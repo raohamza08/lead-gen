@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --paper: #f1f2f4;
+  --ink: #171b21;
+  --accent: #0e6e6b;
+  --line: rgba(23, 27, 33, 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #14171c;
+    --ink: #e8e9ea;
+    --accent: #4fbdb6;
+    --line: rgba(232, 233, 234, 0.14);
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #14171c;
+  --ink: #e8e9ea;
+  --accent: #4fbdb6;
+  --line: rgba(232, 233, 234, 0.14);
+}
+
+:root[data-theme="light"] {
+  --paper: #f1f2f4;
+  --ink: #171b21;
+  --accent: #0e6e6b;
+  --line: rgba(23, 27, 33, 0.12);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

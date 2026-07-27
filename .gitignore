@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+.pnpm-store/
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# build output
+dist/
+build/
+.next/
+out/
+
+# env
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+
+# editor/OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# prisma
+apps/api/prisma/dev.db
+
+# misc
+coverage/
+.turbo/

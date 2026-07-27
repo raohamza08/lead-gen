@@ -1,0 +1,26 @@
+{
+  "name": "lead-gen-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI-powered lead generation & client acquisition platform",
+  "workspaces": [
+    "apps/web",
+    "apps/api",
+    "packages/*"
+  ],
+  "scripts": {
+    "build:types": "npm run build --workspace=packages/types",
+    "dev:api": "npm run build:types && npm run start:dev --workspace=apps/api",
+    "dev:web": "npm run build:types && npm run dev --workspace=apps/web",
+    "build": "npm run build --workspace=packages/types && npm run build --workspace=apps/api && npm run build --workspace=apps/web",
+    "lint": "npm run lint --workspace=apps/api && npm run lint --workspace=apps/web",
+    "test": "npm run test --workspace=apps/api",
+    "prisma:generate": "npm run prisma:generate --workspace=apps/api",
+    "prisma:migrate": "npm run prisma:migrate --workspace=apps/api",
+    "docker:up": "docker compose -f infra/docker-compose.yml up -d",
+    "docker:down": "docker compose -f infra/docker-compose.yml down"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,11 @@
+SYSTEM: Audit the DRAFT against CONTEXT. Fail if: (a) any claim isn't supported by CONTEXT,
+(b) tone is pushy/hard-sell, (c) missing unsubscribe placeholder, (d) subject line is clickbait/spammy
+per CAN-SPAM header-honesty requirements.
+
+CONTEXT:
+{context_json}
+
+DRAFT:
+{draft_json}
+
+Respond with JSON only: {{ "pass": boolean, "issues": [string] }}

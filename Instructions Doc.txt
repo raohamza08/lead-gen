@@ -1,0 +1,909 @@
+# MASTER PROMPT – Build an AI-Powered End-to-End Lead Generation & Client Acquisition System
+
+You are a Senior AI Solutions Architect, Automation Engineer, Product Manager, and Full-Stack System Designer with expertise in Claude Code, AI Agents, Google Workspace, ClickUp, Gemini AI, Gmail API, LinkedIn Automation, MCP Servers, APIs, and Workflow Automation.
+
+Your task is to design a COMPLETE production-ready AI-powered Lead Generation & Client Acquisition System that requires almost no manual work except reviewing and approving AI suggestions.
+
+The objective is to build an internal platform where AI performs lead generation, qualification, personalization, outreach, follow-up, analytics, and workflow management.
+
+This is NOT a simple automation.
+
+I want a scalable SaaS-style internal system.
+
+---
+
+# PRIMARY OBJECTIVE
+
+Build a system where I only:
+
+* Select my niche
+* Set filters
+* Schedule extraction
+* Review leads
+* Approve AI suggestions (if required)
+* Monitor analytics
+
+Everything else should happen automatically.
+
+---
+
+# SYSTEM OVERVIEW
+
+The entire workflow should work like this:
+
+Claude
+↓
+
+Find Verified Leads
+
+↓
+
+Save Leads to Google Sheets
+
+↓
+
+Automatically Create ClickUp Tasks/Cards
+
+↓
+
+Human Reviews AI Suggestions
+
+↓
+
+Personalized Email #1
+
+↓
+
+Wait 2 Days
+
+↓
+
+Personalized Email #2 (Case Study)
+
+↓
+
+Wait 1–2 Days
+
+↓
+
+Gemini Creates Highly Personalized Sales Email
+
+↓
+
+Email Sent
+
+↓
+
+LinkedIn Outreach Starts Simultaneously
+
+↓
+
+Replies Tracked
+
+↓
+
+Analytics Dashboard Updated
+
+Everything should be automated.
+
+---
+
+# PART 1 — AI LEAD GENERATION
+
+Claude should automatically generate leads every day.
+
+Requirements:
+
+* Daily lead extraction
+* Scheduled execution
+* No manual searching
+* Only verified leads
+* No duplicate leads
+* AI should continuously search until the required number is reached
+
+Target:
+
+Minimum 100 verified leads every day.
+
+---
+
+# LEAD FILTERS
+
+The dashboard must allow me to configure filters such as:
+
+Industry
+
+Niche
+
+Sub-niche
+
+Country
+
+City
+
+Company Size
+
+Revenue
+
+Employee Count
+
+Job Titles
+
+Technology Used
+
+Website
+
+Funding Stage
+
+Business Model
+
+B2B/B2C
+
+Healthcare
+
+Real Estate
+
+Law Firms
+
+Recruitment
+
+SaaS
+
+Manufacturing
+
+Agencies
+
+E-commerce
+
+Education
+
+Construction
+
+Startups
+
+Enterprise
+
+and any future niche.
+
+The filters should be editable anytime.
+
+Changing filters should automatically change future lead generation.
+
+---
+
+# LEAD QUALITY REQUIREMENTS
+
+Claude should only collect leads that have:
+
+Verified Business Name
+
+Verified Company Website
+
+Verified LinkedIn
+
+Verified Contact Person
+
+Verified Email
+
+Job Title
+
+Industry
+
+Company Size
+
+Location
+
+Business Description
+
+Technology Stack (if available)
+
+Business Model
+
+AI Opportunity Score
+
+Potential Automation Score
+
+CRM Readiness
+
+Website Quality Score
+
+Lead Score
+
+Confidence Score
+
+Each lead should also include:
+
+Why this company is a good fit.
+
+What services we can sell.
+
+Expected value.
+
+Estimated priority.
+
+---
+
+# DUPLICATE DETECTION
+
+The system must never generate duplicate leads.
+
+Duplicates should be checked using:
+
+Email
+
+Website
+
+LinkedIn
+
+Company Name
+
+Domain
+
+If duplicate exists:
+
+Skip it automatically.
+
+---
+
+# GOOGLE SHEETS INTEGRATION
+
+Every lead should automatically be inserted into Google Sheets.
+
+Each row should include every field collected.
+
+Google Sheets should act as a backup database.
+
+---
+
+# CLICKUP AUTOMATION
+
+Google Sheets should automatically sync with ClickUp.
+
+Each lead should become one ClickUp Card (Task).
+
+Card Name:
+
+Company Name
+
+---
+
+# CLICKUP CUSTOM FIELDS
+
+Create custom fields for:
+
+Lead Name
+
+Company
+
+Website
+
+Email
+
+Phone
+
+LinkedIn
+
+Industry
+
+Sub Niche
+
+Country
+
+Company Size
+
+Revenue
+
+Employees
+
+Decision Maker
+
+Job Title
+
+Technology Stack
+
+Current CRM
+
+Current AI Usage
+
+Lead Score
+
+Confidence Score
+
+AI Opportunity Score
+
+Website Score
+
+Outreach Status
+
+Email Status
+
+LinkedIn Status
+
+Current Pipeline Stage
+
+Created Date
+
+Last Activity
+
+Next Follow-up
+
+Assigned User
+
+Priority
+
+---
+
+# HUMAN REVIEW FIELDS
+
+The reviewer should manually fill custom fields like:
+
+Website Issues
+
+Business Problems
+
+Possible Opportunities
+
+AI Opportunities
+
+Automation Opportunities
+
+CRM Issues
+
+Sales Issues
+
+Marketing Issues
+
+Operational Issues
+
+Suggested Service
+
+Suggested Offer
+
+Suggested Case Study
+
+Suggested Hook
+
+Pain Points
+
+Urgency Level
+
+Expected Value
+
+Notes
+
+Everything should later be used by Gemini.
+
+---
+
+# PIPELINE STAGES
+
+The ClickUp workflow should include:
+
+New Lead
+
+↓
+
+Under Review
+
+↓
+
+Ready for Outreach
+
+↓
+
+Email 1 Sent
+
+↓
+
+Waiting (2 Days)
+
+↓
+
+Email 2 Sent
+
+↓
+
+Waiting (1–2 Days)
+
+↓
+
+Personalized Pitch
+
+↓
+
+LinkedIn Outreach
+
+↓
+
+Replied
+
+↓
+
+Meeting Booked
+
+↓
+
+Proposal Sent
+
+↓
+
+Won
+
+↓
+
+Lost
+
+Moving a task to the next stage should automatically trigger the appropriate automation.
+
+---
+
+# EMAIL AUTOMATION
+
+The system should have a complete Email Management Dashboard.
+
+Settings should include:
+
+Connected Gmail Accounts
+
+SMTP
+
+Microsoft 365
+
+Custom Domains
+
+Email Rotation
+
+Daily Sending Limits
+
+Hourly Sending Limits
+
+Warm-up Settings
+
+Sending Schedule
+
+Timezone
+
+Queue
+
+Retry Logic
+
+Pause
+
+Resume
+
+Stop
+
+Everything should be configurable.
+
+---
+
+# EMAIL #1
+
+When a lead reaches "Ready for Outreach":
+
+Generate a personalized introductory email.
+
+Purpose:
+
+Introduce our company.
+
+Introduce our AI services.
+
+Explain how businesses are adopting AI.
+
+No hard selling.
+
+Only informative.
+
+Professional.
+
+Human-like.
+
+Personalized.
+
+---
+
+# WAIT
+
+After Email #1
+
+Wait exactly 2 days.
+
+---
+
+# EMAIL #2
+
+Automatically send another email.
+
+Purpose:
+
+Provide value.
+
+Share a relevant case study.
+
+Explain measurable business improvements.
+
+No aggressive sales.
+
+---
+
+# WAIT
+
+Wait another 1–2 days.
+
+---
+
+# EMAIL #3
+
+This is the most important email.
+
+Gemini should generate this email.
+
+Gemini should analyze:
+
+Business
+
+Website
+
+Industry
+
+Company
+
+Technology
+
+Manual reviewer notes
+
+Pain points
+
+Custom fields
+
+AI Opportunities
+
+Automation Opportunities
+
+Business Problems
+
+Everything available.
+
+Then Gemini should write a completely personalized email.
+
+No templates.
+
+No generic content.
+
+It should explain:
+
+Current business problems
+
+How AI can help
+
+Specific automation ideas
+
+ROI
+
+Suggested roadmap
+
+How our company can implement everything
+
+CTA to book a meeting
+
+The email should feel like it was written only for that business.
+
+---
+
+# LINKEDIN OUTREACH
+
+At the same time Email #1 is sent,
+
+The assigned user should receive a LinkedIn outreach task.
+
+Eventually this should also support automation where possible while respecting LinkedIn limits and policies.
+
+The system should track:
+
+Connection Sent
+
+Accepted
+
+Message Sent
+
+Replied
+
+Meeting Scheduled
+
+---
+
+# EMAIL TRACKING
+
+Dashboard must display:
+
+Emails Sent
+
+Queued
+
+Delivered
+
+Opened
+
+Not Opened
+
+Clicked
+
+Replied
+
+Bounced
+
+Spam Complaints
+
+Unsubscribed
+
+Blocked
+
+Failed
+
+Delivery Rate
+
+Open Rate
+
+Reply Rate
+
+Click Rate
+
+Meeting Rate
+
+Conversion Rate
+
+Everything should be visualized.
+
+---
+
+# DASHBOARD
+
+I need one centralized dashboard.
+
+The dashboard should include:
+
+Today's Leads
+
+Weekly Leads
+
+Monthly Leads
+
+Verified Leads
+
+Duplicate Rate
+
+Email Performance
+
+LinkedIn Performance
+
+Meetings Booked
+
+Revenue Pipeline
+
+Won Deals
+
+Lost Deals
+
+Average Lead Score
+
+Average AI Score
+
+Pending Reviews
+
+Tasks Waiting
+
+Automation Health
+
+System Errors
+
+API Usage
+
+Claude Usage
+
+Gemini Usage
+
+Google Sheets Status
+
+ClickUp Status
+
+Email Status
+
+LinkedIn Status
+
+Queue Status
+
+Upcoming Follow-ups
+
+Recent Activities
+
+Live Notifications
+
+Charts
+
+KPIs
+
+---
+
+# LEAD EXTRACTION SETTINGS
+
+Dashboard should allow configuring:
+
+Daily Schedule
+
+Weekly Schedule
+
+Time Zone
+
+Number of Leads
+
+Lead Source Priority
+
+Filters
+
+Countries
+
+Industries
+
+Employee Count
+
+Revenue
+
+Technologies
+
+Decision Makers
+
+Everything should be editable.
+
+---
+
+# USER ROLES
+
+Admin
+
+Manager
+
+Lead Reviewer
+
+Sales Representative
+
+Business Developer
+
+Viewer
+
+Each role should have appropriate permissions.
+
+---
+
+# AI IMPROVEMENT
+
+Claude and Gemini should continuously improve based on:
+
+Email open rates
+
+Reply rates
+
+Won deals
+
+Lost deals
+
+Reviewer feedback
+
+Successful case studies
+
+The system should recommend improvements like:
+
+Better subject lines
+
+Better CTAs
+
+Different offers
+
+Different hooks
+
+Better case studies
+
+Different follow-up timing
+
+Different niches
+
+---
+
+# FUTURE SCALABILITY
+
+The architecture should support:
+
+10,000+ leads/day
+
+Multiple users
+
+Multiple Gmail accounts
+
+Multiple businesses
+
+Multiple pipelines
+
+Multiple ClickUp workspaces
+
+CRM integrations
+
+HubSpot
+
+Salesforce
+
+Pipedrive
+
+Zoho
+
+GoHighLevel
+
+n8n
+
+Zapier
+
+Make
+
+Slack
+
+Microsoft Teams
+
+Webhooks
+
+REST APIs
+
+MCP Servers
+
+---
+
+# REQUIRED OUTPUT
+
+Design this system like a real SaaS product.
+
+Provide the following in detail:
+
+1. Complete System Architecture
+2. Technology Stack
+3. Database Design (ERD)
+4. Dashboard UI/UX
+5. User Flow
+6. Workflow Diagrams
+7. AI Agent Architecture
+8. Claude Agent Responsibilities
+9. Gemini Agent Responsibilities
+10. ClickUp Integration Flow
+11. Google Sheets Integration Flow
+12. Email Automation Flow
+13. LinkedIn Outreach Flow
+14. API Architecture
+15. Folder Structure
+16. Authentication & Permissions
+17. Queue Management
+18. Scheduler Design
+19. Error Handling
+20. Retry Logic
+21. Duplicate Detection Logic
+22. Lead Verification Logic
+23. Email Personalization Logic
+24. AI Prompt Architecture
+25. Security Best Practices
+26. Scalability Strategy
+27. Deployment Architecture
+28. Cost Estimation
+29. Development Roadmap
+30. Phase-wise Milestones
+31. Risks & Mitigation
+32. Recommended Tech Stack (Frontend, Backend, Database, AI, Queue, Automation)
+33. Complete Product Requirement Document (PRD)
+34. API Endpoints
+35. Database Schema
+36. Dashboard Wireframes
+37. ClickUp Custom Field Definitions
+38. Google Sheets Column Definitions
+39. Email Templates Strategy
+40. AI Prompt Library
+41. Testing Strategy
+42. Monitoring & Logging
+43. Backup & Recovery Strategy
+44. Future Feature Roadmap
+
+Finally, review the proposed architecture critically. Identify bottlenecks, security risks, scalability issues, compliance considerations (especially email deliverability and privacy regulations such as GDPR/CAN-SPAM), and recommend improvements. The final design should be production-ready, modular, secure, highly scalable, and optimized for long-term growth.

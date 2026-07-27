@@ -1,0 +1,461 @@
+// Prisma schema — implements the ERD in Part B4 of lead-gen-system-architecture.md
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  LEAD_REVIEWER
+  SALES_REP
+  VIEWER
+}
+
+enum PipelineStage {
+  NEW_LEAD
+  UNDER_REVIEW
+  READY_FOR_OUTREACH
+  EMAIL_1_SENT
+  WAITING_2_DAYS
+  EMAIL_2_SENT
+  WAITING_1_2_DAYS
+  GEMINI_DRAFTING
+  PERSONALIZED_PITCH
+  LINKEDIN_OUTREACH
+  REPLIED
+  MEETING_BOOKED
+  PROPOSAL_SENT
+  WON
+  LOST
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ExtractionRunStatus {
+  RUNNING
+  COMPLETED
+  COMPLETED_SHORT_OF_TARGET
+  FAILED
+}
+
+enum EmailProvider {
+  GMAIL
+  MICROSOFT_365
+  SMTP
+}
+
+enum EmailAccountStatus {
+  ACTIVE
+  PAUSED
+  SUSPENDED
+}
+
+enum EmailMessageStatus {
+  DRAFT
+  PENDING_APPROVAL
+  QUEUED
+  SENT
+  FAILED
+  CANCELLED
+}
+
+enum GeneratedBy {
+  TEMPLATE
+  CLAUDE
+  GEMINI
+  HUMAN_EDIT
+}
+
+enum EmailEventType {
+  QUEUED
+  SENT
+  DELIVERED
+  OPENED
+  CLICKED
+  REPLIED
+  BOUNCED
+  SPAM_COMPLAINT
+  UNSUBSCRIBED
+  BLOCKED
+  FAILED
+}
+
+enum LinkedinStatus {
+  NOT_STARTED
+  CONNECTION_SENT
+  ACCEPTED
+  MESSAGE_SENT
+  REPLIED
+  MEETING_SCHEDULED
+}
+
+model Organization {
+  id           String   @id @default(uuid())
+  name         String
+  settings     Json     @default("{}")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  users        User[]
+  nicheFilters NicheFilter[]
+  leads        Lead[]
+  emailAccounts EmailAccount[]
+  caseStudies  CaseStudy[]
+  suppressionEntries SuppressionEntry[]
+
+  @@map("organizations")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id])
+  email     String   @unique
+  name      String
+  passwordHash String  @map("password_hash")
+  role      Role     @default(VIEWER)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  assignedLeads Lead[] @relation("AssignedUser")
+  reviewNotes   ReviewNote[]
+  linkedinActivities LinkedinActivity[]
+  auditLogs     AuditLog[]
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @map("token_hash")
+  revoked    Boolean  @default(false)
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model NicheFilter {
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  org            Organization @relation(fields: [orgId], references: [id])
+  niche          String
+  subNiche       String?  @map("sub_niche")
+  countries      String[] @default([])
+  cities         String[] @default([])
+  companySizeMin Int?     @map("company_size_min")
+  companySizeMax Int?     @map("company_size_max")
+  revenueBandMin String?  @map("revenue_band_min")
+  revenueBandMax String?  @map("revenue_band_max")
+  employeeCountMin Int?   @map("employee_count_min")
+  employeeCountMax Int?   @map("employee_count_max")
+  jobTitles      String[] @default([])
+  technologies   String[] @default([])
+  fundingStage   String?  @map("funding_stage")
+  businessModel  String?  @map("business_model")
+  b2bOrB2c       String?  @map("b2b_or_b2c")
+  dailyTarget    Int      @default(100) @map("daily_target")
+  sourcePriority String[] @default([]) @map("source_priority")
+  scheduleCron   String   @default("0 6 * * *") @map("schedule_cron")
+  timezone       String   @default("UTC")
+  active         Boolean  @default(true)
+  // Part C5: one ClickUp List per niche filter — config, not a hardcoded ID.
+  clickupListId  String?  @map("clickup_list_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  extractionRuns ExtractionRun[]
+  leads          Lead[]
+
+  @@map("niche_filters")
+}
+
+model ExtractionRun {
+  id                String   @id @default(uuid())
+  filterId          String   @map("filter_id")
+  filter            NicheFilter @relation(fields: [filterId], references: [id])
+  startedAt         DateTime @default(now()) @map("started_at")
+  finishedAt        DateTime? @map("finished_at")
+  leadsFound        Int      @default(0) @map("leads_found")
+  leadsVerified     Int      @default(0) @map("leads_verified")
+  duplicatesSkipped Int      @default(0) @map("duplicates_skipped")
+  status            ExtractionRunStatus @default(RUNNING)
+
+  leads             Lead[]
+
+  @@map("extraction_runs")
+}
+
+model Lead {
+  id                  String   @id @default(uuid())
+  orgId               String   @map("org_id")
+  org                 Organization @relation(fields: [orgId], references: [id])
+  runId               String?  @map("run_id")
+  run                 ExtractionRun? @relation(fields: [runId], references: [id])
+  filterId            String?  @map("filter_id")
+  filter              NicheFilter? @relation(fields: [filterId], references: [id])
+  assignedUserId       String?  @map("assigned_user_id")
+  assignedUser         User?    @relation("AssignedUser", fields: [assignedUserId], references: [id])
+
+  companyName         String   @map("company_name")
+  website             String?
+  websiteDomain       String?  @map("website_domain")
+  linkedinUrl         String?  @map("linkedin_url")
+  contactName         String?  @map("contact_name")
+  jobTitle            String?  @map("job_title")
+  email               String?
+  phone               String?
+  industry            String?
+  subNiche            String?  @map("sub_niche")
+  country             String?
+  city                String?
+  companySize         String?  @map("company_size")
+  revenueBand         String?  @map("revenue_band")
+  employeeCount       Int?     @map("employee_count")
+  techStack           Json     @default("[]") @map("tech_stack")
+  businessModel       String?  @map("business_model")
+  b2bOrB2c            String?  @map("b2b_or_b2c")
+  businessDescription String?  @map("business_description")
+  currentCrm          String?  @map("current_crm")
+
+  verifiedEmail       Boolean  @default(false) @map("verified_email")
+  verifiedLinkedin    Boolean  @default(false) @map("verified_linkedin")
+  verifiedWebsite     Boolean  @default(false) @map("verified_website")
+  possibleDuplicate   Boolean  @default(false) @map("possible_duplicate")
+
+  createdAt           DateTime @default(now()) @map("created_at")
+  lastActivityAt      DateTime? @map("last_activity_at")
+
+  score               LeadScore?
+  reviewNote          ReviewNote?
+  pipelineState       PipelineState?
+  emailMessages       EmailMessage[]
+  linkedinActivities  LinkedinActivity[]
+  clickupSync         ClickupSync?
+  sheetsSync          SheetsSync?
+  auditLogs           AuditLog[]
+
+  // Tier-1 exact-match dedup (Part C2) — unique per org on domain and email.
+  @@unique([orgId, websiteDomain], name: "org_domain_unique")
+  @@unique([orgId, email], name: "org_email_unique")
+  @@index([orgId, industry])
+  @@index([orgId, createdAt])
+  @@map("leads")
+}
+
+model LeadScore {
+  id                    String   @id @default(uuid())
+  leadId                String   @unique @map("lead_id")
+  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadScore             Int      @map("lead_score")
+  confidenceScore       Int      @map("confidence_score")
+  aiOpportunityScore    Int      @map("ai_opportunity_score")
+  automationScore       Int      @map("automation_score")
+  crmReadinessScore     Int      @map("crm_readiness_score")
+  websiteQualityScore   Int      @map("website_quality_score")
+  fitReason             String?  @map("fit_reason")
+  suggestedServices     String?  @map("suggested_services")
+  expectedValue         Decimal? @map("expected_value")
+  priority              Priority?
+  scoredAt              DateTime @default(now()) @map("scored_at")
+
+  @@map("lead_scores")
+}
+
+model ReviewNote {
+  id                       String   @id @default(uuid())
+  leadId                   String   @unique @map("lead_id")
+  lead                     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  reviewerId               String?  @map("reviewer_id")
+  reviewer                 User?    @relation(fields: [reviewerId], references: [id])
+  websiteIssues            String?  @map("website_issues")
+  businessProblems         String?  @map("business_problems")
+  opportunities            String?
+  automationOpportunities  String?  @map("automation_opportunities")
+  crmIssues                String?  @map("crm_issues")
+  salesIssues              String?  @map("sales_issues")
+  marketingIssues          String?  @map("marketing_issues")
+  operationalIssues        String?  @map("operational_issues")
+  suggestedService         String?  @map("suggested_service")
+  suggestedOffer           String?  @map("suggested_offer")
+  suggestedCaseStudy       String?  @map("suggested_case_study")
+  suggestedHook            String?  @map("suggested_hook")
+  painPoints               String?  @map("pain_points")
+  urgencyLevel             UrgencyLevel? @map("urgency_level")
+  expectedValue            Decimal? @map("expected_value")
+  notes                    String?
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("review_notes")
+}
+
+model PipelineState {
+  leadId          String   @id @map("lead_id")
+  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  stage           PipelineStage @default(NEW_LEAD)
+  enteredStageAt  DateTime @default(now()) @map("entered_stage_at")
+  nextActionAt    DateTime? @map("next_action_at")
+  // BullMQ delayed-job id for the pending wait-timer (Part C6). Lets the
+  // sequencer cancel an in-flight "wait 2 days" job the instant a reply or
+  // manual stage change makes it moot, instead of letting it fire anyway.
+  waitJobId       String?  @map("wait_job_id")
+
+  @@map("pipeline_states")
+}
+
+model EmailAccount {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  org          Organization @relation(fields: [orgId], references: [id])
+  provider     EmailProvider
+  address      String   @unique
+  dailyLimit   Int      @default(30) @map("daily_limit")
+  hourlyLimit  Int      @default(5) @map("hourly_limit")
+  warmupActive Boolean  @default(true) @map("warmup_active")
+  status       EmailAccountStatus @default(ACTIVE)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // GMAIL: OAuth2 refresh token for this mailbox (gmail.send + gmail.readonly
+  // scopes — Part G1). Obtained out-of-band via a one-time consent flow, not
+  // stored in .env since it's per-mailbox, not per-deployment.
+  oauthRefreshToken String? @map("oauth_refresh_token")
+  // Cursor into Gmail's history API (Part E2 gmail webhook) — lets the push
+  // adapter fetch only what changed since the last processed notification
+  // instead of replaying the whole mailbox history on every event.
+  lastHistoryId     String? @map("last_history_id")
+
+  // MICROSOFT_365 / SMTP: plain SMTP AUTH credentials. TODO(Part E4): these
+  // belong in a secrets manager (Doppler/AWS Secrets Manager), not a plaintext
+  // DB column — same caveat the design doc raises for provider API keys in
+  // general; acceptable for this scaffold, flagged before going live.
+  smtpHost     String? @map("smtp_host")
+  smtpPort     Int?    @map("smtp_port")
+  smtpUsername String? @map("smtp_username")
+  smtpPassword String? @map("smtp_password")
+
+  emailMessages EmailMessage[]
+
+  @@map("email_accounts")
+}
+
+model EmailMessage {
+  id            String   @id @default(uuid())
+  leadId        String   @map("lead_id")
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  accountId     String?  @map("account_id")
+  account       EmailAccount? @relation(fields: [accountId], references: [id])
+  sequenceStep  Int      @map("sequence_step")
+  subject       String
+  bodyHtml      String   @map("body_html")
+  rationale     Json?
+  generatedBy   GeneratedBy @map("generated_by")
+  status        EmailMessageStatus @default(DRAFT)
+  scheduledAt   DateTime? @map("scheduled_at")
+  sentAt        DateTime? @map("sent_at")
+
+  events        EmailEvent[]
+
+  @@index([leadId])
+  @@map("email_messages")
+}
+
+model EmailEvent {
+  id         String   @id @default(uuid())
+  messageId  String   @map("message_id")
+  message    EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  eventType  EmailEventType @map("event_type")
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  meta       Json     @default("{}")
+
+  @@map("email_events")
+}
+
+model LinkedinActivity {
+  id        String   @id @default(uuid())
+  leadId    String   @map("lead_id")
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId    String?  @map("user_id")
+  user      User?    @relation(fields: [userId], references: [id])
+  status    LinkedinStatus @default(NOT_STARTED)
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("linkedin_activities")
+}
+
+model ClickupSync {
+  leadId        String   @id @map("lead_id")
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  clickupTaskId String   @map("clickup_task_id")
+  lastSyncedAt  DateTime @default(now()) @map("last_synced_at")
+
+  @@map("clickup_syncs")
+}
+
+model SheetsSync {
+  leadId       String   @id @map("lead_id")
+  lead         Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  rowNumber    Int      @map("row_number")
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+
+  @@map("sheets_syncs")
+}
+
+model CaseStudy {
+  id       String   @id @default(uuid())
+  orgId    String   @map("org_id")
+  org      Organization @relation(fields: [orgId], references: [id])
+  industry String
+  title    String
+  summary  String
+  metrics  Json     @default("{}")
+
+  @@map("case_studies")
+}
+
+// Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every
+// single send, not just at sequence start. Populated from unsubscribe clicks,
+// hard bounces, spam complaints, and manual do-not-contact entries.
+model SuppressionEntry {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id])
+  email     String
+  reason    String // UNSUBSCRIBED | HARD_BOUNCE | SPAM_COMPLAINT | MANUAL
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([orgId, email])
+  @@map("suppression_entries")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  leadId    String?  @map("lead_id")
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  actorId   String?  @map("actor_id")
+  actor     User?    @relation(fields: [actorId], references: [id])
+  action    String
+  diff      Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([leadId])
+  @@map("audit_logs")
+}
