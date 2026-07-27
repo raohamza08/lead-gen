@@ -21,7 +21,8 @@ infra/
 - Node.js >= 20, npm >= 10
 - Python >= 3.11 (on Windows, use the `py` launcher — see note below)
 - Docker (for Postgres/Redis locally) — or point `DATABASE_URL`/`REDIS_URL` at existing instances
-- API keys: Anthropic (Claude), Google AI (Gemini), ClickUp, Google service account, mail provider — see `.env.example`. **None of these are required to run the scaffold locally** — see "Demo mode" below.
+- Google AI (Gemini), ClickUp, Google service account, mail provider API keys — see `.env.example`. **None of these are required to run the scaffold locally** — see "Demo mode" below.
+- **No Anthropic API key needed.** The lead-finder (`apps/ai-workers/claude_agent`) shells out to the local Claude Code CLI (`claude -p ...`) instead of calling the Anthropic API directly, so it runs on an existing Claude Code subscription rather than metered API billing. Requires the `claude` CLI installed and logged in on the machine running `apps/ai-workers`.
 
 **Windows note:** if `python`/`python3` on PATH resolve to the Microsoft Store stub instead of a real install, use `py -3` instead (`py -3 -m venv .venv`, etc.).
 
@@ -32,8 +33,7 @@ infra/
 ```bash
 cp .env.example .env          # fill in real values (optional for local demo — see below)
 npm install                   # installs web + api + packages workspaces (large tree, first run can take a while — see note)
-npm run docker:up             # starts Postgres + Redis
-npm run prisma:migrate --workspace=apps/api   # creates DB schema
+npm run prisma:deploy --workspace=apps/api    # applies migrations against DATABASE_URL/DIRECT_URL (Supabase or local Postgres)
 npm run prisma:seed --workspace=apps/api      # creates a demo org, admin user, and one niche filter
 npm run dev:api                # http://localhost:4000 (builds packages/types first)
 npm run dev:web                # http://localhost:3000 (builds packages/types first)
@@ -42,8 +42,12 @@ npm run dev:web                # http://localhost:3000 (builds packages/types fi
 cd apps/ai-workers
 py -3 -m venv .venv && .venv\Scripts\activate        # macOS/Linux: python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+uvicorn main:app --port 8000
+# On Windows, don't use --reload here — it hasn't reliably picked up code changes in practice;
+# stop and restart the process manually after editing apps/ai-workers code instead.
 ```
+
+**Database/queue setup used in practice on the reference dev machine:** Postgres via Supabase (`DATABASE_URL` = transaction pooler port 6543 with `?pgbouncer=true`, `DIRECT_URL` = session pooler port 5432, both in `schema.prisma`'s datasource block) rather than the bundled `infra/docker-compose.yml` Postgres; Redis via a standalone container (`docker run -d --name leadgen-redis -p 6379:6379 redis`) rather than the full compose stack. `npm run docker:up` (full compose: Postgres + Redis + all three services) is still there as an option if you'd rather not use Supabase.
 
 Log in at `http://localhost:3000/login` with the seeded admin: `admin@example.com` / `ChangeMe123!`.
 
@@ -51,35 +55,41 @@ Log in at `http://localhost:3000/login` with the seeded admin: `admin@example.co
 
 ## Demo mode (no API keys needed)
 
-The Python AI workers run in a clearly-labeled **demo mode** whenever `ANTHROPIC_API_KEY` / `GOOGLE_GENAI_API_KEY` are unset:
-- `claude_agent/search_tools.py` returns a small fixed pool of synthetic candidate companies instead of doing a real web search (and returns "no more candidates" once the pool is exhausted, exercising the same "niche saturated" shortfall path a real run would hit).
-- `claude_agent/verifier.py` still does **real** HTTP verification (website reachability, LinkedIn URL reachability); only email verification falls back to a syntactic check without a NeverBounce/ZeroBounce key.
-- `claude_agent/scorer.py` and `gemini_agent/drafting.py` fall back to a deterministic, clearly-labeled `[DEMO ...]` heuristic instead of calling Claude/Gemini.
+The Python AI workers run in a clearly-labeled **demo mode** for whichever piece doesn't have what it needs:
+- `claude_agent/search_tools.py` and `claude_agent/scorer.py` use the local `claude` CLI (subscription login, see above) for real web-search-grounded lead-finding and scoring. If the CLI isn't installed/reachable on PATH, they fall back to a small fixed pool of synthetic candidate companies / a deterministic heuristic score instead (and the search fallback returns "no more candidates" once the pool is exhausted, exercising the same "niche saturated" shortfall path a real run would hit).
+- `claude_agent/verifier.py` still does **real** HTTP verification (website reachability, LinkedIn URL reachability); only email verification falls back to a syntactic check without a `NEVERBOUNCE_API_KEY`.
+- `gemini_agent/drafting.py` falls back to a deterministic, clearly-labeled `[DEMO DRAFT]` template instead of calling Gemini when `GOOGLE_GENAI_API_KEY` is unset.
 
-This means the full pipeline — extraction → dedup → verify → score → insert → Sheets/ClickUp sync stubs → Email 1 → wait → Email 2 → wait → Gemini draft → approval queue — is exercisable end-to-end locally with zero external credentials. Swap in real keys in `.env` and nothing else needs to change.
+This means the full pipeline — extraction → dedup → verify → score → insert → Sheets/ClickUp sync → Email 1 → wait → Email 2 → wait → Gemini draft → approval queue — is exercisable end-to-end locally with zero external credentials beyond a logged-in `claude` CLI. Swap in real keys in `.env` and nothing else needs to change.
 
 ## What's implemented vs. stubbed
 
 Maps to the roadmap in Part H1 of the architecture doc.
 
-**Implemented (Phase 0–3 territory):**
+**Implemented (Phase 0–3 territory, confirmed working against a live Supabase/Redis stack, not just against a placeholder DB):**
 - Full Prisma schema matching the ERD (Part B4), including a `SuppressionEntry` table and a `RefreshToken` table not in the original diagram (added during implementation — see below)
 - JWT auth + refresh-token rotation, RBAC guards, PII-redaction interceptor, audit-log interceptor, global exception filter with trace IDs
-- Niche filters CRUD + run-now (dispatches to the AI workers service)
+- Niche filters CRUD + run-now + **automatic daily scheduling**: a dynamic `CronJob` per niche filter (via `@nestjs/schedule`), keyed by that filter's own `scheduleCron`/`timezone`/`active` columns, registered on boot and re-registered on every create/update — this is what actually runs lead extraction daily rather than requiring a manual "Run now" click
 - Leads CRUD, human-review fields, stage-transition validation against the Part C6 state machine, Email #3 approval queue
 - Sequencer: BullMQ delayed jobs for the "wait 2 days" / "wait 1-2 days" steps, cancellable on reply (Part C6) — this is real, not a polling cron
 - Email compliance gate: suppression-list check, unsubscribe-link check, per-mailbox daily-limit rotation, before every send (Part C6/I4/I5)
-- Sheets/ClickUp sync workers and webhook receivers (ClickUp stage-change, email open/click tracking, unsubscribe, reply/bounce/complaint ingestion) — provider API calls are stubbed and logged (see TODOs in `apps/api/src/sync/`), the queueing/idempotency/state machine around them is real
-- Dashboard: login, Overview (live KPIs + funnel chart against the real API), Leads list + detail with the review form, Settings (niche filter CRUD)
-- AI workers: bounded extraction loop (Part C1 — stops on target/attempts/runtime, never loops forever), Gemini drafting + mandatory self-critique pass, both wired to call back into the NestJS API
+- Google Sheets sync (`apps/api/src/sync/google-sheets.client.ts`, real `googleapis` service-account auth), ClickUp sync (`apps/api/src/sync/clickup.client.ts`, real REST client) and webhook receivers (ClickUp stage-change, email open/click tracking, unsubscribe, reply/bounce/complaint ingestion) — real API calls, gated to log-only fallback if credentials aren't configured
+- Gmail sending (real `googleapis` OAuth2 + MIME compose) and M365 sending via SMTP AUTH (`apps/api/src/email/providers/*.ts`) — real, credential-gated
+- Dashboard: login, Overview (live KPIs + funnel chart against the real API), Leads list + detail with the review form, Pipeline (read-only Kanban), Sequences (Email #3 approval queue, mailbox health, send calendar), Settings (niche filter CRUD)
+- AI workers: bounded extraction loop (Part C1 — stops on target/attempts/runtime, never loops forever), Gemini drafting + mandatory self-critique pass, both wired to call back into the NestJS API. Lead-finding/scoring runs on the local Claude Code CLI (see "Prerequisites" above), not the Anthropic API.
+- An internal-token-guarded lead-detail read endpoint (`GET /leads/:id/internal`) so the Gemini agent can fetch lead context without a user JWT — the original design reused the user-scoped route, which 401'd for a service account; fixed by adding this separate route rather than weakening the user-facing guard.
 
 **Stubbed / needs real credentials before going live:**
-- Google Sheets and ClickUp API calls (`apps/api/src/sync/*.worker.ts`) log intent instead of calling the real APIs
-- Gmail/SMTP sending (`apps/api/src/email/providers/*.ts`) logs intent instead of sending
-- Gmail/Graph push-notification adapters for delivery/bounce/reply events (`apps/api/src/webhooks/email-webhook.controller.ts`) — the normalized ingestion endpoint exists, provider-specific translation doesn't yet
-- LinkedIn semi-automation (Part C7) — only the manual task-creation half exists
+- Gmail/Graph push-notification adapters translate provider payloads into the normalized ingestion endpoint for opens/clicks/replies, but Graph's NDR/bounce parsing specifically isn't implemented yet (flagged in code, not faked)
+- LinkedIn — intentionally out of scope for now (see below)
 
-**Not yet built:** analytics beyond the Overview KPIs/funnel (Part F1's Pipeline/Sequences/Analytics tabs are placeholder pages pointing at the relevant backend code), multi-tenant row-level security, the AI improvement/feedback loop (Part D5).
+**Not yet built:**
+- Analytics beyond the Overview KPIs/funnel — `/analytics` is currently a placeholder page; backend routes for email funnel, revenue pipeline, and cohort trends don't exist yet even though the frontend API client already declares functions for them
+- Admin UI for email accounts, ClickUp/Sheets connection config, and user/role management — full backend CRUD exists for all three (`EmailAccountsController`, `UsersController`) but nothing in `apps/web` consumes it yet; ClickUp/Sheets creds are env-var-only
+- Lead-filter controls on the `/leads` page — the backend query DTO already supports industry/country/stage/search/assignee filters, the page just doesn't expose them yet
+- Fuzzy/semantic duplicate detection — current dedup relies only on exact-match Postgres unique constraints (email, website domain), no near-duplicate (e.g. company-name-similarity) layer
+- **LinkedIn automation is intentionally not planned** — real LinkedIn browser/API automation risks ToS violations and account bans; only the data model (`LinkedinActivity`) and a status field exist, with no automation or update endpoint by design, not oversight
+- Multi-tenant row-level security, the AI improvement/feedback loop (Part D5), Next.js auth middleware (unauthenticated users currently just see raw 401s rather than a redirect to `/login`)
 
 ## Implementation notes / deviations from the design doc
 
@@ -88,18 +98,19 @@ A few things surfaced while building this that are worth knowing before you exte
 1. **`bcryptjs` instead of `bcrypt`.** The design doc doesn't specify a hashing library; `bcrypt` (native, via node-gyp) was the initial choice but its build step depends on a working Python toolchain for node-gyp, which hung indefinitely on a Windows dev machine with an inconsistent `python`/`python3` PATH setup (the Microsoft Store alias stub). Switched to `bcryptjs` (pure JS, same API) to remove that class of environment problem entirely. Revisit if hashing throughput ever becomes a bottleneck — it won't at this scale.
 2. **System-driven stage transitions bypass `LeadsService.advanceStage`'s validation on purpose.** The sequencer (Email 1/2 sent, Gemini drafting) and the reply webhook update `PipelineState` directly rather than going through the human-facing `advanceStage` endpoint, because they're system transitions already known to be valid — but this means each of those call sites is also individually responsible for calling `SyncService.onStageChanged` so ClickUp stays in sync (Part C5's "the card always reflects real state even though a human never touched it" requirement). This was actually missed on the first pass — Email #1 sending didn't advance the pipeline stage at all (so the Email #2 wait-timer never got scheduled), and none of the internal transitions were pushed to ClickUp. Both are fixed in `apps/api/src/sequencer/sequencer.service.ts`, `apps/api/src/leads/leads.service.ts`, and `apps/api/src/webhooks/email-webhook.controller.ts`. If you add a new internal stage transition, remember both halves: update `PipelineState` **and** call `sync.onStageChanged`.
 3. **Refresh tokens and the suppression list are real tables, not deferred.** The original ERD (Part B4) didn't include `RefreshToken` or `SuppressionEntry` as separate models; both turned out to be required for the auth rotation design (Part E4) and the compliance gate (Part C6/I4/I5) to actually work, so they were added to `apps/api/prisma/schema.prisma`.
-4. **An initial SQL migration is checked in even though no live Postgres was available in the build environment.** `apps/api/prisma/migrations/20260727000000_init/migration.sql` was generated with `prisma migrate diff --from-empty` (schema-only, no DB connection needed) and validated with `prisma validate`. It hasn't been applied against a live database yet — do that once with `npm run prisma:deploy --workspace=apps/api` (or `prisma:migrate` for a dev DB) the first time you point this at a real Postgres instance.
+4. **Two migrations are checked in** (`20260727000000_init`, `20260727200000_sync_and_email_provider_fields`) — both have since been applied for real against a live Supabase Postgres instance via `npm run prisma:deploy --workspace=apps/api` (2026-07-27), not just validated schema-only.
+5. **`DIRECT_URL` was added to the Prisma datasource** alongside `DATABASE_URL` — needed because Supabase's connection pooler (`DATABASE_URL`, transaction mode, port 6543) doesn't support the prepared statements Prisma's migration engine needs; `DIRECT_URL` (session mode, port 5432) is used for migrations only, while the app itself connects through the pooler.
 
 ## Build validation status
 
 Verified directly, end to end, not just via CI config:
 - `npm run build:types` — shared types package compiles clean
-- `npx prisma validate` / `prisma generate` — schema is valid, client generates clean; `prisma migrate diff --from-empty` produced a working initial migration (see note above) without needing a live DB
-- `npm run build --workspace=apps/api` — NestJS API compiles clean (TypeScript)
-- `npm run lint --workspace=apps/api` — clean (fixed 3 real lint errors: an unused destructured variable in `analytics.service.ts`, a `let` that should've been `const` in `clickup-sync.worker.ts`, an unused import in `tracking.controller.ts`)
+- `npx prisma validate` / `prisma generate` — schema is valid, client generates clean
+- `npm run build --workspace=apps/api` / `npx tsc --noEmit` — NestJS API compiles clean (TypeScript)
 - `npm test --workspace=apps/api` — the `pipeline-transitions.spec.ts` suite passes (4/4)
-- `npm run build --workspace=apps/web` — Next.js production build compiles and prerenders all 11 routes clean (fixed 2 real ESLint errors: unescaped `'`/`"` in JSX text in `analytics/page.tsx` and `leads/[id]/page.tsx`)
-- `npm run lint --workspace=apps/web` — clean
-- Also fixed one real TypeScript error caught by the API build: a `Record<string, unknown>` wasn't directly assignable to Prisma's `InputJsonValue` in `email-webhook.controller.ts`'s `meta` field — needed an explicit cast (same pattern already used elsewhere for JSON fields)
+- `npm run build --workspace=apps/web` — Next.js production build compiles and prerenders all routes clean
+- **`prisma migrate deploy` and `prisma:seed` run for real against a live Supabase Postgres instance** (as of 2026-07-27) — both migrations applied cleanly, seed creates the demo org/admin/niche filter
+- **All three services confirmed running together and talking to each other for real**: `apps/api` (port 4000) boots against Supabase with zero errors, `apps/ai-workers` (port 8000) and `apps/web` (port 3000) both healthy, admin login works end-to-end through the real UI
+- The niche-filter cron scheduler registers correctly on boot (confirmed via log: `Scheduled N active niche filter(s) on startup`) and a manual `POST /niche-filters/:id/run-now` successfully dispatches to the AI workers and creates an `ExtractionRun` row
 
-**Not yet verified (needs a real Postgres/Redis — Docker Desktop install in progress on this dev machine as of 2026-07-27):** `prisma migrate deploy` actually applying to a live DB, the seed script, and any runtime behavior of the API/web/ai-workers servers talking to each other and a real database. Everything else that doesn't need a live DB has been verified directly, not just via CI config: `npm install`, `build:types`, `prisma validate`/`generate` (against a placeholder `DATABASE_URL`), `apps/api` build+lint+test (4/4 pass), `apps/web` build+lint (all 11 routes prerender clean). The demo-mode AI workers service *was* run live (see "Demo mode" above) and confirmed working, including its fire-and-forget callback into the (not-yet-running) NestJS API failing gracefully rather than crashing. Once Docker Desktop is installed, run `npm run docker:up`, `npm run prisma:migrate --workspace=apps/api`, and `npm run prisma:seed --workspace=apps/api` to close this last gap.
+**Known open issue as of 2026-07-27 (mid-debug):** the Claude CLI-based lead-finder (`apps/ai-workers/claude_agent/search_tools.py` → `cli_client.py`) reliably works in isolated test scripts (including ones matching the real FastAPI+BackgroundTasks structure exactly) but returns empty stdout/exit 0 when invoked through the actual running extraction pipeline for a real search prompt — falls back to demo-mode candidates when this happens, so the pipeline doesn't break, but real lead discovery isn't confirmed working yet. Root cause not yet found; next step is bisecting between "real app's import chain" vs. "the actual (longer) prompt content" as the differentiating factor.
