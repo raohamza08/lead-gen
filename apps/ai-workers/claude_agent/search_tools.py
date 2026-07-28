@@ -69,37 +69,69 @@ async def _find_candidate_via_cli(niche_filter: dict, already_found: list[str]) 
         if already_found
         else ""
     )
-    prompt = f"""Find ONE real company matching the targeting brief below.
+    prompt = f"""You are an expert B2B Lead Generation Specialist, Sales Navigator
+strategist and AI sales-intelligence agent. Behave like a senior SDR who
+understands buyer intent, growth signals and technology adoption.
+
+Your goal is NOT to collect random companies. Find ONE company that has a real
+business problem, budget capacity, growth potential, a need for automation or
+technology improvement, and an accessible decision maker.
 
 {_criteria_text(niche_filter)}{exclusion}
 
-HOW TO SEARCH
-Work from the buying-intent signals, not only the firmographics. A company that
-matches the industry and headcount but shows none of the intent signals is a
-weak lead; one showing several intent signals is strong even if the
-firmographics fit imperfectly. Use web search to find candidates, then fetch the
-company's own website to verify what you claim about it.
+SEARCH STRATEGY
+Combine dimensions the way Sales Navigator does — industry + location + size +
+decision maker + growth signal + technology gap — rather than searching on one
+axis. Work from buying-intent signals first: a company matching the industry and
+headcount but showing no intent signal is a weak lead, while one showing several
+intent signals is strong even if the firmographics fit imperfectly.
 
-RULES
-- The company must be real, currently operating, and have a live website. Never
-  invent a company, a contact, or an email address.
-- Apply every EXCLUDE rule as a hard reject.
-- Only report a contact name, title or email you actually found. A guessed
-  address bounces, and bounces damage the sending reputation of every mailbox in
-  the system, so null is always the right answer when unsure.
+Use web search to find candidates, then FETCH the company's own website to
+verify what you claim about it. Check for job postings, funding news, a recent
+redesign or a technology migration — these establish that they are ready to act
+now, not merely that they could benefit eventually.
+
+VERIFY BEFORE RETURNING
+1. The company exists and is currently operating.
+2. The decision maker is genuinely relevant and has buying authority.
+3. Any contact detail you report was actually found, not constructed.
+4. There is a concrete business opportunity for automation or software work.
+5. You can explain why this company is worth contacting.
+
+HARD RULES
+- Never invent a company, a person, or an email address. A guessed address
+  bounces, and bounces damage the sending reputation of every mailbox in the
+  system — null is always the correct answer when unsure.
+- Apply every EXCLUDE rule as a hard reject, however well the company scores.
+- Reject freelancers, sole traders, and companies with no real digital presence
+  or no budget capacity.
+- Prefer a decision maker with authority (Founder, CEO, COO, CTO, VP, Director,
+  Managing Director). Never return an intern, assistant or junior employee.
 - `evidence` must cite what you actually observed — what the site showed, what a
-  job posting said. A human reviewer uses it to judge the lead.
+  job posting said, where a figure came from. A human reviewer uses it to judge
+  the lead, so vague evidence makes the lead unusable.
+- Only return a lead a professional B2B sales team would consider worth
+  contacting. If nothing qualifies, say so rather than lowering the bar.
 
 Respond with ONLY a JSON object — no prose, no markdown code fences:
 {{
   "companyName": string, "website": string, "linkedinUrl": string|null,
-  "contactName": string|null, "jobTitle": string|null, "email": string|null,
-  "industry": string, "country": string|null, "city": string|null,
-  "employeeCount": number|null, "businessDescription": string,
+  "industry": string, "subIndustry": string|null,
+  "country": string|null, "city": string|null,
+  "employeeCount": number|null, "estimatedRevenue": string|null,
+  "businessDescription": string,
+
+  "contactName": string|null, "jobTitle": string|null,
+  "contactLinkedinUrl": string|null, "email": string|null, "phone": string|null,
+
+  "techStack": string[], "currentCrm": string|null,
+  "websitePlatform": string|null, "automationTools": string[], "aiUsage": string|null,
+
+  "growthSignals": string[],
   "matchedSignals": string[],
   "evidence": string
 }}
-If you cannot find a confident match, respond with {{"no_match": true}}.
+If you cannot find a company that genuinely qualifies, respond with {{"no_match": true}}.
 """
     envelope = await cli_client.query(prompt)
     data = cli_client.extract_json(envelope.get("result", ""))

@@ -103,11 +103,25 @@ def _map_candidate_fields(candidate: dict) -> dict:
         "contactName": candidate.get("contactName"),
         "jobTitle": candidate.get("jobTitle"),
         "email": candidate.get("email"),
+        "phone": candidate.get("phone"),
         "industry": candidate.get("industry"),
+        "subNiche": candidate.get("subIndustry"),
         "country": candidate.get("country"),
         "city": candidate.get("city"),
         "employeeCount": candidate.get("employeeCount"),
         "businessDescription": candidate.get("businessDescription"),
+        # The contact's own profile, kept separate from the company page above.
+        "contactLinkedinUrl": candidate.get("contactLinkedinUrl"),
+        "estimatedRevenue": candidate.get("estimatedRevenue"),
+        "currentCrm": candidate.get("currentCrm"),
+        "websitePlatform": candidate.get("websitePlatform"),
+        "automationTools": candidate.get("automationTools") or [],
+        "aiUsage": candidate.get("aiUsage"),
+        "techStack": candidate.get("techStack") or [],
+        "growthSignals": candidate.get("growthSignals") or [],
+        # What the finder actually observed, so a reviewer can audit the claim
+        # rather than taking the score on trust.
+        "researchEvidence": candidate.get("evidence"),
     }
 
 
@@ -119,9 +133,21 @@ def _map_score_fields(scores: dict) -> dict:
         "automationScore": scores.get("automation_score"),
         "crmReadinessScore": scores.get("crm_readiness_score"),
         "websiteQualityScore": scores.get("website_quality_score"),
+        "businessFitScore": scores.get("business_fit_score"),
+        "buyingIntentScore": scores.get("buying_intent_score"),
+        "budgetScore": scores.get("budget_score"),
+        "technologyGapScore": scores.get("technology_gap_score"),
+        "decisionMakerAccessScore": scores.get("decision_maker_access_score"),
+        "leadPriorityScore": scores.get("lead_priority_score"),
         "fitReason": scores.get("fit_reason"),
         "suggestedServices": scores.get("suggested_services"),
         "expectedValue": scores.get("expected_value"),
+        "priority": scores.get("priority"),
+        # Business intelligence produced during scoring. Lands on the lead so a
+        # reviewer edits it rather than authoring it from scratch.
+        "painPoints": scores.get("pain_points"),
+        "aiOpportunities": scores.get("ai_opportunities"),
+        "automationOpportunities": scores.get("automation_opportunities"),
     }
 
 

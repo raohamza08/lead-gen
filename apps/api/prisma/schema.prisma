@@ -254,6 +254,12 @@ model Lead {
   assignedUser         User?    @relation("AssignedUser", fields: [assignedUserId], references: [id])
 
   companyName         String   @map("company_name")
+  // Normalised forms used ONLY for duplicate detection, written on insert.
+  // Comparing normalised values has to happen in the database, so the
+  // normalisation must be persisted — computing it in TypeScript and then
+  // querying on the raw column silently defeats itself.
+  companyNameKey      String?  @map("company_name_key")
+  linkedinSlug        String?  @map("linkedin_slug")
   website             String?
   websiteDomain       String?  @map("website_domain")
   linkedinUrl         String?  @map("linkedin_url")
@@ -273,6 +279,25 @@ model Lead {
   b2bOrB2c            String?  @map("b2b_or_b2c")
   businessDescription String?  @map("business_description")
   currentCrm          String?  @map("current_crm")
+
+  // Contact's own LinkedIn, distinct from `linkedinUrl` above which is the
+  // company page. Conflating the two loses the ability to research the person.
+  contactLinkedinUrl  String?  @map("contact_linkedin_url")
+  estimatedRevenue    String?  @map("estimated_revenue")
+  websitePlatform     String?  @map("website_platform")
+  automationTools     Json     @default("[]") @map("automation_tools")
+  aiUsage             String?  @map("ai_usage")
+
+  // Business intelligence gathered during discovery. Stored on the lead rather
+  // than only in the review note, because these come from the AI's research and
+  // exist before any human review — the reviewer edits them, they aren't
+  // reviewer-authored.
+  growthSignals           Json   @default("[]") @map("growth_signals")
+  painPoints              String? @map("pain_points")
+  aiOpportunities         String? @map("ai_opportunities")
+  automationOpportunities String? @map("automation_opportunities")
+  // Free-text evidence for what the finder claimed, so a reviewer can audit it.
+  researchEvidence        String? @map("research_evidence")
 
   verifiedEmail       Boolean  @default(false) @map("verified_email")
   verifiedLinkedin    Boolean  @default(false) @map("verified_linkedin")
@@ -309,6 +334,18 @@ model LeadScore {
   automationScore       Int      @map("automation_score")
   crmReadinessScore     Int      @map("crm_readiness_score")
   websiteQualityScore   Int      @map("website_quality_score")
+
+  // The scoring rubric's remaining dimensions. Kept as separate columns rather
+  // than folded into leadScore so a reviewer can see *why* a lead ranked where
+  // it did — a single opaque number is not reviewable, and reviewer feedback is
+  // what the scoring loop is meant to improve on.
+  businessFitScore      Int?     @map("business_fit_score")
+  buyingIntentScore     Int?     @map("buying_intent_score")
+  budgetScore           Int?     @map("budget_score")
+  technologyGapScore    Int?     @map("technology_gap_score")
+  decisionMakerAccessScore Int?  @map("decision_maker_access_score")
+  // Weighted roll-up of the six dimensions; what the pipeline sorts on.
+  leadPriorityScore     Int?     @map("lead_priority_score")
   fitReason             String?  @map("fit_reason")
   suggestedServices     String?  @map("suggested_services")
   expectedValue         Decimal? @map("expected_value")

@@ -25,7 +25,188 @@ export interface FilterOption {
   value: string;
   label: string;
   why: string;
+  /** PRIMARY targets are pursued first; SECONDARY are viable but lower yield.
+   *  Absent means the option carries no tier. */
+  tier?: "PRIMARY" | "SECONDARY";
 }
+
+/**
+ * 1. Industries. Suggestions, not a closed set — `niche` on a filter stays free
+ * text so any vertical can be targeted, including ones not listed here. These
+ * are the verticals where manual process density and budget most reliably
+ * coincide.
+ */
+export const INDUSTRIES: FilterOption[] = [
+  { value: "HEALTHCARE", label: "Healthcare", tier: "PRIMARY", why: "Heavy intake, scheduling and records paperwork, with budget and strong compliance drivers." },
+  { value: "SAAS", label: "SaaS", tier: "PRIMARY", why: "Already buys software, so no need to create the category; fastest technical sale." },
+  { value: "REAL_ESTATE", label: "Real estate", tier: "PRIMARY", why: "Lead response speed decides commission, so automation maps straight to revenue." },
+  { value: "LAW_FIRMS", label: "Law firms", tier: "PRIMARY", why: "Document-heavy and billable-hour driven; document AI has an obvious ROI case." },
+  { value: "RECRUITMENT", label: "Recruitment agencies", tier: "PRIMARY", why: "High-volume repetitive screening and outreach; margin scales directly with automation." },
+  { value: "FINANCIAL_SERVICES", label: "Financial services", tier: "PRIMARY", why: "Large budgets, heavy reporting and reconciliation workload." },
+  { value: "INSURANCE", label: "Insurance", tier: "PRIMARY", why: "Claims and quoting are structured, repetitive and expensive to staff." },
+  { value: "ECOMMERCE", label: "E-commerce brands", tier: "PRIMARY", why: "Support volume and order operations scale badly without automation." },
+  { value: "MANUFACTURING", label: "Manufacturing", tier: "PRIMARY", why: "Legacy systems and paper processes with real digital-transformation budgets." },
+  { value: "LOGISTICS", label: "Logistics", tier: "PRIMARY", why: "Tracking, dispatch and proof-of-delivery are high-volume and error-prone." },
+  { value: "EDUCATION", label: "Education", tier: "PRIMARY", why: "Admissions and administration are form-driven and seasonal." },
+  { value: "CONSTRUCTION", label: "Construction", tier: "PRIMARY", why: "Quoting, scheduling and compliance still run on spreadsheets almost everywhere." },
+  { value: "HOSPITALITY", label: "Hospitality", tier: "PRIMARY", why: "Booking and guest communication automate cleanly and visibly." },
+  { value: "PROFESSIONAL_SERVICES", label: "Professional services", tier: "PRIMARY", why: "Sells time, so every hour automated converts into margin." },
+  { value: "MARKETING_AGENCIES", label: "Marketing agencies", tier: "SECONDARY", why: "Understands the value quickly, but may build in-house instead of buying." },
+  { value: "CONSULTING", label: "Consulting firms", tier: "SECONDARY", why: "Strong budget, though often positions itself as a competitor." },
+  { value: "AUTOMOTIVE", label: "Automotive", tier: "SECONDARY", why: "Dealer lead handling and service scheduling are clear automation targets." },
+  { value: "FITNESS", label: "Fitness", tier: "SECONDARY", why: "Membership and scheduling flows automate well; budgets are smaller." },
+  { value: "BEAUTY_WELLNESS", label: "Beauty & wellness", tier: "SECONDARY", why: "Booking and retention automation; typically low deal size." },
+  { value: "TRAVEL", label: "Travel companies", tier: "SECONDARY", why: "Itinerary and support volume suits AI agents." },
+  { value: "PROPERTY_MANAGEMENT", label: "Property management", tier: "SECONDARY", why: "Maintenance requests and tenant communication are relentless and repetitive." },
+  { value: "ACCOUNTING", label: "Accounting firms", tier: "SECONDARY", why: "Document and invoice processing is the single clearest automation use case." },
+];
+
+/**
+ * 2. Target countries. Tiered by purchasing power, English-language business
+ * norms and willingness to buy from an external vendor.
+ *
+ * DEPRIORITISED markets are not blocked — they are simply not searched unless
+ * explicitly selected, which is what the spec asks for. Encoding them as
+ * options rather than a hidden filter keeps the choice visible and reversible.
+ */
+export const TARGET_COUNTRIES: FilterOption[] = [
+  { value: "UNITED_STATES", label: "United States", tier: "PRIMARY", why: "Largest budgets and fastest adoption of new vendors." },
+  { value: "CANADA", label: "Canada", tier: "PRIMARY", why: "Similar buying behaviour to the US, less vendor saturation." },
+  { value: "UNITED_KINGDOM", label: "United Kingdom", tier: "PRIMARY", why: "Mature outsourcing culture and no language barrier." },
+  { value: "GERMANY", label: "Germany", tier: "PRIMARY", why: "Large mid-market with heavy process documentation; longer cycles." },
+  { value: "FRANCE", label: "France", tier: "PRIMARY", why: "Strong digital-transformation spend; expect French-language delivery." },
+  { value: "NETHERLANDS", label: "Netherlands", tier: "PRIMARY", why: "High digital maturity and very high business-English fluency." },
+  { value: "SWITZERLAND", label: "Switzerland", tier: "PRIMARY", why: "High budgets and high willingness to pay for quality." },
+  { value: "SWEDEN", label: "Sweden", tier: "PRIMARY", why: "Early technology adopters, flat organisations, accessible decision makers." },
+  { value: "NORWAY", label: "Norway", tier: "PRIMARY", why: "High spend per employee, small but wealthy market." },
+  { value: "DENMARK", label: "Denmark", tier: "PRIMARY", why: "Digital-first public and private sector." },
+  { value: "AUSTRALIA", label: "Australia", tier: "PRIMARY", why: "English-speaking, receptive to remote vendors; timezone is the main constraint." },
+  { value: "UAE", label: "United Arab Emirates", tier: "PRIMARY", why: "Aggressive digital-transformation investment and fast decisions." },
+  { value: "SAUDI_ARABIA", label: "Saudi Arabia", tier: "PRIMARY", why: "Vision 2030 spending makes AI budgets unusually available." },
+  { value: "QATAR", label: "Qatar", tier: "PRIMARY", why: "High budget per project, small market." },
+  { value: "PAKISTAN", label: "Pakistan", tier: "SECONDARY", why: "Deprioritised: low willingness to pay Western rates. Select explicitly to include." },
+  { value: "INDIA", label: "India", tier: "SECONDARY", why: "Deprioritised: large in-house dev capacity and heavy price competition." },
+  { value: "BANGLADESH", label: "Bangladesh", tier: "SECONDARY", why: "Deprioritised: limited budget for external automation vendors." },
+  { value: "INDONESIA", label: "Indonesia", tier: "SECONDARY", why: "Deprioritised: growing, but low average deal size today." },
+];
+
+/**
+ * 3. Employee bands.
+ *
+ * MICRO is included deliberately rather than hidden, because the spec allows it
+ * conditionally — a 1-5 person company that is recently funded, growing fast or
+ * hiring aggressively is a legitimate target. Selecting it turns on that
+ * conditional rule in the search brief rather than opening the floodgates.
+ */
+export const EMPLOYEE_BANDS: FilterOption[] = [
+  { value: "BAND_10_50", label: "10-50", tier: "PRIMARY", why: "Process pain has appeared but there is no internal IT team to build a fix. Fastest decisions." },
+  { value: "BAND_51_200", label: "51-200", tier: "PRIMARY", why: "The sweet spot: real budget, real complexity, still a short decision chain." },
+  { value: "BAND_201_500", label: "201-500", tier: "PRIMARY", why: "Departmental budgets and multiple automatable processes; expect a committee." },
+  { value: "BAND_501_1000", label: "501-1000", tier: "PRIMARY", why: "Large contracts, formal procurement, longer cycle." },
+  { value: "BAND_1_5_CONDITIONAL", label: "1-5 (only if funded / high growth)", tier: "SECONDARY", why: "Normally too small. Include ONLY with recent funding, aggressive hiring or a strong online presence." },
+];
+
+/** 4. Revenue bands. Visible revenue signals are themselves a qualifier — a
+ *  company with none is usually too small or too opaque to sell to. */
+export const REVENUE_BANDS: FilterOption[] = [
+  { value: "REV_500K_PLUS", label: "$500K+", tier: "PRIMARY", why: "Minimum for a meaningful project budget to exist at all." },
+  { value: "REV_1M_PLUS", label: "$1M+", tier: "PRIMARY", why: "Can fund a serious automation project without board approval." },
+  { value: "REV_5M_PLUS", label: "$5M+", tier: "PRIMARY", why: "Multiple departments with budget; supports retained work." },
+  { value: "REV_10M_PLUS", label: "$10M+", tier: "PRIMARY", why: "Enterprise-scale deals and platform builds." },
+];
+
+/**
+ * 5. Growth signals. Distinct from hiring activity: hiring is one signal among
+ * several, and these are the observable events that indicate a company is
+ * changing — and therefore open to buying.
+ */
+export const GROWTH_SIGNALS: FilterOption[] = [
+  { value: "RECENT_HIRING", label: "Recent hiring", why: "Headcount growth outpacing systems is the classic automation trigger." },
+  { value: "NEW_JOB_OPENINGS", label: "Active job openings", why: "Public, dated and specific — the most verifiable growth signal there is." },
+  { value: "MARKET_EXPANSION", label: "Expanding into new markets", why: "New geography or segment forces process rework, which is when vendors get hired." },
+  { value: "FUNDING_ROUND", label: "Recent funding round", why: "Capital that must be deployed, and a board expecting visible efficiency gains." },
+  { value: "NEW_PRODUCT_LAUNCH", label: "New product launched", why: "Launches expose operational gaps in support, onboarding and billing." },
+  { value: "WEBSITE_REDESIGN", label: "Recent website redesign", why: "Proves an active digital budget and an existing willingness to hire externally." },
+  { value: "TECH_MIGRATION", label: "Technology migration", why: "Mid-migration is the highest-intent moment to sell integration work." },
+  { value: "GROWING_CUSTOMER_BASE", label: "Growing customer base", why: "More customers, same headcount — support and onboarding break first." },
+  { value: "INCREASING_HEADCOUNT", label: "Increasing employee count", why: "Sustained growth over time, not a one-off hire." },
+  { value: "ACTIVE_MARKETING", label: "Active marketing campaigns", why: "Spending to generate leads implies budget and pressure to convert them faster." },
+  { value: "HIGH_WEBSITE_TRAFFIC", label: "High website traffic", why: "Traffic without automation means leads are being lost at the point of enquiry." },
+  { value: "LEADERSHIP_CHANGE", label: "Recent leadership change", why: "New executives buy to make an early mark; a genuine window that closes." },
+];
+
+/** 6. Decision-maker titles with real buying authority. Junior and assistant
+ *  titles are excluded by design — they cannot authorise spend. */
+export const DECISION_MAKER_TITLES: FilterOption[] = [
+  { value: "FOUNDER", label: "Founder", tier: "PRIMARY", why: "Final authority and feels the operational pain personally." },
+  { value: "CO_FOUNDER", label: "Co-Founder", tier: "PRIMARY", why: "Same authority as founder; usually owns operations or product." },
+  { value: "CEO", label: "CEO", tier: "PRIMARY", why: "Budget holder. Pitch business outcomes, never features." },
+  { value: "COO", label: "COO", tier: "PRIMARY", why: "Owns the broken processes. Typically the strongest champion in the building." },
+  { value: "CTO", label: "CTO", tier: "PRIMARY", why: "Technical authority who can approve or veto; engage early, never bypass." },
+  { value: "VP_OPERATIONS", label: "VP Operations", tier: "PRIMARY", why: "Departmental budget plus direct ownership of the pain." },
+  { value: "VP_TECHNOLOGY", label: "VP Technology", tier: "PRIMARY", why: "Owns the systems roadmap and integration decisions." },
+  { value: "HEAD_OF_DIGITAL_TRANSFORMATION", label: "Head of Digital Transformation", tier: "PRIMARY", why: "Exists specifically to buy this. Highest-intent title on the list." },
+  { value: "HEAD_OF_INNOVATION", label: "Head of Innovation", tier: "PRIMARY", why: "Mandated to pilot new technology, usually with a ring-fenced budget." },
+  { value: "IT_DIRECTOR", label: "IT Director", tier: "PRIMARY", why: "Controls systems spend and integration approval." },
+  { value: "OPERATIONS_DIRECTOR", label: "Operations Director", tier: "PRIMARY", why: "Closest to the manual work and able to quantify its cost." },
+  { value: "MANAGING_DIRECTOR", label: "Managing Director", tier: "PRIMARY", why: "Full P&L authority, common in UK and EU mid-market." },
+  { value: "MARKETING_DIRECTOR", label: "Marketing Director", tier: "SECONDARY", why: "Owns CRM and lead-routing budget; a strong entry point for automation." },
+];
+
+/** 7. Technology signals. Both directions matter: a modern stack means budget
+ *  and integration work, a legacy or absent stack means a replacement sale. */
+export const TECHNOLOGY_SIGNALS: FilterOption[] = [
+  { value: "SALESFORCE", label: "Salesforce", tier: "PRIMARY", why: "Already invested in CRM. Sell automation and integration on top." },
+  { value: "HUBSPOT", label: "HubSpot", tier: "PRIMARY", why: "Mid-market default; usually underused, so the upgrade path is obvious." },
+  { value: "ZOHO", label: "Zoho", tier: "PRIMARY", why: "Cost-conscious buyer who has already accepted the category." },
+  { value: "MS_DYNAMICS", label: "Microsoft Dynamics", tier: "PRIMARY", why: "Enterprise budget and near-guaranteed integration work." },
+  { value: "SHOPIFY", label: "Shopify", tier: "PRIMARY", why: "Order and support automation with a measurable revenue impact." },
+  { value: "WORDPRESS", label: "WordPress", tier: "PRIMARY", why: "Usually paired with manual back-office processes and no real integration." },
+  { value: "CUSTOM_SOFTWARE", label: "Custom / in-house software", tier: "PRIMARY", why: "Already pays for software. Sell extension rather than replacement." },
+  { value: "LEGACY_SYSTEMS", label: "Legacy systems", tier: "PRIMARY", why: "Highest-value modernisation projects, though the longest sales cycle." },
+  { value: "NO_CRM_DETECTED", label: "No CRM detected", tier: "PRIMARY", why: "Greenfield: CRM implementation plus the automation layer above it." },
+  { value: "NO_CHATBOT", label: "No chatbot / live chat", why: "Direct opening for an AI support or qualification agent." },
+  { value: "POOR_INTEGRATIONS", label: "Poorly integrated tools", why: "Staff are acting as the integration layer, moving data between systems by hand." },
+  { value: "MANUAL_PROCESSES", label: "Visibly manual processes", why: "The core qualifying signal for every service sold here." },
+];
+
+/**
+ * 8. AI opportunity types — the *solutions* to propose, distinct from
+ * ai-opportunity *signals*, which are the problems observed. Keeping the two
+ * apart matters: the signal is what qualifies the lead, the opportunity is what
+ * goes in the pitch.
+ */
+export const AI_OPPORTUNITY_TYPES: FilterOption[] = [
+  { value: "CUSTOMER_SUPPORT_AUTOMATION", label: "Customer support automation", why: "Highest-volume repetitive work, so deflection savings are easy to quantify." },
+  { value: "AI_CHATBOT", label: "AI chatbot", why: "Visible, fast to deploy, and an ideal low-risk first project." },
+  { value: "LEAD_QUALIFICATION", label: "Lead qualification", why: "Ties directly to revenue, which makes the budget conversation simple." },
+  { value: "CRM_AUTOMATION", label: "CRM automation", why: "Sales teams feel the pain daily and often hold their own budget." },
+  { value: "SALES_AUTOMATION", label: "Sales automation", why: "Measurable in pipeline terms, so results are self-evident." },
+  { value: "MARKETING_AUTOMATION", label: "Marketing automation", why: "Marketing budgets are flexible and already tooling-oriented." },
+  { value: "DATA_ANALYTICS", label: "Data analytics", why: "Usually a follow-on sale once data has been centralised." },
+  { value: "DOCUMENT_PROCESSING", label: "Document processing", why: "Enormous time savings in document-heavy sectors like law and insurance." },
+  { value: "INVOICE_AUTOMATION", label: "Invoice automation", why: "Finance can compute the ROI itself, which shortens approval." },
+  { value: "WORKFLOW_AUTOMATION", label: "Internal workflow automation", why: "Broadest applicability across every department." },
+  { value: "AI_AGENTS", label: "AI agents", why: "Highest-value engagements; needs a mature buyer to land." },
+  { value: "CUSTOM_SAAS", label: "Custom SaaS build", why: "Largest contract value and the stickiest long-term relationship." },
+  { value: "MOBILE_APP", label: "Mobile application", why: "Well-defined scope, straightforward to price." },
+  { value: "BI_DASHBOARDS", label: "BI dashboards", why: "Low-friction entry point that surfaces the deeper automation work." },
+];
+
+/** 9. Website analysis dimensions. Each must be judged from the actual rendered
+ *  site, which is what keeps the resulting claim defensible in a cold email. */
+export const WEBSITE_ANALYSIS_DIMENSIONS: FilterOption[] = [
+  { value: "OVERALL_QUALITY", label: "Overall quality", why: "Proxy for how much a company invests in its digital presence generally." },
+  { value: "PAGE_SPEED", label: "Speed", why: "Objectively measurable, so it opens a conversation without sounding like an opinion." },
+  { value: "DESIGN", label: "Design", why: "A dated design usually means the back office is dated too." },
+  { value: "UX", label: "User experience", why: "Poor UX implies poor internal process design." },
+  { value: "MOBILE", label: "Mobile experience", why: "Not being mobile-friendly signals years without investment." },
+  { value: "SEO", label: "SEO", why: "Weak SEO alongside paid ads means money is being wasted on acquisition." },
+  { value: "CONVERSION", label: "Conversion optimisation", why: "Traffic that does not convert is the most persuasive number to open with." },
+  { value: "CONTENT_QUALITY", label: "Content quality", why: "Thin content indicates no marketing operations capacity." },
+  { value: "TRUST_SIGNALS", label: "Trust signals", why: "Missing proof points suppress conversion regardless of traffic." },
+  { value: "CTA_QUALITY", label: "Calls to action", why: "Weak CTAs mean enquiries are lost before any automation could catch them." },
+];
 
 /**
  * 4. Company Type — how the company is owned/structured.
@@ -166,6 +347,15 @@ export const EXCLUSION_SIGNALS: FilterOption[] = [
 /** Every catalogue keyed by the NicheFilter field it populates. Used by the DTO
  *  validator and the settings UI so neither has its own copy. */
 export const FILTER_TAXONOMY = {
+  industries: INDUSTRIES,
+  targetCountries: TARGET_COUNTRIES,
+  employeeBands: EMPLOYEE_BANDS,
+  revenueBands: REVENUE_BANDS,
+  growthSignals: GROWTH_SIGNALS,
+  decisionMakerTitles: DECISION_MAKER_TITLES,
+  technologySignals: TECHNOLOGY_SIGNALS,
+  aiOpportunityTypes: AI_OPPORTUNITY_TYPES,
+  websiteAnalysisDimensions: WEBSITE_ANALYSIS_DIMENSIONS,
   companyTypes: COMPANY_TYPES,
   growthStages: GROWTH_STAGES,
   departments: DEPARTMENTS,
@@ -175,6 +365,22 @@ export const FILTER_TAXONOMY = {
   aiOpportunitySignals: AI_OPPORTUNITY_SIGNALS,
   exclusionSignals: EXCLUSION_SIGNALS,
 } as const;
+
+/**
+ * Daily priority mix. The spec requires 100+ leads/day split 40/40/20 so the
+ * pipeline keeps a deliberate exploration budget: chasing only high-priority
+ * leads narrows the funnel until the niche is exhausted and nothing new is ever
+ * learned about what converts.
+ */
+export const PRIORITY_DISTRIBUTION = { HIGH: 0.4, MEDIUM: 0.4, EXPERIMENTAL: 0.2 } as const;
+
+/** Target lead count per priority band for a given daily target. HIGH absorbs
+ *  the rounding remainder so the parts always sum to the whole. */
+export function priorityTargets(dailyTarget: number) {
+  const medium = Math.round(dailyTarget * PRIORITY_DISTRIBUTION.MEDIUM);
+  const experimental = Math.round(dailyTarget * PRIORITY_DISTRIBUTION.EXPERIMENTAL);
+  return { high: dailyTarget - medium - experimental, medium, experimental };
+}
 
 export type FilterTaxonomyKey = keyof typeof FILTER_TAXONOMY;
 

@@ -34,6 +34,20 @@ export class LeadsService {
   async createVerified(orgId: string, dto: CreateLeadDto): Promise<CreateLeadResult> {
     const websiteDomain = extractDomain(dto.website);
 
+    // Tier-2 duplicate check, ahead of the insert.
+    //
+    // The unique constraints below cover domain and email only, so the same
+    // company arriving under a different domain (a .co.uk vs .com, a rebrand)
+    // or with no email at all would insert cleanly as a second record. The spec
+    // requires matching on company name and LinkedIn URL as well, and neither
+    // can be a DB unique constraint: company names are legitimately similar
+    // across orgs, and a null LinkedIn URL must not collide with another null.
+    const existing = await this.findExistingDuplicate(orgId, dto, websiteDomain);
+    if (existing) {
+      this.logger.debug(`Duplicate lead rejected for org ${orgId}: matched ${existing.reason}`);
+      return { status: "duplicate" };
+    }
+
     try {
       const lead = await this.prisma.$transaction(async (tx) => {
         const created = await tx.lead.create({
@@ -42,6 +56,10 @@ export class LeadsService {
             runId: dto.runId,
             filterId: dto.filterId,
             companyName: dto.companyName,
+            // Written on insert so the next duplicate check can compare against
+            // it. A lead saved without these is invisible to tier-2 dedup.
+            companyNameKey: normaliseCompanyName(dto.companyName),
+            linkedinSlug: normaliseLinkedin(dto.linkedinUrl),
             website: dto.website,
             websiteDomain,
             linkedinUrl: dto.linkedinUrl,
@@ -61,6 +79,16 @@ export class LeadsService {
             b2bOrB2c: dto.b2bOrB2c,
             businessDescription: dto.businessDescription,
             currentCrm: dto.currentCrm,
+            contactLinkedinUrl: dto.contactLinkedinUrl,
+            estimatedRevenue: dto.estimatedRevenue,
+            websitePlatform: dto.websitePlatform,
+            automationTools: (dto.automationTools ?? []) as Prisma.InputJsonValue,
+            aiUsage: dto.aiUsage,
+            growthSignals: (dto.growthSignals ?? []) as Prisma.InputJsonValue,
+            painPoints: dto.painPoints,
+            aiOpportunities: dto.aiOpportunities,
+            automationOpportunities: dto.automationOpportunities,
+            researchEvidence: dto.researchEvidence,
             verifiedEmail: dto.verifiedEmail ?? false,
             verifiedLinkedin: dto.verifiedLinkedin ?? false,
             verifiedWebsite: dto.verifiedWebsite ?? false,
@@ -76,9 +104,16 @@ export class LeadsService {
             automationScore: dto.automationScore ?? 0,
             crmReadinessScore: dto.crmReadinessScore ?? 0,
             websiteQualityScore: dto.websiteQualityScore ?? 0,
+            businessFitScore: dto.businessFitScore,
+            buyingIntentScore: dto.buyingIntentScore,
+            budgetScore: dto.budgetScore,
+            technologyGapScore: dto.technologyGapScore,
+            decisionMakerAccessScore: dto.decisionMakerAccessScore,
+            leadPriorityScore: dto.leadPriorityScore,
             fitReason: dto.fitReason,
             suggestedServices: dto.suggestedServices,
             expectedValue: dto.expectedValue,
+            priority: dto.priority,
           },
         });
 
@@ -254,6 +289,79 @@ export class LeadsService {
     if (!lead) throw new NotFoundException("Lead not found");
     return lead;
   }
+
+  /**
+   * Tier-2 duplicate detection (Part C2), covering the identities the database
+   * unique constraints cannot.
+   *
+   * The constraints handle exact domain and exact email. These three cases slip
+   * past them:
+   *   - the same company under a different domain (.com vs .co.uk, a rebrand),
+   *   - a company with no email, where the email constraint never applies,
+   *   - a normalised LinkedIn URL that differs only by trailing slash or case.
+   *
+   * Company name is compared case-insensitively after stripping punctuation and
+   * common suffixes, so "Acme Ltd." and "acme limited" collapse together. This
+   * is still exact-after-normalisation, not fuzzy — a genuine similarity layer
+   * (trigram or embedding) is the next step, and is deliberately not faked here.
+   */
+  private async findExistingDuplicate(
+    orgId: string,
+    dto: CreateLeadDto,
+    websiteDomain?: string,
+  ): Promise<{ reason: string } | null> {
+    const checks: { reason: string; where: Prisma.LeadWhereInput }[] = [];
+
+    if (websiteDomain) checks.push({ reason: "website domain", where: { orgId, websiteDomain } });
+    if (dto.email) {
+      checks.push({ reason: "email", where: { orgId, email: { equals: dto.email, mode: "insensitive" } } });
+    }
+
+    // Both compare against the PERSISTED normalised columns. Comparing against
+    // the raw columns would match nothing the raw value wouldn't already have
+    // matched, making the normalisation pointless. Exact equality, not
+    // `contains` — `contains` on a slug makes "company/acme" match
+    // "company/acme-health", merging two different companies.
+    const linkedin = normaliseLinkedin(dto.linkedinUrl);
+    if (linkedin) checks.push({ reason: "LinkedIn URL", where: { orgId, linkedinSlug: linkedin } });
+
+    const name = normaliseCompanyName(dto.companyName);
+    if (name) checks.push({ reason: "company name", where: { orgId, companyNameKey: name } });
+
+    for (const check of checks) {
+      const hit = await this.prisma.lead.findFirst({ where: check.where, select: { id: true } });
+      if (hit) return { reason: check.reason };
+    }
+    return null;
+  }
+}
+
+/** Strips scheme, host, trailing slash and case so cosmetically different
+ *  LinkedIn URLs for the same company compare equal. Exported for testing —
+ *  these two functions are the whole of tier-2 dedup, and a bug in either means
+ *  contacting the same company twice. */
+export function normaliseLinkedin(url?: string): string | undefined {
+  if (!url) return undefined;
+  const slug = url
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/^([a-z]{2,3}\.)?linkedin\.com\//, "")
+    .replace(/\/+$/, "")
+    .trim();
+  return slug || undefined;
+}
+
+/** Lower-cases and strips punctuation plus common legal suffixes, so
+ *  "Acme Ltd." and "acme limited" normalise to the same string. */
+export function normaliseCompanyName(name?: string): string | undefined {
+  if (!name) return undefined;
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[.,]/g, " ")
+    .replace(/\b(ltd|limited|llc|inc|incorporated|corp|corporation|gmbh|bv|plc|pty|co)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || undefined;
 }
 
 function extractDomain(website?: string): string | undefined {

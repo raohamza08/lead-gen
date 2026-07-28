@@ -1,4 +1,4 @@
-import { IsArray, IsBoolean, IsInt, IsNumber, IsOptional, IsString } from "class-validator";
+import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString } from "class-validator";
 
 /**
  * Payload the Claude lead-gen agent posts once a candidate clears verification
@@ -28,6 +28,20 @@ export class CreateLeadDto {
   @IsOptional() @IsString() businessDescription?: string;
   @IsOptional() @IsString() currentCrm?: string;
 
+  // --- Technology & business intelligence gathered during discovery ---
+  /** The contact's own profile, NOT the company page (that's linkedinUrl). */
+  @IsOptional() @IsString() contactLinkedinUrl?: string;
+  @IsOptional() @IsString() estimatedRevenue?: string;
+  @IsOptional() @IsString() websitePlatform?: string;
+  @IsOptional() @IsArray() automationTools?: string[];
+  @IsOptional() @IsString() aiUsage?: string;
+  @IsOptional() @IsArray() growthSignals?: string[];
+  @IsOptional() @IsString() painPoints?: string;
+  @IsOptional() @IsString() aiOpportunities?: string;
+  @IsOptional() @IsString() automationOpportunities?: string;
+  /** What the finder actually observed, so a reviewer can audit the claim. */
+  @IsOptional() @IsString() researchEvidence?: string;
+
   @IsOptional() @IsBoolean() verifiedEmail?: boolean;
   @IsOptional() @IsBoolean() verifiedLinkedin?: boolean;
   @IsOptional() @IsBoolean() verifiedWebsite?: boolean;
@@ -38,9 +52,19 @@ export class CreateLeadDto {
   @IsOptional() @IsInt() automationScore?: number;
   @IsOptional() @IsInt() crmReadinessScore?: number;
   @IsOptional() @IsInt() websiteQualityScore?: number;
+
+  // The remaining rubric dimensions plus the roll-up the pipeline ranks on.
+  @IsOptional() @IsInt() businessFitScore?: number;
+  @IsOptional() @IsInt() buyingIntentScore?: number;
+  @IsOptional() @IsInt() budgetScore?: number;
+  @IsOptional() @IsInt() technologyGapScore?: number;
+  @IsOptional() @IsInt() decisionMakerAccessScore?: number;
+  @IsOptional() @IsInt() leadPriorityScore?: number;
+
   @IsOptional() @IsString() fitReason?: string;
   @IsOptional() @IsString() suggestedServices?: string;
   @IsOptional() @IsNumber() expectedValue?: number;
+  @IsOptional() @IsIn(["LOW", "MEDIUM", "HIGH"]) priority?: "LOW" | "MEDIUM" | "HIGH";
 
   @IsOptional() @IsString() filterId?: string;
   @IsOptional() @IsString() runId?: string;
