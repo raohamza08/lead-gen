@@ -180,6 +180,33 @@ model NicheFilter {
   fundingStage   String?  @map("funding_stage")
   businessModel  String?  @map("business_model")
   b2bOrB2c       String?  @map("b2b_or_b2c")
+
+  // Targeting filters. Values are constrained to the catalogues in
+  // packages/types/src/filter-taxonomy.ts, which the DTO validates against and
+  // the settings UI renders — one source of truth for all three consumers.
+  //
+  // Every array defaults to empty, and empty means "no constraint on this
+  // dimension" rather than "match nothing". That distinction matters: these
+  // columns are added to filters that already exist, and the opposite reading
+  // would silently stop every current filter from returning any leads.
+  companyTypes         String[] @default([]) @map("company_types")
+  growthStages         String[] @default([]) @map("growth_stages")
+  companyKeywords      String[] @default([]) @map("company_keywords")
+  departments          String[] @default([])
+  seniorityLevels      String[] @default([]) @map("seniority_levels")
+  yearsInBusinessMin   Int?     @map("years_in_business_min")
+  yearsInBusinessMax   Int?     @map("years_in_business_max")
+  hiringSignals        String[] @default([]) @map("hiring_signals")
+  websiteConditions    String[] @default([]) @map("website_conditions")
+  aiOpportunitySignals String[] @default([]) @map("ai_opportunity_signals")
+
+  // Exclusions, applied after every inclusion filter. A candidate matching any
+  // of these is rejected however well it scores elsewhere.
+  exclusionSignals  String[] @default([]) @map("exclusion_signals")
+  excludeIndustries String[] @default([]) @map("exclude_industries")
+  excludeKeywords   String[] @default([]) @map("exclude_keywords")
+  excludeCompanies  String[] @default([]) @map("exclude_companies")
+
   dailyTarget    Int      @default(100) @map("daily_target")
   sourcePriority String[] @default([]) @map("source_priority")
   scheduleCron   String   @default("0 6 * * *") @map("schedule_cron")

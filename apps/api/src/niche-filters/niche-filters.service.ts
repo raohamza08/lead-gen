@@ -4,6 +4,7 @@ import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronJob } from "cron";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { UpsertNicheFilterDto } from "./dto/upsert-niche-filter.dto";
+import { buildSearchBrief } from "./search-brief";
 
 /**
  * Part E6 scheduler supervisor: one dynamic CronJob per active NicheFilter,
@@ -112,7 +113,12 @@ export class NicheFiltersService implements OnModuleInit {
       await fetch(`${aiWorkersUrl}/lead-gen/runs`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId: run.id, filter }),
+        // searchBrief expands the stored taxonomy values into explained
+        // criteria. Without it the worker only has raw enum tokens like
+        // MANUAL_WORKFLOWS, which the model can't act on. `filter` is still
+        // sent so the worker keeps the structured values it needs (orgId,
+        // dailyTarget, id).
+        body: JSON.stringify({ runId: run.id, filter, searchBrief: buildSearchBrief(filter) }),
       });
     } catch (err) {
       this.logger.warn(`Failed to dispatch extraction run ${run.id} to AI workers: ${(err as Error).message}`);

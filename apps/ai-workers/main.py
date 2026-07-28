@@ -21,6 +21,10 @@ app = FastAPI(title="Lead-Gen AI Workers")
 class ExtractionRunRequest(BaseModel):
     runId: str
     filter: dict
+    # Human-readable targeting criteria rendered by the API from the shared
+    # filter taxonomy. Optional so an older caller (or a direct curl) still
+    # works — search_tools falls back to describing the raw filter dict.
+    searchBrief: str | None = None
     orgContext: dict | None = None
 
 
@@ -37,7 +41,7 @@ async def health():
 
 @app.post("/lead-gen/runs")
 async def start_extraction_run(req: ExtractionRunRequest, background_tasks: BackgroundTasks):
-    niche_filter = {**req.filter, "orgId": req.filter.get("orgId")}
+    niche_filter = {**req.filter, "orgId": req.filter.get("orgId"), "searchBrief": req.searchBrief}
     background_tasks.add_task(run_extraction_in_background, req.runId, niche_filter, req.orgContext)
     return {"accepted": True, "runId": req.runId}
 

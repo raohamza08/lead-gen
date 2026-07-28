@@ -48,21 +48,56 @@ async def find_candidate(
         return _find_candidate_demo(niche_filter, attempt)
 
 
+def _criteria_text(niche_filter: dict) -> str:
+    """The API renders the filter into an explained brief using the shared
+    taxonomy in packages/types. Fall back to the raw dict only when it's absent,
+    so a direct API call or an older caller still yields a usable prompt."""
+    brief = niche_filter.get("searchBrief")
+    if brief and brief.strip():
+        return brief
+    trimmed = {
+        k: v
+        for k, v in niche_filter.items()
+        if k not in ("searchBrief", "orgId", "id", "clickupListId") and v not in (None, [], "")
+    }
+    return json.dumps(trimmed, indent=2)
+
+
 async def _find_candidate_via_cli(niche_filter: dict, already_found: list[str]) -> Optional[dict]:
     exclusion = (
-        f"\n\nCompanies already found in this run — do NOT repeat any of these: {', '.join(already_found)}"
+        f"\n\nAlready found in this run — do NOT return any of these again: {', '.join(already_found)}"
         if already_found
         else ""
     )
-    prompt = f"""Find ONE real company matching these criteria. Criteria: {json.dumps(niche_filter)}{exclusion}
+    prompt = f"""Find ONE real company matching the targeting brief below.
 
-Use web search to confirm the company exists, has a live website, and (if possible) a LinkedIn
-company page. Respond with ONLY a JSON object, no prose, no markdown code fences:
+{_criteria_text(niche_filter)}{exclusion}
+
+HOW TO SEARCH
+Work from the buying-intent signals, not only the firmographics. A company that
+matches the industry and headcount but shows none of the intent signals is a
+weak lead; one showing several intent signals is strong even if the
+firmographics fit imperfectly. Use web search to find candidates, then fetch the
+company's own website to verify what you claim about it.
+
+RULES
+- The company must be real, currently operating, and have a live website. Never
+  invent a company, a contact, or an email address.
+- Apply every EXCLUDE rule as a hard reject.
+- Only report a contact name, title or email you actually found. A guessed
+  address bounces, and bounces damage the sending reputation of every mailbox in
+  the system, so null is always the right answer when unsure.
+- `evidence` must cite what you actually observed — what the site showed, what a
+  job posting said. A human reviewer uses it to judge the lead.
+
+Respond with ONLY a JSON object — no prose, no markdown code fences:
 {{
   "companyName": string, "website": string, "linkedinUrl": string|null,
   "contactName": string|null, "jobTitle": string|null, "email": string|null,
   "industry": string, "country": string|null, "city": string|null,
-  "employeeCount": number|null, "businessDescription": string
+  "employeeCount": number|null, "businessDescription": string,
+  "matchedSignals": string[],
+  "evidence": string
 }}
 If you cannot find a confident match, respond with {{"no_match": true}}.
 """

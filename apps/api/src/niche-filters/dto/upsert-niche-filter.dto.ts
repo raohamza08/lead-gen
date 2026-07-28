@@ -1,4 +1,16 @@
-import { IsArray, IsBoolean, IsInt, IsOptional, IsString, Min } from "class-validator";
+import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { allowedValues } from "@leadgen/types";
+
+/**
+ * Values for the taxonomy-backed fields are checked against the shared
+ * catalogue rather than accepted as free text. A typo'd value would otherwise
+ * store cleanly, render as an unknown chip in the UI, and quietly narrow the
+ * search to nothing — a failure with no error message anywhere.
+ *
+ * `each: true` applies the check per array element.
+ */
+const inTaxonomy = (key: Parameters<typeof allowedValues>[0]) =>
+  IsIn(allowedValues(key), { each: true });
 
 export class UpsertNicheFilterDto {
   @IsString()
@@ -59,6 +71,91 @@ export class UpsertNicheFilterDto {
   @IsOptional()
   @IsString()
   b2bOrB2c?: string;
+
+  // --- Targeting filters. Empty/omitted means "no constraint on this
+  // dimension", so leaving them all blank reproduces the previous behaviour. ---
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("companyTypes")
+  companyTypes?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("growthStages")
+  growthStages?: string[];
+
+  // Free text by design: keywords are whatever the operator's vertical calls
+  // things, and no fixed catalogue could cover every niche the product targets.
+  // Capped so a paste accident can't blow up the search prompt.
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(50)
+  companyKeywords?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("departments")
+  departments?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("seniorityLevels")
+  seniorityLevels?: string[];
+
+  // 0 is meaningful (founded this year); 200 is a sanity ceiling.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  yearsInBusinessMin?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(200)
+  yearsInBusinessMax?: number;
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("hiringSignals")
+  hiringSignals?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("websiteConditions")
+  websiteConditions?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("aiOpportunitySignals")
+  aiOpportunitySignals?: string[];
+
+  // --- Exclusions ---
+
+  @IsOptional()
+  @IsArray()
+  @inTaxonomy("exclusionSignals")
+  exclusionSignals?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(50)
+  excludeIndustries?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(50)
+  excludeKeywords?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  @ArrayMaxSize(200)
+  excludeCompanies?: string[];
 
   @IsOptional()
   @IsInt()

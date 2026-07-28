@@ -1,0 +1,583 @@
+```md
+# AI-Powered Revenue Intelligence & Client Acquisition Operating System
+## Product Requirements Document (PRD)
+
+---
+
+# Overview
+
+## Vision
+
+Build a production-ready AI-powered Revenue Intelligence Platform that functions as an autonomous AI Sales Department rather than a traditional lead generation tool.
+
+The platform should automate nearly the entire outbound sales lifecycle, allowing humans to focus only on strategy, approval, relationship building, and closing deals.
+
+---
+
+# Core Objective
+
+Create an internal SaaS platform capable of:
+
+- Discovering potential customers
+- Understanding each business
+- Identifying operational pain points
+- Detecting AI and automation opportunities
+- Recommending services
+- Personalizing outreach
+- Managing follow-ups
+- Tracking engagement
+- Predicting buying probability
+- Continuously improving through feedback
+
+---
+
+# Human Responsibilities
+
+Users should only:
+
+- Define target market
+- Configure filters
+- Review AI recommendations
+- Approve outreach
+- Conduct sales conversations
+- Close deals
+
+Everything else should be fully automated.
+
+---
+
+# Multi-Agent AI Architecture
+
+## 1. Lead Discovery Agent
+
+### Responsibilities
+
+- Discover companies matching ICP
+- Search multiple data sources
+- Apply Sales Navigator-like filters
+- Collect company metadata
+- Identify decision makers
+
+### Inputs
+
+- Industry
+- Geography
+- Company size
+- Revenue
+- Technology
+- Keywords
+- Hiring signals
+
+### Outputs
+
+- Qualified companies
+- Initial contact list
+
+---
+
+## 2. Lead Verification Agent
+
+### Responsibilities
+
+Verify:
+
+- Company existence
+- Website
+- LinkedIn
+- Email
+- Domain
+- Company size
+- Country
+- Decision maker
+
+Remove:
+
+- Duplicates
+- Invalid emails
+- Fake companies
+- Closed businesses
+
+---
+
+## 3. Company Intelligence Agent
+
+Analyze every company before outreach.
+
+### Collect
+
+- Company overview
+- Products
+- Services
+- Industry
+- Business model
+- Revenue signals
+- Employee count
+- Growth indicators
+- Competitors
+- Technology stack
+- CRM
+- Marketing stack
+- Recent news
+- Hiring activity
+
+### Generate
+
+- Executive Summary
+- SWOT Analysis
+- Digital Maturity Score
+- AI Readiness Score
+- Automation Opportunity Score
+
+---
+
+## 4. Website Audit Agent
+
+Analyze
+
+- Design
+- UX
+- Mobile experience
+- SEO
+- Page speed
+- Accessibility
+- Conversion optimization
+- CTA placement
+- Security
+- Content quality
+
+### Generate
+
+- Website Score
+- UX Issues
+- SEO Issues
+- Improvement Suggestions
+- Recommended Services
+
+---
+
+## 5. AI Opportunity Agent
+
+Identify
+
+- Manual workflows
+- Operational bottlenecks
+- AI implementation ideas
+- CRM improvements
+- Automation opportunities
+- SaaS opportunities
+
+### Generate
+
+- Top AI Opportunities
+- Expected ROI
+- Estimated Impact
+- Project Complexity
+- Estimated Deal Size
+
+---
+
+## 6. Buyer Intelligence Agent
+
+Find
+
+- Founder
+- CEO
+- COO
+- CTO
+- CIO
+- Operations Director
+- Marketing Director
+- IT Director
+
+Analyze
+
+- LinkedIn profile
+- Career history
+- Company role
+- Buying authority
+- Recent activity
+
+Generate
+
+- Buyer Persona
+- Authority Score
+- Engagement Score
+
+---
+
+## 7. Lead Scoring Agent
+
+Score each lead using:
+
+- Business Fit
+- AI Opportunity
+- Buying Intent
+- Budget
+- Technology Gap
+- Decision Maker Quality
+
+Generate
+
+Lead Priority Score (0–100)
+
+---
+
+# Lead Generation Engine
+
+The platform should support filtering by:
+
+- Industry
+- Sub-industry
+- Country
+- State
+- City
+- Company Size
+- Annual Revenue
+- Employee Count
+- Business Model
+- Technologies Used
+- Funding Stage
+- Growth Stage
+- Job Titles
+- Seniority
+- Department
+- Keywords
+- Intent Signals
+
+The experience should resemble LinkedIn Sales Navigator.
+
+---
+
+# Buying Intent Signals
+
+Prioritize companies showing:
+
+- Recent funding
+- Developer hiring
+- AI hiring
+- Team expansion
+- Product launches
+- Website redesign
+- Technology migration
+- Rapid growth
+- Operational complexity
+
+---
+
+# Database Design
+
+Store comprehensive information for every lead.
+
+## Company Data
+
+- Company name
+- Website
+- LinkedIn
+- Industry
+- Revenue
+- Employees
+- Country
+- City
+
+## Contact Data
+
+- Name
+- Job title
+- Email
+- Phone
+- LinkedIn
+
+## Technology Data
+
+- CRM
+- Marketing stack
+- CMS
+- Analytics
+- AI tools
+- Cloud providers
+
+## Research Data
+
+- SWOT
+- Competitors
+- News
+- Hiring
+- Website audit
+
+## AI Analysis
+
+- AI Readiness
+- Automation Opportunities
+- Opportunity Score
+
+## Communication
+
+- Emails
+- LinkedIn Messages
+- Calls
+- Meetings
+- Notes
+
+## Analytics
+
+- Opens
+- Clicks
+- Replies
+- Engagement
+
+## Deal Information
+
+- Stage
+- Value
+- Probability
+- Forecast
+
+---
+
+# ClickUp CRM Integration
+
+Each qualified lead becomes a ClickUp task.
+
+## Task Name
+
+Company Name
+
+### Custom Fields
+
+- Company
+- Website
+- LinkedIn
+- Industry
+- Country
+- Employees
+- Revenue
+- Decision Maker
+- Job Title
+- Email
+- Technology Stack
+- CRM
+- AI Usage
+- Lead Score
+- Buying Intent
+- AI Opportunity Score
+- Website Score
+- Pain Points
+- Business Problems
+- AI Opportunities
+- Suggested Service
+- Suggested Offer
+- Case Study
+- Email Status
+- LinkedIn Status
+- Pipeline Stage
+- Expected Deal Value
+- Probability
+
+---
+
+# Outreach Engine
+
+Support:
+
+- Email
+- LinkedIn
+- Personalized Landing Pages
+- Follow-ups
+- CRM updates
+
+---
+
+# Email Personalization System
+
+Before generating an email, analyze:
+
+- Company
+- Website
+- Industry
+- Technology
+- Pain points
+- AI opportunities
+- Human notes
+- Previous communication
+
+Every email must explain:
+
+- Why the company was selected
+- Existing business problems
+- AI opportunities
+- Relevant examples
+- Suggested solution
+- Clear CTA
+
+Generic emails are prohibited.
+
+---
+
+# LinkedIn Outreach
+
+Track:
+
+- Connection request
+- Acceptance
+- Message sent
+- Reply received
+- Meeting booked
+
+Generate personalized connection requests.
+
+---
+
+# Personalized Landing Pages
+
+For high-value prospects automatically generate:
+
+- Company-specific landing page
+- Website audit
+- AI opportunity report
+- Recommended solutions
+- Portfolio
+- Relevant case studies
+- Meeting booking
+
+---
+
+# Sales Analytics Dashboard
+
+Track:
+
+- Leads Generated
+- Qualified Leads
+- High Intent Leads
+- Emails Sent
+- Open Rate
+- Reply Rate
+- Meetings
+- Proposals
+- Closed Deals
+- Revenue
+- Conversion Rate
+
+Additional analytics:
+
+- Best industries
+- Best countries
+- Best offers
+- Highest-performing campaigns
+- Best email sequences
+
+---
+
+# AI Learning System
+
+Continuously improve using:
+
+- Email replies
+- Meetings
+- Closed deals
+- Lost deals
+- User feedback
+
+Recommend improvements for:
+
+- ICP
+- Filters
+- Messaging
+- Offers
+- Timing
+- Campaign strategy
+
+---
+
+# Dashboard Modules
+
+## Executive Dashboard
+
+- KPIs
+- Pipeline
+- Revenue Forecast
+
+## Lead Intelligence Dashboard
+
+- Company research
+- AI opportunities
+- Lead scores
+
+## Campaign Dashboard
+
+- Email performance
+- LinkedIn performance
+- Landing page analytics
+
+## Automation Dashboard
+
+- Jobs
+- Queues
+- Agent status
+- Errors
+
+## AI Performance Dashboard
+
+- Claude usage
+- Gemini usage
+- Token consumption
+- Cost
+- Accuracy
+
+---
+
+# Required Deliverables
+
+Design the platform as a production-ready SaaS application and provide:
+
+1. Complete Architecture
+2. Multi-Agent Design
+3. Database Schema
+4. Entity Relationship Diagram (ERD)
+5. Frontend Architecture
+6. Backend Architecture
+7. API Design
+8. AI Agent Workflows
+9. Prompt Architecture
+10. Data Flow
+11. ClickUp Integration
+12. Email Integration
+13. LinkedIn Integration
+14. Dashboard UI
+15. User Roles
+16. Permissions
+17. Security
+18. Deployment Architecture
+19. Scalability Plan
+20. Development Roadmap
+21. Cost Estimation
+22. Testing Strategy
+23. Monitoring System
+24. Failure Handling
+25. Compliance Requirements
+26. Future Improvements
+
+---
+
+# Critical Architecture Review
+
+After completing the design, critically evaluate the system.
+
+Identify:
+
+- Weak points
+- Missing capabilities
+- Scalability limitations
+- Sales conversion bottlenecks
+- Data quality risks
+- Security vulnerabilities
+- Compliance concerns
+- Operational risks
+
+Then propose architectural improvements to address each issue.
+
+---
+
+# Final Goal
+
+Deliver a complete, enterprise-grade AI-powered Sales Department capable of autonomously discovering, qualifying, researching, engaging, and nurturing high-quality opportunities while continuously optimizing client acquisition and revenue generation through AI-driven intelligence and automation.
+```
