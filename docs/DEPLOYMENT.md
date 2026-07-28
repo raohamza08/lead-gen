@@ -1,6 +1,86 @@
 # Deployment
 
-Three services, two of which deploy to managed hosts and one of which cannot.
+Two options. **Option A is what is currently live**, and it is the better fit
+for this project.
+
+---
+
+# Option A — PC as the server, frontend on Vercel (current setup)
+
+The frontend is on Vercel; the API, the Python workers and Redis all run on the
+workstation, published over HTTPS by a Cloudflare quick tunnel.
+
+```
+Vercel (frontend, HTTPS)
+   |  public HTTPS URL
+Cloudflare Tunnel  --->  workstation
+                           |-- API          :4000
+                           |-- ai-workers   :8000   <- the `claude` CLI lives here
+                           +-- Redis        :6379   (Docker)
+                                 |
+                           Supabase (already cloud)
+```
+
+**Why this beats a managed API host here.** A cloud API cannot reach the
+workstation, so `AI_WORKERS_URL` is dead from the cloud: the "Run now" button
+and the scheduled daily extraction both fail, because the lead-finder needs the
+locally logged-in `claude` CLI. Co-locating the API with the workers makes the
+entire pipeline work, dashboard-triggered runs included.
+
+**Cost:** nothing. No credit card, no port forwarding, and the tunnel dials
+outward so the home IP is never exposed.
+
+## Running it
+
+```powershell
+npm run dev:api          # :4000
+npm run dev:web          # :3000 (optional; Vercel serves the public copy)
+cd apps/ai-workers; .venv\Scripts\python.exe -m uvicorn main:app --port 8000
+docker start leadgen-redis
+
+.\scripts\serve-public.ps1
+```
+
+`scripts/serve-public.ps1` starts the tunnel, waits for its hostname, updates
+Vercel's `NEXT_PUBLIC_API_BASE_URL`, and redeploys. **Run it after every reboot
+or whenever the tunnel drops.**
+
+## The two things that break this, and why
+
+1. **A quick tunnel gets a new random hostname every start.**
+   `NEXT_PUBLIC_API_BASE_URL` is inlined into the client bundle at *build* time,
+   so updating the variable alone changes nothing — the shipped JavaScript still
+   calls the old hostname until the site is redeployed. The script always does
+   both. For a hostname that survives restarts, use a *named* tunnel (free
+   Cloudflare account plus a domain), which can also run as a Windows service
+   and start on boot.
+
+2. **CORS.** `APP_BASE_URL` in `.env` must contain the Vercel origin. It takes a
+   comma-separated list, so localhost can stay alongside it:
+
+   ```
+   APP_BASE_URL=https://lead-gen-dashboard-umber.vercel.app,http://localhost:3000
+   ```
+
+   Restart the API after changing it. `*` is not an option — CORS runs with
+   `credentials: true`, and a wildcard is illegal alongside credentials.
+
+## Trade-offs to accept
+
+- The workstation *is* the server: asleep, rebooted or offline means the
+  dashboard has no backend.
+- Home upload bandwidth gates response times.
+- **The API is reachable from the public internet.** The seeded
+  `admin@example.com` account and its password are documented in this public
+  repo; anyone who reads it can sign in. Change that password before treating
+  the deployment as anything other than a demo.
+
+---
+
+# Option B — fully managed (API on Render)
+
+Kept for reference. Three services, two of which deploy to managed hosts and one
+of which cannot.
 
 | Service | Host | Why |
 |---|---|---|

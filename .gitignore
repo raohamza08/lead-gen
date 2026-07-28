@@ -43,3 +43,7 @@ coverage/
 .vercel
 .env*
 !.env.example
+
+# tunnel logs (hostname changes every run, machine-specific)
+cloudflared.log
+cloudflared.err.log
