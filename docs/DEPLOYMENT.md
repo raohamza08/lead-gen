@@ -65,9 +65,23 @@ host, never committed.
    Move both to `starter` before running real sequences. It's a plan change in
    the Render dashboard; no redeploy needed.
 
-3. Migrations run automatically via `preDeployCommand`
-   (`prisma migrate deploy`). A failure there aborts the deploy and leaves the
-   previous version serving, so a bad migration never takes the API down.
+3. **Run migrations yourself, from your machine**, before deploying anything
+   that adds one:
+
+   ```bash
+   npm run prisma:deploy --workspace=apps/api
+   ```
+
+   The blueprint deliberately has **no `preDeployCommand`**: Render offers
+   pre-deploy commands only on paid instance types, and a blueprint pairing one
+   with `plan: free` is rejected. This costs nothing to work around, because the
+   database is Supabase and is reachable from anywhere — the migration doesn't
+   need to run from inside Render at all.
+
+   On a paid instance you can automate it again by adding
+   `preDeployCommand: npm run prisma:deploy:ci --workspace=apps/api`, which also
+   buys you the safety property that a failed migration aborts the deploy and
+   leaves the previous version serving.
 
 4. Verify: `curl https://<your-api>.onrender.com/api/v1/health` →
    `{"status":"ok","dependencies":{"database":"up","redis":"up"}}`.

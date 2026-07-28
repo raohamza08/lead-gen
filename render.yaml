@@ -23,10 +23,19 @@ services:
     # Change to `starter` for an always-on instance.
     plan: free
     healthCheckPath: /api/v1/health
-    # Runs after the image builds, before traffic shifts to it. A failure here
-    # aborts the deploy and leaves the previous version serving, so a bad
-    # migration never takes the API down.
-    preDeployCommand: npm run prisma:deploy:ci --workspace=apps/api
+    # NO preDeployCommand HERE ON PURPOSE. Render only offers pre-deploy
+    # commands on paid instance types, so a blueprint that pairs one with
+    # `plan: free` is rejected outright.
+    #
+    # Migrations therefore run from a workstation instead, which costs nothing
+    # because the database is Supabase and is reachable from anywhere:
+    #
+    #     npm run prisma:deploy --workspace=apps/api
+    #
+    # Run that BEFORE deploying a change that adds a migration, so the new
+    # code never boots against an older schema. If you later move to a paid
+    # instance, restore automatic migrations by adding:
+    #     preDeployCommand: npm run prisma:deploy:ci --workspace=apps/api
     envVars:
       - key: NODE_ENV
         value: production
