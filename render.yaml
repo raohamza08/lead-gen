@@ -17,7 +17,11 @@ services:
     dockerfilePath: ./infra/docker/api.Dockerfile
     # Repo root, not apps/api — the build needs packages/types too.
     dockerContext: .
-    plan: starter
+    # Free to start, so reviewing costs nothing. Caveat: a free web service
+    # spins down after 15 minutes without traffic and takes ~1 minute to wake,
+    # so the first dashboard load after a quiet spell will hang briefly.
+    # Change to `starter` for an always-on instance.
+    plan: free
     healthCheckPath: /api/v1/health
     # Runs after the image builds, before traffic shifts to it. A failure here
     # aborts the deploy and leaves the previous version serving, so a bad
@@ -107,10 +111,17 @@ services:
   # `fromService.type` above to match.
   - type: keyvalue
     name: leadgen-redis
-    plan: starter
-    # BullMQ keeps delayed jobs (the "wait 2 days" timers) in Redis, so
-    # evicting keys under memory pressure would silently drop scheduled
-    # follow-ups. noeviction makes Redis reject writes instead — loud, and
-    # recoverable — rather than losing a sequence step.
+    # WARNING — read before running real outreach on this.
+    # The free tier does NOT persist to disk, and Render may restart a free
+    # instance at any time, deleting its contents. BullMQ stores the "wait 2
+    # days" / "wait 1-2 days" delayed jobs here, so a restart silently drops
+    # every scheduled follow-up: leads would sit at EMAIL_1_SENT forever with
+    # nothing to advance them, and nothing would surface as an error.
+    # Fine for reviewing the dashboard. Move to `starter` before the sequencer
+    # is trusted with live sequences.
+    plan: free
+    # Even with persistence, never evict under memory pressure — dropping a
+    # delayed job loses a sequence step. Rejecting writes is loud and
+    # recoverable; silent eviction is neither.
     maxmemoryPolicy: noeviction
     ipAllowList: []

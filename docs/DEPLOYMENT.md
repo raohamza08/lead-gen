@@ -52,6 +52,19 @@ host, never committed.
 
    > The password in the Supabase URLs must stay **percent-encoded** (`@` → `%40`).
 
+   **Plans.** Both services default to `free` so a review deployment costs
+   nothing. Two consequences to know before trusting it with live outreach:
+
+   - A free **web service** spins down after 15 minutes idle and takes ~1
+     minute to wake, so the first dashboard load after a quiet spell hangs.
+   - A free **Key Value** instance does **not persist to disk**, and Render may
+     restart it at any time, wiping it. BullMQ keeps the "wait 2 days" delayed
+     jobs there, so a restart silently drops every scheduled follow-up — leads
+     stall at `EMAIL_1_SENT` with nothing to advance them and no error raised.
+
+   Move both to `starter` before running real sequences. It's a plan change in
+   the Render dashboard; no redeploy needed.
+
 3. Migrations run automatically via `preDeployCommand`
    (`prisma migrate deploy`). A failure there aborts the deploy and leaves the
    previous version serving, so a bad migration never takes the API down.
