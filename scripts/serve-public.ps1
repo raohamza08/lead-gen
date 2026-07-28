@@ -44,6 +44,17 @@ try {
   throw "No healthy API on :$ApiPort. Start it first:  npm run dev:api"
 }
 
+# A quick tunnel whose control stream has failed keeps the process alive,
+# retrying forever, while its hostname serves nothing. That looks identical to
+# "the tunnel is running" from the outside, so always start from a clean slate
+# rather than trusting an existing process.
+$existing = Get-Process cloudflared -ErrorAction SilentlyContinue
+if ($existing) {
+  Write-Host "Stopping existing cloudflared (PID $($existing.Id -join ', '))..." -ForegroundColor Yellow
+  $existing | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 2
+}
+
 Write-Host "Starting Cloudflare quick tunnel..." -ForegroundColor Cyan
 $log = Join-Path $repoRoot "cloudflared.err.log"
 Remove-Item $log -ErrorAction SilentlyContinue
@@ -79,8 +90,26 @@ try {
 Write-Host "Updating Vercel NEXT_PUBLIC_API_BASE_URL..." -ForegroundColor Cyan
 Push-Location $repoRoot
 try {
-  foreach ($env in @("production","preview")) {
-    $apiBase | vercel env add NEXT_PUBLIC_API_BASE_URL $env --force 2>&1 | Out-Null
+  # `vercel env add` reads the value from stdin. Piping a PowerShell string
+  # into a native executable (`$apiBase | vercel env add ...`) does NOT feed it
+  # stdin the way the CLI expects -- the command just blocks forever waiting
+  # for input, with no output, which is indistinguishable from a slow network.
+  # Redirecting stdin from a real file is the reliable way to do it here.
+  $stdinFile = Join-Path $env:TEMP "vercel-env-value.txt"
+  # -NoNewline matters: a trailing newline becomes part of the stored value,
+  # producing a URL the browser silently fails to call.
+  [System.IO.File]::WriteAllText($stdinFile, $apiBase)
+  try {
+    foreach ($target in @("production","preview")) {
+      $p = Start-Process -FilePath "vercel.cmd" `
+        -ArgumentList "env","add","NEXT_PUBLIC_API_BASE_URL",$target,"--force" `
+        -RedirectStandardInput $stdinFile `
+        -NoNewWindow -Wait -PassThru
+      if ($p.ExitCode -ne 0) { throw "vercel env add failed for $target (exit $($p.ExitCode))" }
+      Write-Host "  $target updated" -ForegroundColor Green
+    }
+  } finally {
+    Remove-Item $stdinFile -ErrorAction SilentlyContinue
   }
   # Required, not optional: NEXT_PUBLIC_* is compiled in, so without this the
   # live site keeps calling the previous tunnel hostname.
