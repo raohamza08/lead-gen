@@ -30,6 +30,9 @@ Thumbs.db
 # prisma
 apps/api/prisma/dev.db
 
+# deploy tooling (local project linkage + pulled env, both machine-specific)
+.vercel/
+
 # misc
 coverage/
 .turbo/

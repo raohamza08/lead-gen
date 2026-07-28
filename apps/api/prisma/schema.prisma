@@ -1,6 +1,13 @@
 // Prisma schema — implements the ERD in Part B4 of lead-gen-system-architecture.md
 generator client {
   provider = "prisma-client-js"
+  // "native" covers the developer's own machine. The musl target is required
+  // for the Alpine-based container image: Prisma's default `linux-musl` engine
+  // links against libssl.so.1.1, but Alpine 3.19+ (what node:20-alpine is built
+  // on) ships OpenSSL 3.x, so the container booted straight into
+  // "Error loading shared library libssl.so.1.1". Without this line the image
+  // builds fine and only fails at runtime, which is the worst place to find out.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -199,6 +206,9 @@ model ExtractionRun {
   leadsVerified     Int      @default(0) @map("leads_verified")
   duplicatesSkipped Int      @default(0) @map("duplicates_skipped")
   status            ExtractionRunStatus @default(RUNNING)
+  // Why a FAILED run failed. Without it the dashboard can report that a run
+  // broke but never what broke, which is the first thing an operator asks.
+  error             String?
 
   leads             Lead[]
 

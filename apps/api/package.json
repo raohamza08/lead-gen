@@ -11,6 +11,9 @@
     "prisma:generate": "dotenv -e ../../.env -- prisma generate",
     "prisma:migrate": "dotenv -e ../../.env -- prisma migrate dev",
     "prisma:deploy": "dotenv -e ../../.env -- prisma migrate deploy",
+    "//ci": "The :ci variants read the real process environment instead of a root .env file. Containers and CI runners have no repo-root .env, and dotenv-cli exits non-zero when the file it is pointed at doesn't exist — which would fail the Docker build and every deploy.",
+    "prisma:generate:ci": "prisma generate",
+    "prisma:deploy:ci": "prisma migrate deploy",
     "prisma:studio": "dotenv -e ../../.env -- prisma studio",
     "prisma:seed": "dotenv -e ../../.env -- ts-node prisma/seed.ts"
   },

@@ -2,41 +2,92 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Palette tokens are declared as space-separated RGB channels so Tailwind can
+ * compose them with an alpha modifier (`text-ink/60`) via the `<alpha-value>`
+ * placeholder in tailwind.config.ts. The plain `--ink`/`--paper`/`--line`
+ * aliases are for raw CSS consumers (chart props, arbitrary-value utilities).
+ *
+ * Chart series colors are the validated 4-slot categorical palette: they clear
+ * the lightness band, chroma floor, adjacent CVD separation (worst ΔE 9.1
+ * light / 8.4 dark) and normal-vision floor against THIS app's surfaces
+ * (#f1f2f4 light, #14171c dark) — not against a generic default. Slots are
+ * assigned in fixed order and never cycled. On the light surface three slots
+ * fall below 3:1 contrast, so every chart using them ships a legend plus a
+ * table view rather than leaning on hue alone.
+ */
 :root {
-  --paper: #f1f2f4;
-  --ink: #171b21;
-  --accent: #0e6e6b;
-  --line: rgba(23, 27, 33, 0.12);
+  --paper-rgb: 241 242 244;
+  --ink-rgb: 23 27 33;
+  --accent-rgb: 14 110 107;
+  --gold-rgb: 184 134 58;
+  --good-rgb: 46 125 82;
+  --bad-rgb: 176 71 59;
+
+  --paper: rgb(var(--paper-rgb));
+  --ink: rgb(var(--ink-rgb));
+  --accent: rgb(var(--accent-rgb));
+  --line: rgb(var(--ink-rgb) / 0.12);
+
+  --chart-grid: #e1e2e5;
+  --chart-axis: #c3c5c9;
+  --ink-muted: #6b7077;
+
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
 }
 
+/* The :not() guard lets an explicit light stamp beat OS-dark; the
+   [data-theme="dark"] block below covers the toggle in the other direction. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #14171c;
-    --ink: #e8e9ea;
-    --accent: #4fbdb6;
-    --line: rgba(232, 233, 234, 0.14);
+  :root:not([data-theme="light"]) {
+    --paper-rgb: 20 23 28;
+    --ink-rgb: 232 233 234;
+    --accent-rgb: 79 189 182;
+    --gold-rgb: 209 165 92;
+    --good-rgb: 87 178 128;
+    --bad-rgb: 216 116 105;
+
+    --chart-grid: #24272c;
+    --chart-axis: #383c42;
+    --ink-muted: #9a9ea5;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
   }
 }
 
 :root[data-theme="dark"] {
-  --paper: #14171c;
-  --ink: #e8e9ea;
-  --accent: #4fbdb6;
-  --line: rgba(232, 233, 234, 0.14);
-}
+  --paper-rgb: 20 23 28;
+  --ink-rgb: 232 233 234;
+  --accent-rgb: 79 189 182;
+  --gold-rgb: 209 165 92;
+  --good-rgb: 87 178 128;
+  --bad-rgb: 216 116 105;
 
-:root[data-theme="light"] {
-  --paper: #f1f2f4;
-  --ink: #171b21;
-  --accent: #0e6e6b;
-  --line: rgba(23, 27, 33, 0.12);
+  --chart-grid: #24272c;
+  --chart-axis: #383c42;
+  --ink-muted: #9a9ea5;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
 }
 
 body {
   background: var(--paper);
   color: var(--ink);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+/* Only for columns of numbers that must align vertically (table rows, axis
+   ticks) — never on a large standalone value, where equal-width digits read
+   as loose spacing. */
 .tabular {
   font-variant-numeric: tabular-nums;
 }

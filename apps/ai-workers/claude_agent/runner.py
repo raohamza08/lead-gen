@@ -9,6 +9,7 @@ import time
 
 from config import settings
 from shared import api_client
+from .cli_client import ClaudeCliUnavailable
 from .search_tools import find_candidate
 from .verifier import verify_candidate
 from .scorer import score_candidate
@@ -26,6 +27,7 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
     attempts = 0
     started_at = time.monotonic()
     already_found: list[str] = []
+    search_failed: str | None = None
 
     while (
         verified < daily_target
@@ -33,7 +35,17 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
         and (time.monotonic() - started_at) < settings.max_runtime_seconds
     ):
         attempts += 1
-        candidate = await find_candidate(niche_filter, attempts - 1, already_found)
+        try:
+            candidate = await find_candidate(niche_filter, attempts - 1, already_found)
+        except ClaudeCliUnavailable as err:
+            # The lead-finder is genuinely unavailable (already retried with
+            # backoff inside cli_client). Stop here and report it: leads found
+            # before the failure are real and stay, but the run must not be
+            # reported as a clean "niche saturated" finish, which is what a
+            # silent break would look like.
+            search_failed = str(err)
+            logger.error("run %s: lead search unavailable after %d attempts: %s", run_id, attempts, err)
+            break
         if candidate is None:
             logger.info("run %s: no more candidates found after %d attempts", run_id, attempts)
             break
@@ -61,7 +73,13 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
         else:
             verified += 1
 
-    status = "COMPLETED" if verified >= daily_target else "COMPLETED_SHORT_OF_TARGET"
+    if search_failed:
+        status = "FAILED"
+    elif verified >= daily_target:
+        status = "COMPLETED"
+    else:
+        status = "COMPLETED_SHORT_OF_TARGET"
+
     await api_client.update_extraction_run(
         run_id,
         {
@@ -70,6 +88,7 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
             "duplicatesSkipped": duplicates,
             "status": status,
             "finishedAt": _now_iso(),
+            **({"error": search_failed} if search_failed else {}),
         },
     )
     logger.info("run %s finished: %s (%d/%d verified, %d duplicates, %d attempts)",

@@ -14,6 +14,8 @@ import logging
 import random
 from typing import Optional
 
+from config import settings
+
 from . import cli_client
 
 logger = logging.getLogger("claude_agent.search_tools")
@@ -33,6 +35,15 @@ async def find_candidate(
     try:
         return await _find_candidate_via_cli(niche_filter, already_found or [])
     except cli_client.ClaudeCliUnavailable as err:
+        if not settings.allow_demo_fallback:
+            # Deliberately re-raised rather than degraded. Demo candidates are
+            # synthetic companies at `.example.com`; inserted into a real leads
+            # table they are indistinguishable from genuine ones and violate the
+            # "only verified leads" requirement. The caller aborts the run and
+            # reports the failure instead of quietly filling the table with
+            # fake companies.
+            logger.error("Claude CLI unavailable on attempt %d and demo fallback is disabled: %s", attempt, err)
+            raise
         logger.warning("Claude CLI unavailable (%s) — falling back to demo candidate for attempt %d", err, attempt)
         return _find_candidate_demo(niche_filter, attempt)
 

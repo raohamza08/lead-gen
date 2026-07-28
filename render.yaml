@@ -1,0 +1,116 @@
+# Render Blueprint for the NestJS API + its Redis instance.
+#
+# Only apps/api is deployed here. apps/web goes to Vercel, and apps/ai-workers
+# is deliberately absent: the lead-finder shells out to a locally logged-in
+# `claude` CLI, which cannot exist on a managed host. Lead extraction therefore
+# stays on the workstation that runs that CLI, pointed at this API via
+# API_BASE_URL.
+#
+# Deploy: Render Dashboard -> New -> Blueprint -> pick this repo.
+# Secrets marked `sync: false` are NOT read from the repo — Render prompts for
+# them on first deploy, which is what keeps them out of git.
+
+services:
+  - type: web
+    name: leadgen-api
+    runtime: docker
+    dockerfilePath: ./infra/docker/api.Dockerfile
+    # Repo root, not apps/api — the build needs packages/types too.
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/v1/health
+    # Runs after the image builds, before traffic shifts to it. A failure here
+    # aborts the deploy and leaves the previous version serving, so a bad
+    # migration never takes the API down.
+    preDeployCommand: npm run prisma:deploy:ci --workspace=apps/api
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Supabase. DATABASE_URL is the transaction pooler (port 6543,
+      # ?pgbouncer=true); DIRECT_URL is the session pooler (port 5432) and is
+      # used only by the migration engine, which needs prepared statements the
+      # transaction pooler doesn't support.
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+
+      # Wired automatically from the Key Value service defined below.
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: leadgen-redis
+          property: connectionString
+
+      # Comma-separated browser origins. Set this to the Vercel production
+      # domain once it exists; localhost is kept so a local web dev server can
+      # also talk to the deployed API.
+      - key: APP_BASE_URL
+        sync: false
+      # Optional: set to your team's `.vercel.app` suffix to also allow
+      # per-branch preview deployments, whose hostnames can't be listed ahead
+      # of time. Leave unset to disallow previews.
+      - key: VERCEL_PREVIEW_ORIGIN_SUFFIX
+        sync: false
+
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_TTL
+        value: 15m
+      - key: JWT_REFRESH_TTL
+        value: 7d
+
+      # Shared secret the Python workers present on internal endpoints.
+      # Must match INTERNAL_SERVICE_TOKEN in the workstation's .env.
+      - key: INTERNAL_SERVICE_TOKEN
+        sync: false
+
+      # Integrations — all optional. Each client degrades to a logged no-op
+      # when its credentials are absent, so the API boots without them.
+      - key: GOOGLE_GENAI_API_KEY
+        sync: false
+      - key: NEVERBOUNCE_API_KEY
+        sync: false
+      - key: CLICKUP_API_TOKEN
+        sync: false
+      - key: CLICKUP_WEBHOOK_SECRET
+        sync: false
+      - key: CLICKUP_TEAM_ID
+        sync: false
+      - key: CLICKUP_DEFAULT_LIST_ID
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_EMAIL
+        sync: false
+      - key: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY
+        sync: false
+      - key: GOOGLE_SHEETS_SPREADSHEET_ID
+        sync: false
+      - key: GMAIL_OAUTH_CLIENT_ID
+        sync: false
+      - key: GMAIL_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: ORG_POSTAL_ADDRESS
+        sync: false
+
+      # The API dispatches extraction runs to the workers. A managed host
+      # cannot reach a workstation, so leave this at its localhost default
+      # unless the workstation is exposed through a tunnel (e.g. cloudflared);
+      # scheduled runs will fail until it is.
+      - key: AI_WORKERS_URL
+        sync: false
+
+  # Render renamed its Redis product to "Key Value". On an older account where
+  # `keyvalue` is rejected, change this block's type to `redis` and the
+  # `fromService.type` above to match.
+  - type: keyvalue
+    name: leadgen-redis
+    plan: starter
+    # BullMQ keeps delayed jobs (the "wait 2 days" timers) in Redis, so
+    # evicting keys under memory pressure would silently drop scheduled
+    # follow-ups. noeviction makes Redis reject writes instead — loud, and
+    # recoverable — rather than losing a sequence step.
+    maxmemoryPolicy: noeviction
+    ipAllowList: []

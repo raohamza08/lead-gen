@@ -63,5 +63,5 @@ export const api = {
   getEmailFunnel: () => request("/analytics/email-funnel"),
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),
   getRevenuePipeline: () => request("/analytics/revenue-pipeline"),
-  getCohortTrends: () => request("/analytics/cohort-trends"),
+  getCohortTrends: (days = 30) => request(`/analytics/cohort-trends?days=${days}`),
 };

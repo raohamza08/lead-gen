@@ -16,6 +16,7 @@ import { EmailModule } from "./email/email.module";
 import { SyncModule } from "./sync/sync.module";
 import { SequencerModule } from "./sequencer/sequencer.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
+import { HealthModule } from "./health/health.module";
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
     SyncModule,
     SequencerModule,
     WebhooksModule,
+    HealthModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

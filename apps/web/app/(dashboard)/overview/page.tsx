@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { api } from "../../../lib/api-client";
 import { KpiTile } from "../../../components/kpi-tile";
+import { AXIS_PROPS, GRID_PROPS, SINGLE_SERIES, TOOLTIP_STYLE } from "../../../components/chart-kit";
 import type { AnalyticsSummary, FunnelStageCount } from "@leadgen/types";
 
 export default function OverviewPage() {
@@ -41,11 +42,12 @@ export default function OverviewPage() {
         <div className="h-72 w-full overflow-x-auto">
           <ResponsiveContainer width="100%" height="100%" minWidth={640}>
             <BarChart data={funnel} margin={{ top: 8, right: 8, left: 8, bottom: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" />
-              <XAxis dataKey="stage" angle={-35} textAnchor="end" interval={0} height={70} tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="count" fill="#0e6e6b" radius={[3, 3, 0, 0]} />
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="stage" angle={-35} textAnchor="end" interval={0} height={70} {...AXIS_PROPS} />
+              <YAxis allowDecimals={false} {...AXIS_PROPS} />
+              <Tooltip {...TOOLTIP_STYLE} />
+              {/* One series, one colour — a per-bar ramp would double-encode the height. */}
+              <Bar dataKey="count" fill={SINGLE_SERIES} radius={[4, 4, 0, 0]} maxBarSize={24} />
             </BarChart>
           </ResponsiveContainer>
         </div>
