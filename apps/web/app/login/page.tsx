@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { api, setAccessToken } from "../../lib/api-client";
+import { api, setTokens } from "../../lib/api-client";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,8 +16,11 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      const { accessToken } = await api.login(email, password);
-      setAccessToken(accessToken);
+      // Store BOTH tokens. Keeping only the access token was the bug behind the
+      // dashboard filling with 401s 15 minutes after signing in — there was
+      // nothing left to refresh with.
+      const tokens = await api.login(email, password);
+      setTokens(tokens);
       router.push("/overview");
     } catch (err) {
       setError((err as Error).message);
