@@ -1,0 +1,20 @@
+# What NOT to upload to Vercel. Explicit rather than relying on .gitignore
+# being honoured, because a mistake here would ship real credentials.
+.env
+.env.*
+!.env.example
+
+# Not part of the frontend build. apps/api is deliberately NOT excluded — it is
+# declared in the root package.json `workspaces` array and referenced by
+# package-lock.json, so removing it breaks workspace resolution during install.
+apps/ai-workers
+infra
+
+# Build output and local artefacts — Vercel builds these itself.
+node_modules
+.next
+dist
+*.log
+coverage
+__pycache__
+.venv

@@ -36,3 +36,10 @@ apps/api/prisma/dev.db
 # misc
 coverage/
 .turbo/
+
+# Appended by `vercel link`. `.env*` is kept but must be followed by the
+# negation again — a later broader pattern overrides the earlier `!.env.example`
+# further up this file, which would otherwise stop the template being tracked.
+.vercel
+.env*
+!.env.example
