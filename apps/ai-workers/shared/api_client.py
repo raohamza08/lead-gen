@@ -3,6 +3,8 @@ Thin client back into the NestJS core API (Part B1: AI workers never write to
 Sheets/ClickUp/DB directly — everything goes through the Lead/Sequencer API so
 every external write is auditable and rate-limited in one place, Part D1).
 """
+import logging
+
 import httpx
 from config import settings
 
@@ -19,6 +21,31 @@ async def create_lead(org_id: str, lead_payload: dict) -> dict:
         resp = await client.post("/leads", json={"orgId": org_id, **lead_payload}, headers=_headers())
         resp.raise_for_status()
         return resp.json()
+
+
+async def record_agent_runs(org_id: str, run_id: str | None, records: list[dict]) -> None:
+    """Ship agent telemetry to the API.
+
+    Batched, because one extraction run produces seven records per candidate —
+    at 100 leads/day that would be 700 round trips the worker spends waiting
+    instead of finding leads.
+
+    Failures are swallowed deliberately: telemetry must never be able to fail a
+    run that otherwise succeeded. Losing a dashboard row is trivial; losing a
+    verified lead because the metrics endpoint was briefly down is not.
+    """
+    if not records:
+        return
+    try:
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
+            resp = await client.post(
+                "/agent-runs",
+                json={"orgId": org_id, "runId": run_id, "records": records},
+                headers=_headers(),
+            )
+            resp.raise_for_status()
+    except Exception as err:  # noqa: BLE001
+        logging.getLogger("shared.api_client").warning("agent telemetry not recorded: %s", err)
 
 
 async def update_extraction_run(run_id: str, patch: dict) -> None:

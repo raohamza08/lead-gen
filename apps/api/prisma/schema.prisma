@@ -131,6 +131,7 @@ model Organization {
   emailAccounts EmailAccount[]
   caseStudies  CaseStudy[]
   suppressionEntries SuppressionEntry[]
+  agentRuns    AgentRun[]
 
   @@map("organizations")
 }
@@ -247,6 +248,30 @@ model ExtractionRun {
   leads             Lead[]
 
   @@map("extraction_runs")
+}
+
+/// One agent execution. Written by the workers after every agent run so the
+/// Automation and AI Performance dashboards can show what the fleet is actually
+/// doing — which agents fail, how long each takes, and where a run stopped.
+/// Without this the agent architecture is unobservable, and an agent degrading
+/// silently looks identical to one working.
+model AgentRun {
+  id         String   @id @default(uuid())
+  orgId      String   @map("org_id")
+  org        Organization @relation(fields: [orgId], references: [id])
+  /// The extraction run this belonged to, when there was one.
+  runId      String?  @map("run_id")
+  agent      String
+  status     String
+  durationMs Int      @map("duration_ms")
+  attempts   Int      @default(1)
+  error      String?
+  notes      Json     @default("[]")
+  startedAt  DateTime @default(now()) @map("started_at")
+
+  @@index([orgId, startedAt])
+  @@index([orgId, agent, status])
+  @@map("agent_runs")
 }
 
 model Lead {

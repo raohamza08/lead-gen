@@ -9,8 +9,7 @@ import time
 
 from config import settings
 from shared import api_client
-from agents import AgentContext
-from agents import build as build_pipeline
+from agents import AgentContext, build_for_filter
 
 logger = logging.getLogger("claude_agent.runner")
 
@@ -32,9 +31,13 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
     # Built once per run, not per candidate: construction validates that every
     # agent's requirements are satisfied by something earlier in the chain, and
     # paying that check 40 times would be waste.
-    orchestrator = build_pipeline(
-        "lead_acquisition",
+    orchestrator = build_for_filter(
+        niche_filter,
         seed_keys=("niche_filter", "org_context", "attempt", "already_found"),
+    )
+    logger.info(
+        "run %s: pipeline = %s",
+        run_id, " -> ".join(a.name for a in orchestrator.agents),
     )
 
     while (
@@ -117,6 +120,25 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
             duplicates += 1
         else:
             verified += 1
+
+    # Flushed once at the end rather than per candidate: the records are only
+    # read by dashboards, so batching them costs nothing and saves one HTTP
+    # round trip per agent per candidate.
+    await api_client.record_agent_runs(
+        org_id,
+        run_id,
+        [
+            {
+                "agent": r.agent,
+                "status": r.status,
+                "durationMs": r.duration_ms,
+                "attempts": r.attempts,
+                "error": r.error,
+                "notes": r.notes,
+            }
+            for r in agent_records
+        ],
+    )
 
     if search_failed:
         status = "FAILED"

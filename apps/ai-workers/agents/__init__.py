@@ -2,7 +2,14 @@
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 from .orchestrator import AgentRunRecord, Orchestrator, PipelineDefinitionError, PipelineResult
-from .registry import AGENTS, PIPELINES, build, describe_fleet
+from .registry import (
+    AGENTS,
+    OPTIONAL_ENRICHMENT,
+    PIPELINES,
+    build,
+    build_for_filter,
+    describe_fleet,
+)
 
 __all__ = [
     "Agent",
@@ -14,7 +21,9 @@ __all__ = [
     "PipelineDefinitionError",
     "PipelineResult",
     "AGENTS",
+    "OPTIONAL_ENRICHMENT",
     "PIPELINES",
     "build",
+    "build_for_filter",
     "describe_fleet",
 ]

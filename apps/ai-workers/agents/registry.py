@@ -67,6 +67,37 @@ PIPELINES: dict[str, tuple[str, ...]] = {
 }
 
 
+#: Agents that make an extra Claude CLI call each. The full lead_acquisition
+#: pipeline costs SIX CLI calls per candidate; dropping these three brings it
+#: back to three. At a 100/day target that is the difference between ~600 and
+#: ~300 calls against a subscription with finite headroom, so which enrichment
+#: runs is a per-filter decision rather than a global default.
+OPTIONAL_ENRICHMENT: tuple[str, ...] = (
+    "company_intelligence",
+    "website_audit",
+    "buyer_intelligence",
+)
+
+
+def build_for_filter(niche_filter: dict, *, seed_keys: tuple[str, ...] = ()) -> Orchestrator:
+    """The acquisition pipeline with enrichment agents the filter disabled removed.
+
+    Discovery, verification, opportunity and scoring are never optional — without
+    them there is no lead, no guarantee it is real, and no way to rank it.
+    """
+    disabled = set(niche_filter.get("disabledAgents") or [])
+    # Silently dropping a required agent would produce a pipeline that validates
+    # but cannot make a lead, so only enrichment is removable.
+    steps = tuple(
+        name
+        for name in PIPELINES["lead_acquisition"]
+        if name not in disabled or name not in OPTIONAL_ENRICHMENT
+    )
+    orchestrator = Orchestrator([AGENTS[name] for name in steps])
+    orchestrator.validate(seed_keys=seed_keys)
+    return orchestrator
+
+
 def build(pipeline: str, *, seed_keys: tuple[str, ...] = ()) -> Orchestrator:
     """Construct and validate a pipeline by name.
 
