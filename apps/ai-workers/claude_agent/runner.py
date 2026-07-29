@@ -9,10 +9,8 @@ import time
 
 from config import settings
 from shared import api_client
-from .cli_client import ClaudeCliUnavailable
-from .search_tools import find_candidate
-from .verifier import verify_candidate
-from .scorer import score_candidate
+from agents import AgentContext
+from agents import build as build_pipeline
 
 logger = logging.getLogger("claude_agent.runner")
 
@@ -24,10 +22,20 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
 
     verified = 0
     duplicates = 0
+    rejected = 0
     attempts = 0
     started_at = time.monotonic()
     already_found: list[str] = []
     search_failed: str | None = None
+    agent_records: list = []
+
+    # Built once per run, not per candidate: construction validates that every
+    # agent's requirements are satisfied by something earlier in the chain, and
+    # paying that check 40 times would be waste.
+    orchestrator = build_pipeline(
+        "lead_acquisition",
+        seed_keys=("niche_filter", "org_context", "attempt", "already_found"),
+    )
 
     while (
         verified < daily_target
@@ -35,32 +43,58 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
         and (time.monotonic() - started_at) < settings.max_runtime_seconds
     ):
         attempts += 1
-        try:
-            candidate = await find_candidate(niche_filter, attempts - 1, already_found)
-        except ClaudeCliUnavailable as err:
-            # The lead-finder is genuinely unavailable (already retried with
-            # backoff inside cli_client). Stop here and report it: leads found
-            # before the failure are real and stay, but the run must not be
-            # reported as a clean "niche saturated" finish, which is what a
-            # silent break would look like.
-            search_failed = str(err)
-            logger.error("run %s: lead search unavailable after %d attempts: %s", run_id, attempts, err)
-            break
-        if candidate is None:
-            logger.info("run %s: no more candidates found after %d attempts", run_id, attempts)
-            break
-        if candidate.get("companyName"):
+
+        # One candidate through the agent chain: discovery -> verification ->
+        # research -> opportunity. The orchestrator owns retries, failure
+        # classification and per-agent timing, so this loop only decides what to
+        # do with a finished pipeline.
+        ctx = AgentContext(
+            run_id=run_id,
+            org_id=org_id,
+            data={
+                "niche_filter": niche_filter,
+                "org_context": org_context,
+                "attempt": attempts - 1,
+                "already_found": already_found,
+            },
+        )
+        pipeline_result = await orchestrator.run(ctx)
+        agent_records.extend(pipeline_result.records)
+
+        candidate = ctx.get("candidate")
+        if candidate and candidate.get("companyName"):
             already_found.append(candidate["companyName"])
 
-        verification = await verify_candidate(candidate)
-        if not verification["qualifies"]:
-            continue  # rejected — Part C3: never persisted, only counted in metrics
+        if not pipeline_result.completed:
+            stopped, reason = pipeline_result.stopped_at, pipeline_result.stop_reason or ""
 
-        scores = await score_candidate(candidate, org_context)
+            # Discovery stopping means the niche is exhausted for this run —
+            # a clean finish, not a failure.
+            if stopped == "lead_discovery":
+                logger.info("run %s: no more candidates after %d attempts", run_id, attempts)
+                break
+
+            # Verification rejecting a candidate is the common case and simply
+            # means try the next one.
+            if stopped == "lead_verification":
+                rejected += 1
+                continue
+
+            # Anything else genuinely broke; record it rather than reporting a
+            # clean "niche saturated" finish.
+            search_failed = f"{stopped}: {reason}"
+            logger.error("run %s: pipeline failed at %s: %s", run_id, stopped, reason)
+            break
+
+        verification = ctx.get("verification") or {}
+        scores = ctx.get("scores") or {}
+        research = ctx.get("research") or {}
+
         result = await api_client.create_lead(
             org_id,
             {
                 **_map_candidate_fields(candidate),
+                **_map_research_fields(research),
                 **verification,
                 **_map_score_fields(scores),
                 "runId": run_id,
@@ -93,6 +127,22 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
     )
     logger.info("run %s finished: %s (%d/%d verified, %d duplicates, %d attempts)",
                 run_id, status, verified, daily_target, duplicates, attempts)
+
+
+def _map_research_fields(research: dict) -> dict:
+    """Research output onto lead columns. Only fills fields discovery left
+    empty — discovery saw the company directly, research is inference on top."""
+    if not research:
+        return {}
+    mapped = {
+        "businessDescription": research.get("businessSummary"),
+        "websitePlatform": research.get("websitePlatform"),
+        "currentCrm": research.get("currentCrm"),
+        "aiUsage": research.get("aiUsage"),
+        "growthSignals": research.get("growthSignals") or [],
+        "techStack": research.get("techStack") or [],
+    }
+    return {k: v for k, v in mapped.items() if v not in (None, [], "")}
 
 
 def _map_candidate_fields(candidate: dict) -> dict:

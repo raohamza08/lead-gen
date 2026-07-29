@@ -11,6 +11,7 @@ import logging
 from fastapi import BackgroundTasks, FastAPI
 from pydantic import BaseModel
 
+from agents import PIPELINES, describe_fleet
 from claude_agent.runner import run_in_background as run_extraction_in_background
 from gemini_agent.runner import run_personalization
 
@@ -37,6 +38,17 @@ class PersonalizationRequest(BaseModel):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/agents")
+async def list_agents():
+    """The agent roster, for the dashboard's AI Performance panel.
+
+    Reads from the registry rather than a hand-maintained list, so an agent
+    added to the fleet appears here without a second edit that could be
+    forgotten.
+    """
+    return {"agents": describe_fleet(), "pipelines": {k: list(v) for k, v in PIPELINES.items()}}
 
 
 @app.post("/lead-gen/runs")

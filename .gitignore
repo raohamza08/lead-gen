@@ -47,3 +47,6 @@ coverage/
 # tunnel logs (hostname changes every run, machine-specific)
 cloudflared.log
 cloudflared.err.log
+
+# python tooling
+.pytest_cache/
