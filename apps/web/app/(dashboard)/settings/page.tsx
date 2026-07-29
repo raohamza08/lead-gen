@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../../../lib/api-client";
 import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../components/filter-controls";
+import { EmailAccountsSection } from "../../../components/email-accounts-section";
 import type { NicheFilter } from "@leadgen/types";
 
 /**
@@ -43,11 +44,19 @@ const EMPTY = {
   excludeKeywords: [] as string[],
   excludeCompanies: [] as string[],
   dailyTarget: 100,
+  disabledAgents: [] as string[],
   scheduleCron: "0 6 * * *",
   timezone: "UTC",
 };
 
 type FilterDraft = typeof EMPTY;
+
+/** The only three agents a filter can drop — see disabledAgents on NicheFilter. */
+const ENRICHMENT_AGENTS: { key: string; label: string; hint: string }[] = [
+  { key: "company_intelligence", label: "Company intelligence", hint: "SWOT, competitors, recent news" },
+  { key: "website_audit", label: "Website audit", hint: "UX/SEO issues quoted back to the prospect" },
+  { key: "buyer_intelligence", label: "Buyer intelligence", hint: "Persona of the decision maker" },
+];
 
 export default function SettingsPage() {
   const [filters, setFilters] = useState<NicheFilter[]>([]);
@@ -56,6 +65,7 @@ export default function SettingsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
+  const [togglingCost, setTogglingCost] = useState<string | null>(null);
 
   function refresh() {
     api
@@ -68,6 +78,31 @@ export default function SettingsPage() {
 
   const set = <K extends keyof FilterDraft>(key: K, value: FilterDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  /**
+   * Flips between the full 6-call pipeline and the reduced 3-call one by
+   * PATCHing all three enrichment agents on or off together — a per-agent
+   * toggle in this table would need three buttons per row for a saving most
+   * users take all-or-nothing; the create form still offers per-agent control.
+   * The whole filter is re-sent because UpsertNicheFilterDto requires `niche`,
+   * and the update endpoint replaces (rather than merges) what's provided.
+   */
+  async function toggleCost(filter: NicheFilter) {
+    setTogglingCost(filter.id);
+    setError(null);
+    try {
+      const nextDisabled =
+        filter.disabledAgents.length > 0
+          ? []
+          : ["company_intelligence", "website_audit", "buyer_intelligence"];
+      await api.updateNicheFilter(filter.id, { ...filter, disabledAgents: nextDisabled });
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setTogglingCost(null);
+    }
+  }
 
   /**
    * Deleting is destructive and irreversible, so the confirmation states the
@@ -148,6 +183,8 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <EmailAccountsSection />
+
       <section className="rounded-xl border border-[var(--line)] p-5">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-sm font-semibold tracking-tight">Niche filters</h2>
@@ -179,6 +216,7 @@ export default function SettingsPage() {
                 <th className="tabular py-2 pr-3">Daily target</th>
                 <th className="py-2 pr-3">Schedule</th>
                 <th className="py-2 pr-3">Active</th>
+                <th className="py-2 pr-3">Cost / candidate</th>
                 <th className="py-2" />
               </tr>
             </thead>
@@ -203,6 +241,22 @@ export default function SettingsPage() {
                     {f.scheduleCron} ({f.timezone})
                   </td>
                   <td className="py-2 pr-3">{f.active ? "Yes" : "No"}</td>
+                  <td className="py-2 pr-3">
+                    <button
+                      disabled={togglingCost === f.id}
+                      onClick={() => toggleCost(f)}
+                      title="The three enrichment agents (company intelligence, website audit, buyer intelligence) can be skipped; discovery, verification, opportunity and scoring always run."
+                      className={`rounded px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${
+                        f.disabledAgents.length > 0
+                          ? "bg-good/20 text-good hover:bg-good/30"
+                          : "bg-gold/20 text-gold hover:bg-gold/30"
+                      }`}
+                    >
+                      {f.disabledAgents.length > 0
+                        ? `Reduced (${3} calls)`
+                        : `Full (${6} calls)`}
+                    </button>
+                  </td>
                   <td className="py-2">
                     <div className="flex items-center gap-2">
                       <button
@@ -223,7 +277,7 @@ export default function SettingsPage() {
               ))}
               {filters.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-6 text-center text-sm text-ink/50">
+                  <td colSpan={7} className="py-6 text-center text-sm text-ink/50">
                     No filters yet. Create one to start finding leads.
                   </td>
                 </tr>
@@ -499,6 +553,36 @@ export default function SettingsPage() {
                   className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
                 />
               </label>
+            </div>
+
+            <div className="mt-4 border-t border-[var(--line)] pt-4">
+              <span className="mb-1 block text-xs text-ink/60">
+                Enrichment agents to skip — each candidate is 6 Claude CLI calls with all three on, 3 with
+                all three off. Discovery, verification, opportunity and scoring always run.
+              </span>
+              <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                {ENRICHMENT_AGENTS.map((agent) => (
+                  <label key={agent.key} className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={draft.disabledAgents.includes(agent.key)}
+                      onChange={(e) =>
+                        set(
+                          "disabledAgents",
+                          e.target.checked
+                            ? [...draft.disabledAgents, agent.key]
+                            : draft.disabledAgents.filter((k) => k !== agent.key),
+                        )
+                      }
+                    />
+                    <span>
+                      {agent.label}
+                      <span className="block text-xs text-ink/50">{agent.hint}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
           </section>
 

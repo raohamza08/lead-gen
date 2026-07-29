@@ -30,19 +30,47 @@ interface CampaignPerformance {
   winRate: number;
 }
 
-const EMPTY = { name: "", niche: "", country: "", offer: "", caseStudy: "", goal: "", targetLeads: 100 };
+interface NicheFilterOption {
+  id: string;
+  niche: string;
+  subNiche: string | null;
+}
+
+const EMPTY = {
+  name: "",
+  niche: "",
+  country: "",
+  offer: "",
+  caseStudy: "",
+  goal: "",
+  targetLeads: 100,
+  filterId: "",
+};
 
 export default function CampaignsPage() {
   const [rows, setRows] = useState<CampaignPerformance[]>([]);
+  const [filters, setFilters] = useState<NicheFilterOption[]>([]);
+  // filterId per campaign, kept separate from `rows` because /campaigns/performance
+  // doesn't return it — only /campaigns does.
+  const [linkedFilter, setLinkedFilter] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [linking, setLinking] = useState<string | null>(null);
 
   function refresh() {
-    api
-      .getCampaignPerformance()
-      .then((r) => setRows(r as CampaignPerformance[]))
+    Promise.all([api.getCampaignPerformance(), api.getCampaigns(), api.getNicheFilters()])
+      .then(([performance, campaigns, nicheFilters]) => {
+        setRows(performance as CampaignPerformance[]);
+        setFilters(nicheFilters as NicheFilterOption[]);
+        const linked: Record<string, string> = {};
+        for (const c of campaigns as { id: string; filterId: string | null }[]) {
+          linked[c.id] = c.filterId ?? "";
+        }
+        setLinkedFilter(linked);
+      })
       .catch((err) => setError((err as Error).message));
   }
 
@@ -64,6 +92,27 @@ export default function CampaignsPage() {
       setError((err as Error).message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  /**
+   * A campaign only accrues leads/performance once it's linked to the filter
+   * that's finding them — every AI-discovered lead now carries the campaignId
+   * of whichever campaign points at its filter, so this link is what makes
+   * campaign performance non-zero.
+   */
+  async function linkFilter(campaignId: string, filterId: string) {
+    setLinking(campaignId);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.updateCampaign(campaignId, { filterId: filterId || null });
+      setNotice(filterId ? "Filter linked. New leads it finds will attribute to this campaign." : "Filter unlinked.");
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setLinking(null);
     }
   }
 
@@ -117,6 +166,7 @@ export default function CampaignsPage() {
         }
       >
         {error && <p className="mb-3 text-sm text-bad">{error}</p>}
+        {notice && <p className="mb-3 text-sm text-good">{notice}</p>}
 
         {showForm && (
           <form onSubmit={create} className="mb-5 grid gap-3 rounded-lg border border-[var(--line)] p-4 sm:grid-cols-2">
@@ -149,6 +199,22 @@ export default function CampaignsPage() {
                 className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
               />
             </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Niche filter</span>
+              <select
+                value={draft.filterId}
+                onChange={(e) => setDraft((d) => ({ ...d, filterId: e.target.value }))}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              >
+                <option value="">None yet — link it later</option>
+                {filters.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.niche}
+                    {f.subNiche ? ` — ${f.subNiche}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div className="flex items-end">
               <button
                 type="submit"
@@ -174,6 +240,26 @@ export default function CampaignsPage() {
               { key: "niche", header: "Niche", render: (r) => r.niche },
               { key: "country", header: "Country", render: (r) => r.country ?? "—" },
               { key: "offer", header: "Offer", render: (r) => r.offer ?? "—" },
+              {
+                key: "filterId",
+                header: "Linked filter",
+                render: (r) => (
+                  <select
+                    value={linkedFilter[r.id] ?? ""}
+                    disabled={linking === r.id}
+                    onChange={(e) => linkFilter(r.id, e.target.value)}
+                    className="rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs disabled:opacity-50"
+                  >
+                    <option value="">Not linked</option>
+                    {filters.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.niche}
+                        {f.subNiche ? ` — ${f.subNiche}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                ),
+              },
               {
                 key: "leads",
                 header: "Leads",

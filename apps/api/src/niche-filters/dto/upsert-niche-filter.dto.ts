@@ -166,6 +166,14 @@ export class UpsertNicheFilterDto {
   @IsArray()
   sourcePriority?: string[];
 
+  // Only these three are ever droppable — discovery/verification/opportunity/
+  // scoring are silently kept by the worker regardless of what's listed here,
+  // so a bad value here can narrow cost but can never break the pipeline.
+  @IsOptional()
+  @IsArray()
+  @IsIn(["company_intelligence", "website_audit", "buyer_intelligence"], { each: true })
+  disabledAgents?: string[];
+
   @IsOptional()
   @IsString()
   scheduleCron?: string;

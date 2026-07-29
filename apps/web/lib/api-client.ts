@@ -155,14 +155,19 @@ export const api = {
   deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),
   createNicheFilter: (body: Record<string, unknown>) =>
     request("/niche-filters", { method: "POST", body: JSON.stringify(body) }),
+  updateNicheFilter: (id: string, body: Record<string, unknown>) =>
+    request(`/niche-filters/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   runNicheFilterNow: (id: string) => request(`/niche-filters/${id}/run-now`, { method: "POST" }),
   getPendingApprovals: () => request("/sequences/pending-approvals"),
   getUpcomingSends: () => request("/sequences/upcoming"),
+  getEmailAccounts: () => request("/settings/email-accounts"),
   getEmailAccountsHealth: () => request("/settings/email-accounts/health"),
   createEmailAccount: (body: Record<string, unknown>) =>
     request("/settings/email-accounts", { method: "POST", body: JSON.stringify(body) }),
   updateEmailAccount: (id: string, body: Record<string, unknown>) =>
     request(`/settings/email-accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  testEmailAccount: (id: string) => request(`/settings/email-accounts/${id}/test`, { method: "POST" }),
+  deleteEmailAccount: (id: string) => request(`/settings/email-accounts/${id}`, { method: "DELETE" }),
   getEmailFunnel: () => request("/analytics/email-funnel"),
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),
   getRevenuePipeline: () => request("/analytics/revenue-pipeline"),
@@ -173,4 +178,6 @@ export const api = {
   getCampaignPerformance: () => request("/campaigns/performance"),
   createCampaign: (body: Record<string, unknown>) =>
     request("/campaigns", { method: "POST", body: JSON.stringify(body) }),
+  updateCampaign: (id: string, body: Record<string, unknown>) =>
+    request(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
 };

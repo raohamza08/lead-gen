@@ -42,6 +42,11 @@ export interface NicheFilter {
 
   dailyTarget: number;
   sourcePriority: string[];
+  // Enrichment agents to skip: any of "company_intelligence" |
+  // "website_audit" | "buyer_intelligence". Cuts 6 Claude CLI calls per
+  // candidate down to 3; discovery/verification/opportunity/scoring can't be
+  // disabled this way.
+  disabledAgents: string[];
   scheduleCron: string;
   timezone: string;
   active: boolean;

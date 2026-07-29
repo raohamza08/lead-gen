@@ -55,6 +55,14 @@ export class LeadsService {
       return { status: "duplicate" };
     }
 
+    // A lead's campaign is inferred from the filter that found it: campaigns
+    // point at a filter, not the other way round, so this is the only place
+    // that link can be made. Without it, campaign performance reads zero
+    // regardless of activity, no matter how many leads the filter produces.
+    const campaign = dto.filterId
+      ? await this.prisma.campaign.findFirst({ where: { orgId, filterId: dto.filterId } })
+      : null;
+
     try {
       const lead = await this.prisma.$transaction(async (tx) => {
         const created = await tx.lead.create({
@@ -62,6 +70,7 @@ export class LeadsService {
             orgId,
             runId: dto.runId,
             filterId: dto.filterId,
+            campaignId: campaign?.id,
             companyName: dto.companyName,
             // Written on insert so the next duplicate check can compare against
             // it. A lead saved without these is invisible to tier-2 dedup.

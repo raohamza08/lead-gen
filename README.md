@@ -1,6 +1,39 @@
-# Lead Generation & Client Acquisition Platform
+# AI Sales OS — Lead Generation & Client Acquisition Platform
 
-AI-powered internal platform for lead sourcing, qualification, personalization, outreach, and analytics. Full design is in [`lead-gen-system-architecture.md`](./lead-gen-system-architecture.md) (also published as a shareable doc — ask if you need the link again).
+An internal platform that discovers, researches, qualifies and contacts B2B
+leads through a fleet of specialised AI agents, keeping a human in control of
+review and approval.
+
+> **Picking this up again? Read [`docs/RESUME.md`](./docs/RESUME.md) first.**
+> It has the restart commands, exactly where work stopped, and the traps already
+> hit — reading it will save you rediscovering several of them.
+
+**Live:** https://lead-gen-dashboard-umber.vercel.app · **Login:** `admin@example.com` / `ChangeMe123!`
+
+## How it fits together
+
+```
+Vercel (dashboard)  ──HTTPS──>  Cloudflare Tunnel  ──>  workstation
+                                                          ├── API        :4000  (NestJS)
+                                                          ├── AI workers :8000  (FastAPI, 13 agents)
+                                                          └── Redis      :6379  (BullMQ)
+                                                                 │
+                                                          Supabase Postgres
+```
+
+The API runs on the workstation rather than a managed host **on purpose**: the
+lead-finder shells out to a locally logged-in `claude` CLI, so a cloud API could
+never trigger extraction. See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
+
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [`docs/RESUME.md`](./docs/RESUME.md) | **Start here.** Restart commands, current state, known traps |
+| [`docs/AGENT_ARCHITECTURE.md`](./docs/AGENT_ARCHITECTURE.md) | The 13 agents, orchestrator contract, failure classification |
+| [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Vercel + tunnel setup, Render fallback |
+| [`lead-gen-system-architecture.md`](./lead-gen-system-architecture.md) | Original full design |
+| [`Instructions Doc.txt`](./Instructions%20Doc.txt), [`new.md.txt`](./new.md.txt) | Product specs this is built against |
 
 ## Monorepo layout
 
@@ -64,7 +97,28 @@ This means the full pipeline — extraction → dedup → verify → score → i
 
 ## What's implemented vs. stubbed
 
-Maps to the roadmap in Part H1 of the architecture doc.
+> The list below predates the agent architecture and is kept for the detail it
+> carries about individual subsystems. For **current** status —  what works, what
+> doesn't, and what to build next — use [`docs/RESUME.md`](./docs/RESUME.md),
+> which is maintained as the source of truth.
+
+### Added since (2026-07-28/29)
+
+- **13 specialised agents behind a workflow orchestrator** with contract
+  validation and classified failure — `docs/AGENT_ARCHITECTURE.md`
+- **20-stage pipeline** matching the full sales flow, with the state machine
+  shared between API and dashboard
+- **Sales-Navigator-style filter taxonomy** (18 categories) feeding an explained
+  search brief the model can actually act on
+- **Six-dimension lead scoring** plus a priority roll-up
+- **Four-identity duplicate detection** — domain, email, company name, LinkedIn,
+  the last two via persisted normalised keys
+- **Campaigns**, **agent telemetry**, **automation dashboard**, full
+  **analytics** (email funnel, revenue pipeline, cohort trends, LinkedIn)
+- **Manual lead entry**, **niche-filter delete**, **drag-and-drop pipeline**
+- Auth refresh with single-flight rotation, route guard, dark mode that works
+
+### Maps to the roadmap in Part H1 of the architecture doc
 
 **Implemented (Phase 0–3 territory, confirmed working against a live Supabase/Redis stack, not just against a placeholder DB):**
 - Full Prisma schema matching the ERD (Part B4), including a `SuppressionEntry` table and a `RefreshToken` table not in the original diagram (added during implementation — see below)

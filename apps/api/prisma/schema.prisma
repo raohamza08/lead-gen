@@ -218,6 +218,11 @@ model NicheFilter {
 
   dailyTarget    Int      @default(100) @map("daily_target")
   sourcePriority String[] @default([]) @map("source_priority")
+  // Enrichment agents to skip for this filter (company_intelligence,
+  // website_audit, buyer_intelligence — the only ones the worker will ever
+  // drop; discovery/verification/opportunity/scoring ignore this). Cuts the
+  // pipeline from 6 Claude CLI calls per candidate to 3.
+  disabledAgents String[] @default([]) @map("disabled_agents")
   scheduleCron   String   @default("0 6 * * *") @map("schedule_cron")
   timezone       String   @default("UTC")
   active         Boolean  @default(true)
@@ -409,6 +414,15 @@ model Lead {
   @@unique([orgId, email], name: "org_email_unique")
   @@index([orgId, industry])
   @@index([orgId, createdAt])
+  // These four were hand-written SQL in earlier migrations and never declared
+  // here, so a later `prisma migrate dev` read their absence as drift and
+  // silently dropped them (2026-07-29 incident — recovered same day). Declaring
+  // them is what stops that happening again: duplicate checks run on every
+  // lead insert and must not be sequential scans.
+  @@index([campaignId], map: "leads_campaign_id_idx")
+  @@index([orgId, companyNameKey], map: "leads_org_company_name_key_idx")
+  @@index([orgId, linkedinSlug], map: "leads_org_linkedin_slug_idx")
+  @@index([orgId, linkedinUrl], map: "leads_org_linkedin_url_idx")
   @@map("leads")
 }
 
@@ -450,6 +464,13 @@ model LeadScore {
   priority              Priority?
   scoredAt              DateTime @default(now()) @map("scored_at")
 
+  // The pipeline ranks by priority score, so make that ordering cheap. Was
+  // hand-written SQL (DESC NULLS LAST) never declared here, and got silently
+  // dropped by a later `prisma migrate dev` for the same reason as the Lead
+  // indexes above (2026-07-29 incident). Prisma can't express NULLS LAST, so
+  // this recreates it DESC only — still avoids a sort node for the common
+  // case, though nulls (unscored leads) sort first rather than last.
+  @@index([leadPriorityScore(sort: Desc)], map: "lead_scores_lead_priority_score_idx")
   @@map("lead_scores")
 }
 
