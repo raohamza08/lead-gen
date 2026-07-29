@@ -79,6 +79,25 @@ export class LeadsController {
     return this.leadsService.advanceStage(user.orgId, id, dto.stage);
   }
 
+  /** Undo one step — see LeadsService.moveBack for why this doesn't re-run automation. */
+  @Post(":id/move-back")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  moveBack(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.leadsService.moveBack(user.orgId, id);
+  }
+
+  @Post(":id/emails/:emailMessageId/resend")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP)
+  resendEmail(
+    @CurrentUser() user: JwtClaims,
+    @Param("id") id: string,
+    @Param("emailMessageId") emailMessageId: string,
+  ) {
+    return this.leadsService.resendEmail(user.orgId, id, emailMessageId);
+  }
+
   @Post(":id/approve-email")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP)

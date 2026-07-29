@@ -172,6 +172,9 @@ export const api = {
     request(`/leads/${id}/review`, { method: "PATCH", body: JSON.stringify(body) }),
   advanceStage: (id: string, stage: string) =>
     request(`/leads/${id}/advance-stage`, { method: "POST", body: JSON.stringify({ stage }) }),
+  moveBack: (id: string) => request(`/leads/${id}/move-back`, { method: "POST" }),
+  resendEmail: (id: string, emailMessageId: string) =>
+    request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),
   createManualLead: (body: Record<string, unknown>) =>

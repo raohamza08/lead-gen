@@ -45,6 +45,43 @@ personal email in the public repo — flag this to the user before editing.
 
 ## Pick up exactly here
 
+**Fixed: emails silently not sending on manual pipeline moves, and no way to
+undo a drag (2026-07-29).** Root causes, both now fixed:
+
+1. `onStageEntered`'s READY_FOR_OUTREACH/EMAIL_1_SENT/EMAIL_2_SENT cases only
+   ever ran automatically after `sendEmail1`/the wait-timer job set the stage
+   themselves. A **human dragging a card directly into "Email 2 Sent"**
+   (a legal transition per `ALLOWED_TRANSITIONS`) hit the `EMAIL_2_SENT` case,
+   which only scheduled the *next* wait — it never actually sent Email #2.
+   Fixed: that case now calls `sendEmail2` first (idempotent — see #2).
+2. Even a correct READY_FOR_OUTREACH move could permanently fail if no
+   mailbox was active yet (`ComplianceGateError`, never retried). Two of the
+   dashboard's own leads (EurosHub, Ferrow Manufacturing) were stuck exactly
+   this way and are now fixed. `sendEmail1`/`sendEmail2` are now idempotent
+   AND retry-capable: a FAILED message for that step gets replaced with a
+   fresh queued attempt; an already-SENT/QUEUED one is left alone (never
+   double-emails a prospect).
+3. Added a direct fix path: `POST /leads/:id/emails/:emailMessageId/resend`
+   (ADMIN/MANAGER/SALES_REP), surfaced as a **Resend** button in a new
+   "Emails" section on the lead detail page — only shown for `FAILED`
+   messages.
+
+**Pipeline "back" button — added (2026-07-29).** `PipelineState.previousStage`
+(new column) records the immediate predecessor on every `advanceStage` call —
+including the system-driven ones inside the sequencer, not just human moves.
+`POST /leads/:id/move-back` swaps `stage`↔`previousStage` (a toggle, not a
+history stack — one level of undo). Deliberately does **not** re-run
+`sequencer.onStageEntered` — going back is a correction, not a forward action,
+and calls `cancelWaitTimer` first so rewinding out of a `WAITING_*` stage
+can't leave a stale BullMQ job. Surfaced as a small "← Back" button on every
+pipeline card (`/pipeline`, shown only when a previous stage exists) and next
+to the forward-stage buttons on the lead detail page. **Also the retry
+mechanism for #2 above**: back to `READY_FOR_OUTREACH` then forward again
+re-triggers `sendEmail1` for any lead whose send failed *after* this fix
+shipped. Leads that reached a stage before this fix have `previousStage: null`
+— use the direct Resend button instead for those (already used to unstick
+EurosHub and Ferrow Manufacturing above).
+
 **Team / user management UI — done (2026-07-29).** The backend
 (`apps/api/src/users/`) already existed in full — list, create, role change,
 deactivate, all `@Roles`-gated — but had zero frontend before this. `/settings`

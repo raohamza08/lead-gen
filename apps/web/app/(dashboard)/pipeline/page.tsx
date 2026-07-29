@@ -8,7 +8,7 @@ import type { Lead, LeadScore } from "@leadgen/types";
 
 interface LeadRow extends Lead {
   score: LeadScore | null;
-  pipelineState: { stage: string } | null;
+  pipelineState: { stage: string; previousStage: string | null } | null;
 }
 
 const LABELS: Record<string, string> = {
@@ -92,7 +92,7 @@ export default function PipelinePage() {
     // transition and is the authority.
     const previous = leads;
     setLeads((rows) =>
-      rows.map((r) => (r.id === lead.id ? { ...r, pipelineState: { stage } } : r)),
+      rows.map((r) => (r.id === lead.id ? { ...r, pipelineState: { stage, previousStage: from } } : r)),
     );
 
     try {
@@ -101,6 +101,24 @@ export default function PipelinePage() {
     } catch (err) {
       setLeads(previous);
       setError(`Could not move ${lead.companyName}: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Undo one step — swaps stage<->previousStage server-side. Also how a
+   *  failed automated send (e.g. no mailbox configured yet) gets retried:
+   *  back to Ready, then forward again. */
+  async function moveBack(lead: LeadRow, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setBusy(lead.id);
+    setError(null);
+    try {
+      await api.moveBack(lead.id);
+      load();
+    } catch (err) {
+      setError(`Could not move ${lead.companyName} back: ${(err as Error).message}`);
     } finally {
       setBusy(null);
     }
@@ -191,6 +209,17 @@ export default function PipelinePage() {
                         <div className="mt-1 text-[11px] text-ink/40">{lead.country}</div>
                       )}
                     </Link>
+                    {lead.pipelineState?.previousStage && (
+                      <button
+                        type="button"
+                        disabled={busy === lead.id}
+                        onClick={(e) => moveBack(lead, e)}
+                        title={`Move back to ${LABELS[lead.pipelineState.previousStage] ?? lead.pipelineState.previousStage}`}
+                        className="mt-1.5 rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-ink/50 transition-colors hover:bg-ink/5 hover:text-ink/80 disabled:opacity-50"
+                      >
+                        ← Back
+                      </button>
+                    )}
                   </article>
                 ))}
                 {cards.length === 0 && (

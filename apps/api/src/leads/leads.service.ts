@@ -235,7 +235,11 @@ export class LeadsService {
 
     const updated = await this.prisma.pipelineState.update({
       where: { leadId: id },
-      data: { stage: toStage, enteredStageAt: new Date() },
+      // previousStage records where this lead just came from, so a single
+      // "back" step can undo a wrong drag or re-enter a stage whose
+      // automation failed (e.g. Email #1 with no mailbox configured yet)
+      // without a separate retry mechanism.
+      data: { stage: toStage, previousStage: current.stage, enteredStageAt: new Date() },
     });
 
     await this.prisma.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
@@ -248,6 +252,52 @@ export class LeadsService {
     await this.sequencer.onStageEntered(lead.id, toStage);
 
     return updated;
+  }
+
+  /**
+   * Moves a lead back to the stage it was in immediately before its current
+   * one. Swaps stage<->previousStage rather than consuming the history, so
+   * back-then-forward-then-back keeps working like a toggle instead of
+   * dead-ending after one use.
+   *
+   * Deliberately does NOT call sequencer.onStageEntered — going back is a
+   * correction, not a forward action, and re-firing it could send a second
+   * copy of an email that already went out. It does cancel any pending wait
+   * timer, since rewinding out of a WAITING_* stage must not leave a stale
+   * BullMQ job that fires against a stage the lead has since left.
+   */
+  async moveBack(orgId: string, id: string) {
+    await this.assertOwnership(orgId, id);
+    const current = await this.prisma.pipelineState.findUniqueOrThrow({ where: { leadId: id } });
+
+    if (!current.previousStage) {
+      throw new BadRequestException("This lead has no previous stage to go back to");
+    }
+
+    await this.sequencer.cancelWaitTimer(id);
+
+    const updated = await this.prisma.pipelineState.update({
+      where: { leadId: id },
+      data: { stage: current.previousStage, previousStage: current.stage, enteredStageAt: new Date() },
+    });
+
+    await this.prisma.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
+
+    this.sync.onStageChanged(id, updated.stage as PipelineStage).catch((err) =>
+      this.logger.warn(`ClickUp sync failed for lead ${id}: ${(err as Error).message}`),
+    );
+
+    return updated;
+  }
+
+  /** Retries an email that failed to send — e.g. it failed because no mailbox
+   *  was configured yet, and one has since been added. */
+  async resendEmail(orgId: string, leadId: string, emailMessageId: string) {
+    await this.assertOwnership(orgId, leadId);
+    const message = await this.prisma.emailMessage.findFirst({ where: { id: emailMessageId, leadId } });
+    if (!message) throw new NotFoundException("Email message not found");
+    await this.sequencer.resendFailedMessage(emailMessageId);
+    return { resent: true };
   }
 
   async approveEmail(orgId: string, leadId: string, dto: ApproveEmailDto) {

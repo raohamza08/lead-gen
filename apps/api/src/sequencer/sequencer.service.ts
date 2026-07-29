@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Queue, Worker, Job } from "bullmq";
 import { PipelineStage } from "@leadgen/types";
@@ -63,6 +63,12 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
       case PipelineStage.EMAIL_1_SENT:
         return this.scheduleWait(leadId, WAIT_2_DAYS_MS, "send-email-2");
       case PipelineStage.EMAIL_2_SENT:
+        // Entering this stage always ensures Email #2 exists — covers both
+        // the normal path (handleWaitJob calls this after sending) and a
+        // human dragging straight into "Email 2 Sent" on the board, which
+        // otherwise looked like a send with none actually queued. Idempotent
+        // via sendEmail2's own existing-message check.
+        await this.sendEmail2(leadId);
         return this.scheduleWait(leadId, WAIT_1_2_DAYS_MS, "draft-email-3");
       default:
         return; // other stages are human- or reply-driven, not sequencer-driven
@@ -81,36 +87,53 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (nextAction === "send-email-2") {
-      await this.sendEmail2(leadId);
       await this.prisma.pipelineState.update({
         where: { leadId },
-        data: { stage: PipelineStage.EMAIL_2_SENT, enteredStageAt: new Date(), waitJobId: null },
+        // previousStage records the immediate predecessor so "back" is
+        // accurate regardless of whether the move was human- or
+        // automation-driven — see the same note on advanceStage. The actual
+        // send happens inside onStageEntered below (sendEmail2), not here.
+        data: { stage: PipelineStage.EMAIL_2_SENT, previousStage: state.stage, enteredStageAt: new Date(), waitJobId: null },
       });
       await this.sync.onStageChanged(leadId, PipelineStage.EMAIL_2_SENT);
       await this.onStageEntered(leadId, PipelineStage.EMAIL_2_SENT);
     } else if (nextAction === "draft-email-3") {
       await this.prisma.pipelineState.update({
         where: { leadId },
-        data: { stage: PipelineStage.GEMINI_DRAFTING, enteredStageAt: new Date(), waitJobId: null },
+        data: { stage: PipelineStage.GEMINI_DRAFTING, previousStage: state.stage, enteredStageAt: new Date(), waitJobId: null },
       });
       await this.sync.onStageChanged(leadId, PipelineStage.GEMINI_DRAFTING);
       await this.requestGeminiDraft(leadId);
     }
   }
 
+  /**
+   * Enters (or re-enters, on "back" then forward again) READY_FOR_OUTREACH.
+   * Idempotent by design: entering this stage a second time must never send a
+   * duplicate intro email to the same prospect. If Email #1 already sent or
+   * is still queued, this only re-syncs the pipeline stage. If it previously
+   * failed (e.g. no mailbox was configured yet), this is exactly how a retry
+   * happens — move back to Ready and forward again — so the failed row is
+   * replaced with a fresh queued attempt rather than left stuck forever.
+   */
   private async sendEmail1(leadId: string) {
-    const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
-    const { subject, bodyHtml } = buildEmail1(lead as any);
+    const existing = await this.prisma.emailMessage.findFirst({ where: { leadId, sequenceStep: 1 } });
+    if (!existing || existing.status === "FAILED") {
+      if (existing) await this.prisma.emailMessage.delete({ where: { id: existing.id } });
 
-    const message = await this.prisma.emailMessage.create({
-      data: { leadId, sequenceStep: 1, subject, bodyHtml, generatedBy: "TEMPLATE", status: "QUEUED" },
-    });
-    await this.emailQueue.add("send", { emailMessageId: message.id });
+      const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+      const { subject, bodyHtml } = buildEmail1(lead as any);
 
-    // LinkedIn task is created in lockstep with Email #1 (Part C7).
-    const existingActivity = await this.prisma.linkedinActivity.findFirst({ where: { leadId } });
-    if (!existingActivity) {
-      await this.prisma.linkedinActivity.create({ data: { leadId, status: "NOT_STARTED" } });
+      const message = await this.prisma.emailMessage.create({
+        data: { leadId, sequenceStep: 1, subject, bodyHtml, generatedBy: "TEMPLATE", status: "QUEUED" },
+      });
+      await this.emailQueue.add("send", { emailMessageId: message.id });
+
+      // LinkedIn task is created in lockstep with Email #1 (Part C7).
+      const existingActivity = await this.prisma.linkedinActivity.findFirst({ where: { leadId } });
+      if (!existingActivity) {
+        await this.prisma.linkedinActivity.create({ data: { leadId, status: "NOT_STARTED" } });
+      }
     }
 
     // Advance the stage the moment the send is enqueued (same optimistic
@@ -119,13 +142,18 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     // READY_FOR_OUTREACH forever.
     await this.prisma.pipelineState.update({
       where: { leadId },
-      data: { stage: PipelineStage.EMAIL_1_SENT, enteredStageAt: new Date() },
+      data: { stage: PipelineStage.EMAIL_1_SENT, previousStage: PipelineStage.READY_FOR_OUTREACH, enteredStageAt: new Date() },
     });
     await this.sync.onStageChanged(leadId, PipelineStage.EMAIL_1_SENT);
     await this.onStageEntered(leadId, PipelineStage.EMAIL_1_SENT);
   }
 
+  /** Same idempotency/retry reasoning as sendEmail1 above. */
   private async sendEmail2(leadId: string) {
+    const existing = await this.prisma.emailMessage.findFirst({ where: { leadId, sequenceStep: 2 } });
+    if (existing && existing.status !== "FAILED") return;
+    if (existing) await this.prisma.emailMessage.delete({ where: { id: existing.id } });
+
     const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     const caseStudy = await this.prisma.caseStudy.findFirst({ where: { orgId: lead.orgId, industry: lead.industry ?? undefined } });
     const { subject, bodyHtml } = buildEmail2(lead as any, caseStudy?.summary);
@@ -180,6 +208,23 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
   }
 
   async enqueueApprovedSend(emailMessageId: string) {
+    await this.emailQueue.add("send", { emailMessageId });
+  }
+
+  /**
+   * Manual retry for a message that failed permanently (ComplianceGateError,
+   * e.g. no mailbox was configured or active yet) — those never get retried
+   * automatically since a permanent failure is by definition not transient.
+   * Only FAILED is eligible: resending an already-SENT message would email
+   * the same prospect twice. Caller (LeadsService) verifies the message
+   * belongs to the org/lead before calling this.
+   */
+  async resendFailedMessage(emailMessageId: string) {
+    const message = await this.prisma.emailMessage.findUniqueOrThrow({ where: { id: emailMessageId } });
+    if (message.status !== "FAILED") {
+      throw new BadRequestException(`Only a failed email can be resent (this one is ${message.status})`);
+    }
+    await this.prisma.emailMessage.update({ where: { id: emailMessageId }, data: { status: "QUEUED" } });
     await this.emailQueue.add("send", { emailMessageId });
   }
 }

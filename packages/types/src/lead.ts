@@ -85,6 +85,7 @@ export interface PipelineState {
   stage: PipelineStage;
   enteredStageAt: string;
   nextActionAt: string | null;
+  previousStage: PipelineStage | null;
 }
 
 /** Full lead detail payload returned by GET /leads/:id */

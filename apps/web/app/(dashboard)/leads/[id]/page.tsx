@@ -57,6 +57,7 @@ export default function LeadDetailPage() {
   const [moving, setMoving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
 
   function load() {
     api
@@ -97,6 +98,36 @@ export default function LeadDetailPage() {
     }
   }
 
+  /** Undo one step. Also how a failed automated send (e.g. no mailbox
+   *  configured yet) gets retried — back to Ready, then forward again. */
+  async function goBack() {
+    setMoving(true);
+    setError(null);
+    try {
+      await api.moveBack(params.id);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  async function resend(emailMessageId: string) {
+    setResendingId(emailMessageId);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.resendEmail(params.id, emailMessageId);
+      setNotice("Email re-queued for sending.");
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setResendingId(null);
+    }
+  }
+
   if (error && !lead) return <p className="text-bad">{error}</p>;
   if (!lead) return <div className="card h-64 animate-pulse" />;
 
@@ -122,6 +153,16 @@ export default function LeadDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {lead.pipelineState?.previousStage && (
+            <button
+              onClick={goBack}
+              disabled={moving}
+              title={`Move back to ${stageLabel(lead.pipelineState.previousStage)}`}
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+            >
+              ← Back
+            </button>
+          )}
           <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-medium">{stageLabel(stage)}</span>
           {nextStages.map((next) => (
             <button
@@ -270,6 +311,52 @@ export default function LeadDetailPage() {
               ))}
             </div>
           </section>
+
+          {Array.isArray(lead.emailMessages) && lead.emailMessages.length > 0 && (
+            <section className="card p-5">
+              <h2 className="mb-3 text-sm font-semibold tracking-tight">Emails</h2>
+              <div className="flex flex-col gap-2">
+                {lead.emailMessages.map((m: any) => (
+                  <div key={m.id} className="rounded-lg border border-[var(--line)] p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="text-xs font-medium text-ink/80">
+                          #{m.sequenceStep} — {m.subject}
+                        </div>
+                        <div className="mt-1 text-[11px] text-ink/50">
+                          {m.sentAt
+                            ? `Sent ${new Date(m.sentAt).toLocaleString()}`
+                            : m.status === "FAILED"
+                              ? "Failed to send"
+                              : "Queued"}
+                        </div>
+                      </div>
+                      <span
+                        className={`shrink-0 rounded px-2 py-0.5 text-[11px] ${
+                          m.status === "SENT"
+                            ? "bg-good/20 text-good"
+                            : m.status === "FAILED"
+                              ? "bg-bad/20 text-bad"
+                              : "bg-ink/8 text-ink/60"
+                        }`}
+                      >
+                        {m.status}
+                      </span>
+                    </div>
+                    {m.status === "FAILED" && (
+                      <button
+                        onClick={() => resend(m.id)}
+                        disabled={resendingId === m.id}
+                        className="mt-2 rounded-md bg-accent px-2.5 py-1 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                      >
+                        {resendingId === m.id ? "Resending…" : "Resend"}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           <section className="card p-5">
             <h2 className="text-sm font-semibold tracking-tight">Human review</h2>

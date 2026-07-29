@@ -511,6 +511,12 @@ model PipelineState {
   // sequencer cancel an in-flight "wait 2 days" job the instant a reply or
   // manual stage change makes it moot, instead of letting it fire anyway.
   waitJobId       String?  @map("wait_job_id")
+  // One level of undo: the stage this lead was in immediately before the
+  // current one. "Back" swaps stage<->previousStage rather than replaying full
+  // history, which is enough for correcting a wrong drag or retrying a stage
+  // whose automation failed (e.g. no mailbox configured yet) without needing a
+  // separate retry mechanism.
+  previousStage   PipelineStage? @map("previous_stage")
 
   @@map("pipeline_states")
 }
