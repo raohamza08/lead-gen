@@ -43,6 +43,28 @@ export class CreateLeadDto {
   /** What the finder actually observed, so a reviewer can audit the claim. */
   @IsOptional() @IsString() researchEvidence?: string;
 
+  // --- Company Intelligence Agent ---
+  @IsOptional() swotAnalysis?: Record<string, string[]>;
+  @IsOptional() @IsArray() competitors?: string[];
+  @IsOptional() @IsArray() recentNews?: string[];
+  @IsOptional() @IsArray() marketingStack?: string[];
+
+  // --- Website Audit Agent ---
+  @IsOptional() @IsString() uxIssues?: string;
+  @IsOptional() @IsString() seoIssues?: string;
+
+  // --- Buyer Intelligence Agent ---
+  @IsOptional() @IsString() buyerPersona?: string;
+
+  // Maturity and buyer scores. Separate from the six rubric dimensions because
+  // they describe the company and the person, not the fit of the deal.
+  @IsOptional() @IsInt() digitalMaturityScore?: number;
+  @IsOptional() @IsInt() aiReadinessScore?: number;
+  @IsOptional() @IsInt() automationOpportunityScore?: number;
+  @IsOptional() @IsInt() authorityScore?: number;
+  @IsOptional() @IsInt() engagementScore?: number;
+  @IsOptional() @IsIn(["LOW", "MEDIUM", "HIGH"]) projectComplexity?: "LOW" | "MEDIUM" | "HIGH";
+
   @IsOptional() @IsBoolean() verifiedEmail?: boolean;
   @IsOptional() @IsBoolean() verifiedLinkedin?: boolean;
   @IsOptional() @IsBoolean() verifiedWebsite?: boolean;

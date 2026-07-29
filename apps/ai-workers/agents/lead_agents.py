@@ -72,101 +72,111 @@ class LeadVerificationAgent(Agent):
         return AgentResult(status=AgentStatus.OK, data={"verification": verification})
 
 
-class ResearchAgent(Agent):
-    """Studies the company itself, separately from scoring it.
+class AiOpportunityAgent(Agent):
+    """Identifies what to actually sell this company, and what it is worth.
 
-    Kept apart from OpportunityAgent on purpose: research establishes *facts*
-    (what they sell, who they compete with, what they're hiring for) while the
-    opportunity agent forms *judgements* on top of those facts. Fusing them
-    produces confident-sounding opportunities with nothing underneath, and makes
-    a wrong answer impossible to attribute.
+    Deliberately separate from LeadScoringAgent. This agent answers "what is the
+    opportunity here"; scoring answers "how good a lead is this". Fusing them
+    lets a high score justify a vague opportunity and vice versa, and makes a
+    wrong answer impossible to attribute to one or the other.
     """
 
-    name = "research"
-    responsibility = "Studies the company's website, business model, competitors and growth signals."
+    name = "ai_opportunity"
+    responsibility = "Identifies manual workflows, automation ideas, ROI and estimated deal size."
     requires = ("candidate",)
-    provides = ("research",)
+    provides = ("opportunities",)
 
     async def execute(self, ctx: AgentContext) -> AgentResult:
         candidate = ctx.get("candidate")
-        company = candidate.get("companyName")
-        website = candidate.get("website")
+        intel = ctx.get("company_intelligence") or {}
+        audit = ctx.get("website_audit") or {}
 
-        if not website:
-            return AgentResult(
-                status=AgentStatus.DEGRADED,
-                data={"research": {}},
-                notes=["no website to research"],
-            )
+        context_json = json.dumps(
+            {
+                "company": candidate.get("companyName"),
+                "industry": candidate.get("industry"),
+                "employees": candidate.get("employeeCount"),
+                "description": candidate.get("businessDescription"),
+                "intelligence": intel,
+                "websiteAudit": audit,
+            },
+            default=str,
+        )[:6000]
 
-        prompt = f"""Research the company below for a B2B sales conversation. Fetch its
-website and search for recent public information.
+        services = (ctx.get("org_context") or {}).get("services", "AI automation services")
 
-Company: {company}
-Website: {website}
+        prompt = f"""Identify the concrete opportunities to sell {services} to this company.
 
-Report only what you can actually source. Leave a field null rather than
-guessing — a fabricated competitor or funding round destroys credibility the
-moment a prospect reads it.
+{context_json}
+
+Base every opportunity on something in the data above. An opportunity you cannot
+tie to an observed fact is a guess, and a guess in a first email is obvious to
+the reader — omit it instead.
+
+Be specific: "automate the manual quote-to-invoice handoff across their three
+systems" is usable; "improve efficiency with AI" is not.
 
 Respond with ONLY JSON, no prose or code fences:
 {{
-  "businessSummary": string,
-  "productsServices": string[],
-  "competitors": string[],
-  "growthSignals": string[],
-  "hiringActivity": string|null,
-  "fundingStatus": string|null,
-  "recentNews": string[],
-  "techStack": string[],
-  "websitePlatform": string|null,
-  "currentCrm": string|null,
-  "aiUsage": string|null,
-  "sources": string[]
+  "manualWorkflows": string[],
+  "operationalBottlenecks": string[],
+  "topAiOpportunities": [
+    {{"opportunity": string, "expectedRoi": string, "estimatedImpact": string,
+      "complexity": "LOW"|"MEDIUM"|"HIGH", "evidence": string}}
+  ],
+  "crmImprovements": string[],
+  "automationOpportunities": string[],
+  "saasOpportunities": string[],
+  "painPoints": string,
+  "suggestedServices": string[],
+  "estimatedDealSize": number,
+  "projectComplexity": "LOW"|"MEDIUM"|"HIGH"
 }}"""
 
         try:
             envelope = await cli_client.query(prompt)
         except cli_client.ClaudeCliUnavailable as err:
-            # Research is valuable but not load-bearing: the lead is still real
-            # and contactable without it, just less personalised.
             return AgentResult(
                 status=AgentStatus.DEGRADED,
-                data={"research": {}},
+                data={"opportunities": {}},
                 error=str(err),
-                notes=["research skipped; lead retained without enrichment"],
+                notes=["lead retained without opportunity analysis"],
             )
 
-        research = cli_client.extract_json(envelope.get("result", "")) or {}
-        if not research:
+        data = cli_client.extract_json(envelope.get("result", "")) or {}
+        if not data:
             return AgentResult(
                 status=AgentStatus.DEGRADED,
-                data={"research": {}},
-                notes=["research returned unparseable output"],
+                data={"opportunities": {}},
+                notes=["opportunity analysis returned unparseable output"],
             )
+        return AgentResult(status=AgentStatus.OK, data={"opportunities": data})
 
-        return AgentResult(status=AgentStatus.OK, data={"research": research})
 
+class LeadScoringAgent(Agent):
+    """Scores the lead on the six-dimension rubric and produces the priority score.
 
-class OpportunityAgent(Agent):
-    """Turns research plus candidate data into scores, pain points and an offer."""
+    Runs last on purpose: it scores against everything the earlier agents
+    established, so a lead whose research or audit degraded is scored on what
+    was actually verified rather than on optimistic assumptions.
+    """
 
-    name = "opportunity"
-    responsibility = "Identifies pain points, automation opportunities and the suggested offer."
+    name = "lead_scoring"
+    responsibility = "Scores business fit, AI opportunity, intent, budget, tech gap and DM access."
     requires = ("candidate", "verification")
     provides = ("scores",)
 
     async def execute(self, ctx: AgentContext) -> AgentResult:
+        # Everything the earlier agents produced is folded in, so the scorer
+        # judges sourced facts rather than the one-line description discovery
+        # returned.
         candidate = dict(ctx.get("candidate"))
-        research = ctx.get("research") or {}
-
-        # Fold research into what the scorer sees, so its judgements rest on
-        # sourced facts rather than the one-line description discovery produced.
-        if research:
-            candidate["research"] = research
+        for key in ("company_intelligence", "website_audit", "buyer_intelligence", "opportunities"):
+            value = ctx.get(key)
+            if value:
+                candidate[key] = value
 
         scores = await score_candidate(candidate, ctx.get("org_context") or {})
-
         if not scores:
             return AgentResult(status=AgentStatus.FAILED, error="scorer returned nothing")
 

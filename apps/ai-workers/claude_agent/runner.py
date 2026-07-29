@@ -88,21 +88,25 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
 
         verification = ctx.get("verification") or {}
         scores = ctx.get("scores") or {}
-        research = ctx.get("research") or {}
+        intel = ctx.get("company_intelligence") or {}
+        audit = ctx.get("website_audit") or {}
+        buyer = ctx.get("buyer_intelligence") or {}
+        opportunities = ctx.get("opportunities") or {}
 
         # Start the lead at the stage it has genuinely reached. Every lead
         # persisted here already passed the verification agent, and most also
         # completed research — starting them all at NEW_LEAD would misreport the
         # funnel and force them through transitions that already happened.
-        initial_stage = "RESEARCH_COMPLETED" if research else "VERIFIED"
+        initial_stage = "RESEARCH_COMPLETED" if intel else "VERIFIED"
 
         result = await api_client.create_lead(
             org_id,
             {
                 **_map_candidate_fields(candidate),
-                **_map_research_fields(research),
+                **_map_intelligence_fields(intel, audit, buyer, opportunities),
                 **verification,
                 **_map_score_fields(scores),
+                **_map_agent_scores(intel, buyer, opportunities),
                 "runId": run_id,
                 "filterId": niche_filter.get("id"),
                 "initialStage": initial_stage,
@@ -136,20 +140,44 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
                 run_id, status, verified, daily_target, duplicates, attempts)
 
 
-def _map_research_fields(research: dict) -> dict:
-    """Research output onto lead columns. Only fills fields discovery left
-    empty — discovery saw the company directly, research is inference on top."""
-    if not research:
-        return {}
+def _join(values) -> str | None:
+    """Model output is a list here and a string there depending on the prompt;
+    normalise to the single text column the lead stores."""
+    if not values:
+        return None
+    if isinstance(values, str):
+        return values
+    return "; ".join(str(v) for v in values if v)
+
+
+def _map_intelligence_fields(intel: dict, audit: dict, buyer: dict, opps: dict) -> dict:
+    """Agent outputs onto lead columns.
+
+    Empty values are stripped rather than written, so a degraded agent leaves
+    the existing field alone instead of overwriting good data with null.
+    """
     mapped = {
-        "businessDescription": research.get("businessSummary"),
-        "websitePlatform": research.get("websitePlatform"),
-        "currentCrm": research.get("currentCrm"),
-        "aiUsage": research.get("aiUsage"),
-        "growthSignals": research.get("growthSignals") or [],
-        "techStack": research.get("techStack") or [],
+        "businessDescription": intel.get("executiveSummary"),
+        "currentCrm": intel.get("crm"),
+        "techStack": intel.get("techStack") or [],
+        "growthSignals": intel.get("growthIndicators") or [],
+        "swotAnalysis": intel.get("swot") or {},
+        "competitors": intel.get("competitors") or [],
+        "recentNews": intel.get("recentNews") or [],
+
+        "websitePlatform": audit.get("platform"),
+        "uxIssues": _join(audit.get("uxIssues")),
+        "seoIssues": _join(audit.get("seoIssues")),
+
+        "buyerPersona": buyer.get("buyerPersona"),
+
+        "painPoints": opps.get("painPoints") or _join(opps.get("manualWorkflows")),
+        "aiOpportunities": _join(
+            [o.get("opportunity") for o in (opps.get("topAiOpportunities") or []) if isinstance(o, dict)]
+        ),
+        "automationOpportunities": _join(opps.get("automationOpportunities")),
     }
-    return {k: v for k, v in mapped.items() if v not in (None, [], "")}
+    return {k: v for k, v in mapped.items() if v not in (None, [], "", {})}
 
 
 def _map_candidate_fields(candidate: dict) -> dict:
@@ -206,6 +234,19 @@ def _map_score_fields(scores: dict) -> dict:
         "aiOpportunities": scores.get("ai_opportunities"),
         "automationOpportunities": scores.get("automation_opportunities"),
     }
+
+
+def _map_agent_scores(intel: dict, buyer: dict, opps: dict) -> dict:
+    """Scores produced by the intelligence agents rather than the scorer."""
+    mapped = {
+        "digitalMaturityScore": intel.get("digitalMaturityScore"),
+        "aiReadinessScore": intel.get("aiReadinessScore"),
+        "automationOpportunityScore": intel.get("automationOpportunityScore"),
+        "authorityScore": buyer.get("authorityScore"),
+        "engagementScore": buyer.get("engagementScore"),
+        "projectComplexity": opps.get("projectComplexity"),
+    }
+    return {k: v for k, v in mapped.items() if v is not None}
 
 
 def _now_iso() -> str:

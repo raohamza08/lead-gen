@@ -306,6 +306,21 @@ model Lead {
   // Free-text evidence for what the finder claimed, so a reviewer can audit it.
   researchEvidence        String? @map("research_evidence")
 
+  // Company Intelligence Agent output.
+  swotAnalysis            Json    @default("{}") @map("swot_analysis")
+  competitors             Json    @default("[]")
+  recentNews              Json    @default("[]") @map("recent_news")
+  marketingStack          Json    @default("[]") @map("marketing_stack")
+
+  // Website Audit Agent output. Kept on the lead rather than only in the score
+  // because a reviewer quotes these back to the prospect — they are evidence,
+  // not just inputs to a number.
+  uxIssues                String? @map("ux_issues")
+  seoIssues               String? @map("seo_issues")
+
+  // Buyer Intelligence Agent output.
+  buyerPersona            String? @map("buyer_persona")
+
   verifiedEmail       Boolean  @default(false) @map("verified_email")
   verifiedLinkedin    Boolean  @default(false) @map("verified_linkedin")
   verifiedWebsite     Boolean  @default(false) @map("verified_website")
@@ -353,6 +368,16 @@ model LeadScore {
   decisionMakerAccessScore Int?  @map("decision_maker_access_score")
   // Weighted roll-up of the six dimensions; what the pipeline sorts on.
   leadPriorityScore     Int?     @map("lead_priority_score")
+
+  // Maturity scores from the Company Intelligence Agent, and buyer scores from
+  // the Buyer Intelligence Agent. Separate from the six rubric dimensions
+  // because they describe the company and the person, not the fit of the deal.
+  digitalMaturityScore      Int?  @map("digital_maturity_score")
+  aiReadinessScore          Int?  @map("ai_readiness_score")
+  automationOpportunityScore Int? @map("automation_opportunity_score")
+  authorityScore            Int?  @map("authority_score")
+  engagementScore           Int?  @map("engagement_score")
+  projectComplexity         String? @map("project_complexity")
   fitReason             String?  @map("fit_reason")
   suggestedServices     String?  @map("suggested_services")
   expectedValue         Decimal? @map("expected_value")

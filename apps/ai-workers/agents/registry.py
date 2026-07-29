@@ -8,11 +8,16 @@ names rather than imports.
 from __future__ import annotations
 
 from .base import Agent
+from .intelligence_agents import (
+    BuyerIntelligenceAgent,
+    CompanyIntelligenceAgent,
+    WebsiteAuditAgent,
+)
 from .lead_agents import (
+    AiOpportunityAgent,
     LeadDiscoveryAgent,
+    LeadScoringAgent,
     LeadVerificationAgent,
-    OpportunityAgent,
-    ResearchAgent,
 )
 from .orchestrator import Orchestrator
 
@@ -22,18 +27,43 @@ AGENTS: dict[str, Agent] = {
     for a in (
         LeadDiscoveryAgent(),
         LeadVerificationAgent(),
-        ResearchAgent(),
-        OpportunityAgent(),
+        CompanyIntelligenceAgent(),
+        WebsiteAuditAgent(),
+        BuyerIntelligenceAgent(),
+        AiOpportunityAgent(),
+        LeadScoringAgent(),
     )
 }
 
 #: Named pipelines. Order is the contract — `Orchestrator.validate` proves each
 #: agent's requirements are satisfied by something earlier in the list.
+#:
+#: Scoring is deliberately LAST in every pipeline: it judges what the
+#: intelligence agents actually established, so a lead whose research degraded
+#: is scored on verified facts rather than optimistic assumptions.
 PIPELINES: dict[str, tuple[str, ...]] = {
-    # One candidate, end to end, from search to a scored lead ready to persist.
-    "lead_acquisition": ("lead_discovery", "lead_verification", "research", "opportunity"),
-    # Re-enrich a lead that already exists, skipping discovery and verification.
-    "lead_enrichment": ("research", "opportunity"),
+    # One candidate, end to end: found, verified, researched, audited, profiled,
+    # analysed for opportunity, then scored.
+    "lead_acquisition": (
+        "lead_discovery",
+        "lead_verification",
+        "company_intelligence",
+        "website_audit",
+        "buyer_intelligence",
+        "ai_opportunity",
+        "lead_scoring",
+    ),
+    # Re-enrich an existing lead without re-discovering or re-verifying it.
+    "lead_enrichment": (
+        "company_intelligence",
+        "website_audit",
+        "buyer_intelligence",
+        "ai_opportunity",
+        "lead_scoring",
+    ),
+    # Cheap re-score after a human edits the review notes: no external calls
+    # beyond the scorer itself.
+    "rescore": ("lead_scoring",),
 }
 
 
