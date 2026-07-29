@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { EmailAccount } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { UpsertEmailAccountDto } from "./dto/upsert-email-account.dto";
+import { GmailProvider } from "./providers/gmail.provider";
+import { SmtpProvider } from "./providers/smtp.provider";
 
 /** Never send raw credentials back to the dashboard — just whether one is set. */
 function sanitize(account: EmailAccount) {
@@ -17,7 +19,62 @@ function sanitize(account: EmailAccount) {
  */
 @Injectable()
 export class EmailAccountsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gmail: GmailProvider,
+    private readonly smtp: SmtpProvider,
+  ) {}
+
+  /**
+   * Sends a real test email through this mailbox.
+   *
+   * Actually sending, rather than just validating that credentials parse, is
+   * the whole point: SMTP auth can succeed while the provider still refuses to
+   * relay, and an app password can be valid but scoped wrongly. Neither shows
+   * up until a message is really pushed — and finding out during a live
+   * campaign means failed sends against real prospects.
+   */
+  async sendTest(orgId: string, id: string, toAddress: string) {
+    const account = await this.prisma.emailAccount.findFirst({ where: { id, orgId } });
+    if (!account) throw new NotFoundException(`Email account ${id} not found`);
+
+    const provider = account.provider === "GMAIL" ? this.gmail : this.smtp;
+
+    try {
+      const { providerMessageId } = await provider.send(account, {
+        fromAddress: account.address,
+        toAddress,
+        subject: `Test send from ${account.address}`,
+        bodyHtml:
+          `<p>This is a test message from your Sales OS.</p>` +
+          `<p>Mailbox <strong>${account.address}</strong> (${account.provider}) can send.</p>` +
+          `<p>Daily limit ${account.dailyLimit}, hourly limit ${account.hourlyLimit}.</p>`,
+      });
+      return { ok: true, sentTo: toAddress, providerMessageId };
+    } catch (err) {
+      // Returned rather than thrown: a failed test is expected during setup and
+      // the operator needs the provider's own message to fix it. A 500 with a
+      // generic body would hide exactly the detail that makes it actionable.
+      return { ok: false, sentTo: toAddress, error: (err as Error).message.slice(0, 500) };
+    }
+  }
+
+  /**
+   * Deletes a mailbox. Sent messages are kept and simply lose their account
+   * link — they are delivery history, and removing them would silently change
+   * every open- and reply-rate figure already reported.
+   */
+  async remove(orgId: string, id: string) {
+    const account = await this.prisma.emailAccount.findFirst({ where: { id, orgId } });
+    if (!account) throw new NotFoundException(`Email account ${id} not found`);
+
+    const messages = await this.prisma.emailMessage.count({ where: { accountId: id } });
+    await this.prisma.$transaction([
+      this.prisma.emailMessage.updateMany({ where: { accountId: id }, data: { accountId: null } }),
+      this.prisma.emailAccount.delete({ where: { id } }),
+    ]);
+    return { deleted: true, messagesKept: messages };
+  }
 
   async findAllForOrg(orgId: string) {
     const accounts = await this.prisma.emailAccount.findMany({ where: { orgId }, orderBy: { createdAt: "asc" } });

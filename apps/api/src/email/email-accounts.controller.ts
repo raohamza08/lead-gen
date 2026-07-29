@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { EmailAccountsService } from "./email-accounts.service";
 import { UpsertEmailAccountDto } from "./dto/upsert-email-account.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -33,5 +33,30 @@ export class EmailAccountsController {
   @Roles(Role.ADMIN)
   update(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpsertEmailAccountDto) {
     return this.service.update(user.orgId, id, dto);
+  }
+
+  /**
+   * Sends a real test email through this mailbox to the signed-in user.
+   *
+   * Sending for real, rather than merely checking the credentials parse, is the
+   * point: SMTP auth can succeed while the provider still refuses to relay, and
+   * an app password can be valid but scoped wrongly. Both only surface on an
+   * actual send — and discovering them partway through a live campaign means
+   * failed sends against real prospects.
+   *
+   * Deliberately bypasses the compliance gate: the recipient is the operator's
+   * own address, so suppression lists and unsubscribe links do not apply, and
+   * running the gate here would block the test for the wrong reason.
+   */
+  @Post(":id/test")
+  @Roles(Role.ADMIN)
+  sendTest(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.sendTest(user.orgId, id, user.email);
+  }
+
+  @Delete(":id")
+  @Roles(Role.ADMIN)
+  remove(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.remove(user.orgId, id);
   }
 }
