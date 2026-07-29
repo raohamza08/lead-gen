@@ -53,6 +53,7 @@ export default function SettingsPage() {
   const [filters, setFilters] = useState<NicheFilter[]>([]);
   const [draft, setDraft] = useState<FilterDraft>(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
 
@@ -67,6 +68,39 @@ export default function SettingsPage() {
 
   const set = <K extends keyof FilterDraft>(key: K, value: FilterDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  /**
+   * Deleting is destructive and irreversible, so the confirmation states the
+   * real consequences with real numbers fetched first — a generic "are you
+   * sure?" gives the user nothing to base the decision on.
+   */
+  async function confirmDelete(filter: NicheFilter) {
+    setError(null);
+    try {
+      const impact = (await api.getFilterDeletionImpact(filter.id)) as {
+        leadsKept: number;
+        runsDeleted: number;
+      };
+
+      const message =
+        `Delete the "${filter.niche}" filter?\n\n` +
+        `• ${impact.leadsKept} lead(s) will be KEPT and detached from this filter.\n` +
+        `• ${impact.runsDeleted} extraction run(s) will be permanently deleted.\n` +
+        `• Its schedule stops immediately.\n\n` +
+        (impact.runsDeleted > 0
+          ? "Deleting the run history will change the duplicate-rate figure on the Overview page.\n\n"
+          : "") +
+        "This cannot be undone.";
+
+      if (!window.confirm(message)) return;
+
+      const result = (await api.deleteNicheFilter(filter.id)) as { leadsKept: number };
+      setNotice(`Deleted "${filter.niche}". ${result.leadsKept} lead(s) kept.`);
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
 
   async function createFilter(e: React.FormEvent) {
     e.preventDefault();
@@ -125,7 +159,16 @@ export default function SettingsPage() {
             {showBuilder ? "Cancel" : "New filter"}
           </button>
         </div>
-        {error && <p className="mb-3 text-sm text-bad">{error}</p>}
+        {error && (
+          <div className="mb-3 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
+            {error}
+          </div>
+        )}
+        {notice && (
+          <div className="mb-3 rounded-lg border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-3 py-2 text-sm text-good">
+            {notice}
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
@@ -161,12 +204,20 @@ export default function SettingsPage() {
                   </td>
                   <td className="py-2 pr-3">{f.active ? "Yes" : "No"}</td>
                   <td className="py-2">
-                    <button
-                      onClick={() => api.runNicheFilterNow(f.id).catch((e) => setError((e as Error).message))}
-                      className="rounded-md bg-accent px-2.5 py-1 text-xs text-white"
-                    >
-                      Run now
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => api.runNicheFilterNow(f.id).catch((e) => setError((e as Error).message))}
+                        className="rounded-md bg-accent px-2.5 py-1 text-xs text-white transition-opacity hover:opacity-90"
+                      >
+                        Run now
+                      </button>
+                      <button
+                        onClick={() => confirmDelete(f)}
+                        className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)]"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -79,10 +79,82 @@
   --series-4: #c98500;
 }
 
+/* Elevation. Two levels only — a card and a lifted card. More steps make a
+   dashboard read as cluttered, because every surface competes for attention. */
+:root {
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --shadow-sm: 0 1px 2px rgb(23 27 33 / 0.06), 0 1px 3px rgb(23 27 33 / 0.04);
+  --shadow-md: 0 4px 12px rgb(23 27 33 / 0.08), 0 2px 4px rgb(23 27 33 / 0.04);
+  --shadow-lg: 0 12px 32px rgb(23 27 33 / 0.14);
+  --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Dark surfaces are LIGHTER than the page, not darker: shadow barely reads
+       on a dark background, so elevation has to come from luminance instead. */
+    --surface: #1a1e25;
+    --surface-raised: #212630;
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+  }
+}
+
+:root[data-theme="dark"] {
+  --surface: #1a1e25;
+  --surface-raised: #212630;
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+}
+
 body {
   background: var(--paper);
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The standard card. Used everywhere so surfaces stay consistent. */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+}
+
+.card-interactive {
+  transition: box-shadow 140ms ease, transform 140ms ease, border-color 140ms ease;
+}
+.card-interactive:hover {
+  box-shadow: var(--shadow-md);
+  border-color: rgb(var(--accent-rgb) / 0.35);
+}
+
+/* Drag affordances for the pipeline board. */
+.drag-ghost {
+  opacity: 0.4;
+  transform: scale(0.98);
+}
+.drop-target {
+  border-color: rgb(var(--accent-rgb) / 0.6);
+  background: rgb(var(--accent-rgb) / 0.06);
+}
+.drop-blocked {
+  border-color: rgb(var(--bad-rgb) / 0.5);
+  background: rgb(var(--bad-rgb) / 0.06);
+  cursor: not-allowed;
+}
+
+/* Respect a reduced-motion preference: these transitions are decorative, and
+   motion sensitivity is a real accessibility need, not a style choice. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 /* Only for columns of numbers that must align vertically (table rows, axis

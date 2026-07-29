@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { LeadsService } from "./leads.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
+import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
 import { ReviewNoteDto } from "./dto/review-note.dto";
 import { AdvanceStageDto } from "./dto/advance-stage.dto";
 import { ApproveEmailDto } from "./dto/approve-email.dto";
@@ -22,6 +23,22 @@ export class LeadsController {
   @UseGuards(InternalAuthGuard)
   create(@Body("orgId") orgId: string, @Body() dto: CreateLeadDto) {
     return this.leadsService.createVerified(orgId, dto);
+  }
+
+  /**
+   * Manual lead entry from the dashboard.
+   *
+   * Separate from the internal POST above rather than relaxing that guard: the
+   * agent route trusts its caller with orgId and pre-computed scores, and a
+   * user-facing endpoint must take orgId from the JWT instead. It also runs the
+   * same duplicate checks, so hand-entering a company the agents already found
+   * is rejected rather than creating a second record someone contacts twice.
+   */
+  @Post("manual")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
+  createManual(@CurrentUser() user: JwtClaims, @Body() dto: CreateManualLeadDto) {
+    return this.leadsService.createManual(user.orgId, dto);
   }
 
   @Get()

@@ -88,6 +88,55 @@ export class NicheFiltersService implements OnModuleInit {
     this.schedulerRegistry.addCronJob(jobName(filter.id), job);
   }
 
+  /**
+   * Deletes a niche filter, keeping the leads it produced.
+   *
+   * Leads are detached (filterId set to null) rather than deleted. They are
+   * real companies that were verified and may already be mid-sequence —
+   * removing a targeting rule must never destroy the pipeline it built.
+   *
+   * Extraction runs ARE deleted: they are operational logs of this filter's
+   * activity and are meaningless without it. That does shift the historical
+   * duplicate-rate figure, which aggregates over runs, so the affected counts
+   * are returned for the caller to show before confirming.
+   *
+   * The cron job is unregistered first. Doing it after the delete would leave a
+   * window where a scheduled run fires against a filter that no longer exists.
+   */
+  async remove(orgId: string, id: string) {
+    const filter = await this.prisma.nicheFilter.findFirst({ where: { id, orgId } });
+    if (!filter) throw new NotFoundException(`Niche filter ${id} not found`);
+
+    this.unregisterJob(id);
+
+    const [leads, runs] = await Promise.all([
+      this.prisma.lead.count({ where: { filterId: id } }),
+      this.prisma.extractionRun.count({ where: { filterId: id } }),
+    ]);
+
+    await this.prisma.$transaction([
+      this.prisma.lead.updateMany({ where: { filterId: id }, data: { filterId: null } }),
+      this.prisma.campaign.updateMany({ where: { filterId: id }, data: { filterId: null } }),
+      this.prisma.extractionRun.deleteMany({ where: { filterId: id } }),
+      this.prisma.nicheFilter.delete({ where: { id } }),
+    ]);
+
+    this.logger.log(`Deleted niche filter ${id}: kept ${leads} lead(s), removed ${runs} run(s)`);
+    return { deleted: true, leadsKept: leads, runsDeleted: runs };
+  }
+
+  /** Counts of what a delete would affect, so the UI can warn before doing it. */
+  async deletionImpact(orgId: string, id: string) {
+    const filter = await this.prisma.nicheFilter.findFirst({ where: { id, orgId } });
+    if (!filter) throw new NotFoundException(`Niche filter ${id} not found`);
+
+    const [leads, runs] = await Promise.all([
+      this.prisma.lead.count({ where: { filterId: id } }),
+      this.prisma.extractionRun.count({ where: { filterId: id } }),
+    ]);
+    return { leadsKept: leads, runsDeleted: runs };
+  }
+
   private unregisterJob(filterId: string) {
     const name = jobName(filterId);
     if (this.schedulerRegistry.doesExist("cron", name)) {

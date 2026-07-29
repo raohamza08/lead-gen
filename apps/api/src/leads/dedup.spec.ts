@@ -12,8 +12,22 @@ describe("normaliseCompanyName", () => {
     expect(normaliseCompanyName("Northwind GmbH")).toBe(normaliseCompanyName("northwind gmbh"));
   });
 
+  it("treats 'Co' and 'Company' as the same suffix", () => {
+    // Without this, "Acme Co" and "Acme Company" normalise differently and the
+    // same business gets contacted twice.
+    expect(normaliseCompanyName("Acme Co")).toBe(normaliseCompanyName("Acme Company"));
+  });
+
   it("keeps genuinely different companies apart", () => {
     expect(normaliseCompanyName("Acme Health")).not.toBe(normaliseCompanyName("Acme Legal"));
+  });
+
+  it("does not merge on 'Group' or 'Holdings'", () => {
+    // These can be genuinely distinct entities. A false merge silently discards
+    // a real lead, which is worse than a duplicate somebody can see and remove.
+    expect(normaliseCompanyName("Harbor Recruiting")).not.toBe(
+      normaliseCompanyName("Harbor Recruiting Group"),
+    );
   });
 
   it("returns undefined for empty or suffix-only input", () => {

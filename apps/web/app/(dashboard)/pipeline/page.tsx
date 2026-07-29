@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../lib/api-client";
+import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 
 interface LeadRow extends Lead {
@@ -10,35 +11,64 @@ interface LeadRow extends Lead {
   pipelineState: { stage: string } | null;
 }
 
-/** Mirrors CLICKUP_STATUS_MAP in apps/api/src/sync/clickup-sync.worker.ts — same labels, same order. */
-const COLUMNS: { stage: string; label: string }[] = [
-  { stage: "NEW_LEAD", label: "New Lead" },
-  { stage: "UNDER_REVIEW", label: "Under Review" },
-  { stage: "READY_FOR_OUTREACH", label: "Ready for Outreach" },
-  { stage: "EMAIL_1_SENT", label: "Email 1 Sent" },
-  { stage: "WAITING_2_DAYS", label: "Waiting (2 Days)" },
-  { stage: "EMAIL_2_SENT", label: "Email 2 Sent" },
-  { stage: "WAITING_1_2_DAYS", label: "Waiting (1-2 Days)" },
-  { stage: "PERSONALIZED_PITCH", label: "Personalized Pitch" },
-  { stage: "LINKEDIN_OUTREACH", label: "LinkedIn Outreach" },
-  { stage: "REPLIED", label: "Replied" },
-  { stage: "MEETING_BOOKED", label: "Meeting Booked" },
-  { stage: "PROPOSAL_SENT", label: "Proposal Sent" },
-  { stage: "WON", label: "Won" },
-  { stage: "LOST", label: "Lost" },
-];
+const LABELS: Record<string, string> = {
+  NEW_LEAD: "New Lead",
+  VERIFIED: "Verified",
+  RESEARCH_COMPLETED: "Research Done",
+  UNDER_REVIEW: "Under Review",
+  READY_FOR_OUTREACH: "Ready",
+  EMAIL_1_SENT: "Email 1 Sent",
+  WAITING_2_DAYS: "Waiting 2d",
+  EMAIL_2_SENT: "Email 2 Sent",
+  WAITING_1_2_DAYS: "Waiting 1-2d",
+  GEMINI_DRAFTING: "Drafting",
+  PERSONALIZED_PITCH: "Pitch Sent",
+  LINKEDIN_OUTREACH: "LinkedIn",
+  LINKEDIN_FOLLOW_UP: "LinkedIn F/U",
+  REPLIED: "Replied",
+  MEETING_BOOKED: "Meeting",
+  PROPOSAL_SENT: "Proposal",
+  NEGOTIATION: "Negotiation",
+  WON: "Won",
+  CLIENT_ONBOARDING: "Onboarding",
+  LOST: "Lost",
+};
 
-/** Read-through, not a fork of truth (Part F1) — real stage changes happen via ClickUp or the sequencer. */
+const COLUMNS = Object.values(PipelineStage);
+
+/** Whether a card may be dropped here, mirroring the API's state machine.
+ *  Checked client-side purely to show the affordance — the API re-validates,
+ *  and it remains the authority. */
+function canDrop(from: string | null, to: string): boolean {
+  if (!from || from === to) return false;
+  if (to === PipelineStage.LOST) {
+    return from !== PipelineStage.WON && from !== PipelineStage.CLIENT_ONBOARDING;
+  }
+  return (ALLOWED_TRANSITIONS[from as PipelineStage] ?? []).includes(to as PipelineStage);
+}
+
+function scoreTone(score?: number | null) {
+  if (score == null) return "text-ink/40";
+  if (score >= 75) return "text-good";
+  if (score >= 50) return "text-gold";
+  return "text-ink/50";
+}
+
 export default function PipelinePage() {
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [dragging, setDragging] = useState<LeadRow | null>(null);
+  const [hoverStage, setHoverStage] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
+  function load() {
     api
       .getLeads({ pageSize: "200" })
-      .then((res: any) => setLeads(res.items))
+      .then((res: any) => setLeads(res.items ?? res))
       .catch((err) => setError((err as Error).message));
-  }, []);
+  }
+
+  useEffect(load, []);
 
   const byStage = useMemo(() => {
     const grouped = new Map<string, LeadRow[]>();
@@ -50,37 +80,129 @@ export default function PipelinePage() {
     return grouped;
   }, [leads]);
 
-  if (error) return <p className="text-bad">{error}</p>;
+  async function moveTo(lead: LeadRow, stage: string) {
+    const from = lead.pipelineState?.stage ?? null;
+    if (!canDrop(from, stage)) return;
+
+    setBusy(lead.id);
+    setError(null);
+
+    // Optimistic: the card moves immediately so dragging feels direct. Reverted
+    // below if the API rejects it, which it can — the server re-validates the
+    // transition and is the authority.
+    const previous = leads;
+    setLeads((rows) =>
+      rows.map((r) => (r.id === lead.id ? { ...r, pipelineState: { stage } } : r)),
+    );
+
+    try {
+      await api.advanceStage(lead.id, stage);
+      load();
+    } catch (err) {
+      setLeads(previous);
+      setError(`Could not move ${lead.companyName}: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
-    <div className="flex gap-3 overflow-x-auto pb-2">
-      {COLUMNS.map((col) => {
-        const cards = byStage.get(col.stage) ?? [];
-        return (
-          <div key={col.stage} className="flex w-64 shrink-0 flex-col rounded-lg border border-[var(--line)]">
-            <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
-              <span className="text-xs font-medium uppercase tracking-wide text-ink/60">{col.label}</span>
-              <span className="tabular rounded bg-black/5 px-1.5 py-0.5 text-xs">{cards.length}</span>
-            </div>
-            <div className="flex flex-col gap-2 p-2">
-              {cards.map((lead) => (
-                <Link
-                  key={lead.id}
-                  href={`/leads/${lead.id}`}
-                  className="rounded border border-[var(--line)] p-2 text-xs hover:bg-black/5"
-                >
-                  <div className="font-medium text-ink">{lead.companyName}</div>
-                  <div className="mt-1 flex items-center justify-between text-ink/60">
-                    <span>{lead.industry ?? "—"}</span>
-                    <span className="tabular">{lead.score?.leadScore ?? "—"}</span>
-                  </div>
-                </Link>
-              ))}
-              {cards.length === 0 && <p className="px-1 py-3 text-center text-xs text-ink/40">Empty</p>}
-            </div>
-          </div>
-        );
-      })}
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
+          <p className="mt-0.5 text-xs text-ink/55">
+            Drag a card to move it. Only valid next stages accept a drop — the same rules the
+            automation follows, so a manual move can&apos;t create a state the sequencer won&apos;t
+            understand.
+          </p>
+        </div>
+        <span className="text-xs text-ink/50">{leads.length} leads</span>
+      </div>
+
+      {error && (
+        <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
+          {error}
+        </div>
+      )}
+
+      <div className="flex gap-3 overflow-x-auto pb-3">
+        {COLUMNS.map((stage) => {
+          const cards = byStage.get(stage) ?? [];
+          const from = dragging?.pipelineState?.stage ?? null;
+          const droppable = dragging ? canDrop(from, stage) : false;
+          const blocked = Boolean(dragging) && !droppable && from !== stage;
+          const isHover = hoverStage === stage;
+
+          return (
+            <section
+              key={stage}
+              onDragOver={(e) => {
+                // preventDefault is what actually permits a drop; without it the
+                // browser refuses regardless of any visual affordance.
+                if (droppable) {
+                  e.preventDefault();
+                  setHoverStage(stage);
+                }
+              }}
+              onDragLeave={() => setHoverStage((s) => (s === stage ? null : s))}
+              onDrop={(e) => {
+                e.preventDefault();
+                setHoverStage(null);
+                if (dragging && droppable) moveTo(dragging, stage);
+                setDragging(null);
+              }}
+              className={`card flex w-64 shrink-0 flex-col transition-colors ${
+                isHover && droppable ? "drop-target" : blocked ? "drop-blocked" : ""
+              }`}
+            >
+              <header className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-ink/65">
+                  {LABELS[stage] ?? stage}
+                </span>
+                <span className="tabular rounded-full bg-ink/8 px-2 py-0.5 text-[11px] text-ink/70">
+                  {cards.length}
+                </span>
+              </header>
+
+              <div className="flex min-h-[80px] flex-col gap-2 p-2">
+                {cards.map((lead) => (
+                  <article
+                    key={lead.id}
+                    draggable
+                    onDragStart={() => setDragging(lead)}
+                    onDragEnd={() => {
+                      setDragging(null);
+                      setHoverStage(null);
+                    }}
+                    className={`card card-interactive cursor-grab p-2.5 text-xs active:cursor-grabbing ${
+                      dragging?.id === lead.id ? "drag-ghost" : ""
+                    } ${busy === lead.id ? "opacity-50" : ""}`}
+                  >
+                    <Link href={`/leads/${lead.id}`} className="block">
+                      <div className="font-medium leading-snug text-ink">{lead.companyName}</div>
+                      <div className="mt-1.5 flex items-center justify-between gap-2">
+                        <span className="truncate text-ink/55">{lead.industry ?? "—"}</span>
+                        <span className={`tabular font-semibold ${scoreTone(lead.score?.leadScore)}`}>
+                          {lead.score?.leadScore ?? "—"}
+                        </span>
+                      </div>
+                      {lead.country && (
+                        <div className="mt-1 text-[11px] text-ink/40">{lead.country}</div>
+                      )}
+                    </Link>
+                  </article>
+                ))}
+                {cards.length === 0 && (
+                  <p className="px-1 py-4 text-center text-[11px] text-ink/35">
+                    {droppable ? "Drop here" : "Empty"}
+                  </p>
+                )}
+              </div>
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 }

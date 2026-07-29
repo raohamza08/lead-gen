@@ -71,7 +71,7 @@ export function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-[var(--line)] p-5">
+    <section className="card p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
@@ -228,10 +228,10 @@ export function StatTile({
   const toneClass =
     tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "gold" ? "text-gold" : "text-ink";
   return (
-    <div className="rounded-lg border border-[var(--line)] px-3.5 py-3">
+    <div className="card card-interactive px-3.5 py-3">
       <div className="text-[11px] uppercase tracking-wide text-ink/55">{label}</div>
       {/* Proportional figures, not tabular — these are standalone values, not a column. */}
-      <div className={`mt-1 text-xl font-semibold ${toneClass}`}>{value}</div>
+      <div className={`mt-1 text-2xl font-semibold tracking-tight ${toneClass}`}>{value}</div>
       {hint ? <div className="mt-0.5 text-[11px] text-ink/45">{hint}</div> : null}
     </div>
   );

@@ -148,7 +148,11 @@ export const api = {
     request(`/leads/${id}/advance-stage`, { method: "POST", body: JSON.stringify({ stage }) }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),
+  createManualLead: (body: Record<string, unknown>) =>
+    request("/leads/manual", { method: "POST", body: JSON.stringify(body) }),
   getNicheFilters: () => request("/niche-filters"),
+  getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
+  deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),
   createNicheFilter: (body: Record<string, unknown>) =>
     request("/niche-filters", { method: "POST", body: JSON.stringify(body) }),
   runNicheFilterNow: (id: string) => request(`/niche-filters/${id}/run-now`, { method: "POST" }),

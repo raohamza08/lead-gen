@@ -1,8 +1,15 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
+import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
 import { ReviewNoteDto } from "./dto/review-note.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { ApproveEmailAction, ApproveEmailDto } from "./dto/approve-email.dto";
@@ -304,6 +311,86 @@ export class LeadsService {
   }
 
   /**
+   * Creates a lead entered by hand in the dashboard.
+   *
+   * Runs the same duplicate checks as the agent path, so typing in a company
+   * the agents already found is rejected rather than creating a second record
+   * two people then contact independently.
+   *
+   * Starts at NEW_LEAD, not VERIFIED: nothing has checked the website, LinkedIn
+   * or email yet. Marking it verified because a human typed it would put
+   * unchecked addresses into the send queue, and a bounce damages the sending
+   * reputation of every mailbox in the org.
+   */
+  async createManual(orgId: string, dto: CreateManualLeadDto): Promise<CreateLeadResult> {
+    const websiteDomain = extractDomain(dto.website);
+
+    const existing = await this.findExistingDuplicate(
+      orgId,
+      { companyName: dto.companyName, email: dto.email, linkedinUrl: dto.linkedinUrl },
+      websiteDomain,
+    );
+    if (existing) {
+      throw new ConflictException(
+        `A lead for this company already exists (matched on ${existing.reason}).`,
+      );
+    }
+
+    const lead = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.lead.create({
+        data: {
+          orgId,
+          companyName: dto.companyName,
+          companyNameKey: normaliseCompanyName(dto.companyName),
+          linkedinSlug: normaliseLinkedin(dto.linkedinUrl),
+          website: dto.website,
+          websiteDomain,
+          linkedinUrl: dto.linkedinUrl,
+          contactName: dto.contactName,
+          contactLinkedinUrl: dto.contactLinkedinUrl,
+          jobTitle: dto.jobTitle,
+          email: dto.email,
+          phone: dto.phone,
+          industry: dto.industry,
+          country: dto.country,
+          city: dto.city,
+          employeeCount: dto.employeeCount,
+          businessDescription: dto.businessDescription,
+          campaignId: dto.campaignId,
+          researchEvidence: dto.notes ? `[MANUAL ENTRY] ${dto.notes}` : "[MANUAL ENTRY]",
+        },
+      });
+
+      // A score row is created so the lead sorts and renders alongside the
+      // others; zeros are honest here — nothing has been assessed yet.
+      await tx.leadScore.create({
+        data: {
+          leadId: created.id,
+          leadScore: 0,
+          confidenceScore: 0,
+          aiOpportunityScore: 0,
+          automationScore: 0,
+          crmReadinessScore: 0,
+          websiteQualityScore: 0,
+          fitReason: "Added manually — not yet researched or scored.",
+        },
+      });
+
+      await tx.pipelineState.create({
+        data: { leadId: created.id, stage: PipelineStage.NEW_LEAD },
+      });
+
+      return created;
+    });
+
+    this.sync.onLeadCreated(lead.id).catch((err) =>
+      this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
+    );
+
+    return { status: "created", leadId: lead.id };
+  }
+
+  /**
    * Tier-2 duplicate detection (Part C2), covering the identities the database
    * unique constraints cannot.
    *
@@ -371,7 +458,16 @@ export function normaliseCompanyName(name?: string): string | undefined {
   const cleaned = name
     .toLowerCase()
     .replace(/[.,]/g, " ")
-    .replace(/\b(ltd|limited|llc|inc|incorporated|corp|corporation|gmbh|bv|plc|pty|co)\b/g, " ")
+    // "company" belongs here alongside "co": without it "Acme Co" and "Acme
+    // Company" normalise differently and both get contacted. "group" and
+    // "holdings" are deliberately NOT stripped — "Harbor Recruiting" and
+    // "Harbor Recruiting Group" can be genuinely different entities, and a
+    // false merge silently discards a real lead, which is worse than a
+    // duplicate someone can spot.
+    .replace(
+      /\b(ltd|limited|llc|inc|incorporated|corp|corporation|company|gmbh|bv|plc|pty|co)\b/g,
+      " ",
+    )
     .replace(/\s+/g, " ")
     .trim();
   return cleaned || undefined;
