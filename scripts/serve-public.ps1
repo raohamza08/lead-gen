@@ -59,8 +59,15 @@ Write-Host "Starting Cloudflare quick tunnel..." -ForegroundColor Cyan
 $log = Join-Path $repoRoot "cloudflared.err.log"
 Remove-Item $log -ErrorAction SilentlyContinue
 
+# --protocol http2 is NOT optional here.
+#
+# cloudflared defaults to QUIC (UDP/7844). On this network that connection dies
+# within minutes and the log fills with "control stream encountered a failure
+# while serving" followed by endless reconnects — the process stays alive while
+# the hostname serves nothing, so from outside it looks identical to a working
+# tunnel. HTTP/2 runs over TCP/443 and is stable.
 Start-Process -FilePath $cloudflared `
-  -ArgumentList "tunnel","--url","http://localhost:$ApiPort" `
+  -ArgumentList "tunnel","--protocol","http2","--url","http://localhost:$ApiPort" `
   -WindowStyle Hidden `
   -RedirectStandardOutput (Join-Path $repoRoot "cloudflared.log") `
   -RedirectStandardError $log
