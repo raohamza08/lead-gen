@@ -19,7 +19,9 @@ from .lead_agents import (
     LeadScoringAgent,
     LeadVerificationAgent,
 )
+from .ops_agents import AnalyticsAgent, LearningAgent
 from .orchestrator import Orchestrator
+from .outreach_agents import EmailAgent, LinkedInAgent, ReviewAgent, SchedulerAgent
 
 #: Every agent the system can run, keyed by its stable name.
 AGENTS: dict[str, Agent] = {
@@ -32,6 +34,12 @@ AGENTS: dict[str, Agent] = {
         BuyerIntelligenceAgent(),
         AiOpportunityAgent(),
         LeadScoringAgent(),
+        ReviewAgent(),
+        EmailAgent(),
+        LinkedInAgent(),
+        SchedulerAgent(),
+        AnalyticsAgent(),
+        LearningAgent(),
     )
 }
 
@@ -64,6 +72,16 @@ PIPELINES: dict[str, tuple[str, ...]] = {
     # Cheap re-score after a human edits the review notes: no external calls
     # beyond the scorer itself.
     "rescore": ("lead_scoring",),
+
+    # Everything needed to contact one lead. Review runs first so the reviewer's
+    # corrections reach the email and LinkedIn copy rather than being applied
+    # after they are written.
+    "outreach": ("review", "email", "linkedin", "scheduler"),
+    # Email only, for a sequence step that needs no LinkedIn copy.
+    "email_only": ("review", "email", "scheduler"),
+    # Cross-lead analysis. Separate from every per-lead pipeline because it
+    # reads aggregates, not one candidate.
+    "optimisation": ("analytics", "learning"),
 }
 
 
