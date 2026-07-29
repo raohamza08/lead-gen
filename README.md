@@ -8,7 +8,9 @@ review and approval.
 > It has the restart commands, exactly where work stopped, and the traps already
 > hit — reading it will save you rediscovering several of them.
 
-**Live:** https://lead-gen-dashboard-umber.vercel.app · **Login:** `admin@example.com` / `ChangeMe123!`
+**Live:** https://lead-gen-dashboard-umber.vercel.app · **Login:** see
+[`docs/RESUME.md`](./docs/RESUME.md#restart-the-stack) — the seeded admin's
+email has since been changed and isn't published here
 
 ## How it fits together
 
@@ -117,6 +119,9 @@ This means the full pipeline — extraction → dedup → verify → score → i
   **analytics** (email funnel, revenue pipeline, cohort trends, LinkedIn)
 - **Manual lead entry**, **niche-filter delete**, **drag-and-drop pipeline**
 - Auth refresh with single-flight rotation, route guard, dark mode that works
+- **Team management, email-account admin UI, per-filter enrichment cost
+  control, campaign↔filter linking, pipeline undo, lead delete, and CSV
+  export** — see `docs/RESUME.md` for the full detail on each
 
 ### Maps to the roadmap in Part H1 of the architecture doc
 
@@ -139,8 +144,8 @@ This means the full pipeline — extraction → dedup → verify → score → i
 - LinkedIn — intentionally out of scope for now (see below)
 
 **Not yet built:**
-- Admin UI for email accounts, ClickUp/Sheets connection config, and user/role management — full backend CRUD exists for all three (`EmailAccountsController`, `UsersController`) but nothing in `apps/web` consumes it yet; ClickUp/Sheets creds are env-var-only
-- Lead-filter controls on the `/leads` page — the backend query DTO already supports industry/country/stage/search/assignee filters, the page just doesn't expose them yet
+- ClickUp/Sheets connection config UI — creds are still env-var-only (the email-accounts and user/role admin UIs this bullet used to also list are both built now — see `docs/RESUME.md`)
+- Self-service password change/reset for Team accounts — an admin sets the password at creation and hands it over directly
 - Fuzzy/semantic duplicate detection — current dedup relies only on exact-match Postgres unique constraints (email, website domain), no near-duplicate (e.g. company-name-similarity) layer
 - **LinkedIn automation is intentionally not planned** — real LinkedIn browser/API automation risks ToS violations and account bans; only the data model (`LinkedinActivity`) and a status field exist, with no automation or update endpoint by design, not oversight
 - Multi-tenant row-level security, the AI improvement/feedback loop (Part D5), Next.js auth middleware (unauthenticated users currently just see raw 401s rather than a redirect to `/login`)
@@ -154,7 +159,7 @@ A few things surfaced while building this that are worth knowing before you exte
 3. **Refresh tokens and the suppression list are real tables, not deferred.** The original ERD (Part B4) didn't include `RefreshToken` or `SuppressionEntry` as separate models; both turned out to be required for the auth rotation design (Part E4) and the compliance gate (Part C6/I4/I5) to actually work, so they were added to `apps/api/prisma/schema.prisma`.
 4. **Two migrations are checked in** (`20260727000000_init`, `20260727200000_sync_and_email_provider_fields`) — both have since been applied for real against a live Supabase Postgres instance via `npm run prisma:deploy --workspace=apps/api` (2026-07-27), not just validated schema-only.
 5. **The Claude CLI argv trap (Windows).** The prompt is piped to `claude` on **stdin**, never passed as an argv element. On Windows `shutil.which("claude")` resolves to `claude.CMD` — an npm batch shim — so `subprocess.run` executes it through `cmd.exe`, and cmd.exe's parser stops at the first newline in the command line. The search prompts are multi-line, so `-p <prompt>` truncated the command and silently dropped **every flag after it**: without `--output-format json` stdout came back as raw prose instead of the JSON envelope, and without `--allowed-tools`/`--permission-mode` the model's WebSearch calls were denied and it returned an apology. Nothing errored — it just produced unusable output. If you add another CLI invocation, keep every argv element newline-free.
-6. **Demo lead data is off by default and should stay that way.** `search_tools.find_candidate` can substitute synthetic `[DEMO DATA]` companies when the CLI is unavailable, which keeps the downstream pipeline exercisable — but those rows land in the real `leads` table and are indistinguishable from genuine leads once inserted, against the spec's "only verified leads" requirement. It is now gated behind `ALLOW_DEMO_FALLBACK` (default `false`); with it disabled a CLI failure aborts the run and records `FAILED` plus the reason on `extraction_runs.error` rather than quietly manufacturing leads. Enable it only against a throwaway database. (The `*.example.com` rows currently in the dev database — Northwind Ops, Beacon Analytics, Lucent Field Services, Harbor Recruiting Group, Ferrow Manufacturing — are leftovers from before this gate existed.)
+6. **Demo lead data is off by default and should stay that way.** `search_tools.find_candidate` can substitute synthetic `[DEMO DATA]` companies when the CLI is unavailable, which keeps the downstream pipeline exercisable — but those rows land in the real `leads` table and are indistinguishable from genuine leads once inserted, against the spec's "only verified leads" requirement. It is now gated behind `ALLOW_DEMO_FALLBACK` (default `false`); with it disabled a CLI failure aborts the run and records `FAILED` plus the reason on `extraction_runs.error` rather than quietly manufacturing leads. Enable it only against a throwaway database.
 7. **`DIRECT_URL` was added to the Prisma datasource** alongside `DATABASE_URL` — needed because Supabase's connection pooler (`DATABASE_URL`, transaction mode, port 6543) doesn't support the prepared statements Prisma's migration engine needs; `DIRECT_URL` (session mode, port 5432) is used for migrations only, while the app itself connects through the pooler.
 
 ## Build validation status
@@ -163,7 +168,7 @@ Verified directly, end to end, not just via CI config:
 - `npm run build:types` — shared types package compiles clean
 - `npx prisma validate` / `prisma generate` — schema is valid, client generates clean
 - `npm run build --workspace=apps/api` / `npx tsc --noEmit` — NestJS API compiles clean (TypeScript)
-- `npm test --workspace=apps/api` — 14/14 across 2 suites (`pipeline-transitions.spec.ts`, `analytics.math.spec.ts`)
+- `npm test --workspace=apps/api` — 37/37 across 4 suites (`pipeline-transitions.spec.ts`, `analytics.math.spec.ts`, `dedup.spec.ts`, `search-brief.spec.ts`)
 - `npm run build --workspace=apps/web` — Next.js production build compiles and prerenders all routes clean
 - **`prisma migrate deploy` and `prisma:seed` run for real against a live Supabase Postgres instance** (as of 2026-07-27) — both migrations applied cleanly, seed creates the demo org/admin/niche filter
 - **All three services confirmed running together and talking to each other for real**: `apps/api` (port 4000) boots against Supabase with zero errors, `apps/ai-workers` (port 8000) and `apps/web` (port 3000) both healthy, admin login works end-to-end through the real UI
