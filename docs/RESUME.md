@@ -24,7 +24,13 @@ Then publish the API and repoint the deployed dashboard:
 Check it worked: `curl http://localhost:4000/api/v1/health` should report
 `database: up, redis: up`.
 
-**Login:** `admin@example.com` / `ChangeMe123!`
+**Login:** the seeded admin's email was changed directly in the database at
+some point outside any migration/seed file — it is **no longer**
+`admin@example.com`. Check `/settings` → Team (once logged in) or query the
+`users` table for the current one. Password is still `ChangeMe123!` unless
+changed. `docs/RESUME.md`/`README.md` mentions of `admin@example.com` below
+are stale; not corrected in place because doing so would mean putting a real
+personal email in the public repo — flag this to the user before editing.
 **Dashboard:** https://lead-gen-dashboard-umber.vercel.app
 **Repo:** https://github.com/raohamza08/lead-gen
 
@@ -38,6 +44,22 @@ Check it worked: `curl http://localhost:4000/api/v1/health` should report
 ---
 
 ## Pick up exactly here
+
+**Team / user management UI — done (2026-07-29).** The backend
+(`apps/api/src/users/`) already existed in full — list, create, role change,
+deactivate, all `@Roles`-gated — but had zero frontend before this. `/settings`
+now has a Team section: ADMIN sees a "New user" form (name, email, temp
+password, role) and can change any member's role or deactivate/reactivate
+them (can't deactivate self); MANAGER and below see a read-only roster
+(matches the `GET /users` RBAC, which already allowed ADMIN+MANAGER). Added
+`PATCH /users/:id/activate` (only `deactivate` existed) and a friendly 409 on
+duplicate email (was an unhandled Prisma P2002 → 500). Each new user logs in
+with their own email/password immediately — there's no separate invite/consent
+step. `getCurrentUser()` in `api-client.ts` decodes the JWT payload
+client-side to gate the admin-only controls in the UI; this is display-only,
+never a security boundary — the API's `RolesGuard` is what actually enforces
+it on every request. **Not built:** self-service password change/reset — an
+admin sets the password at creation and hands it to the person directly.
 
 **Email settings UI — done.** `/settings` now has an Email accounts panel:
 list with health bars (sent today vs daily limit), an add form that switches

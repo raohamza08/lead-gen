@@ -48,6 +48,32 @@ export function hasSession(): boolean {
   return Boolean(getAccessToken());
 }
 
+export interface CurrentUser {
+  sub: string;
+  orgId: string;
+  role: "ADMIN" | "MANAGER" | "LEAD_REVIEWER" | "SALES_REP" | "VIEWER";
+  email: string;
+}
+
+/**
+ * Reads identity/role off the access token's payload for UI purposes only —
+ * showing or hiding admin-only controls like "New user". This is NOT a
+ * security boundary: the JWT signature is never checked client-side, so a
+ * tampered token could claim any role. The API's own RolesGuard is what
+ * actually enforces access on every request; this only decides what renders.
+ */
+export function getCurrentUser(): CurrentUser | null {
+  const token = getAccessToken();
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    return JSON.parse(json) as CurrentUser;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * De-duplicates concurrent refreshes.
  *
@@ -180,4 +206,10 @@ export const api = {
     request("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: string, body: Record<string, unknown>) =>
     request(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  getUsers: () => request("/users"),
+  createUser: (body: Record<string, unknown>) =>
+    request("/users", { method: "POST", body: JSON.stringify(body) }),
+  activateUser: (id: string) => request(`/users/${id}/activate`, { method: "PATCH" }),
+  deactivateUser: (id: string) => request(`/users/${id}/deactivate`, { method: "PATCH" }),
+  changeUserRole: (id: string, role: string) => request(`/users/${id}/role/${role}`, { method: "PATCH" }),
 };

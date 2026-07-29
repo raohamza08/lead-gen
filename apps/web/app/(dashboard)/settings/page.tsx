@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "../../../lib/api-client";
 import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../components/filter-controls";
 import { EmailAccountsSection } from "../../../components/email-accounts-section";
+import { TeamSection } from "../../../components/team-section";
 import type { NicheFilter } from "@leadgen/types";
 
 /**
@@ -183,6 +184,7 @@ export default function SettingsPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <TeamSection />
       <EmailAccountsSection />
 
       <section className="rounded-xl border border-[var(--line)] p-5">

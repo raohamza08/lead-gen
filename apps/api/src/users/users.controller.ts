@@ -30,6 +30,12 @@ export class UsersController {
     return this.usersService.setActive(id, false);
   }
 
+  @Patch(":id/activate")
+  @Roles(Role.ADMIN)
+  activate(@Param("id") id: string) {
+    return this.usersService.setActive(id, true);
+  }
+
   @Patch(":id/role/:role")
   @Roles(Role.ADMIN)
   changeRole(@Param("id") id: string, @Param("role") role: Role) {
