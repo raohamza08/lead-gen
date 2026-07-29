@@ -648,7 +648,10 @@ model SuppressionEntry {
 model AuditLog {
   id        String   @id @default(uuid())
   leadId    String?  @map("lead_id")
-  lead      Lead?    @relation(fields: [leadId], references: [id])
+  // SetNull rather than the default: deleting a lead must keep the audit
+  // trail entry (who did what, when) even though the row it was about is
+  // gone — losing accountability history is worse than an orphaned reference.
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
   actorId   String?  @map("actor_id")
   actor     User?    @relation(fields: [actorId], references: [id])
   action    String

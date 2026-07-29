@@ -124,6 +124,33 @@ export default function PipelinePage() {
     }
   }
 
+  /** Unlike the niche-filter/email-account deletes elsewhere, there is no
+   *  "detach and keep" option — this wipes the lead's full history, including
+   *  any real emails already sent to the prospect, so the confirmation says
+   *  so explicitly rather than a generic "are you sure?". */
+  async function deleteLead(lead: LeadRow, e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (
+      !window.confirm(
+        `Permanently delete ${lead.companyName}?\n\n` +
+          "This removes its full history — scores, review notes, and any emails already sent — and cannot be undone.",
+      )
+    )
+      return;
+
+    setBusy(lead.id);
+    setError(null);
+    try {
+      await api.deleteLead(lead.id);
+      setLeads((rows) => rows.filter((r) => r.id !== lead.id));
+    } catch (err) {
+      setError(`Could not delete ${lead.companyName}: ${(err as Error).message}`);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -209,17 +236,28 @@ export default function PipelinePage() {
                         <div className="mt-1 text-[11px] text-ink/40">{lead.country}</div>
                       )}
                     </Link>
-                    {lead.pipelineState?.previousStage && (
+                    <div className="mt-1.5 flex items-center gap-1.5">
+                      {lead.pipelineState?.previousStage && (
+                        <button
+                          type="button"
+                          disabled={busy === lead.id}
+                          onClick={(e) => moveBack(lead, e)}
+                          title={`Move back to ${LABELS[lead.pipelineState.previousStage] ?? lead.pipelineState.previousStage}`}
+                          className="rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-ink/50 transition-colors hover:bg-ink/5 hover:text-ink/80 disabled:opacity-50"
+                        >
+                          ← Back
+                        </button>
+                      )}
                       <button
                         type="button"
                         disabled={busy === lead.id}
-                        onClick={(e) => moveBack(lead, e)}
-                        title={`Move back to ${LABELS[lead.pipelineState.previousStage] ?? lead.pipelineState.previousStage}`}
-                        className="mt-1.5 rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-ink/50 transition-colors hover:bg-ink/5 hover:text-ink/80 disabled:opacity-50"
+                        onClick={(e) => deleteLead(lead, e)}
+                        title={`Delete ${lead.companyName}`}
+                        className="ml-auto rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)] disabled:opacity-50"
                       >
-                        ← Back
+                        Delete
                       </button>
-                    )}
+                    </div>
                   </article>
                 ))}
                 {cards.length === 0 && (

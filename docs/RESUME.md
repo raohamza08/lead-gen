@@ -45,6 +45,21 @@ personal email in the public repo — flag this to the user before editing.
 
 ## Pick up exactly here
 
+**Lead delete + CSV export — added (2026-07-29).** `DELETE /leads/:id`
+(ADMIN only) — unlike the niche-filter/email-account deletes elsewhere in
+this app, there's no "detach and keep" option: it wipes the lead's full
+history (score, review note, pipeline state, email messages including ones
+already sent, LinkedIn activity). `AuditLog.leadId` survives via `SET NULL`
+(already the case at the DB level before this — schema.prisma just didn't
+declare it, so no migration was actually needed, only the annotation).
+Surfaced as a "Delete" button on every `/pipeline` card with a confirm dialog
+that says explicitly what's being destroyed. `GET /leads/export` streams all
+of the org's leads as CSV (UTF-8 BOM + CRLF so Excel opens it cleanly) via a
+"Export CSV" button on `/leads` — always all leads, not the page's client-side
+filtered view. Downloading needed a dedicated `downloadLeadsCsv()` in
+`api-client.ts` rather than a plain link, since the endpoint is
+JWT-protected and a bare `<a href>` can't attach an Authorization header.
+
 **Fixed: emails silently not sending on manual pipeline moves, and no way to
 undo a drag (2026-07-29).** Root causes, both now fixed:
 

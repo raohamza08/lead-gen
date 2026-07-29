@@ -153,6 +153,40 @@ async function request<T>(path: string, init?: RequestInit, allowRetry = true): 
   return res.json() as Promise<T>;
 }
 
+/**
+ * CSV export bypasses `request()` — the response is a file, not JSON, and
+ * triggering a save needs a real DOM element, not a return value. The token
+ * is attached manually since this isn't a same-origin link a browser could
+ * navigate to directly; a plain `<a href>` to the API would hit it with no
+ * Authorization header and get a 401.
+ */
+export async function downloadLeadsCsv(): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE_URL}/leads/export`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Export failed with ${res.status}`);
+  }
+
+  // Blob URLs ignore Content-Disposition (that header only applies to a
+  // direct navigation), so the filename has to be pulled out and applied via
+  // the <a> element's own `download` attribute instead.
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "leads.csv";
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<AuthTokens>("/auth/login", {
@@ -179,6 +213,7 @@ export const api = {
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),
   createManualLead: (body: Record<string, unknown>) =>
     request("/leads/manual", { method: "POST", body: JSON.stringify(body) }),
+  deleteLead: (id: string) => request(`/leads/${id}`, { method: "DELETE" }),
   getNicheFilters: () => request("/niche-filters"),
   getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
   deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),

@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { Response } from "express";
 import { LeadsService } from "./leads.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
@@ -45,6 +46,20 @@ export class LeadsController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   findAll(@CurrentUser() user: JwtClaims, @Query() query: QueryLeadsDto) {
     return this.leadsService.findAll(user.orgId, query);
+  }
+
+  // Must come before ":id" — otherwise Nest matches "export" as the :id param
+  // and this route is never reached.
+  @Get("export")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  async exportCsv(@CurrentUser() user: JwtClaims, @Res() res: Response) {
+    const csv = await this.leadsService.exportCsv(user.orgId);
+    res
+      .set({
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="leads-${new Date().toISOString().slice(0, 10)}.csv"`,
+      })
+      .send(csv);
   }
 
   @Get(":id")
@@ -110,5 +125,15 @@ export class LeadsController {
   @UseGuards(InternalAuthGuard)
   receiveDraft(@Param("id") id: string, @Body() dto: CreateEmailDraftDto) {
     return this.leadsService.receiveEmail3Draft(id, dto);
+  }
+
+  // ADMIN only: unlike other deletes in this app (niche filter, email
+  // account), there is no "detach and keep" option — this removes the lead's
+  // full history, including any real emails already sent to the prospect.
+  @Delete(":id")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN)
+  remove(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.leadsService.remove(user.orgId, id);
   }
 }

@@ -211,6 +211,66 @@ export class LeadsService {
     return lead;
   }
 
+  /**
+   * Permanently deletes a lead and everything under it — score, review note,
+   * pipeline state, sent/queued email history, LinkedIn activity. Unlike
+   * niche-filter or email-account deletion elsewhere in this app, there is no
+   * "detach and keep" option here: the lead itself is what's being removed,
+   * so its history goes with it. AuditLog rows are kept with leadId set to
+   * null (Prisma's `onDelete: SetNull` on that relation) so accountability
+   * history survives; everything else cascades.
+   */
+  async remove(orgId: string, id: string) {
+    await this.assertOwnership(orgId, id);
+    await this.sequencer.cancelWaitTimer(id);
+    await this.prisma.lead.delete({ where: { id } });
+    return { deleted: true };
+  }
+
+  /** All leads for the org as CSV, for the "download all leads" export on /leads. */
+  async exportCsv(orgId: string): Promise<string> {
+    const leads = await this.prisma.lead.findMany({
+      where: { orgId },
+      include: { score: true, pipelineState: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const columns = [
+      "Company", "Website", "Industry", "Country", "City",
+      "Contact name", "Job title", "Email", "Phone",
+      "Lead score", "AI opportunity score", "Stage", "Created at",
+    ];
+
+    // Excel and most spreadsheet tools choke on a bare comma/quote/newline in
+    // a field without quoting, so every value is quoted and internal quotes
+    // are doubled per RFC 4180 rather than only quoting when "necessary".
+    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+
+    const rows = leads.map((lead) =>
+      [
+        lead.companyName,
+        lead.website,
+        lead.industry,
+        lead.country,
+        lead.city,
+        lead.contactName,
+        lead.jobTitle,
+        lead.email,
+        lead.phone,
+        lead.score?.leadScore,
+        lead.score?.aiOpportunityScore,
+        lead.pipelineState?.stage,
+        lead.createdAt.toISOString(),
+      ]
+        .map(escape)
+        .join(","),
+    );
+
+    // \r\n per RFC 4180, and a leading BOM so Excel on Windows detects UTF-8
+    // instead of guessing the system codepage and mangling non-ASCII names.
+    return "﻿" + [columns.map(escape).join(","), ...rows].join("\r\n");
+  }
+
   async updateReviewNote(orgId: string, id: string, reviewerId: string, dto: ReviewNoteDto) {
     await this.assertOwnership(orgId, id);
     return this.prisma.reviewNote.upsert({

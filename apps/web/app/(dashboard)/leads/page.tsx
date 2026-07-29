@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { api } from "../../../lib/api-client";
+import { api, downloadLeadsCsv } from "../../../lib/api-client";
 import { PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 
@@ -64,6 +64,19 @@ export default function LeadsPage() {
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(EMPTY_LEAD);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
+
+  async function exportCsv() {
+    setExporting(true);
+    setError(null);
+    try {
+      await downloadLeadsCsv();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function load() {
     api
@@ -129,13 +142,23 @@ export default function LeadsPage() {
               : `${filtered.length} of ${leads.length} leads`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
-        >
-          {showForm ? "Cancel" : "+ Add lead"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={exportCsv}
+            disabled={exporting || leads.length === 0}
+            className="rounded-lg border border-[var(--line)] px-3.5 py-2 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+          >
+            {exporting ? "Exporting…" : "Export CSV"}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
+          >
+            {showForm ? "Cancel" : "+ Add lead"}
+          </button>
+        </div>
       </div>
 
       {error && (
