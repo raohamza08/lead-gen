@@ -24,8 +24,12 @@ enum Role {
   VIEWER
 }
 
+// Declaration order is funnel order — see the note on the shared PipelineStage
+// enum in packages/types/src/enums.ts.
 enum PipelineStage {
   NEW_LEAD
+  VERIFIED
+  RESEARCH_COMPLETED
   UNDER_REVIEW
   READY_FOR_OUTREACH
   EMAIL_1_SENT
@@ -35,10 +39,13 @@ enum PipelineStage {
   GEMINI_DRAFTING
   PERSONALIZED_PITCH
   LINKEDIN_OUTREACH
+  LINKEDIN_FOLLOW_UP
   REPLIED
   MEETING_BOOKED
   PROPOSAL_SENT
+  NEGOTIATION
   WON
+  CLIENT_ONBOARDING
   LOST
 }
 

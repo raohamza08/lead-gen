@@ -118,7 +118,7 @@ export class LeadsService {
         });
 
         await tx.pipelineState.create({
-          data: { leadId: created.id, stage: PipelineStage.NEW_LEAD },
+          data: { leadId: created.id, stage: dto.initialStage ?? PipelineStage.NEW_LEAD },
         });
 
         return created;
