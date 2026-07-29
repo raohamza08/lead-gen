@@ -1,0 +1,202 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { api } from "../../../lib/api-client";
+import { DataTable, SectionCard, StatTile } from "../../../components/chart-kit";
+
+/**
+ * Automation / AI Performance dashboard.
+ *
+ * Shows what the agent fleet is actually doing. Before this existed an agent
+ * degrading silently looked exactly like one working, because the only visible
+ * output was the lead count at the end of a run.
+ */
+
+interface AgentHealth {
+  agent: string;
+  total: number;
+  failed: number;
+  degraded: number;
+  avgDurationMs: number;
+  failureRate: number;
+  degradedRate: number;
+}
+
+interface HealthReport {
+  windowHours: number;
+  totalRuns: number;
+  totalFailures: number;
+  agents: AgentHealth[];
+}
+
+interface AgentRun {
+  id: string;
+  agent: string;
+  status: string;
+  durationMs: number;
+  attempts: number;
+  error: string | null;
+  startedAt: string;
+}
+
+const WINDOWS = [1, 24, 168] as const;
+const WINDOW_LABELS: Record<number, string> = { 1: "1h", 24: "24h", 168: "7d" };
+
+const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+
+/** Status carries meaning here, so it ships with a label rather than colour alone. */
+function StatusBadge({ status }: { status: string }) {
+  const tone =
+    status === "OK" ? "text-good"
+      : status === "DEGRADED" ? "text-gold"
+      : status === "SKIPPED" ? "text-ink/50"
+      : "text-bad";
+  return <span className={`font-medium ${tone}`}>{status}</span>;
+}
+
+export default function AutomationPage() {
+  const [hours, setHours] = useState<number>(24);
+  const [health, setHealth] = useState<HealthReport | null>(null);
+  const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRefreshing(true);
+    Promise.all([api.getAgentHealth(hours), api.getRecentAgentRuns(50)])
+      .then(([h, r]) => {
+        if (cancelled) return;
+        setHealth(h as HealthReport);
+        setRuns(r as AgentRun[]);
+        setError(null);
+      })
+      .catch((err) => !cancelled && setError((err as Error).message))
+      .finally(() => !cancelled && setRefreshing(false));
+    return () => { cancelled = true; };
+  }, [hours]);
+
+  if (error) return <p className="text-bad">{error}</p>;
+  if (!health) return <p className="text-ink/60">Loading…</p>;
+
+  const failureRate = health.totalRuns
+    ? Math.round((health.totalFailures / health.totalRuns) * 1000) / 10
+    : 0;
+  const slowest = [...health.agents].sort((a, b) => b.avgDurationMs - a.avgDurationMs)[0];
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs uppercase tracking-wide text-ink/55">Window</span>
+        <div className="flex rounded-lg border border-[var(--line)] p-0.5">
+          {WINDOWS.map((w) => (
+            <button
+              key={w}
+              type="button"
+              onClick={() => setHours(w)}
+              aria-pressed={hours === w}
+              className={`rounded-md px-3 py-1 text-xs transition-colors ${
+                hours === w ? "bg-ink/10 font-medium text-ink" : "text-ink/60 hover:bg-ink/5"
+              }`}
+            >
+              {WINDOW_LABELS[w]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className={`flex flex-col gap-6 transition-opacity ${refreshing ? "opacity-60" : ""}`}>
+        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <StatTile label="Agent runs" value={health.totalRuns} />
+          <StatTile
+            label="Failures"
+            value={health.totalFailures}
+            tone={health.totalFailures > 0 ? "bad" : "good"}
+          />
+          <StatTile
+            label="Failure rate"
+            value={`${failureRate}%`}
+            tone={failureRate > 20 ? "bad" : failureRate > 5 ? "gold" : "good"}
+          />
+          <StatTile
+            label="Slowest agent"
+            value={slowest ? fmtMs(slowest.avgDurationMs) : "—"}
+            hint={slowest?.agent}
+          />
+        </section>
+
+        <SectionCard
+          title="Agent fleet"
+          subtitle={`Per-agent volume, reliability and latency over the last ${WINDOW_LABELS[health.windowHours] ?? `${health.windowHours}h`}.`}
+        >
+          {health.agents.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink/50">
+              No agent activity in this window. Run a niche filter to populate it.
+            </p>
+          ) : (
+            <DataTable<AgentHealth>
+              rows={health.agents}
+              rowKey={(a) => a.agent}
+              columns={[
+                { key: "agent", header: "Agent", render: (a) => a.agent },
+                { key: "total", header: "Runs", numeric: true, render: (a) => a.total },
+                {
+                  key: "failureRate",
+                  header: "Failure %",
+                  numeric: true,
+                  render: (a) => (
+                    <span className={a.failureRate > 20 ? "text-bad" : a.failureRate > 5 ? "text-gold" : ""}>
+                      {a.failureRate}%
+                    </span>
+                  ),
+                },
+                {
+                  key: "degradedRate",
+                  header: "Degraded %",
+                  numeric: true,
+                  render: (a) => (
+                    <span className={a.degradedRate > 30 ? "text-gold" : ""}>{a.degradedRate}%</span>
+                  ),
+                },
+                { key: "avg", header: "Avg time", numeric: true, render: (a) => fmtMs(a.avgDurationMs) },
+              ]}
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard title="Recent activity" subtitle="Newest first.">
+          {runs.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink/50">Nothing recorded yet.</p>
+          ) : (
+            <DataTable<AgentRun>
+              rows={runs}
+              rowKey={(r) => r.id}
+              columns={[
+                {
+                  key: "startedAt",
+                  header: "When",
+                  render: (r) => new Date(r.startedAt).toLocaleTimeString(),
+                },
+                { key: "agent", header: "Agent", render: (r) => r.agent },
+                { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
+                { key: "duration", header: "Time", numeric: true, render: (r) => fmtMs(r.durationMs) },
+                { key: "attempts", header: "Tries", numeric: true, render: (r) => r.attempts },
+                {
+                  key: "error",
+                  header: "Error",
+                  // Truncated: an agent error can carry a full model response,
+                  // and the table stays readable only if one row is one line.
+                  render: (r) => (
+                    <span className="text-ink/60" title={r.error ?? ""}>
+                      {r.error ? `${r.error.slice(0, 70)}${r.error.length > 70 ? "…" : ""}` : "—"}
+                    </span>
+                  ),
+                },
+              ]}
+            />
+          )}
+        </SectionCard>
+      </div>
+    </div>
+  );
+}

@@ -20,6 +20,7 @@ export class ExtractionRunsController {
       status: ExtractionRunStatus;
       finishedAt: string;
       error: string;
+      priorityMix: Record<string, number>;
     }>,
   ) {
     // Fields are copied across explicitly rather than spread — spreading the
@@ -34,6 +35,7 @@ export class ExtractionRunsController {
         status: body.status,
         finishedAt: body.finishedAt ? new Date(body.finishedAt) : undefined,
         error: body.error?.slice(0, 2000),
+        priorityMix: body.priorityMix,
       },
     });
   }

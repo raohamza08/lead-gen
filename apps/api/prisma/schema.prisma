@@ -132,6 +132,7 @@ model Organization {
   caseStudies  CaseStudy[]
   suppressionEntries SuppressionEntry[]
   agentRuns    AgentRun[]
+  campaigns    Campaign[]
 
   @@map("organizations")
 }
@@ -227,6 +228,7 @@ model NicheFilter {
 
   extractionRuns ExtractionRun[]
   leads          Lead[]
+  campaigns      Campaign[]
 
   @@map("niche_filters")
 }
@@ -244,10 +246,47 @@ model ExtractionRun {
   // Why a FAILED run failed. Without it the dashboard can report that a run
   // broke but never what broke, which is the first thing an operator asks.
   error             String?
+  /// Leads produced per priority band, for checking the 40/40/20 mix actually
+  /// held. A run that hit its total but produced only high-priority leads has
+  /// spent no exploration budget, and the targeting stops improving.
+  priorityMix       Json     @default("{}") @map("priority_mix")
 
   leads             Lead[]
 
   @@map("extraction_runs")
+}
+
+/// A campaign groups a niche, an offer and a message sequence so performance
+/// can be attributed. Without it "best offer" and "best sequence" are
+/// unanswerable — every lead looks the same to analytics, and the learning loop
+/// has nothing to compare against.
+model Campaign {
+  id            String   @id @default(uuid())
+  orgId         String   @map("org_id")
+  org           Organization @relation(fields: [orgId], references: [id])
+  name          String
+  niche         String
+  country       String?
+  /// What is being sold in this campaign, in the operator's own words. Feeds
+  /// the email prompts, so it is a real input, not a label.
+  offer         String?
+  caseStudy     String?  @map("case_study")
+  goal          String?
+  targetLeads   Int      @default(100) @map("target_leads")
+  /// Per-step subject/angle overrides. Empty means use the default sequence.
+  emailSequence Json     @default("[]") @map("email_sequence")
+  linkedinSequence Json  @default("[]") @map("linkedin_sequence")
+  /// Optional niche filter that feeds this campaign.
+  filterId      String?  @map("filter_id")
+  filter        NicheFilter? @relation(fields: [filterId], references: [id])
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  leads         Lead[]
+
+  @@index([orgId, active])
+  @@map("campaigns")
 }
 
 /// One agent execution. Written by the workers after every agent run so the
@@ -282,6 +321,8 @@ model Lead {
   run                 ExtractionRun? @relation(fields: [runId], references: [id])
   filterId            String?  @map("filter_id")
   filter              NicheFilter? @relation(fields: [filterId], references: [id])
+  campaignId          String?  @map("campaign_id")
+  campaign            Campaign? @relation(fields: [campaignId], references: [id])
   assignedUserId       String?  @map("assigned_user_id")
   assignedUser         User?    @relation("AssignedUser", fields: [assignedUserId], references: [id])
 

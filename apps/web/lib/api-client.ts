@@ -163,4 +163,10 @@ export const api = {
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),
   getRevenuePipeline: () => request("/analytics/revenue-pipeline"),
   getCohortTrends: (days = 30) => request(`/analytics/cohort-trends?days=${days}`),
+  getAgentHealth: (hours = 24) => request(`/agent-runs/health?hours=${hours}`),
+  getRecentAgentRuns: (limit = 50) => request(`/agent-runs/recent?limit=${limit}`),
+  getCampaigns: () => request("/campaigns"),
+  getCampaignPerformance: () => request("/campaigns/performance"),
+  createCampaign: (body: Record<string, unknown>) =>
+    request("/campaigns", { method: "POST", body: JSON.stringify(body) }),
 };

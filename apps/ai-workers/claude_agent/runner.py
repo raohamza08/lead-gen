@@ -28,6 +28,16 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
     search_failed: str | None = None
     agent_records: list = []
 
+    # 40/40/20 high/medium/experimental. LOW is the experimental band: those are
+    # the leads outside the obvious profile, and finding out which of them
+    # convert is the only way the targeting improves.
+    priority_counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    priority_targets = {
+        "HIGH": round(daily_target * 0.4),
+        "MEDIUM": round(daily_target * 0.4),
+        "LOW": daily_target - round(daily_target * 0.4) * 2,
+    }
+
     # Built once per run, not per candidate: construction validates that every
     # agent's requirements are satisfied by something earlier in the chain, and
     # paying that check 40 times would be waste.
@@ -116,9 +126,17 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
             },
         )
 
+        # Track the priority mix. The spec requires 40/40/20 high/medium/
+        # experimental so the funnel keeps an exploration budget: chasing only
+        # high-priority leads narrows targeting until the niche is exhausted and
+        # nothing new is ever learned about what converts.
+        band = (scores.get("priority") or "MEDIUM").upper()
+        band = band if band in priority_counts else "MEDIUM"
+
         if result.get("status") == "duplicate":
             duplicates += 1
         else:
+            priority_counts[band] += 1
             verified += 1
 
     # Flushed once at the end rather than per candidate: the records are only
@@ -154,12 +172,19 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
             "leadsVerified": verified,
             "duplicatesSkipped": duplicates,
             "status": status,
+            "priorityMix": priority_counts,
             "finishedAt": _now_iso(),
             **({"error": search_failed} if search_failed else {}),
         },
     )
-    logger.info("run %s finished: %s (%d/%d verified, %d duplicates, %d attempts)",
-                run_id, status, verified, daily_target, duplicates, attempts)
+    logger.info(
+        "run %s finished: %s (%d/%d verified, %d duplicates, %d rejected, %d attempts) "
+        "priority mix high=%d/%d medium=%d/%d experimental=%d/%d",
+        run_id, status, verified, daily_target, duplicates, rejected, attempts,
+        priority_counts["HIGH"], priority_targets["HIGH"],
+        priority_counts["MEDIUM"], priority_targets["MEDIUM"],
+        priority_counts["LOW"], priority_targets["LOW"],
+    )
 
 
 def _join(values) -> str | None:
