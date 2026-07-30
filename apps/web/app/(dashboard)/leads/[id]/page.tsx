@@ -84,6 +84,8 @@ export default function LeadDetailPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
+  const [generatingLinkedin, setGeneratingLinkedin] = useState(false);
+  const [copied, setCopied] = useState<string | null>(null);
 
   function load() {
     api
@@ -137,6 +139,27 @@ export default function LeadDetailPage() {
     } finally {
       setMoving(false);
     }
+  }
+
+  async function generateLinkedinDraft() {
+    setGeneratingLinkedin(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.generateLinkedinDraft(params.id);
+      setNotice("LinkedIn copy is drafting in the background — reload in a few seconds to see it.");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setGeneratingLinkedin(false);
+    }
+  }
+
+  function copyToClipboard(label: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(label);
+      setTimeout(() => setCopied(null), 1500);
+    });
   }
 
   async function resend(emailMessageId: string) {
@@ -453,6 +476,61 @@ export default function LeadDetailPage() {
               </div>
             </section>
           )}
+
+          <section className="card p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold tracking-tight">LinkedIn</h2>
+              <button
+                onClick={generateLinkedinDraft}
+                disabled={generatingLinkedin}
+                className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+              >
+                {generatingLinkedin ? "Requesting…" : "Generate LinkedIn copy"}
+              </button>
+            </div>
+            <p className="mb-3 text-xs text-ink/50">
+              Drafts a connection note and two follow-ups for you to copy and send yourself — LinkedIn
+              outreach is never automated here.
+            </p>
+            {(() => {
+              const activity = Array.isArray(lead.linkedinActivities) ? lead.linkedinActivities[0] : null;
+              const messages = activity?.draftMessages as
+                | { connectionNote?: string; followUpMessage?: string; secondFollowUp?: string; rationale?: string }
+                | null
+                | undefined;
+              if (!messages) {
+                return <p className="text-xs text-ink/40">No draft yet.</p>;
+              }
+              const fields: { key: string; label: string }[] = [
+                { key: "connectionNote", label: "Connection note" },
+                { key: "followUpMessage", label: "Follow-up 1" },
+                { key: "secondFollowUp", label: "Follow-up 2" },
+              ];
+              return (
+                <div className="flex flex-col gap-2">
+                  {fields.map(
+                    (f) =>
+                      messages[f.key as keyof typeof messages] && (
+                        <div key={f.key} className="rounded-lg border border-[var(--line)] p-3">
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-[10px] uppercase tracking-wide text-ink/50">{f.label}</span>
+                            <button
+                              onClick={() => copyToClipboard(f.key, messages[f.key as keyof typeof messages] as string)}
+                              className="text-[11px] text-accent hover:underline"
+                            >
+                              {copied === f.key ? "Copied" : "Copy"}
+                            </button>
+                          </div>
+                          <p className="text-sm leading-relaxed text-ink/80">
+                            {messages[f.key as keyof typeof messages] as string}
+                          </p>
+                        </div>
+                      ),
+                  )}
+                </div>
+              );
+            })()}
+          </section>
 
           <section className="card p-5">
             <h2 className="text-sm font-semibold tracking-tight">Human review</h2>

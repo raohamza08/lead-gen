@@ -69,3 +69,13 @@ async def submit_email_draft(lead_id: str, subject: str, body_html: str, rationa
             headers=_headers(),
         )
         resp.raise_for_status()
+
+
+async def submit_linkedin_draft(lead_id: str, messages: dict) -> None:
+    async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
+        resp = await client.patch(
+            f"/leads/{lead_id}/linkedin-draft",
+            json={"messages": messages},
+            headers=_headers(),
+        )
+        resp.raise_for_status()

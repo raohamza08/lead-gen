@@ -17,6 +17,7 @@ SEEDS = {
     "rescore": ("candidate", "verification", "org_context"),
     "outreach": ("lead", "org_context", "case_study"),
     "email_only": ("lead", "org_context", "case_study"),
+    "linkedin_draft": ("lead",),
     "optimisation": ("performance", "outcomes"),
 }
 

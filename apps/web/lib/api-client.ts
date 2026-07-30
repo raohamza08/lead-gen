@@ -209,6 +209,7 @@ export const api = {
   moveBack: (id: string) => request(`/leads/${id}/move-back`, { method: "POST" }),
   resendEmail: (id: string, emailMessageId: string) =>
     request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
+  generateLinkedinDraft: (id: string) => request(`/leads/${id}/linkedin-draft/generate`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),
   createManualLead: (body: Record<string, unknown>) =>
@@ -236,6 +237,7 @@ export const api = {
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),
   getRevenuePipeline: () => request("/analytics/revenue-pipeline"),
   getCohortTrends: (days = 30) => request(`/analytics/cohort-trends?days=${days}`),
+  getAiInsights: () => request("/analytics/ai-insights", { method: "POST" }),
   getAgentHealth: (hours = 24) => request(`/agent-runs/health?hours=${hours}`),
   getRecentAgentRuns: (limit = 50) => request(`/agent-runs/recent?limit=${limit}`),
   getAgentFleet: () => request("/agents/fleet"),

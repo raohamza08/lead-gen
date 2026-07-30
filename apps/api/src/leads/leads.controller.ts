@@ -127,6 +127,22 @@ export class LeadsController {
     return this.leadsService.receiveEmail3Draft(id, dto);
   }
 
+  /** Triggers the LinkedInAgent for this lead — manual, not automatic on
+   *  stage entry, since LinkedIn outreach itself stays human-sent. */
+  @Post(":id/linkedin-draft/generate")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  generateLinkedinDraft(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.leadsService.requestLinkedinDraft(user.orgId, id);
+  }
+
+  /** Called by the LinkedInAgent once copy is drafted. */
+  @Patch(":id/linkedin-draft")
+  @UseGuards(InternalAuthGuard)
+  receiveLinkedinDraft(@Param("id") id: string, @Body("messages") messages: unknown) {
+    return this.leadsService.receiveLinkedinDraft(id, messages);
+  }
+
   // ADMIN only: unlike other deletes in this app (niche filter, email
   // account), there is no "detach and keep" option — this removes the lead's
   // full history, including any real emails already sent to the prospect.

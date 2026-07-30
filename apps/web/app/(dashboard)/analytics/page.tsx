@@ -61,6 +61,23 @@ const TREND_SERIES = [
   { key: "meetingsBooked", label: "Meetings booked", color: SERIES[3] },
 ] as const;
 
+interface AiInsights {
+  insights: {
+    summary?: string;
+    bestCampaigns?: { name: string; why: string }[];
+    underperforming?: { name: string; why: string; suggestedFix: string }[];
+    warnings?: string[];
+    confidence?: string;
+  };
+  recommendations: {
+    icpRecommendations?: { change: string; evidence: string; confidence: string }[];
+    messagingRecommendations?: { change: string; evidence: string; confidence: string }[];
+    stopDoing?: string[];
+    sampleSizeWarning?: string | null;
+  };
+  notes: string[];
+}
+
 export default function AnalyticsPage() {
   const [days, setDays] = useState<number>(30);
   const [email, setEmail] = useState<EmailFunnelReport | null>(null);
@@ -69,6 +86,21 @@ export default function AnalyticsPage() {
   const [trends, setTrends] = useState<CohortTrendsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+
+  async function runAiInsights() {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      setAiInsights((await api.getAiInsights()) as AiInsights);
+    } catch (err) {
+      setAiError((err as Error).message);
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +168,79 @@ export default function AnalyticsPage() {
       {/* Hold the previous render at reduced opacity while refetching — a
           skeleton here would jump the layout on every window change. */}
       <div className={`flex flex-col gap-6 transition-opacity ${refreshing ? "opacity-60" : ""}`}>
+        <section className="rounded-xl border border-[var(--line)] p-5">
+          <div className="mb-1 flex items-center justify-between">
+            <h2 className="text-sm font-semibold tracking-tight">AI insights</h2>
+            <button
+              onClick={runAiInsights}
+              disabled={aiLoading}
+              className="rounded-md bg-accent px-3 py-1.5 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            >
+              {aiLoading ? "Analysing…" : "Run analysis"}
+            </button>
+          </div>
+          <p className="mb-3 text-xs text-ink/50">
+            The analytics/learning agents reading campaign performance and outcomes — on demand, since
+            each run costs a model call. Recommendations only; nothing here changes targeting by itself.
+          </p>
+          {aiError && <p className="text-sm text-bad">{aiError}</p>}
+          {aiInsights && (
+            <div className="flex flex-col gap-3">
+              {aiInsights.notes.length > 0 && (
+                <p className="rounded-lg bg-ink/5 px-3 py-2 text-xs text-ink/60">
+                  {aiInsights.notes.join(" · ")}
+                </p>
+              )}
+              {aiInsights.insights.summary && (
+                <p className="text-sm text-ink/80">{aiInsights.insights.summary}</p>
+              )}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {!!aiInsights.insights.bestCampaigns?.length && (
+                  <div className="rounded-lg border border-[var(--line)] p-3">
+                    <div className="mb-1 text-[10px] uppercase tracking-wide text-good">Working</div>
+                    <ul className="space-y-1 text-xs text-ink/75">
+                      {aiInsights.insights.bestCampaigns.map((c, i) => (
+                        <li key={i}>
+                          <strong>{c.name}</strong> — {c.why}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {!!aiInsights.insights.underperforming?.length && (
+                  <div className="rounded-lg border border-[var(--line)] p-3">
+                    <div className="mb-1 text-[10px] uppercase tracking-wide text-gold">Underperforming</div>
+                    <ul className="space-y-1 text-xs text-ink/75">
+                      {aiInsights.insights.underperforming.map((c, i) => (
+                        <li key={i}>
+                          <strong>{c.name}</strong> — {c.why}. {c.suggestedFix}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              {!!aiInsights.recommendations.messagingRecommendations?.length && (
+                <div className="rounded-lg border border-[var(--line)] p-3">
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-ink/50">
+                    Messaging recommendations
+                  </div>
+                  <ul className="space-y-1 text-xs text-ink/75">
+                    {aiInsights.recommendations.messagingRecommendations.map((r, i) => (
+                      <li key={i}>
+                        {r.change} <span className="text-ink/40">({r.confidence} confidence — {r.evidence})</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.recommendations.sampleSizeWarning && (
+                <p className="text-xs text-ink/45">{aiInsights.recommendations.sampleSizeWarning}</p>
+              )}
+            </div>
+          )}
+        </section>
+
         <section>
           <h2 className="mb-3 text-sm font-semibold tracking-tight">Email performance</h2>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">

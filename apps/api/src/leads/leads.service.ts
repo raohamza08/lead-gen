@@ -4,7 +4,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
@@ -30,6 +32,7 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     private readonly sequencer: SequencerService,
     private readonly sync: SyncService,
+    private readonly config: ConfigService,
   ) {}
 
   /**
@@ -439,6 +442,47 @@ export class LeadsService {
     }
 
     return message;
+  }
+
+  /** Fire-and-forget hand-off to the LinkedInAgent — mirrors requestGeminiDraft
+   *  in SequencerService, but triggered manually from a lead's detail page
+   *  rather than automatically on stage entry, since LinkedIn outreach stays
+   *  human-driven end to end. */
+  async requestLinkedinDraft(orgId: string, leadId: string) {
+    await this.assertOwnership(orgId, leadId);
+    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
+    try {
+      await fetch(`${aiWorkersUrl}/linkedin/draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leadId, orgId }),
+      });
+    } catch (err) {
+      throw new ServiceUnavailableException(
+        `Could not reach the AI workers: ${(err as Error).message}`,
+      );
+    }
+    return { accepted: true };
+  }
+
+  /** Called by the LinkedInAgent (via the internal-token-guarded endpoint)
+   *  once copy is drafted. There's no unique constraint tying one
+   *  LinkedinActivity to one lead (sequencer.ts's sendEmail1 creates it
+   *  lazily too), so this finds-or-creates rather than relying on upsert. */
+  async receiveLinkedinDraft(leadId: string, messages: unknown) {
+    await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+    const existing = await this.prisma.linkedinActivity.findFirst({ where: { leadId } });
+    if (existing) {
+      await this.prisma.linkedinActivity.update({
+        where: { id: existing.id },
+        data: { draftMessages: messages as Prisma.InputJsonValue },
+      });
+    } else {
+      await this.prisma.linkedinActivity.create({
+        data: { leadId, draftMessages: messages as Prisma.InputJsonValue },
+      });
+    }
+    return { saved: true };
   }
 
   private async assertOwnership(orgId: string, leadId: string) {

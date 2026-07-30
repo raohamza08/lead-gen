@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 
 from claude_agent import cli_client
 from gemini_agent.context_builder import build_context, fetch_website_excerpt
+from gemini_agent.critique import critique_draft
 from gemini_agent.drafting import draft_email
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
@@ -99,22 +100,54 @@ class EmailAgent(Agent):
     async def execute(self, ctx: AgentContext) -> AgentResult:
         lead = ctx.get("lead")
         merged = ctx.get("review_merged") or {}
+        org_context = ctx.get("org_context") or {}
 
         excerpt = await fetch_website_excerpt(lead.get("website"))
         context = build_context(lead, excerpt, ctx.get("case_study"))
-        # Merged review data overrides what build_context derived, since it
-        # carries the reviewer's corrections.
-        context.update(merged)
 
-        draft = await draft_email(context, ctx.get("org_context") or {})
-        if not draft or not draft.get("bodyHtml"):
+        # build_context already derives `reviewer_notes` straight from the raw
+        # reviewNote, bypassing ReviewAgent entirely. Overlaying the merged
+        # output here (which prefers the human's value, falling back to the
+        # AI's) onto the SAME sub-dict the drafting prompt actually reads is
+        # what gives ReviewAgent's merge real effect — without this, running
+        # it changes nothing downstream regardless of what it produces.
+        notes_map = {
+            "pain_points": "painPoints",
+            "business_problems": "businessProblems",
+            "website_issues": "websiteIssues",
+            "suggested_offer": "suggestedOffer",
+            "suggested_hook": "suggestedHook",
+            "urgency_level": "urgencyLevel",
+        }
+        reviewer_notes = context.setdefault("reviewer_notes", {})
+        for prompt_key, merged_key in notes_map.items():
+            if merged.get(merged_key):
+                reviewer_notes[prompt_key] = merged[merged_key]
+
+        notes: list[str] = []
+        draft = await draft_email(context, org_context)
+        if not draft or not draft.get("body_html"):
             return AgentResult(status=AgentStatus.FAILED, error="drafting produced no body")
 
+        # Mandatory groundedness pass (Part D2/D4): retry once on failure rather
+        # than submitting a draft that hallucinated a fact, silently correcting
+        # what a human reviewer would otherwise have to catch.
+        critique = await critique_draft(context, draft)
+        if not critique.get("pass"):
+            notes.append(f"failed self-critique ({critique.get('issues')}) — retried once")
+            draft = await draft_email(context, org_context)
+            critique = await critique_draft(context, draft)
+            if not critique.get("pass"):
+                notes.append("still fails self-critique after retry — needs human review before sending")
+
         demo = "[DEMO DRAFT]" in json.dumps(draft)
+        if demo:
+            notes.append("template fallback — Gemini unavailable")
+
         return AgentResult(
-            status=AgentStatus.DEGRADED if demo else AgentStatus.OK,
+            status=AgentStatus.DEGRADED if notes else AgentStatus.OK,
             data={"email_draft": draft},
-            notes=["template fallback — Gemini unavailable"] if demo else [],
+            notes=notes,
         )
 
 

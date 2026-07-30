@@ -52,14 +52,23 @@ interface FleetReport {
   pipelines: Record<string, string[]>;
 }
 
-/** Pipelines actually invoked at runtime (`lead_acquisition` per candidate,
- *  `lead_enrichment`/`rescore` on demand). `outreach`/`email_only`/
- *  `optimisation` are registered and contract-tested but nothing in the API
- *  or workers calls them yet — the live Gemini drafting path and the BullMQ
- *  sequencer do that work directly instead of through these agents. Shown
- *  rather than hidden, since an agent that never runs should be visible as
- *  such, not silently indistinguishable from one that does. */
-const LIVE_PIPELINES = new Set(["lead_acquisition", "lead_enrichment", "rescore"]);
+/** Pipelines actually invoked at runtime: `lead_acquisition` per candidate,
+ *  `lead_enrichment`/`rescore` on demand, `email_only` behind the
+ *  GEMINI_DRAFTING stage, `linkedin_draft` behind the lead detail page's
+ *  "Generate LinkedIn copy" button, and `optimisation` behind the Analytics
+ *  page's "Run analysis" button. `outreach` alone (review->email->linkedin->
+ *  scheduler as one combined chain) still has no caller — email and LinkedIn
+ *  drafting are triggered independently rather than as one hop. Shown rather
+ *  than hidden, since an agent that never runs should be visible as such, not
+ *  silently indistinguishable from one that does. */
+const LIVE_PIPELINES = new Set([
+  "lead_acquisition",
+  "lead_enrichment",
+  "rescore",
+  "email_only",
+  "linkedin_draft",
+  "optimisation",
+]);
 
 const WINDOWS = [1, 24, 168] as const;
 const WINDOW_LABELS: Record<number, string> = { 1: "1h", 24: "24h", 168: "7d" };

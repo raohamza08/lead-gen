@@ -77,8 +77,13 @@ PIPELINES: dict[str, tuple[str, ...]] = {
     # corrections reach the email and LinkedIn copy rather than being applied
     # after they are written.
     "outreach": ("review", "email", "linkedin", "scheduler"),
-    # Email only, for a sequence step that needs no LinkedIn copy.
+    # Email only, for a sequence step that needs no LinkedIn copy. This is what
+    # actually drives the Gemini-drafted pitch (Part D2) — see gemini_agent/runner.py.
     "email_only": ("review", "email", "scheduler"),
+    # LinkedIn copy only, triggered on demand from a lead's detail page rather
+    # than automatically — LinkedIn outreach itself stays human-driven (ToS/ban
+    # risk), this only removes the blank-page problem for the person sending it.
+    "linkedin_draft": ("review", "linkedin"),
     # Cross-lead analysis. Separate from every per-lead pipeline because it
     # reads aggregates, not one candidate.
     "optimisation": ("analytics", "learning"),

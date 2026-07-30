@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from agents import PIPELINES, describe_fleet
 from claude_agent.runner import run_in_background as run_extraction_in_background
 from gemini_agent.runner import run_personalization
+from outreach_runner import run_linkedin_draft, run_optimisation
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Lead-Gen AI Workers")
@@ -33,6 +34,17 @@ class PersonalizationRequest(BaseModel):
     leadId: str
     orgId: str | None = None
     orgContext: dict | None = None
+
+
+class LinkedinDraftRequest(BaseModel):
+    leadId: str
+    orgId: str | None = None
+
+
+class OptimisationRequest(BaseModel):
+    orgId: str
+    performance: list = []
+    outcomes: dict = {}
 
 
 @app.get("/health")
@@ -62,3 +74,16 @@ async def start_extraction_run(req: ExtractionRunRequest, background_tasks: Back
 async def start_personalization(req: PersonalizationRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(run_personalization, req.leadId, req.orgId, req.orgContext)
     return {"accepted": True, "leadId": req.leadId}
+
+
+@app.post("/linkedin/draft")
+async def start_linkedin_draft(req: LinkedinDraftRequest, background_tasks: BackgroundTasks):
+    background_tasks.add_task(run_linkedin_draft, req.leadId, req.orgId)
+    return {"accepted": True, "leadId": req.leadId}
+
+
+@app.post("/optimisation/run")
+async def start_optimisation(req: OptimisationRequest):
+    # Not backgrounded: the caller is a dashboard button waiting on the result,
+    # and a single Claude CLI call is well within an HTTP request's timeout.
+    return await run_optimisation(req.orgId, req.performance, req.outcomes)

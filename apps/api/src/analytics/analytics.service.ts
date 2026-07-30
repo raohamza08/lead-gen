@@ -1,5 +1,7 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { CampaignsService } from "../campaigns/campaigns.service";
 import {
   AnalyticsSummary,
   CohortTrendPoint,
@@ -30,7 +32,11 @@ const MEETING_OR_BEYOND: PipelineStage[] = [
  */
 @Injectable()
 export class AnalyticsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly campaigns: CampaignsService,
+    private readonly config: ConfigService,
+  ) {}
 
   async getSummary(orgId: string): Promise<AnalyticsSummary> {
     const now = new Date();
@@ -366,5 +372,35 @@ export class AnalyticsService {
     }
 
     return { days: windowDays, points };
+  }
+
+  /**
+   * Runs the cross-lead `analytics`/`learning` agents on demand. On-demand
+   * rather than scheduled: it costs a Claude CLI call, and its output is a
+   * recommendation a human reviews, not something that needs to be fresh
+   * every minute — matches the "give me the control, don't just spend the
+   * quota" pattern already used for enrichment cost elsewhere in this app.
+   */
+  async getAiInsights(orgId: string) {
+    const [performance, won, lost] = await Promise.all([
+      this.campaigns.performance(orgId),
+      this.prisma.pipelineState.count({ where: { stage: PipelineStage.WON, lead: { orgId } } }),
+      this.prisma.pipelineState.count({ where: { stage: PipelineStage.LOST, lead: { orgId } } }),
+    ]);
+
+    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
+    try {
+      const res = await fetch(`${aiWorkersUrl}/optimisation/run`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orgId, performance, outcomes: { won, lost } }),
+      });
+      if (!res.ok) throw new Error(`worker responded ${res.status}`);
+      return res.json();
+    } catch (err) {
+      throw new ServiceUnavailableException(
+        `Could not reach the AI workers for insights: ${(err as Error).message}`,
+      );
+    }
   }
 }

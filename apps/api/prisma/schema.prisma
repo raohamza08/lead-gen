@@ -604,6 +604,10 @@ model LinkedinActivity {
   userId    String?  @map("user_id")
   user      User?    @relation(fields: [userId], references: [id])
   status    LinkedinStatus @default(NOT_STARTED)
+  /// AI-drafted connectionNote/followUpMessage/secondFollowUp for a human to
+  /// copy and send manually — LinkedIn automation itself stays out of scope
+  /// (ToS/ban risk). Null until "Generate LinkedIn copy" has been used once.
+  draftMessages Json?  @map("draft_messages")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("linkedin_activities")

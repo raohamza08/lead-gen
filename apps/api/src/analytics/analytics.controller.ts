@@ -1,8 +1,10 @@
-import { Controller, DefaultValuePipe, Get, ParseIntPipe, Query, UseGuards } from "@nestjs/common";
+import { Controller, DefaultValuePipe, Get, ParseIntPipe, Post, Query, UseGuards } from "@nestjs/common";
 import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
+import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { JwtClaims } from "@leadgen/types";
+import { JwtClaims, Role } from "@leadgen/types";
 
 @Controller("analytics")
 @UseGuards(JwtAuthGuard)
@@ -42,5 +44,14 @@ export class AnalyticsController {
     // The service clamps `days` to 1-365 — an unbounded window would let a
     // query string trigger a full-table scan.
     return this.analyticsService.getCohortTrends(user.orgId, days);
+  }
+
+  /** Costs a Claude CLI call, so gated to roles that can already see the
+   *  enrichment-cost controls on Settings, not every viewer. */
+  @Post("ai-insights")
+  @UseGuards(RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER)
+  getAiInsights(@CurrentUser() user: JwtClaims) {
+    return this.analyticsService.getAiInsights(user.orgId);
   }
 }
