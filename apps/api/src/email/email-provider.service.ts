@@ -3,6 +3,18 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { GmailProvider } from "./providers/gmail.provider";
 import { SmtpProvider } from "./providers/smtp.provider";
 import { EmailProvider } from "./email-provider.interface";
+import { OrganizationService } from "../organization/organization.service";
+
+/** The API's own public root — where an email client fetches the open-tracking
+ *  pixel and follows the unsubscribe link back to. Distinct from APP_BASE_URL
+ *  (the dashboard's origin, used for CORS and browser redirects): those two
+ *  links must hit this NestJS process, not the Next.js frontend, which has no
+ *  route to handle either of them. Falls back to localhost for dev, where the
+ *  pixel simply won't resolve from an external mail client — acceptable, since
+ *  no real recipient exists in dev. */
+function apiPublicUrl(): string {
+  return (process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT ?? process.env.API_PORT ?? 4000}`).replace(/\/$/, "");
+}
 
 export class ComplianceGateError extends Error {}
 
@@ -20,9 +32,22 @@ export class EmailProviderService {
     private readonly prisma: PrismaService,
     private readonly gmail: GmailProvider,
     private readonly smtp: SmtpProvider,
+    private readonly organization: OrganizationService,
   ) {}
 
-  async sendForLead(leadId: string, subject: string, bodyHtml: string): Promise<{ accountId: string; providerMessageId: string }> {
+  /**
+   * `messageId` is optional only because a handful of call sites (the test
+   * send in EmailAccountsService, notably) send without a persisted
+   * EmailMessage row to attach an open-tracking pixel to — every real
+   * outreach send has one, and skipping the pixel there just means an
+   * operator's own test open never appears in analytics, which is correct.
+   */
+  async sendForLead(
+    leadId: string,
+    subject: string,
+    bodyHtml: string,
+    messageId?: string,
+  ): Promise<{ accountId: string; providerMessageId: string }> {
     const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     if (!lead.email) {
       throw new ComplianceGateError("Lead has no verified email address");
@@ -44,13 +69,22 @@ export class EmailProviderService {
       throw new ComplianceGateError("No email account available within its daily/hourly send limit");
     }
 
+    const branding = await this.organization.getBranding(lead.orgId);
     const provider = this.providerFor(account.provider);
-    const renderedBody = bodyHtml
-      .replace("{{unsubscribe_link}}", `${process.env.APP_BASE_URL}/unsubscribe?lead=${lead.id}`)
-      .replace("{{org.postal_address}}", process.env.ORG_POSTAL_ADDRESS ?? "[postal address required by CAN-SPAM]");
+    const apiRoot = apiPublicUrl();
+    let renderedBody = bodyHtml
+      .replace(/\{\{unsubscribe_link\}\}/g, `${apiRoot}/unsubscribe?lead=${lead.id}`)
+      .replace(/\{\{org\.postal_address\}\}/g, process.env.ORG_POSTAL_ADDRESS ?? "[postal address required by CAN-SPAM]")
+      .replace(/\{\{org\.name\}\}/g, branding.emailOrgName)
+      .replace(/\{\{sender\.name\}\}/g, branding.emailSenderName);
+
+    if (messageId) {
+      renderedBody += `<img src="${apiRoot}/track/open/${messageId}.png" width="1" height="1" alt="" style="display:none" />`;
+    }
 
     const result = await provider.send(account, {
       fromAddress: account.address,
+      fromName: branding.emailSenderName,
       toAddress: lead.email,
       subject,
       bodyHtml: renderedBody,

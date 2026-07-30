@@ -305,6 +305,11 @@ model AgentRun {
   org        Organization @relation(fields: [orgId], references: [id])
   /// The extraction run this belonged to, when there was one.
   runId      String?  @map("run_id")
+  /// The lead this execution touched, when the candidate survived long enough
+  /// to become one. Null for a candidate an earlier agent rejected (discovery
+  /// dead-end, verification failure) — there is no lead to attach that run to.
+  leadId     String?  @map("lead_id")
+  lead       Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
   agent      String
   status     String
   durationMs Int      @map("duration_ms")
@@ -315,6 +320,7 @@ model AgentRun {
 
   @@index([orgId, startedAt])
   @@index([orgId, agent, status])
+  @@index([leadId, startedAt])
   @@map("agent_runs")
 }
 
@@ -408,6 +414,9 @@ model Lead {
   clickupSync         ClickupSync?
   sheetsSync          SheetsSync?
   auditLogs           AuditLog[]
+  /// Every agent execution attributable to this lead, in run order — the
+  /// per-lead trail behind the Automation dashboard's aggregate view.
+  agentRuns           AgentRun[]
 
   // Tier-1 exact-match dedup (Part C2) — unique per org on domain and email.
   @@unique([orgId, websiteDomain], name: "org_domain_unique")

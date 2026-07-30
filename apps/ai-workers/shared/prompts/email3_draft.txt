@@ -12,6 +12,10 @@ TASK: Write Email 3. Structure: (1) one-line hook referencing a REAL specific de
 (2) name 1-2 concrete problems, (3) 2-3 automation ideas mapped to {org_services}, (4) a plausible ROI
 framed as a range with the basis stated, (5) a 3-step roadmap, (6) a single low-friction CTA (15-min call).
 Tone: {tone_of_voice}. Max 180 words. Include {{{{unsubscribe_link}}}} placeholder verbatim.
+Write like a person emailing another person: no em dashes, no semicolons used as a dash substitute, no
+"I hope this finds you well", no corporate throat-clearing. Short sentences. Use periods and commas, not
+dashes, to join clauses. The subject line should create real curiosity about {company_name} specifically,
+not read as a mail-merge template a spam filter has seen before.
 
 Respond with JSON only:
 {{

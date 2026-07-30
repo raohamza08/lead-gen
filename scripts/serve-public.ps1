@@ -94,6 +94,22 @@ try {
   throw "Tunnel is up but the API is not reachable through it: $_"
 }
 
+# API_PUBLIC_URL is what the open-tracking pixel and unsubscribe link embedded
+# in outbound emails point back to (see .env's comment on it) — it has to track
+# the tunnel hostname exactly like NEXT_PUBLIC_API_BASE_URL does below, or a
+# recipient's mail client fetches a dead hostname from a previous tunnel run.
+# Unlike the Vercel variable this isn't baked into a build, but the running API
+# process already has the old value in memory, so it still needs a restart.
+$envPath = Join-Path $repoRoot ".env"
+$envContent = Get-Content $envPath -Raw
+if ($envContent -match "(?m)^API_PUBLIC_URL=.*$") {
+  $envContent = $envContent -replace "(?m)^API_PUBLIC_URL=.*$", "API_PUBLIC_URL=$tunnelUrl"
+} else {
+  $envContent += "`nAPI_PUBLIC_URL=$tunnelUrl`n"
+}
+[System.IO.File]::WriteAllText($envPath, $envContent)
+Write-Host "Updated API_PUBLIC_URL in .env to $tunnelUrl (restart the API to pick it up)" -ForegroundColor Cyan
+
 Write-Host "Updating Vercel NEXT_PUBLIC_API_BASE_URL..." -ForegroundColor Cyan
 Push-Location $repoRoot
 try {

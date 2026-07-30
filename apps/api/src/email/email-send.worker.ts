@@ -41,6 +41,7 @@ export class EmailSendWorker implements OnModuleInit, OnModuleDestroy {
         message.leadId,
         message.subject,
         message.bodyHtml,
+        message.id,
       );
 
       await this.prisma.emailMessage.update({

@@ -39,6 +39,28 @@ interface AgentRun {
   startedAt: string;
 }
 
+interface FleetAgent {
+  name: string;
+  responsibility: string;
+  requires: string[];
+  provides: string[];
+  critical: boolean;
+}
+
+interface FleetReport {
+  agents: FleetAgent[];
+  pipelines: Record<string, string[]>;
+}
+
+/** Pipelines actually invoked at runtime (`lead_acquisition` per candidate,
+ *  `lead_enrichment`/`rescore` on demand). `outreach`/`email_only`/
+ *  `optimisation` are registered and contract-tested but nothing in the API
+ *  or workers calls them yet — the live Gemini drafting path and the BullMQ
+ *  sequencer do that work directly instead of through these agents. Shown
+ *  rather than hidden, since an agent that never runs should be visible as
+ *  such, not silently indistinguishable from one that does. */
+const LIVE_PIPELINES = new Set(["lead_acquisition", "lead_enrichment", "rescore"]);
+
 const WINDOWS = [1, 24, 168] as const;
 const WINDOW_LABELS: Record<number, string> = { 1: "1h", 24: "24h", 168: "7d" };
 
@@ -58,6 +80,8 @@ export default function AutomationPage() {
   const [hours, setHours] = useState<number>(24);
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [runs, setRuns] = useState<AgentRun[]>([]);
+  const [fleet, setFleet] = useState<FleetReport | null>(null);
+  const [fleetError, setFleetError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -75,6 +99,17 @@ export default function AutomationPage() {
       .finally(() => !cancelled && setRefreshing(false));
     return () => { cancelled = true; };
   }, [hours]);
+
+  // Fetched once, not per window — the roster itself doesn't change with the
+  // time window, only the run history does.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getAgentFleet()
+      .then((f) => !cancelled && setFleet(f as FleetReport))
+      .catch((err) => !cancelled && setFleetError((err as Error).message));
+    return () => { cancelled = true; };
+  }, []);
 
   if (error) return <p className="text-bad">{error}</p>;
   if (!health) return <p className="text-ink/60">Loading…</p>;
@@ -126,7 +161,7 @@ export default function AutomationPage() {
         </section>
 
         <SectionCard
-          title="Agent fleet"
+          title="Agent performance"
           subtitle={`Per-agent volume, reliability and latency over the last ${WINDOW_LABELS[health.windowHours] ?? `${health.windowHours}h`}.`}
         >
           {health.agents.length === 0 ? (
@@ -194,6 +229,53 @@ export default function AutomationPage() {
                 },
               ]}
             />
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="Agent roster"
+          subtitle="Every agent registered in the fleet, read live from the workers — not a hand-maintained list."
+        >
+          {fleetError ? (
+            <p className="py-8 text-center text-sm text-bad">{fleetError}</p>
+          ) : !fleet ? (
+            <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {fleet.agents.map((a) => {
+                const pipelines = Object.entries(fleet.pipelines)
+                  .filter(([, steps]) => steps.includes(a.name))
+                  .map(([name]) => name);
+                const live = pipelines.some((p) => LIVE_PIPELINES.has(p));
+                return (
+                  <div key={a.name} className="rounded-lg border border-[var(--line)] p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-ink/85">{a.name}</span>
+                        {a.critical && (
+                          <span className="rounded-full bg-ink/8 px-2 py-0.5 text-[10px] uppercase tracking-wide text-ink/55">
+                            critical
+                          </span>
+                        )}
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wide ${
+                          live ? "bg-good/15 text-good" : "bg-ink/8 text-ink/50"
+                        }`}
+                        title={
+                          live
+                            ? `Runs in: ${pipelines.join(", ")}`
+                            : "Registered and contract-tested, but no live caller invokes it yet"
+                        }
+                      >
+                        {live ? "live" : "not wired up"}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs text-ink/60">{a.responsibility}</p>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </SectionCard>
       </div>

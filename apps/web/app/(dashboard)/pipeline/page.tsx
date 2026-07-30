@@ -6,9 +6,109 @@ import { api } from "../../../lib/api-client";
 import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 
+interface AgentRunSummary {
+  agent: string;
+  status: string;
+  startedAt: string;
+}
+
+interface EmailSummary {
+  subject: string;
+  status: string;
+  sequenceStep: number;
+  sentAt: string | null;
+  events?: { occurredAt: string }[];
+}
+
 interface LeadRow extends Lead {
   score: LeadScore | null;
   pipelineState: { stage: string; previousStage: string | null } | null;
+  agentRuns?: AgentRunSummary[];
+  emailMessages?: EmailSummary[];
+}
+
+/** Human-readable agent names, matching the registry in apps/ai-workers. */
+const AGENT_LABELS: Record<string, string> = {
+  lead_discovery: "Discovery",
+  lead_verification: "Verification",
+  company_intelligence: "Company intel",
+  website_audit: "Website audit",
+  buyer_intelligence: "Buyer intel",
+  ai_opportunity: "Opportunity",
+  lead_scoring: "Scoring",
+  email: "Email agent",
+  review: "Review",
+  linkedin: "LinkedIn",
+  scheduler: "Scheduler",
+  analytics: "Analytics",
+  learning: "Learning",
+};
+
+function agentTone(status: string) {
+  if (status === "OK") return "text-good";
+  if (status === "DEGRADED") return "text-gold";
+  if (status === "SKIPPED") return "text-ink/45";
+  return "text-bad";
+}
+
+function timeAgo(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+/** What's actually happening on this card right now. Every other stage in the
+ *  acquisition pipeline finishes all its agent work before the lead ever
+ *  becomes a row here — GEMINI_DRAFTING is the one stage where an agent is
+ *  still genuinely running in the background while the card sits on the
+ *  board, so it gets a live indicator instead of a static "last agent" line. */
+function AgentActivity({ lead }: { lead: LeadRow }) {
+  const stage = lead.pipelineState?.stage;
+  if (stage === "GEMINI_DRAFTING") {
+    return (
+      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+        Email agent drafting…
+      </div>
+    );
+  }
+
+  const last = lead.agentRuns?.[0];
+  if (!last) return null;
+  return (
+    <div className="mt-1.5 flex items-center gap-1 text-[11px] text-ink/50">
+      <span className={agentTone(last.status)}>●</span>
+      <span className="truncate">{AGENT_LABELS[last.agent] ?? last.agent}</span>
+      <span className="text-ink/35">· {timeAgo(last.startedAt)}</span>
+    </div>
+  );
+}
+
+function LastEmail({ lead }: { lead: LeadRow }) {
+  const email = lead.emailMessages?.[0];
+  if (!email) return null;
+  const tone =
+    email.status === "SENT" ? "text-good" : email.status === "FAILED" ? "text-bad" : "text-ink/50";
+  const when =
+    email.status === "SENT"
+      ? timeAgo(email.sentAt)
+      : email.status === "FAILED"
+        ? "failed"
+        : "queued";
+  const opened = email.events?.[0]?.occurredAt;
+  return (
+    <div className="mt-1 flex items-center gap-1 text-[11px] text-ink/50" title={email.subject}>
+      <span aria-hidden>✉</span>
+      <span className="truncate">Email {email.sequenceStep}</span>
+      <span className={tone}>· {when}</span>
+      {opened && <span className="text-accent" title={`Opened ${new Date(opened).toLocaleString()}`}>· opened {timeAgo(opened)}</span>}
+    </div>
+  );
 }
 
 const LABELS: Record<string, string> = {
@@ -235,6 +335,8 @@ export default function PipelinePage() {
                       {lead.country && (
                         <div className="mt-1 text-[11px] text-ink/40">{lead.country}</div>
                       )}
+                      <AgentActivity lead={lead} />
+                      <LastEmail lead={lead} />
                     </Link>
                     <div className="mt-1.5 flex items-center gap-1.5">
                       {lead.pipelineState?.previousStage && (

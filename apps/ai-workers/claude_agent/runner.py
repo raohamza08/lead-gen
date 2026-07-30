@@ -126,6 +126,15 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
             },
         )
 
+        # Attribute this candidate's whole agent trail to the lead it produced,
+        # so the dashboard can show "which agents touched this lead" rather
+        # than only an org-wide aggregate. A duplicate has no new lead id to
+        # attach to, so its records stay attributable only at the org level.
+        lead_id = result.get("leadId")
+        if lead_id:
+            for record in pipeline_result.records:
+                record.lead_id = lead_id
+
         # Track the priority mix. The spec requires 40/40/20 high/medium/
         # experimental so the funnel keeps an exploration budget: chasing only
         # high-priority leads narrows targeting until the niche is exhausted and
@@ -153,6 +162,7 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
                 "attempts": r.attempts,
                 "error": r.error,
                 "notes": r.notes,
+                "leadId": r.lead_id,
             }
             for r in agent_records
         ],

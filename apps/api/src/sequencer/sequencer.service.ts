@@ -6,6 +6,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { buildEmail1, buildEmail2 } from "./email-templates";
 import { SyncService } from "../sync/sync.service";
+import { OrganizationService } from "../organization/organization.service";
 
 const WAIT_2_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 const WAIT_1_2_DAYS_MS = 36 * 60 * 60 * 1000; // midpoint of the 1-2 day window (Part C6)
@@ -29,6 +30,7 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly sync: SyncService,
+    private readonly organization: OrganizationService,
   ) {
     const connection = getRedisConnection();
     this.waitQueue = new Queue(QUEUE_NAMES.WAIT_TIMERS, { connection });
@@ -169,10 +171,20 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
     const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { orgId: true } });
     try {
+      // Without this, the drafting agent falls back to a hardcoded "our
+      // company" identity — the Settings branding fields would silently only
+      // affect Email 1/2 and not the Gemini-drafted Email 3.
+      const orgContext = lead?.orgId
+        ? await this.organization.getBranding(lead.orgId).then((b) => ({
+            name: b.emailOrgName,
+            services: "AI automation and lead-generation systems",
+            tone_of_voice: "direct, warm, no jargon, no em dashes",
+          }))
+        : undefined;
       await fetch(`${aiWorkersUrl}/personalization/draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, orgId: lead?.orgId }),
+        body: JSON.stringify({ leadId, orgId: lead?.orgId, orgContext }),
       });
     } catch (err) {
       this.logger.warn(`Failed to request Gemini draft for lead ${leadId}: ${(err as Error).message}`);

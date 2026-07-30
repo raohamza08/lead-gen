@@ -12,6 +12,7 @@ interface AgentRunPayload {
   attempts?: number;
   error?: string;
   notes?: string[];
+  leadId?: string;
 }
 
 @Controller("agent-runs")
@@ -40,6 +41,10 @@ export class AgentRunsController {
       data: records.map((r) => ({
         orgId,
         runId,
+        // Only set once a candidate survives long enough to become a lead —
+        // the worker tags these after create_lead returns, so a rejected
+        // candidate's records simply have none.
+        leadId: r.leadId,
         agent: r.agent,
         status: r.status,
         durationMs: Math.max(0, Math.trunc(r.durationMs ?? 0)),

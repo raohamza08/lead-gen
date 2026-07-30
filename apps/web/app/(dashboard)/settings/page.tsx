@@ -5,6 +5,7 @@ import { api } from "../../../lib/api-client";
 import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../components/filter-controls";
 import { EmailAccountsSection } from "../../../components/email-accounts-section";
 import { TeamSection } from "../../../components/team-section";
+import { OrgBrandingSection } from "../../../components/org-branding-section";
 import type { NicheFilter } from "@leadgen/types";
 
 /**
@@ -67,6 +68,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [showBuilder, setShowBuilder] = useState(false);
   const [togglingCost, setTogglingCost] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   function refresh() {
     api
@@ -138,7 +140,7 @@ export default function SettingsPage() {
     }
   }
 
-  async function createFilter(e: React.FormEvent) {
+  async function saveFilter(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
     setError(null);
@@ -152,8 +154,13 @@ export default function SettingsPage() {
           return true;
         }),
       );
-      await api.createNicheFilter(payload);
+      if (editingId) {
+        await api.updateNicheFilter(editingId, payload);
+      } else {
+        await api.createNicheFilter(payload);
+      }
       setDraft(EMPTY);
+      setEditingId(null);
       setShowBuilder(false);
       refresh();
     } catch (err) {
@@ -161,6 +168,46 @@ export default function SettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  /** Loads a saved filter into the same builder used to create one — editing
+   *  and viewing are the same form, since every field is already shown. */
+  function startEdit(f: NicheFilter) {
+    setEditingId(f.id);
+    setDraft({
+      niche: f.niche,
+      subNiche: f.subNiche ?? "",
+      countries: f.countries ?? [],
+      cities: f.cities ?? [],
+      employeeCountMin: f.employeeCountMin,
+      employeeCountMax: f.employeeCountMax,
+      revenueBandMin: f.revenueBandMin ?? "",
+      revenueBandMax: f.revenueBandMax ?? "",
+      yearsInBusinessMin: f.yearsInBusinessMin,
+      yearsInBusinessMax: f.yearsInBusinessMax,
+      jobTitles: f.jobTitles ?? [],
+      technologies: f.technologies ?? [],
+      businessModel: f.businessModel ?? "",
+      b2bOrB2c: f.b2bOrB2c ?? "",
+      fundingStage: f.fundingStage ?? "",
+      companyTypes: f.companyTypes ?? [],
+      growthStages: f.growthStages ?? [],
+      companyKeywords: f.companyKeywords ?? [],
+      departments: f.departments ?? [],
+      seniorityLevels: f.seniorityLevels ?? [],
+      hiringSignals: f.hiringSignals ?? [],
+      websiteConditions: f.websiteConditions ?? [],
+      aiOpportunitySignals: f.aiOpportunitySignals ?? [],
+      exclusionSignals: f.exclusionSignals ?? [],
+      excludeIndustries: f.excludeIndustries ?? [],
+      excludeKeywords: f.excludeKeywords ?? [],
+      excludeCompanies: f.excludeCompanies ?? [],
+      dailyTarget: f.dailyTarget,
+      disabledAgents: f.disabledAgents ?? [],
+      scheduleCron: f.scheduleCron,
+      timezone: f.timezone,
+    });
+    setShowBuilder(true);
   }
 
   /** How many dimensions this filter actually constrains — the quickest read on
@@ -185,6 +232,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <TeamSection />
+      <OrgBrandingSection />
       <EmailAccountsSection />
 
       <section className="rounded-xl border border-[var(--line)] p-5">
@@ -192,7 +240,13 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold tracking-tight">Niche filters</h2>
           <button
             type="button"
-            onClick={() => setShowBuilder((v) => !v)}
+            onClick={() => {
+              if (showBuilder) {
+                setDraft(EMPTY);
+                setEditingId(null);
+              }
+              setShowBuilder((v) => !v);
+            }}
             className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
           >
             {showBuilder ? "Cancel" : "New filter"}
@@ -268,6 +322,12 @@ export default function SettingsPage() {
                         Run now
                       </button>
                       <button
+                        onClick={() => startEdit(f)}
+                        className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+                      >
+                        Edit
+                      </button>
+                      <button
                         onClick={() => confirmDelete(f)}
                         className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)]"
                       >
@@ -290,9 +350,11 @@ export default function SettingsPage() {
       </section>
 
       {showBuilder && (
-        <form onSubmit={createFilter} className="flex flex-col gap-4">
+        <form onSubmit={saveFilter} className="flex flex-col gap-4">
           <section className="rounded-xl border border-[var(--line)] p-5">
-            <h2 className="mb-1 text-sm font-semibold tracking-tight">Target profile</h2>
+            <h2 className="mb-1 text-sm font-semibold tracking-tight">
+              {editingId ? `Edit filter — ${draft.niche || "untitled"}` : "Target profile"}
+            </h2>
             <p className="mb-4 text-xs text-ink/50">
               Only the niche is required. Every other field left blank means &ldquo;no constraint&rdquo;, so
               start broad and narrow once you see what comes back.
@@ -594,11 +656,11 @@ export default function SettingsPage() {
               disabled={saving || !draft.niche.trim()}
               className="rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
             >
-              {saving ? "Creating…" : "Create filter"}
+              {saving ? "Saving…" : editingId ? "Save changes" : "Create filter"}
             </button>
             <button
               type="button"
-              onClick={() => { setDraft(EMPTY); setShowBuilder(false); }}
+              onClick={() => { setDraft(EMPTY); setEditingId(null); setShowBuilder(false); }}
               className="rounded-md border border-[var(--line)] px-4 py-2 text-sm text-ink/70"
             >
               Cancel

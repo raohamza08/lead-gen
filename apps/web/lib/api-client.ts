@@ -238,12 +238,16 @@ export const api = {
   getCohortTrends: (days = 30) => request(`/analytics/cohort-trends?days=${days}`),
   getAgentHealth: (hours = 24) => request(`/agent-runs/health?hours=${hours}`),
   getRecentAgentRuns: (limit = 50) => request(`/agent-runs/recent?limit=${limit}`),
+  getAgentFleet: () => request("/agents/fleet"),
   getCampaigns: () => request("/campaigns"),
   getCampaignPerformance: () => request("/campaigns/performance"),
   createCampaign: (body: Record<string, unknown>) =>
     request("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: string, body: Record<string, unknown>) =>
     request(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  getOrgBranding: () => request("/settings/organization/branding"),
+  updateOrgBranding: (body: Record<string, unknown>) =>
+    request("/settings/organization/branding", { method: "PATCH", body: JSON.stringify(body) }),
   getUsers: () => request("/users"),
   createUser: (body: Record<string, unknown>) =>
     request("/users", { method: "POST", body: JSON.stringify(body) }),

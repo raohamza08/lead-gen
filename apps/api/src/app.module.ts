@@ -19,6 +19,7 @@ import { WebhooksModule } from "./webhooks/webhooks.module";
 import { HealthModule } from "./health/health.module";
 import { AgentsModule } from "./agents/agents.module";
 import { CampaignsModule } from "./campaigns/campaigns.module";
+import { OrganizationModule } from "./organization/organization.module";
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { CampaignsModule } from "./campaigns/campaigns.module";
     HealthModule,
     AgentsModule,
     CampaignsModule,
+    OrganizationModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

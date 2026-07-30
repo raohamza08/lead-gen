@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
@@ -38,7 +38,13 @@ export class UsersController {
 
   @Patch(":id/role/:role")
   @Roles(Role.ADMIN)
-  changeRole(@Param("id") id: string, @Param("role") role: Role) {
+  changeRole(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Param("role") role: Role) {
+    // An admin demoting themselves could lock the org out of admin access
+    // entirely if they're the only one — changing your own role always goes
+    // through another admin instead.
+    if (id === user.sub) {
+      throw new ForbiddenException("You can't change your own role — ask another admin.");
+    }
     return this.usersService.setRole(id, role);
   }
 }

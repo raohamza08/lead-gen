@@ -151,7 +151,8 @@ What we know: {json.dumps(merged)[:1500]}
 
 The connection note has a HARD 300-character limit; anything longer cannot be
 sent. Write like a person, not a marketer: no "I hope this finds you well", no
-flattery, no pitch in the connection request itself.
+flattery, no pitch in the connection request itself, and no em dashes anywhere
+in the output — use periods or commas instead.
 
 Respond with ONLY JSON, no prose or code fences:
 {{

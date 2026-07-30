@@ -51,8 +51,12 @@ export function TeamSection() {
     setError(null);
     setNotice(null);
     try {
-      await api.createUser(draft);
-      setNotice(`${draft.email} can now log in with the password you set.`);
+      const created = (await api.createUser(draft)) as { credentialsEmailSent?: boolean };
+      setNotice(
+        created.credentialsEmailSent
+          ? `${draft.email} was emailed their login link and password.`
+          : `${draft.email} was created, but the credentials email could not be sent (no active mailbox?) — share the password with them directly.`,
+      );
       setDraft(EMPTY_DRAFT);
       setShowForm(false);
       refresh();
@@ -141,7 +145,7 @@ export function TeamSection() {
                   </td>
                   <td className="py-2 pr-3 text-ink/60">{m.email}</td>
                   <td className="py-2 pr-3">
-                    {isAdmin ? (
+                    {isAdmin && !isSelf ? (
                       <select
                         value={m.role}
                         disabled={busyId === m.id}
@@ -155,7 +159,9 @@ export function TeamSection() {
                         ))}
                       </select>
                     ) : (
-                      <span className="text-ink/60">{m.role}</span>
+                      <span className="text-ink/60" title={isSelf ? "You can't change your own role." : undefined}>
+                        {m.role}
+                      </span>
                     )}
                   </td>
                   <td className="py-2 pr-3">

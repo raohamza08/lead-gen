@@ -50,7 +50,7 @@ def _draft_demo(context: dict, org_context: dict) -> dict:
     return {
         "subject": f"A specific idea for {context['company_name']}",
         "body_html": (
-            f"<p>[DEMO DRAFT] Hi — following up on {hook}. For a {context.get('industry','')} team your size, "
+            f"<p>[DEMO DRAFT] Hi, following up on {hook}. For a {context.get('industry','')} team your size, "
             f"the biggest lever is usually {problems[0]}. We could likely automate this in a few weeks with a "
             f"payback inside a quarter. Worth a 15-minute call?</p>"
             f"<p style=\"font-size:12px;color:#888\">{{{{org.postal_address}}}} · "

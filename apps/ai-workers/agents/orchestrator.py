@@ -32,6 +32,10 @@ class AgentRunRecord:
     error: str | None = None
     notes: list[str] = field(default_factory=list)
     attempts: int = 1
+    # Set after the fact, once the candidate this run belonged to either became
+    # a Lead or was rejected — the orchestrator itself never knows a lead id,
+    # since agents run before the lead row exists.
+    lead_id: str | None = None
 
 
 @dataclass

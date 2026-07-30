@@ -185,7 +185,19 @@ export class LeadsService {
     const [items, total] = await Promise.all([
       this.prisma.lead.findMany({
         where,
-        include: { score: true, pipelineState: true },
+        include: {
+          score: true,
+          pipelineState: true,
+          // Cheap summaries for the pipeline board: the single most recent
+          // agent touch and email attempt, not the full history — a card
+          // needs "what happened last", the lead detail page has the trail.
+          agentRuns: { orderBy: { startedAt: "desc" }, take: 1 },
+          emailMessages: {
+            orderBy: { sequenceStep: "desc" },
+            take: 1,
+            include: { events: { where: { eventType: "OPENED" }, orderBy: { occurredAt: "desc" }, take: 1 } },
+          },
+        },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -203,8 +215,14 @@ export class LeadsService {
         score: true,
         reviewNote: true,
         pipelineState: true,
-        emailMessages: { orderBy: { sequenceStep: "asc" } },
+        emailMessages: {
+          orderBy: { sequenceStep: "asc" },
+          include: { events: { orderBy: { occurredAt: "asc" } } },
+        },
         linkedinActivities: true,
+        // Full trail, oldest first, so the detail page can render it as a
+        // timeline of what the fleet actually did to this specific lead.
+        agentRuns: { orderBy: { startedAt: "asc" } },
       },
     });
     if (!lead) throw new NotFoundException("Lead not found");

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EmailAccount } from "@prisma/client";
 import nodemailer from "nodemailer";
-import { EmailProvider, OutboundEmail } from "../email-provider.interface";
+import { EmailProvider, formatFrom, OutboundEmail } from "../email-provider.interface";
 
 const PROVIDER_DEFAULTS: Record<string, { host: string; port: number }> = {
   MICROSOFT_365: { host: "smtp.office365.com", port: 587 },
@@ -35,7 +35,7 @@ export class SmtpProvider implements EmailProvider {
     });
 
     const info = await transport.sendMail({
-      from: email.fromAddress,
+      from: formatFrom(email.fromAddress, email.fromName),
       to: email.toAddress,
       subject: email.subject,
       html: email.bodyHtml,

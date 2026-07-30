@@ -6,7 +6,7 @@ import { google } from "googleapis";
 // boundaries, base64 body) — reused here purely as a message builder, no SMTP
 // transport involved; the built message is handed to the Gmail API instead.
 import MailComposer from "nodemailer/lib/mail-composer";
-import { EmailProvider, OutboundEmail } from "../email-provider.interface";
+import { EmailProvider, formatFrom, OutboundEmail } from "../email-provider.interface";
 
 /**
  * Sends via the Gmail API (`users.messages.send`) using a per-mailbox OAuth2
@@ -51,7 +51,7 @@ export class GmailProvider implements EmailProvider {
 
   private buildRawMessage(email: OutboundEmail): Promise<string> {
     const composer = new MailComposer({
-      from: email.fromAddress,
+      from: formatFrom(email.fromAddress, email.fromName),
       to: email.toAddress,
       subject: email.subject,
       html: email.bodyHtml,

@@ -23,6 +23,31 @@ const REVIEW_FIELDS: { key: string; label: string; hint?: string }[] = [
 const stageLabel = (s: string) =>
   s.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
 
+const AGENT_LABELS: Record<string, string> = {
+  lead_discovery: "Lead discovery",
+  lead_verification: "Lead verification",
+  company_intelligence: "Company intelligence",
+  website_audit: "Website audit",
+  buyer_intelligence: "Buyer intelligence",
+  ai_opportunity: "AI opportunity",
+  lead_scoring: "Lead scoring",
+  email: "Email agent",
+  review: "Review",
+  linkedin: "LinkedIn",
+  scheduler: "Scheduler",
+  analytics: "Analytics",
+  learning: "Learning",
+};
+
+function agentStatusTone(status: string) {
+  if (status === "OK") return "text-good";
+  if (status === "DEGRADED") return "text-gold";
+  if (status === "SKIPPED") return "text-ink/45";
+  return "text-bad";
+}
+
+const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+
 function tone(v?: number | null) {
   if (v == null) return "text-ink/35";
   if (v >= 75) return "text-good";
@@ -58,6 +83,7 @@ export default function LeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [openEmailId, setOpenEmailId] = useState<string | null>(null);
 
   function load() {
     api
@@ -253,6 +279,41 @@ export default function LeadDetailPage() {
             <Field label="Research evidence">{lead.researchEvidence}</Field>
           </section>
 
+          {Array.isArray(lead.agentRuns) && lead.agentRuns.length > 0 && (
+            <section className="card p-5">
+              <h2 className="mb-1 text-sm font-semibold tracking-tight">Agent activity</h2>
+              <p className="mb-3 text-xs text-ink/50">
+                Every agent that has touched this lead, in order. This is a completed trail, not a
+                live view — the acquisition agents all finish before a lead becomes a card; the
+                email agent is the one exception, shown as &quot;Drafting…&quot; on the pipeline
+                board while it runs.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {lead.agentRuns.map((r: any) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between gap-2 border-t border-[var(--line)] py-1.5 text-xs first:border-t-0"
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <span className={agentStatusTone(r.status)}>●</span>
+                      <span className="text-ink/80">{AGENT_LABELS[r.agent] ?? r.agent}</span>
+                      {r.notes?.length > 0 && (
+                        <span className="truncate text-ink/40" title={r.notes.join("; ")}>
+                          — {r.notes[0]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2 text-ink/45">
+                      <span className={agentStatusTone(r.status)}>{r.status}</span>
+                      <span className="tabular">{fmtMs(r.durationMs)}</span>
+                      <span>{new Date(r.startedAt).toLocaleTimeString()}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {hasSwot && (
             <section className="card p-5">
               <h2 className="mb-3 text-sm font-semibold tracking-tight">SWOT</h2>
@@ -331,26 +392,61 @@ export default function LeadDetailPage() {
                               : "Queued"}
                         </div>
                       </div>
-                      <span
-                        className={`shrink-0 rounded px-2 py-0.5 text-[11px] ${
-                          m.status === "SENT"
-                            ? "bg-good/20 text-good"
-                            : m.status === "FAILED"
-                              ? "bg-bad/20 text-bad"
-                              : "bg-ink/8 text-ink/60"
-                        }`}
-                      >
-                        {m.status}
-                      </span>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span
+                          className={`rounded px-2 py-0.5 text-[11px] ${
+                            m.status === "SENT"
+                              ? "bg-good/20 text-good"
+                              : m.status === "FAILED"
+                                ? "bg-bad/20 text-bad"
+                                : "bg-ink/8 text-ink/60"
+                          }`}
+                        >
+                          {m.status}
+                        </span>
+                        {Array.isArray(m.events) && m.events.some((e: any) => e.eventType === "OPENED") ? (
+                          <span className="text-[11px] text-accent">
+                            Opened{" "}
+                            {(() => {
+                              const opens = m.events.filter((e: any) => e.eventType === "OPENED");
+                              const last = opens[opens.length - 1];
+                              return `${new Date(last.occurredAt).toLocaleString()}${opens.length > 1 ? ` (${opens.length}×)` : ""}`;
+                            })()}
+                          </span>
+                        ) : m.status === "SENT" ? (
+                          <span className="text-[11px] text-ink/35">Not opened yet</span>
+                        ) : null}
+                      </div>
                     </div>
-                    {m.status === "FAILED" && (
+                    <div className="mt-2 flex items-center gap-2">
                       <button
-                        onClick={() => resend(m.id)}
-                        disabled={resendingId === m.id}
-                        className="mt-2 rounded-md bg-accent px-2.5 py-1 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        onClick={() => setOpenEmailId(openEmailId === m.id ? null : m.id)}
+                        className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
                       >
-                        {resendingId === m.id ? "Resending…" : "Resend"}
+                        {openEmailId === m.id ? "Hide" : "View email"}
                       </button>
+                      {m.status === "FAILED" && (
+                        <button
+                          onClick={() => resend(m.id)}
+                          disabled={resendingId === m.id}
+                          className="rounded-md bg-accent px-2.5 py-1 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          {resendingId === m.id ? "Resending…" : "Resend"}
+                        </button>
+                      )}
+                    </div>
+                    {openEmailId === m.id && (
+                      // Sandboxed with no allow-scripts/allow-same-origin: bodyHtml can
+                      // trace back to scraped website content by way of the drafting
+                      // agent's context, so it is untrusted input, not just our own
+                      // template output. srcDoc renders the formatting without letting
+                      // anything in it execute in the dashboard's origin.
+                      <iframe
+                        title={`Email ${m.sequenceStep} body`}
+                        srcDoc={m.bodyHtml}
+                        sandbox=""
+                        className="mt-2 h-64 w-full rounded-lg border border-[var(--line)] bg-white"
+                      />
                     )}
                   </div>
                 ))}

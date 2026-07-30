@@ -6,11 +6,21 @@ import { EmailAccount } from "@prisma/client";
  */
 export interface OutboundEmail {
   fromAddress: string;
+  /** Display name shown next to the address in the recipient's inbox (e.g.
+   *  "EurosHub Team" instead of the bare mailbox address). Optional so a
+   *  provider stub still works with just an address. */
+  fromName?: string;
   toAddress: string;
   subject: string;
   bodyHtml: string;
   /** Used to correlate inbound replies (In-Reply-To/References) back to the sequence (Part C6). */
   headers?: Record<string, string>;
+}
+
+/** RFC 5322 "display name" syntax — quoted, with internal quotes/backslashes escaped. */
+export function formatFrom(address: string, name?: string): string {
+  if (!name) return address;
+  return `"${name.replace(/["\\]/g, "")}" <${address}>`;
 }
 
 export interface EmailProvider {
