@@ -55,10 +55,19 @@ class LeadVerificationAgent(Agent):
     provides = ("verification",)
     critical = True
 
+    def __init__(self, *, reject_unqualified: bool = True) -> None:
+        # Discovery candidates aren't persisted yet, so failing verification
+        # can end the pipeline outright (see below). A manual lead is already
+        # a Lead row a human created deliberately — rejecting it the same way
+        # would mean it silently never gets enriched. Registered under a
+        # second registry key ("lead_verification_soft") for the manual
+        # pipeline; see registry.py.
+        self.reject_unqualified = reject_unqualified
+
     async def execute(self, ctx: AgentContext) -> AgentResult:
         verification = await verify_candidate(ctx.get("candidate"))
 
-        if not verification.get("qualifies"):
+        if not verification.get("qualifies") and self.reject_unqualified:
             # A rejected candidate is a normal, expected outcome — most are.
             # FATAL ends this candidate's pipeline without polluting the lead
             # table, which is exactly the "only verified leads" requirement.
@@ -67,6 +76,13 @@ class LeadVerificationAgent(Agent):
                 data={"verification": verification},
                 error="candidate failed verification",
                 notes=["rejected before persistence — never counted as a lead"],
+            )
+
+        if not verification.get("qualifies"):
+            return AgentResult(
+                status=AgentStatus.DEGRADED,
+                data={"verification": verification},
+                notes=["one or more contact details could not be verified"],
             )
 
         return AgentResult(status=AgentStatus.OK, data={"verification": verification})

@@ -22,6 +22,7 @@ from .lead_agents import (
 from .ops_agents import AnalyticsAgent, LearningAgent
 from .orchestrator import Orchestrator
 from .outreach_agents import EmailAgent, LinkedInAgent, ReviewAgent, SchedulerAgent
+from .review_agents import AgentReviewAgent
 
 #: Every agent the system can run, keyed by its stable name.
 AGENTS: dict[str, Agent] = {
@@ -40,8 +41,14 @@ AGENTS: dict[str, Agent] = {
         SchedulerAgent(),
         AnalyticsAgent(),
         LearningAgent(),
+        AgentReviewAgent(),
     )
 }
+# A second instance of the same agent under a distinct registry key, used only
+# by the manual-lead pipeline below — see LeadVerificationAgent.__init__. Its
+# `.name` is still "lead_verification", so AgentRun telemetry looks identical
+# regardless of which pipeline ran it; only this lookup key differs.
+AGENTS["lead_verification_soft"] = LeadVerificationAgent(reject_unqualified=False)
 
 #: Named pipelines. Order is the contract — `Orchestrator.validate` proves each
 #: agent's requirements are satisfied by something earlier in the list.
@@ -68,6 +75,22 @@ PIPELINES: dict[str, tuple[str, ...]] = {
         "buyer_intelligence",
         "ai_opportunity",
         "lead_scoring",
+    ),
+    # A hand-entered lead already exists as a Lead row (CreateManualLeadDto),
+    # so this runs everything discovery would otherwise have triggered —
+    # verification, research, opportunity, scoring, and the AI's own review
+    # note — just against a lead that isn't going anywhere if a check fails.
+    # Verification is the soft variant: a manual lead with an unverified email
+    # still gets fully enriched, it just carries that as information rather
+    # than being dropped (see LeadVerificationAgent.reject_unqualified).
+    "manual_lead_enrichment": (
+        "lead_verification_soft",
+        "company_intelligence",
+        "website_audit",
+        "buyer_intelligence",
+        "ai_opportunity",
+        "lead_scoring",
+        "agent_review",
     ),
     # Cheap re-score after a human edits the review notes: no external calls
     # beyond the scorer itself.
@@ -136,14 +159,26 @@ def build(pipeline: str, *, seed_keys: tuple[str, ...] = ()) -> Orchestrator:
 
 
 def describe_fleet() -> list[dict]:
-    """Agent roster for the dashboard's AI Performance panel."""
-    return [
-        {
-            "name": a.name,
-            "responsibility": a.responsibility,
-            "requires": list(a.requires),
-            "provides": list(a.provides),
-            "critical": a.critical,
-        }
-        for a in AGENTS.values()
-    ]
+    """Agent roster for the dashboard's AI Performance panel.
+
+    Deduped by `.name` rather than a straight pass over AGENTS.values():
+    "lead_verification_soft" is a second registry entry for the manual-lead
+    pipeline (see LeadVerificationAgent.__init__), not a second agent, and
+    would otherwise show as a duplicate "lead_verification" row.
+    """
+    seen: set[str] = set()
+    fleet: list[dict] = []
+    for a in AGENTS.values():
+        if a.name in seen:
+            continue
+        seen.add(a.name)
+        fleet.append(
+            {
+                "name": a.name,
+                "responsibility": a.responsibility,
+                "requires": list(a.requires),
+                "provides": list(a.provides),
+                "critical": a.critical,
+            }
+        )
+    return fleet

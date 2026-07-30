@@ -13,6 +13,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
 import { ReviewNoteDto } from "./dto/review-note.dto";
+import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { ApproveEmailAction, ApproveEmailDto } from "./dto/approve-email.dto";
 import { isValidTransition } from "./pipeline-transitions";
@@ -218,6 +219,7 @@ export class LeadsService {
       include: {
         score: true,
         reviewNote: true,
+        agentReview: true,
         pipelineState: true,
         emailMessages: {
           orderBy: { sequenceStep: "asc" },
@@ -299,6 +301,93 @@ export class LeadsService {
       where: { leadId: id },
       create: { leadId: id, reviewerId, ...dto },
       update: { reviewerId, ...dto },
+    });
+  }
+
+  /**
+   * Called by the AI workers once the manual-lead enrichment pipeline
+   * finishes (lead_verification/company_intelligence/website_audit/
+   * buyer_intelligence/ai_opportunity/lead_scoring/agent_review). Unlike
+   * createVerified, this UPDATES a lead that already exists rather than
+   * inserting one, so only the keys actually present get written — a
+   * degraded agent must leave the existing value alone, not null it out.
+   */
+  async applyEnrichment(orgId: string, id: string, dto: ApplyEnrichmentDto) {
+    await this.assertOwnership(orgId, id);
+    const { agentReview, ...fields } = dto;
+    const values = fields as Record<string, unknown>;
+
+    const leadPatch: Record<string, unknown> = {};
+    for (const key of LEAD_ENRICHMENT_KEYS) {
+      if (values[key] !== undefined) leadPatch[key] = values[key];
+    }
+
+    const scorePatch: Record<string, unknown> = {};
+    for (const key of SCORE_ENRICHMENT_KEYS) {
+      if (values[key] !== undefined) scorePatch[key] = values[key];
+    }
+
+    await this.prisma.$transaction(async (tx) => {
+      if (Object.keys(leadPatch).length) {
+        await tx.lead.update({ where: { id }, data: leadPatch as Prisma.LeadUpdateInput });
+      }
+      if (Object.keys(scorePatch).length) {
+        await tx.leadScore.upsert({
+          where: { leadId: id },
+          // A manual lead already has a zeroed LeadScore row from createManual,
+          // so this branch is mostly belt-and-braces for the rare case the
+          // enrichment pipeline runs before that row exists for some reason.
+          create: {
+            leadId: id,
+            leadScore: 0,
+            confidenceScore: 0,
+            aiOpportunityScore: 0,
+            automationScore: 0,
+            crmReadinessScore: 0,
+            websiteQualityScore: 0,
+            ...scorePatch,
+          } as Prisma.LeadScoreUncheckedCreateInput,
+          update: scorePatch as Prisma.LeadScoreUpdateInput,
+        });
+      }
+      if (agentReview) {
+        await tx.agentReview.upsert({
+          where: { leadId: id },
+          create: { leadId: id, ...agentReview },
+          update: { ...agentReview },
+        });
+      }
+      await tx.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
+    });
+
+    return { updated: true };
+  }
+
+  /**
+   * Triggers the full research/verification/scoring pipeline against a lead
+   * that already exists. Runs automatically once when a manual lead is
+   * created (see createManual); exposed here too so a lead added before this
+   * existed — or whose enrichment run failed — can be re-run without
+   * re-entering it.
+   */
+  async requestEnrichment(orgId: string, leadId: string) {
+    await this.assertOwnership(orgId, leadId);
+    try {
+      await this.dispatchEnrichment(orgId, leadId);
+    } catch (err) {
+      throw new ServiceUnavailableException(
+        `Could not reach the AI workers: ${(err as Error).message}`,
+      );
+    }
+    return { accepted: true };
+  }
+
+  private async dispatchEnrichment(orgId: string, leadId: string) {
+    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
+    await fetch(`${aiWorkersUrl}/lead-gen/enrich`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId, orgId }),
     });
   }
 
@@ -570,6 +659,15 @@ export class LeadsService {
       this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
     );
 
+    // A hand-entered lead skips discovery, but everything discovery would
+    // otherwise have triggered — verification, company/website/buyer
+    // research, AI opportunity, scoring, and the AI's own review note — still
+    // needs to happen. Fire-and-forget, same as the sync dispatch above: a
+    // worker outage must not block the lead from being created.
+    this.dispatchEnrichment(orgId, lead.id).catch((err) =>
+      this.logger.warn(`Enrichment dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
+    );
+
     return { status: "created", leadId: lead.id };
   }
 
@@ -655,6 +753,25 @@ export function normaliseCompanyName(name?: string): string | undefined {
     .trim();
   return cleaned || undefined;
 }
+
+/** Which ApplyEnrichmentDto keys land on the Lead row versus the LeadScore
+ *  row — the same split createVerified makes explicitly field-by-field, done
+ *  here as a lookup since applyEnrichment's payload is a dynamic patch rather
+ *  than a fixed literal. */
+const LEAD_ENRICHMENT_KEYS = [
+  "businessDescription", "currentCrm", "techStack", "growthSignals", "swotAnalysis",
+  "competitors", "recentNews", "websitePlatform", "uxIssues", "seoIssues", "buyerPersona",
+  "painPoints", "aiOpportunities", "automationOpportunities",
+  "verifiedEmail", "verifiedLinkedin", "verifiedWebsite",
+] as const;
+
+const SCORE_ENRICHMENT_KEYS = [
+  "leadScore", "confidenceScore", "aiOpportunityScore", "automationScore", "crmReadinessScore",
+  "websiteQualityScore", "businessFitScore", "buyingIntentScore", "budgetScore", "technologyGapScore",
+  "decisionMakerAccessScore", "leadPriorityScore", "digitalMaturityScore", "aiReadinessScore",
+  "automationOpportunityScore", "authorityScore", "engagementScore", "projectComplexity",
+  "fitReason", "suggestedServices", "expectedValue", "priority",
+] as const;
 
 function extractDomain(website?: string): string | undefined {
   if (!website) return undefined;

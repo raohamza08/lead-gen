@@ -9,7 +9,7 @@ import time
 
 from config import settings
 from shared import api_client
-from agents import AgentContext, build_for_filter
+from agents import AgentContext, build, build_for_filter
 
 logger = logging.getLogger("claude_agent.runner")
 
@@ -321,3 +321,116 @@ async def run_in_background(run_id: str, niche_filter: dict, org_context: dict |
     except Exception:
         logger.exception("run %s failed", run_id)
         await api_client.update_extraction_run(run_id, {"status": "FAILED", "finishedAt": _now_iso()})
+
+
+def _lead_to_candidate(lead: dict) -> dict:
+    """Reshapes a persisted Lead back into the `candidate` shape the
+    lead/intelligence agents expect — the mirror image of
+    _map_candidate_fields above, which goes the other way for a
+    freshly-discovered one."""
+    return {
+        "companyName": lead.get("companyName"),
+        "website": lead.get("website"),
+        "linkedinUrl": lead.get("linkedinUrl"),
+        "contactName": lead.get("contactName"),
+        "jobTitle": lead.get("jobTitle"),
+        "email": lead.get("email"),
+        "phone": lead.get("phone"),
+        "industry": lead.get("industry"),
+        "subIndustry": lead.get("subNiche"),
+        "country": lead.get("country"),
+        "city": lead.get("city"),
+        "employeeCount": lead.get("employeeCount"),
+        "businessDescription": lead.get("businessDescription"),
+        "contactLinkedinUrl": lead.get("contactLinkedinUrl"),
+        "estimatedRevenue": lead.get("estimatedRevenue"),
+        "currentCrm": lead.get("currentCrm"),
+        "websitePlatform": lead.get("websitePlatform"),
+        "automationTools": lead.get("automationTools") or [],
+        "aiUsage": lead.get("aiUsage"),
+        "techStack": lead.get("techStack") or [],
+        "growthSignals": lead.get("growthSignals") or [],
+        "evidence": lead.get("researchEvidence"),
+    }
+
+
+async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | None = None) -> None:
+    """Runs the research/verification/scoring pipeline against a lead a human
+    typed in by hand.
+
+    CreateManualLeadDto's own doc comment always intended this ("Enrichment
+    and scoring happen afterwards by running the agents against it") but
+    nothing ever triggered it until this function existed. Unlike
+    run_extraction, the Lead row already exists, so this PATCHes the result
+    onto it (see api_client.apply_enrichment) instead of POSTing a new lead,
+    and verification runs in its non-rejecting form — see
+    "lead_verification_soft" in the registry.
+    """
+    org_context = org_context or {}
+    lead = await api_client.get_lead_detail(lead_id, org_id)
+    candidate = _lead_to_candidate(lead)
+
+    orchestrator = build("manual_lead_enrichment", seed_keys=("candidate", "org_context"))
+    ctx = AgentContext(
+        run_id=f"manual-enrich-{lead_id}",
+        org_id=org_id,
+        data={"candidate": candidate, "org_context": org_context},
+    )
+    pipeline_result = await orchestrator.run(ctx)
+    for record in pipeline_result.records:
+        record.lead_id = lead_id
+
+    verification = ctx.get("verification") or {}
+    scores = ctx.get("scores") or {}
+    intel = ctx.get("company_intelligence") or {}
+    audit = ctx.get("website_audit") or {}
+    buyer = ctx.get("buyer_intelligence") or {}
+    opportunities = ctx.get("opportunities") or {}
+    agent_review = ctx.get("agent_review") or {}
+
+    patch = {
+        **_map_intelligence_fields(intel, audit, buyer, opportunities),
+        **verification,
+        **_map_score_fields(scores),
+        **_map_agent_scores(intel, buyer, opportunities),
+    }
+    # Unlike _map_candidate_fields feeding a brand-new lead, this PATCHes one
+    # that already has real values — a None here must leave the existing
+    # column alone rather than null it out. _map_intelligence_fields already
+    # filters its own Nones; the other two mapping functions don't (they were
+    # only ever used to build a CREATE payload before), so filter the merged
+    # result instead of duplicating that logic in each of them.
+    patch = {k: v for k, v in patch.items() if v is not None}
+    if agent_review:
+        patch["agentReview"] = agent_review
+
+    try:
+        await api_client.apply_enrichment(lead_id, org_id, patch)
+    except Exception:
+        logger.exception("failed to apply enrichment results for lead %s", lead_id)
+
+    await api_client.record_agent_runs(
+        org_id,
+        None,
+        [
+            {
+                "agent": r.agent,
+                "status": r.status,
+                "durationMs": r.duration_ms,
+                "attempts": r.attempts,
+                "error": r.error,
+                "notes": r.notes,
+                "leadId": r.lead_id,
+            }
+            for r in pipeline_result.records
+        ],
+    )
+
+
+async def run_manual_enrichment_in_background(
+    lead_id: str, org_id: str, org_context: dict | None = None
+) -> None:
+    try:
+        await run_manual_enrichment(lead_id, org_id, org_context)
+    except Exception:
+        logger.exception("manual enrichment for lead %s failed", lead_id)

@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from agents import PIPELINES, describe_fleet
 from claude_agent.runner import run_in_background as run_extraction_in_background
+from claude_agent.runner import run_manual_enrichment_in_background
 from gemini_agent.runner import run_personalization
 from outreach_runner import run_linkedin_draft, run_optimisation
 
@@ -39,6 +40,12 @@ class PersonalizationRequest(BaseModel):
 class LinkedinDraftRequest(BaseModel):
     leadId: str
     orgId: str | None = None
+
+
+class ManualEnrichmentRequest(BaseModel):
+    leadId: str
+    orgId: str
+    orgContext: dict | None = None
 
 
 class OptimisationRequest(BaseModel):
@@ -79,6 +86,15 @@ async def start_personalization(req: PersonalizationRequest, background_tasks: B
 @app.post("/linkedin/draft")
 async def start_linkedin_draft(req: LinkedinDraftRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(run_linkedin_draft, req.leadId, req.orgId)
+    return {"accepted": True, "leadId": req.leadId}
+
+
+@app.post("/lead-gen/enrich")
+async def start_manual_enrichment(req: ManualEnrichmentRequest, background_tasks: BackgroundTasks):
+    """Runs the manual_lead_enrichment pipeline against a lead that already
+    exists — triggered once automatically when a manual lead is created
+    (LeadsService.createManual), and on demand from the lead's detail page."""
+    background_tasks.add_task(run_manual_enrichment_in_background, req.leadId, req.orgId, req.orgContext)
     return {"accepted": True, "leadId": req.leadId}
 
 

@@ -86,6 +86,7 @@ export default function LeadDetailPage() {
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
   const [generatingLinkedin, setGeneratingLinkedin] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
+  const [enriching, setEnriching] = useState(false);
 
   function load() {
     api
@@ -152,6 +153,23 @@ export default function LeadDetailPage() {
       setError((err as Error).message);
     } finally {
       setGeneratingLinkedin(false);
+    }
+  }
+
+  /** Runs the same research/verification/scoring pipeline discovery would
+   *  have — automatic for a manual lead on creation, exposed here to re-run
+   *  it (a lead added before this existed, or a failed run). */
+  async function runEnrichment() {
+    setEnriching(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.enrichLead(params.id);
+      setNotice("Agent review is running in the background — reload in a bit to see results.");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setEnriching(false);
     }
   }
 
@@ -530,6 +548,37 @@ export default function LeadDetailPage() {
                 </div>
               );
             })()}
+          </section>
+
+          <section className="card p-5">
+            <div className="mb-0.5 flex items-center justify-between">
+              <h2 className="text-sm font-semibold tracking-tight">Agent review</h2>
+              <button
+                onClick={runEnrichment}
+                disabled={enriching}
+                className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+              >
+                {enriching ? "Running…" : "Run agent review"}
+              </button>
+            </div>
+            <p className="mb-3 mt-0.5 text-xs text-ink/50">
+              The same fields as Human review below, but read and filled in by the AI from its own
+              research — a starting point to agree with, correct, or override, not the final word.
+            </p>
+            {lead.agentReview ? (
+              <div className="flex flex-col">
+                {REVIEW_FIELDS.map((field) => (
+                  <Field key={field.key} label={field.label}>
+                    {lead.agentReview[field.key]}
+                  </Field>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-ink/40">
+                Not generated yet — runs automatically for manually-added leads, or click &ldquo;Run
+                agent review&rdquo; above.
+              </p>
+            )}
           </section>
 
           <section className="card p-5">

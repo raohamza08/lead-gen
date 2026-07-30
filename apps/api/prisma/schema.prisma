@@ -418,6 +418,7 @@ model Lead {
 
   score               LeadScore?
   reviewNote          ReviewNote?
+  agentReview         AgentReview?
   pipelineState       PipelineState?
   emailMessages       EmailMessage[]
   linkedinActivities  LinkedinActivity[]
@@ -518,6 +519,37 @@ model ReviewNote {
   updatedAt                DateTime @updatedAt @map("updated_at")
 
   @@map("review_notes")
+}
+
+/// The AI's own counterpart to ReviewNote above — same fields, but synthesised
+/// by the `agent_review` agent from what the intelligence/scoring agents found
+/// rather than typed by a person. Gives a reviewer a populated starting point
+/// (agree, correct, or override) instead of a blank form, and is what a
+/// manually-added lead gets in place of a human's review until one happens.
+model AgentReview {
+  id                       String   @id @default(uuid())
+  leadId                   String   @unique @map("lead_id")
+  lead                     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  websiteIssues            String?  @map("website_issues")
+  businessProblems         String?  @map("business_problems")
+  opportunities            String?
+  automationOpportunities  String?  @map("automation_opportunities")
+  crmIssues                String?  @map("crm_issues")
+  salesIssues              String?  @map("sales_issues")
+  marketingIssues          String?  @map("marketing_issues")
+  operationalIssues        String?  @map("operational_issues")
+  suggestedService         String?  @map("suggested_service")
+  suggestedOffer           String?  @map("suggested_offer")
+  suggestedCaseStudy       String?  @map("suggested_case_study")
+  suggestedHook            String?  @map("suggested_hook")
+  painPoints               String?  @map("pain_points")
+  urgencyLevel             UrgencyLevel? @map("urgency_level")
+  expectedValue            Decimal? @map("expected_value")
+  notes                    String?
+  generatedAt              DateTime @default(now()) @map("generated_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("agent_reviews")
 }
 
 model PipelineState {

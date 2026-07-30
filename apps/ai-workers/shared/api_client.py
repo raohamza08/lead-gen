@@ -54,6 +54,18 @@ async def update_extraction_run(run_id: str, patch: dict) -> None:
         resp.raise_for_status()
 
 
+async def apply_enrichment(lead_id: str, org_id: str, patch: dict) -> None:
+    """Writes the manual-lead enrichment pipeline's results onto a lead that
+    already exists — the update counterpart to create_lead above."""
+    async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
+        resp = await client.patch(
+            f"/leads/{lead_id}/enrichment",
+            json={"orgId": org_id, **patch},
+            headers=_headers(),
+        )
+        resp.raise_for_status()
+
+
 async def get_lead_detail(lead_id: str, org_id: str | None = None) -> dict:
     async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
         resp = await client.get(f"/leads/{lead_id}/internal", params={"orgId": org_id}, headers=_headers())

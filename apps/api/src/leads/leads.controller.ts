@@ -8,6 +8,7 @@ import { AdvanceStageDto } from "./dto/advance-stage.dto";
 import { ApproveEmailDto } from "./dto/approve-email.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { CreateEmailDraftDto } from "./dto/create-email-draft.dto";
+import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { InternalAuthGuard } from "../common/guards/internal-auth.guard";
@@ -85,6 +86,31 @@ export class LeadsController {
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER)
   updateReview(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: ReviewNoteDto) {
     return this.leadsService.updateReviewNote(user.orgId, id, user.sub, dto);
+  }
+
+  /**
+   * Triggers the research/verification/scoring pipeline for a lead that
+   * already exists — runs automatically once for a manually-entered lead;
+   * exposed here to re-run it (e.g. a lead added before this existed, or a
+   * run that failed).
+   */
+  @Post(":id/enrich")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  enrich(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.leadsService.requestEnrichment(user.orgId, id);
+  }
+
+  /** Called by the AI workers once the manual-lead enrichment pipeline
+   *  finishes. See LeadsService.applyEnrichment. */
+  @Patch(":id/enrichment")
+  @UseGuards(InternalAuthGuard)
+  receiveEnrichment(
+    @Param("id") id: string,
+    @Body("orgId") orgId: string,
+    @Body() dto: ApplyEnrichmentDto,
+  ) {
+    return this.leadsService.applyEnrichment(orgId, id, dto);
   }
 
   @Post(":id/advance-stage")
