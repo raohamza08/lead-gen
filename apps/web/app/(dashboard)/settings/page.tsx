@@ -6,6 +6,7 @@ import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../components/f
 import { EmailAccountsSection } from "../../../components/email-accounts-section";
 import { TeamSection } from "../../../components/team-section";
 import { OrgBrandingSection } from "../../../components/org-branding-section";
+import { AutomationSettingsSection } from "../../../components/automation-settings-section";
 import type { NicheFilter } from "@leadgen/types";
 
 /**
@@ -232,6 +233,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <TeamSection />
+      <AutomationSettingsSection />
       <OrgBrandingSection />
       <EmailAccountsSection />
 

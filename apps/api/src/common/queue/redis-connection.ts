@@ -17,4 +17,7 @@ export const QUEUE_NAMES = {
   EMAIL_SEND: "email-send",
   SHEETS_SYNC: "sheets-sync",
   CLICKUP_SYNC: "clickup-sync",
+  // Every call out to the Python AI workers that used to be a raw fetch with
+  // no retry (Part: autonomous system) — see agent-dispatch.worker.ts.
+  AGENT_DISPATCH: "agent-dispatch",
 } as const;

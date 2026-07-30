@@ -141,6 +141,7 @@ model Organization {
   suppressionEntries SuppressionEntry[]
   agentRuns    AgentRun[]
   campaigns    Campaign[]
+  notifications Notification[]
 
   @@map("organizations")
 }
@@ -428,6 +429,7 @@ model Lead {
   /// Every agent execution attributable to this lead, in run order — the
   /// per-lead trail behind the Automation dashboard's aggregate view.
   agentRuns           AgentRun[]
+  notifications       Notification[]
 
   // Tier-1 exact-match dedup (Part C2) — unique per org on domain and email.
   @@unique([orgId, websiteDomain], name: "org_domain_unique")
@@ -719,4 +721,26 @@ model AuditLog {
 
   @@index([leadId])
   @@map("audit_logs")
+}
+
+/// Surfaced when automatic recovery fails and a human genuinely needs to
+/// know — an agent-dispatch job exhausting its retries, a pipeline hitting a
+/// permanent failure. Everyday agent activity (OK/DEGRADED runs, normal
+/// stage transitions) does NOT create one of these; that's what AgentRun and
+/// the live event stream are for. A Notification means "autonomous recovery
+/// could not fix this on its own."
+model Notification {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id])
+  leadId    String?  @map("lead_id")
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  type      String
+  severity  String   @default("ERROR") // ERROR | WARNING
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, read, createdAt])
+  @@map("notifications")
 }

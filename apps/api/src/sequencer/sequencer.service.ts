@@ -1,12 +1,12 @@
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { Queue, Worker, Job } from "bullmq";
-import { PipelineStage } from "@leadgen/types";
+import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { buildEmail1, buildEmail2 } from "./email-templates";
 import { SyncService } from "../sync/sync.service";
 import { OrganizationService } from "../organization/organization.service";
+import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
 
 const WAIT_2_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 const WAIT_1_2_DAYS_MS = 36 * 60 * 60 * 1000; // midpoint of the 1-2 day window (Part C6)
@@ -28,9 +28,9 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly config: ConfigService,
     private readonly sync: SyncService,
     private readonly organization: OrganizationService,
+    private readonly agentDispatch: AgentDispatchQueue,
   ) {
     const connection = getRedisConnection();
     this.waitQueue = new Queue(QUEUE_NAMES.WAIT_TIMERS, { connection });
@@ -74,15 +74,70 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
         return this.scheduleWait(leadId, WAIT_1_2_DAYS_MS, "draft-email-3");
       case PipelineStage.GEMINI_DRAFTING:
         // The automatic path (handleWaitJob's "draft-email-3" branch) calls
-        // requestGeminiDraft directly and never reaches here. Without this
+        // dispatchGeminiDraft directly and never reaches here. Without this
         // case, a human advancing straight into this stage — a legal manual
         // transition from WAITING_1_2_DAYS — silently did nothing: the board
         // still showed the "Email agent drafting…" pulsing indicator (it
         // renders off the stage alone, not off real agent activity) while no
         // agent had ever been invoked. This is the fix for that bug.
-        return this.requestGeminiDraft(leadId);
+        return this.dispatchGeminiDraft(leadId);
       default:
         return; // other stages are human- or reply-driven, not sequencer-driven
+    }
+  }
+
+  /** Stages a lead walks through before it's ready to be contacted — the
+   *  segment autoAdvanceToOutreach below auto-chains instead of waiting for
+   *  a human to click "advance" at each one. */
+  private static readonly PRE_OUTREACH_CHAIN: PipelineStage[] = [
+    PipelineStage.NEW_LEAD,
+    PipelineStage.VERIFIED,
+    PipelineStage.RESEARCH_COMPLETED,
+    PipelineStage.UNDER_REVIEW,
+  ];
+
+  /**
+   * Walks a lead straight through NEW_LEAD -> VERIFIED -> RESEARCH_COMPLETED
+   * -> UNDER_REVIEW -> READY_FOR_OUTREACH the moment it's ready, instead of
+   * waiting for a human to advance it one stage at a time (Part: autonomous
+   * system). A human can still add or edit a review note at any point —
+   * that no longer gates outreach from starting, it just stops being
+   * required before it can.
+   *
+   * Stops one stage short of READY_FOR_OUTREACH if the lead's email never
+   * verified: auto-discovered leads can't reach this method without a
+   * verified email (verification runs before they're ever persisted), but a
+   * manually-entered lead can, and auto-sending to an address nothing has
+   * confirmed risks the sending domain's reputation on a bounce — the same
+   * bar every other lead already had to clear before outreach, just applied
+   * here instead of at insert time.
+   */
+  async autoAdvanceToOutreach(leadId: string): Promise<void> {
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { verifiedEmail: true },
+    });
+    if (!lead) return;
+
+    let state = await this.prisma.pipelineState.findUnique({ where: { leadId } });
+    while (state && SequencerService.PRE_OUTREACH_CHAIN.includes(state.stage as PipelineStage)) {
+      const next = ALLOWED_TRANSITIONS[state.stage as PipelineStage]?.[0];
+      if (!next) break;
+
+      if (next === PipelineStage.READY_FOR_OUTREACH && !lead.verifiedEmail) {
+        this.logger.log(
+          `Lead ${leadId} held at ${state.stage}: email not verified, not auto-advancing to outreach`,
+        );
+        break;
+      }
+
+      state = await this.prisma.pipelineState.update({
+        where: { leadId },
+        data: { stage: next, previousStage: state.stage, enteredStageAt: new Date() },
+      });
+      await this.prisma.lead.update({ where: { id: leadId }, data: { lastActivityAt: new Date() } });
+      await this.sync.onStageChanged(leadId, next);
+      await this.onStageEntered(leadId, next);
     }
   }
 
@@ -114,7 +169,7 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
         data: { stage: PipelineStage.GEMINI_DRAFTING, previousStage: state.stage, enteredStageAt: new Date(), waitJobId: null },
       });
       await this.sync.onStageChanged(leadId, PipelineStage.GEMINI_DRAFTING);
-      await this.requestGeminiDraft(leadId);
+      await this.dispatchGeminiDraft(leadId);
     }
   }
 
@@ -140,10 +195,16 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
       });
       await this.emailQueue.add("send", { emailMessageId: message.id });
 
-      // LinkedIn task is created in lockstep with Email #1 (Part C7).
+      // LinkedIn task is created in lockstep with Email #1 (Part C7). Copy is
+      // drafted automatically too (Part: autonomous system) — the actual
+      // send stays a human action (ToS/ban risk), but there's no reason to
+      // make someone click a button first just to get a draft ready.
       const existingActivity = await this.prisma.linkedinActivity.findFirst({ where: { leadId } });
       if (!existingActivity) {
         await this.prisma.linkedinActivity.create({ data: { leadId, status: "NOT_STARTED" } });
+      }
+      if (lead.contactName) {
+        await this.agentDispatch.add({ kind: "linkedin_draft", leadId, orgId: lead.orgId });
       }
     }
 
@@ -175,39 +236,25 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     await this.emailQueue.add("send", { emailMessageId: message.id });
   }
 
-  /** Automatic call sites (onStageEntered, the wait-timer job): a dispatch
-   *  failure here must never block or crash the caller, so it's logged and
-   *  swallowed rather than thrown. */
-  async requestGeminiDraft(leadId: string) {
-    try {
-      await this.dispatchGeminiDraft(leadId);
-    } catch (err) {
-      this.logger.warn(`Failed to request Gemini draft for lead ${leadId}: ${(err as Error).message}`);
-      // TODO(Part E7): retry with backoff via a dedicated queue instead of a bare fetch.
-    }
-  }
-
-  /** Manual retry (LeadsService.requestPitchDraft): unlike the automatic path
-   *  above, a failure here must reach the person who clicked the button, so
-   *  this throws instead of swallowing. */
+  /**
+   * Enqueues the Gemini pitch draft (Part: autonomous system) — used by both
+   * the automatic path (onStageEntered, the wait-timer job) and the manual
+   * retry (LeadsService.requestPitchDraft). Retries and failure notification
+   * are the queue's job now (see AgentDispatchWorker), not this method's —
+   * enqueueing itself only fails if Redis itself is unreachable.
+   */
   async dispatchGeminiDraft(leadId: string) {
-    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
     const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { orgId: true } });
+    if (!lead) return;
     // Without this, the drafting agent falls back to a hardcoded "our
     // company" identity — the Settings branding fields would silently only
     // affect Email 1/2 and not the Gemini-drafted Email 3.
-    const orgContext = lead?.orgId
-      ? await this.organization.getBranding(lead.orgId).then((b) => ({
-          name: b.emailOrgName,
-          services: "AI automation and lead-generation systems",
-          tone_of_voice: "direct, warm, no jargon, no em dashes",
-        }))
-      : undefined;
-    await fetch(`${aiWorkersUrl}/personalization/draft`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId, orgId: lead?.orgId, orgContext }),
-    });
+    const orgContext = await this.organization.getBranding(lead.orgId).then((b) => ({
+      name: b.emailOrgName,
+      services: "AI automation and lead-generation systems",
+      tone_of_voice: "direct, warm, no jargon, no em dashes",
+    }));
+    await this.agentDispatch.add({ kind: "pitch_draft", leadId, orgId: lead.orgId, orgContext });
   }
 
   /** Schedules the next automated step after a wait, storing the job id for cancellation. */

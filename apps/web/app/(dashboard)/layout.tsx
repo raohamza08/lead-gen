@@ -2,6 +2,7 @@ import { Nav } from "../../components/nav";
 import { AuthGuard } from "../../components/auth-guard";
 import { SignOutButton } from "../../components/sign-out-button";
 import { ThemeToggle } from "../../components/theme-toggle";
+import { NotificationsBell } from "../../components/notifications-bell";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -24,6 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <NotificationsBell />
               <ThemeToggle />
               <SignOutButton />
             </div>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "../../../../lib/api-client";
+import { useRealtimeEvent } from "../../../../lib/realtime";
 import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
 
 const REVIEW_FIELDS: { key: string; label: string; hint?: string }[] = [
@@ -84,10 +85,7 @@ export default function LeadDetailPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
-  const [generatingLinkedin, setGeneratingLinkedin] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
-  const [enriching, setEnriching] = useState(false);
-  const [draftingPitch, setDraftingPitch] = useState(false);
 
   function load() {
     api
@@ -101,19 +99,19 @@ export default function LeadDetailPage() {
 
   useEffect(load, [params.id]);
 
-  // GEMINI_DRAFTING and the manual-enrichment pipeline can both run for
-  // minutes with no user action in between — without a live refresh, the
-  // Agent activity / Agent review sections below only ever showed what was
-  // true at the moment the page loaded, which read as "stuck" even when the
-  // pipeline was genuinely still working (or, before the onStageEntered fix,
-  // looked identical to a lead where nothing had actually been triggered).
-  const liveStage = lead?.pipelineState?.stage;
-  useEffect(() => {
-    if (liveStage !== PipelineStage.GEMINI_DRAFTING) return;
-    const interval = setInterval(load, 8000);
-    return () => clearInterval(interval);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveStage, params.id]);
+  // Every agent-driven pipeline (Gemini drafting, manual-lead enrichment,
+  // LinkedIn copy) can run for minutes with no user action in between — this
+  // used to need an 8s poll while GEMINI_DRAFTING specifically; now every
+  // relevant event pushes live, for this lead specifically, the moment it
+  // happens, and nothing on this page ever needs a manual refresh.
+  type LeadEvent = { leadId: string };
+  const refetchIfThisLead = (payload: LeadEvent) => {
+    if (payload.leadId === params.id) load();
+  };
+  useRealtimeEvent<LeadEvent>("lead.updated", refetchIfThisLead);
+  useRealtimeEvent<LeadEvent>("lead.stageChanged", refetchIfThisLead);
+  useRealtimeEvent<LeadEvent & { agent: string; status: string }>("agentRun.recorded", refetchIfThisLead);
+  useRealtimeEvent<LeadEvent & { kind: string; status: string }>("agentDispatch.status", refetchIfThisLead);
 
   async function saveReview() {
     setSaving(true);
@@ -154,54 +152,6 @@ export default function LeadDetailPage() {
       setError((err as Error).message);
     } finally {
       setMoving(false);
-    }
-  }
-
-  /** (Re)triggers the Gemini pitch draft — recovers a lead stuck in
-   *  GEMINI_DRAFTING (see SequencerService.onStageEntered) or retries a
-   *  failed run, without needing to move back and forward again. */
-  async function generatePitch() {
-    setDraftingPitch(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await api.generatePitchDraft(params.id);
-      setNotice("Pitch draft requested — this section refreshes automatically while drafting is in progress.");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setDraftingPitch(false);
-    }
-  }
-
-  async function generateLinkedinDraft() {
-    setGeneratingLinkedin(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await api.generateLinkedinDraft(params.id);
-      setNotice("LinkedIn copy is drafting in the background — reload in a few seconds to see it.");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setGeneratingLinkedin(false);
-    }
-  }
-
-  /** Runs the same research/verification/scoring pipeline discovery would
-   *  have — automatic for a manual lead on creation, exposed here to re-run
-   *  it (a lead added before this existed, or a failed run). */
-  async function runEnrichment() {
-    setEnriching(true);
-    setError(null);
-    setNotice(null);
-    try {
-      await api.enrichLead(params.id);
-      setNotice("Agent review is running in the background — reload in a bit to see results.");
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setEnriching(false);
     }
   }
 
@@ -263,16 +213,6 @@ export default function LeadDetailPage() {
             </button>
           )}
           <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-medium">{stageLabel(stage)}</span>
-          {stage === PipelineStage.GEMINI_DRAFTING && (
-            <button
-              onClick={generatePitch}
-              disabled={draftingPitch}
-              title="Use this if the lead has sat here without the Agent activity trail below showing an email/scheduler run."
-              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-            >
-              {draftingPitch ? "Requesting…" : "Generate pitch draft"}
-            </button>
-          )}
           {nextStages.map((next) => (
             <button
               key={next}
@@ -537,19 +477,10 @@ export default function LeadDetailPage() {
           )}
 
           <section className="card p-5">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold tracking-tight">LinkedIn</h2>
-              <button
-                onClick={generateLinkedinDraft}
-                disabled={generatingLinkedin}
-                className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-              >
-                {generatingLinkedin ? "Requesting…" : "Generate LinkedIn copy"}
-              </button>
-            </div>
+            <h2 className="mb-1 text-sm font-semibold tracking-tight">LinkedIn</h2>
             <p className="mb-3 text-xs text-ink/50">
-              Drafts a connection note and two follow-ups for you to copy and send yourself — LinkedIn
-              outreach is never automated here.
+              A connection note and two follow-ups are drafted automatically alongside Email #1 — for
+              you to copy and send yourself. LinkedIn outreach itself is never automated here.
             </p>
             {(() => {
               const activity = Array.isArray(lead.linkedinActivities) ? lead.linkedinActivities[0] : null;
@@ -592,16 +523,7 @@ export default function LeadDetailPage() {
           </section>
 
           <section className="card p-5">
-            <div className="mb-0.5 flex items-center justify-between">
-              <h2 className="text-sm font-semibold tracking-tight">Agent review</h2>
-              <button
-                onClick={runEnrichment}
-                disabled={enriching}
-                className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-              >
-                {enriching ? "Running…" : "Run agent review"}
-              </button>
-            </div>
+            <h2 className="mb-0.5 text-sm font-semibold tracking-tight">Agent review</h2>
             <p className="mb-3 mt-0.5 text-xs text-ink/50">
               The same fields as Human review below, but read and filled in by the AI from its own
               research — a starting point to agree with, correct, or override, not the final word.
@@ -616,8 +538,7 @@ export default function LeadDetailPage() {
               </div>
             ) : (
               <p className="text-xs text-ink/40">
-                Not generated yet — runs automatically for manually-added leads, or click &ldquo;Run
-                agent review&rdquo; above.
+                Not generated yet — runs automatically once research and scoring finish.
               </p>
             )}
           </section>

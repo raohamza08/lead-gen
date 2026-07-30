@@ -9,7 +9,9 @@ export interface AuthTokens {
   expiresIn?: number;
 }
 
-function getAccessToken(): string | null {
+/** Exported for realtime.ts — the socket handshake authenticates with the
+ *  same access token every REST call already uses. */
+export function getAccessToken(): string | null {
   if (typeof window === "undefined") return null;
   return window.localStorage.getItem(ACCESS_KEY);
 }
@@ -209,9 +211,6 @@ export const api = {
   moveBack: (id: string) => request(`/leads/${id}/move-back`, { method: "POST" }),
   resendEmail: (id: string, emailMessageId: string) =>
     request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
-  generateLinkedinDraft: (id: string) => request(`/leads/${id}/linkedin-draft/generate`, { method: "POST" }),
-  generatePitchDraft: (id: string) => request(`/leads/${id}/pitch-draft/generate`, { method: "POST" }),
-  enrichLead: (id: string) => request(`/leads/${id}/enrich`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),
   createManualLead: (body: Record<string, unknown>) =>
@@ -249,6 +248,12 @@ export const api = {
     request("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: string, body: Record<string, unknown>) =>
     request(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  getNotifications: (limit = 50) => request(`/notifications?limit=${limit}`),
+  markNotificationRead: (id: string) => request(`/notifications/${id}/read`, { method: "PATCH" }),
+  markAllNotificationsRead: () => request("/notifications/read-all", { method: "PATCH" }),
+  getAutomationSettings: () => request("/settings/organization/automation"),
+  updateAutomationSettings: (body: Record<string, unknown>) =>
+    request("/settings/organization/automation", { method: "PATCH", body: JSON.stringify(body) }),
   getOrgBranding: () => request("/settings/organization/branding"),
   updateOrgBranding: (body: Record<string, unknown>) =>
     request("/settings/organization/branding", { method: "PATCH", body: JSON.stringify(body) }),

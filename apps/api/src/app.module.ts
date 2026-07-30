@@ -4,6 +4,8 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { PrismaModule } from "./common/prisma/prisma.module";
+import { RealtimeModule } from "./realtime/realtime.module";
+import { AgentDispatchModule } from "./common/queue/agent-dispatch.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
 import { PiiRedactionInterceptor } from "./common/interceptors/pii-redaction.interceptor";
 import { AuditLogInterceptor } from "./common/interceptors/audit-log.interceptor";
@@ -20,6 +22,7 @@ import { HealthModule } from "./health/health.module";
 import { AgentsModule } from "./agents/agents.module";
 import { CampaignsModule } from "./campaigns/campaigns.module";
 import { OrganizationModule } from "./organization/organization.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
   imports: [
@@ -30,6 +33,8 @@ import { OrganizationModule } from "./organization/organization.module";
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env", ".env"] }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    RealtimeModule,
+    AgentDispatchModule,
     AuthModule,
     UsersModule,
     NicheFiltersModule,
@@ -43,6 +48,7 @@ import { OrganizationModule } from "./organization/organization.module";
     AgentsModule,
     CampaignsModule,
     OrganizationModule,
+    NotificationsModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

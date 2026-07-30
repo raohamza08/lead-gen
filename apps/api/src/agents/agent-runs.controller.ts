@@ -4,6 +4,7 @@ import { InternalAuthGuard } from "../common/guards/internal-auth.guard";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
+import { RealtimeGateway } from "../realtime/realtime.gateway";
 
 interface AgentRunPayload {
   agent: string;
@@ -17,7 +18,10 @@ interface AgentRunPayload {
 
 @Controller("agent-runs")
 export class AgentRunsController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly realtime: RealtimeGateway,
+  ) {}
 
   /**
    * Batch ingestion from the Python workers.
@@ -25,6 +29,10 @@ export class AgentRunsController {
    * Batched rather than one request per agent because a single extraction run
    * produces seven records per candidate — at 100 leads/day that is 700 HTTP
    * round trips the workers would spend waiting on instead of finding leads.
+   * "Batched" no longer means "delayed", though: the orchestrator now streams
+   * one record at a time as each agent finishes (Part: autonomous system —
+   * see agents/orchestrator.py's on_step), so most calls here carry exactly
+   * one record, and each is pushed live the instant it lands.
    */
   @Post()
   @UseGuards(InternalAuthGuard)
@@ -55,6 +63,16 @@ export class AgentRunsController {
         notes: (r.notes ?? []).slice(0, 20),
       })),
     });
+
+    for (const r of records) {
+      this.realtime.emitToOrg(orgId, "agentRun.recorded", {
+        leadId: r.leadId,
+        agent: r.agent,
+        status: r.status,
+        notes: r.notes ?? [],
+        durationMs: r.durationMs,
+      });
+    }
 
     return { recorded: result.count };
   }

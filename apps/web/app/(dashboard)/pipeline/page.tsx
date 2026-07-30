@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../lib/api-client";
+import { useRealtimeRefetch } from "../../../lib/realtime";
 import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 
@@ -224,6 +225,15 @@ export default function PipelinePage() {
   }
 
   useEffect(load, []);
+
+  // No page in this app should ever need a manual reload to see current
+  // state (Part: autonomous system) — this board previously fetched once on
+  // mount and never again, so a card another user (or the pipeline itself)
+  // moved stayed frozen in its old column until someone happened to refresh.
+  useRealtimeRefetch(
+    ["lead.created", "lead.stageChanged", "lead.updated", "agentRun.recorded", "agentDispatch.status"],
+    load,
+  );
 
   const byStage = useMemo(() => {
     const grouped = new Map<string, LeadRow[]>();

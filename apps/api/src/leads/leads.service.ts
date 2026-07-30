@@ -6,7 +6,6 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
@@ -19,6 +18,8 @@ import { ApproveEmailAction, ApproveEmailDto } from "./dto/approve-email.dto";
 import { isValidTransition } from "./pipeline-transitions";
 import { SequencerService } from "../sequencer/sequencer.service";
 import { SyncService } from "../sync/sync.service";
+import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
+import { RealtimeGateway } from "../realtime/realtime.gateway";
 
 export interface CreateLeadResult {
   status: "created" | "duplicate";
@@ -33,7 +34,8 @@ export class LeadsService {
     private readonly prisma: PrismaService,
     private readonly sequencer: SequencerService,
     private readonly sync: SyncService,
-    private readonly config: ConfigService,
+    private readonly agentDispatch: AgentDispatchQueue,
+    private readonly realtime: RealtimeGateway,
   ) {}
 
   /**
@@ -162,6 +164,15 @@ export class LeadsService {
       // retried by the sync queue, never block the lead from existing.
       this.sync.onLeadCreated(lead.id).catch((err) =>
         this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
+      );
+
+      // A lead reaching here has already passed verification (and usually
+      // research too — see initialStage above), so there is nothing left for
+      // a human to gate: walk it straight through to READY_FOR_OUTREACH
+      // (Part: autonomous system) rather than leaving it for someone to
+      // click through NEW_LEAD/VERIFIED/RESEARCH_COMPLETED/UNDER_REVIEW.
+      this.sequencer.autoAdvanceToOutreach(lead.id).catch((err) =>
+        this.logger.warn(`Auto-advance failed for lead ${lead.id}: ${(err as Error).message}`),
       );
 
       return { status: "created", leadId: lead.id };
@@ -297,11 +308,13 @@ export class LeadsService {
 
   async updateReviewNote(orgId: string, id: string, reviewerId: string, dto: ReviewNoteDto) {
     await this.assertOwnership(orgId, id);
-    return this.prisma.reviewNote.upsert({
+    const note = await this.prisma.reviewNote.upsert({
       where: { leadId: id },
       create: { leadId: id, reviewerId, ...dto },
       update: { reviewerId, ...dto },
     });
+    this.realtime.emitToOrg(orgId, "lead.updated", { leadId: id });
+    return note;
   }
 
   /**
@@ -360,6 +373,15 @@ export class LeadsService {
       await tx.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
     });
 
+    this.realtime.emitToOrg(orgId, "lead.updated", { leadId: id });
+
+    // A manually-entered lead sits at NEW_LEAD with nothing verified or
+    // scored until this runs — once it has, there's no reason to make a
+    // human click through NEW_LEAD -> VERIFIED -> RESEARCH_COMPLETED ->
+    // UNDER_REVIEW by hand (Part: autonomous system). No-ops harmlessly if
+    // the lead has already moved past that range (e.g. a later re-run).
+    await this.sequencer.autoAdvanceToOutreach(id);
+
     return { updated: true };
   }
 
@@ -383,12 +405,7 @@ export class LeadsService {
   }
 
   private async dispatchEnrichment(orgId: string, leadId: string) {
-    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
-    await fetch(`${aiWorkersUrl}/lead-gen/enrich`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ leadId, orgId }),
-    });
+    await this.agentDispatch.add({ kind: "enrich", leadId, orgId });
   }
 
   /**
@@ -500,14 +517,15 @@ export class LeadsService {
 
   /**
    * Called by the Gemini agent (via the internal-token-guarded endpoint) once
-   * Email #3 is drafted. Defaults to PENDING_APPROVAL — auto-send is opt-in per
-   * org (Part I2/I6: unattended AI-drafted sends are the single highest launch
-   * risk, so the safer state is the default).
+   * Email #3 is drafted. Defaults to auto-send (Part: autonomous system) —
+   * an org can opt back into a human approving each one first via the
+   * Settings toggle (Organization.settings.autoSendEnabled), but the
+   * unattended default is now the norm rather than the exception.
    */
   async receiveEmail3Draft(leadId: string, dto: { subject: string; bodyHtml: string; rationale: unknown }) {
     const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: lead.orgId } });
-    const autoSendEnabled = Boolean((org.settings as Record<string, unknown>)?.autoSendEnabled);
+    const autoSendEnabled = (org.settings as Record<string, unknown>)?.autoSendEnabled !== false;
 
     const message = await this.prisma.emailMessage.create({
       data: {
@@ -554,25 +572,23 @@ export class LeadsService {
     return { accepted: true };
   }
 
-  /** Fire-and-forget hand-off to the LinkedInAgent — mirrors requestGeminiDraft
-   *  in SequencerService, but triggered manually from a lead's detail page
-   *  rather than automatically on stage entry, since LinkedIn outreach stays
-   *  human-driven end to end. */
+  /**
+   * Manual re-draft, ownership-checked — the JWT-guarded escape hatch if an
+   * automatic draft (see dispatchLinkedinDraft) came out wrong or never
+   * arrived. The actual send stays human-driven end to end (ToS/ban risk,
+   * never automatable); only the copy-drafting step is dispatched here.
+   */
   async requestLinkedinDraft(orgId: string, leadId: string) {
     await this.assertOwnership(orgId, leadId);
-    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
-    try {
-      await fetch(`${aiWorkersUrl}/linkedin/draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, orgId }),
-      });
-    } catch (err) {
-      throw new ServiceUnavailableException(
-        `Could not reach the AI workers: ${(err as Error).message}`,
-      );
-    }
+    await this.dispatchLinkedinDraft(orgId, leadId);
     return { accepted: true };
+  }
+
+  /** Hands off to the LinkedInAgent for copy only. Called automatically
+   *  alongside Email #1 (see SequencerService.sendEmail1) so a draft is
+   *  already waiting by the time a person gets to LinkedIn outreach. */
+  async dispatchLinkedinDraft(orgId: string, leadId: string) {
+    await this.agentDispatch.add({ kind: "linkedin_draft", leadId, orgId });
   }
 
   /** Called by the LinkedInAgent (via the internal-token-guarded endpoint)
@@ -580,7 +596,7 @@ export class LeadsService {
    *  LinkedinActivity to one lead (sequencer.ts's sendEmail1 creates it
    *  lazily too), so this finds-or-creates rather than relying on upsert. */
   async receiveLinkedinDraft(leadId: string, messages: unknown) {
-    await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+    const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     const existing = await this.prisma.linkedinActivity.findFirst({ where: { leadId } });
     if (existing) {
       await this.prisma.linkedinActivity.update({
@@ -592,6 +608,7 @@ export class LeadsService {
         data: { leadId, draftMessages: messages as Prisma.InputJsonValue },
       });
     }
+    this.realtime.emitToOrg(lead.orgId, "lead.updated", { leadId });
     return { saved: true };
   }
 

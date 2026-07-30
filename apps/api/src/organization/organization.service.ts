@@ -37,4 +37,29 @@ export class OrganizationService {
     });
     return this.getBranding(orgId);
   }
+
+  /**
+   * autoSendEnabled defaults to true when unset (Part: autonomous system) —
+   * the AI-drafted pitch (Email #3) sends itself unless an org explicitly
+   * opts back into a human approving each one first. See
+   * LeadsService.receiveEmail3Draft for where this is actually read.
+   */
+  async getAutomationSettings(orgId: string): Promise<{ autoSendEnabled: boolean }> {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    const settings = (org.settings as Record<string, unknown>) ?? {};
+    return { autoSendEnabled: settings.autoSendEnabled !== false };
+  }
+
+  async updateAutomationSettings(
+    orgId: string,
+    dto: { autoSendEnabled?: boolean },
+  ): Promise<{ autoSendEnabled: boolean }> {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    const settings = { ...(org.settings as Record<string, unknown>), ...dto };
+    await this.prisma.organization.update({
+      where: { id: orgId },
+      data: { settings: settings as Prisma.InputJsonValue },
+    });
+    return this.getAutomationSettings(orgId);
+  }
 }
