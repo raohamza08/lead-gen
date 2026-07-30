@@ -84,7 +84,10 @@ export class EmailProviderService {
 
     const result = await provider.send(account, {
       fromAddress: account.address,
-      fromName: branding.emailSenderName,
+      // A per-mailbox display name (Settings > Email accounts) wins over the
+      // org-wide sender name — an org with several mailboxes may want each to
+      // show a different name in the recipient's inbox.
+      fromName: account.displayName || branding.emailSenderName,
       toAddress: lead.email,
       subject,
       bodyHtml: renderedBody,

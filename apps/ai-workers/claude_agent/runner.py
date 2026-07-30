@@ -240,6 +240,10 @@ def _map_intelligence_fields(intel: dict, audit: dict, buyer: dict, opps: dict) 
 def _map_candidate_fields(candidate: dict) -> dict:
     return {
         "companyName": candidate["companyName"],
+        # The only automated discovery method today is a public web search —
+        # see LeadSourceLayer's doc comment (packages/types) for why there is
+        # no "dark web" value to set here.
+        "sourceLayer": "SURFACE_WEB",
         "website": candidate.get("website"),
         "linkedinUrl": candidate.get("linkedinUrl"),
         "contactName": candidate.get("contactName"),

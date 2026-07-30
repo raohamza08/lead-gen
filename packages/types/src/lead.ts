@@ -1,4 +1,4 @@
-import { BusinessModel, PipelineStage, UrgencyLevel } from "./enums";
+import { BusinessModel, LeadSourceLayer, PipelineStage, UrgencyLevel } from "./enums";
 
 export interface TechStackEntry {
   name: string;
@@ -12,6 +12,7 @@ export interface Lead {
   runId: string | null;
   assignedUserId: string | null;
   companyName: string;
+  sourceLayer: LeadSourceLayer;
   website: string | null;
   websiteDomain: string | null;
   linkedinUrl: string | null;

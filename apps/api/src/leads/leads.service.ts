@@ -75,6 +75,7 @@ export class LeadsService {
             filterId: dto.filterId,
             campaignId: campaign?.id,
             companyName: dto.companyName,
+            sourceLayer: dto.sourceLayer,
             // Written on insert so the next duplicate check can compare against
             // it. A lead saved without these is invisible to tier-2 dedup.
             companyNameKey: normaliseCompanyName(dto.companyName),
@@ -522,6 +523,7 @@ export class LeadsService {
         data: {
           orgId,
           companyName: dto.companyName,
+          sourceLayer: "MANUAL",
           companyNameKey: normaliseCompanyName(dto.companyName),
           linkedinSlug: normaliseLinkedin(dto.linkedinUrl),
           website: dto.website,

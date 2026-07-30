@@ -1,5 +1,5 @@
-import { IsArray, IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString } from "class-validator";
-import { PipelineStage } from "@leadgen/types";
+import { IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString } from "class-validator";
+import { LeadSourceLayer, PipelineStage } from "@leadgen/types";
 
 /**
  * Payload the Claude lead-gen agent posts once a candidate clears verification
@@ -9,6 +9,11 @@ import { PipelineStage } from "@leadgen/types";
 export class CreateLeadDto {
   @IsString()
   companyName!: string;
+
+  /** Which method found this candidate. Omitted defaults to SURFACE_WEB
+   *  (the only automated discovery method that exists) — see the enum's doc
+   *  comment for why there's no "dark web" value to set here. */
+  @IsOptional() @IsEnum(LeadSourceLayer) sourceLayer?: LeadSourceLayer;
 
   @IsOptional() @IsString() website?: string;
   @IsOptional() @IsString() linkedinUrl?: string;

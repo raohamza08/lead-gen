@@ -55,6 +55,14 @@ enum UrgencyLevel {
   HIGH
 }
 
+/// Where a lead's data actually came from. No "dark web" value on purpose —
+/// see the doc comment on the shared TS enum (@leadgen/types) for why.
+enum LeadSourceLayer {
+  SURFACE_WEB
+  LICENSED_DATABASE
+  MANUAL
+}
+
 enum Priority {
   LOW
   MEDIUM
@@ -338,6 +346,8 @@ model Lead {
   assignedUser         User?    @relation("AssignedUser", fields: [assignedUserId], references: [id])
 
   companyName         String   @map("company_name")
+  /// Which method found this lead. Set once at creation, never changed after.
+  sourceLayer         LeadSourceLayer @default(SURFACE_WEB) @map("source_layer")
   // Normalised forms used ONLY for duplicate detection, written on insert.
   // Comparing normalised values has to happen in the database, so the
   // normalisation must be persisted — computing it in TypeScript and then
@@ -536,6 +546,10 @@ model EmailAccount {
   org          Organization @relation(fields: [orgId], references: [id])
   provider     EmailProvider
   address      String   @unique
+  /// Shown as the From display name in the recipient's inbox (e.g. "EurosHub
+  /// Sales" instead of the bare mailbox address). Falls back to the org-wide
+  /// sender name (Settings > Email branding) when unset.
+  displayName  String?  @map("display_name")
   dailyLimit   Int      @default(30) @map("daily_limit")
   hourlyLimit  Int      @default(5) @map("hourly_limit")
   warmupActive Boolean  @default(true) @map("warmup_active")

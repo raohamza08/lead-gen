@@ -8,6 +8,10 @@ export class UpsertEmailAccountDto {
   @IsEmail()
   address!: string;
 
+  /** Shown as the From display name instead of the bare address. Falls back
+   *  to Settings > Email branding's sender name when unset. */
+  @IsOptional() @IsString() displayName?: string;
+
   @IsOptional() @IsInt() @Min(1) @Max(500)
   dailyLimit?: number;
 

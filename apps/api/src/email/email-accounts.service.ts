@@ -43,6 +43,7 @@ export class EmailAccountsService {
     try {
       const { providerMessageId } = await provider.send(account, {
         fromAddress: account.address,
+        fromName: account.displayName ?? undefined,
         toAddress,
         subject: `Test send from ${account.address}`,
         bodyHtml:

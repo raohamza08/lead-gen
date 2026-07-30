@@ -87,3 +87,21 @@ export enum BusinessModel {
   B2C = "B2C",
   B2B2C = "B2B2C",
 }
+
+/**
+ * Where a lead's contact/company data actually came from. Deliberately only
+ * two automated sources: SURFACE_WEB (the Claude discovery agent's public web
+ * search — everything the pipeline finds today) and LICENSED_DATABASE (a paid
+ * B2B data provider accessed under its API/ToS — Crunchbase/Apollo/ZoomInfo-
+ * style, not yet wired to a specific provider). There is deliberately no
+ * "dark web" value: sourcing sales contacts from Tor/onion sites means either
+ * stolen/breached personal data or illicit-marketplace listings, neither of
+ * which has a lawful basis for outreach under GDPR/CCPA — there is no filter
+ * that makes that sourcing safe, so it was never built rather than built and
+ * gated.
+ */
+export enum LeadSourceLayer {
+  SURFACE_WEB = "SURFACE_WEB",
+  LICENSED_DATABASE = "LICENSED_DATABASE",
+  MANUAL = "MANUAL",
+}

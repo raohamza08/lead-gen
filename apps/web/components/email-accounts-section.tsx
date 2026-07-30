@@ -7,6 +7,7 @@ interface MailboxHealth {
   id: string;
   provider: "GMAIL" | "MICROSOFT_365" | "SMTP";
   address: string;
+  displayName: string | null;
   status: "ACTIVE" | "PAUSED" | "SUSPENDED";
   dailyLimit: number;
   hourlyLimit: number;
@@ -22,6 +23,7 @@ interface MailboxHealth {
 const EMPTY_DRAFT = {
   provider: "SMTP" as "SMTP" | "MICROSOFT_365" | "GMAIL",
   address: "",
+  displayName: "",
   dailyLimit: 30,
   hourlyLimit: 5,
   smtpHost: "",
@@ -75,6 +77,10 @@ export function EmailAccountsSection() {
       const body: Record<string, unknown> = {
         provider: draft.provider,
         address: draft.address,
+        // Sent even when blank (unlike the credential fields below) — this
+        // isn't a secret the API withholds, so an operator clearing it here
+        // really does mean "remove it," not "leave the old one alone."
+        displayName: draft.displayName,
         dailyLimit: draft.dailyLimit,
         hourlyLimit: draft.hourlyLimit,
       };
@@ -111,6 +117,7 @@ export function EmailAccountsSection() {
     setDraft({
       provider: account.provider,
       address: account.address,
+      displayName: account.displayName ?? "",
       dailyLimit: account.dailyLimit,
       hourlyLimit: account.hourlyLimit,
       smtpHost: account.smtpHost ?? "",
@@ -212,6 +219,7 @@ export function EmailAccountsSection() {
           <thead className="text-left text-xs uppercase tracking-wide text-ink/55">
             <tr className="border-b border-[var(--line)]">
               <th className="py-2 pr-3">Address</th>
+              <th className="py-2 pr-3">Shown as</th>
               <th className="py-2 pr-3">Provider</th>
               <th className="py-2 pr-3">Status</th>
               <th className="py-2 pr-3">Sent today</th>
@@ -223,6 +231,9 @@ export function EmailAccountsSection() {
             {accounts.map((a) => (
               <tr key={a.id} className="border-b border-[var(--line)] last:border-0">
                 <td className="py-2 pr-3">{a.address}</td>
+                <td className="py-2 pr-3 text-ink/60">
+                  {a.displayName || <span className="text-ink/35">org default</span>}
+                </td>
                 <td className="py-2 pr-3 text-ink/60">{a.provider}</td>
                 <td className="py-2 pr-3">
                   <span
@@ -285,7 +296,7 @@ export function EmailAccountsSection() {
             ))}
             {accounts.length === 0 && (
               <tr>
-                <td colSpan={6} className="py-6 text-center text-sm text-ink/50">
+                <td colSpan={7} className="py-6 text-center text-sm text-ink/50">
                   No mailboxes configured. Add one, then use &ldquo;Send test&rdquo; before running a campaign
                   — a mailbox that fails to send is the most common reason outreach silently stalls.
                 </td>
@@ -325,6 +336,16 @@ export function EmailAccountsSection() {
               />
             </label>
           </div>
+
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink/60">Display name shown to recipients</span>
+            <input
+              value={draft.displayName}
+              onChange={(e) => set("displayName", e.target.value)}
+              placeholder="e.g. EurosHub Sales — leave blank to use the org default from Email branding"
+              className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+            />
+          </label>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">

@@ -33,6 +33,23 @@ function scoreTone(score?: number | null) {
   return "text-ink/55";
 }
 
+/** No "dark web" option exists — see LeadSourceLayer's doc comment in
+ *  @leadgen/types for why. */
+const SOURCE_LABELS: Record<string, string> = {
+  SURFACE_WEB: "Surface web",
+  LICENSED_DATABASE: "Licensed database",
+  MANUAL: "Manual entry",
+};
+
+function SourceBadge({ source }: { source?: string | null }) {
+  if (!source) return <span className="text-ink/40">—</span>;
+  return (
+    <span className="whitespace-nowrap rounded-full bg-ink/8 px-2 py-0.5 text-[11px] text-ink/60">
+      {SOURCE_LABELS[source] ?? source}
+    </span>
+  );
+}
+
 function StagePill({ stage }: { stage?: string | null }) {
   if (!stage) return <span className="text-ink/40">—</span>;
   const won = stage === PipelineStage.WON || stage === PipelineStage.CLIENT_ONBOARDING;
@@ -60,6 +77,7 @@ export default function LeadsPage() {
   const [industry, setIndustry] = useState("");
   const [country, setCountry] = useState("");
   const [stage, setStage] = useState("");
+  const [source, setSource] = useState("");
 
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(EMPTY_LEAD);
@@ -97,9 +115,10 @@ export default function LeadsPage() {
       if (industry && l.industry !== industry) return false;
       if (country && l.country !== country) return false;
       if (stage && (l.pipelineState?.stage ?? "") !== stage) return false;
+      if (source && l.sourceLayer !== source) return false;
       return true;
     });
-  }, [leads, search, industry, country, stage]);
+  }, [leads, search, industry, country, stage, source]);
 
   const industries = useMemo(
     () => [...new Set(leads.map((l) => l.industry).filter(Boolean))].sort() as string[],
@@ -265,10 +284,23 @@ export default function LeadsPage() {
             ))}
           </select>
         </label>
-        {(search || industry || country || stage) && (
+        <label>
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Source</span>
+          <select
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none"
+          >
+            <option value="">All</option>
+            {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        {(search || industry || country || stage || source) && (
           <button
             type="button"
-            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); }}
+            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); setSource(""); }}
             className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 hover:bg-ink/5"
           >
             Clear
@@ -281,6 +313,7 @@ export default function LeadsPage() {
           <thead className="border-b border-[var(--line)] text-left text-[11px] uppercase tracking-wide text-ink/55">
             <tr>
               <th className="px-4 py-3">Company</th>
+              <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Industry</th>
               <th className="px-4 py-3">Country</th>
               <th className="px-4 py-3">Decision maker</th>
@@ -303,6 +336,7 @@ export default function LeadsPage() {
                     </div>
                   )}
                 </td>
+                <td className="px-4 py-3"><SourceBadge source={lead.sourceLayer} /></td>
                 <td className="px-4 py-3 text-ink/70">{lead.industry ?? "—"}</td>
                 <td className="px-4 py-3 text-ink/70">{lead.country ?? "—"}</td>
                 <td className="px-4 py-3">
@@ -325,7 +359,7 @@ export default function LeadsPage() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-ink/50">
+                <td colSpan={9} className="px-4 py-10 text-center text-ink/50">
                   {leads.length === 0
                     ? "No leads yet — configure a niche filter in Settings, or add one manually above."
                     : "No leads match these filters."}

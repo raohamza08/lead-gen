@@ -27,6 +27,24 @@ interface LeadRow extends Lead {
   emailMessages?: EmailSummary[];
 }
 
+/** Which method actually found this lead. No "dark web" value exists —
+ *  see LeadSourceLayer's doc comment in @leadgen/types for why. */
+const SOURCE_LABELS: Record<string, { label: string; className: string }> = {
+  SURFACE_WEB: { label: "Web", className: "bg-ink/8 text-ink/50" },
+  LICENSED_DATABASE: { label: "Licensed DB", className: "bg-accent/15 text-accent" },
+  MANUAL: { label: "Manual", className: "bg-ink/8 text-ink/50" },
+};
+
+function SourceBadge({ source }: { source?: string }) {
+  const info = source ? SOURCE_LABELS[source] : null;
+  if (!info) return null;
+  return (
+    <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${info.className}`}>
+      {info.label}
+    </span>
+  );
+}
+
 /** Human-readable agent names, matching the registry in apps/ai-workers. */
 const AGENT_LABELS: Record<string, string> = {
   lead_discovery: "Discovery",
@@ -325,7 +343,10 @@ export default function PipelinePage() {
                     } ${busy === lead.id ? "opacity-50" : ""}`}
                   >
                     <Link href={`/leads/${lead.id}`} className="block">
-                      <div className="font-medium leading-snug text-ink">{lead.companyName}</div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="truncate font-medium leading-snug text-ink">{lead.companyName}</div>
+                        <SourceBadge source={lead.sourceLayer} />
+                      </div>
                       <div className="mt-1.5 flex items-center justify-between gap-2">
                         <span className="truncate text-ink/55">{lead.industry ?? "—"}</span>
                         <span className={`tabular font-semibold ${scoreTone(lead.score?.leadScore)}`}>
