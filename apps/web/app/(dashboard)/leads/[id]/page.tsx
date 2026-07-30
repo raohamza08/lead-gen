@@ -87,6 +87,7 @@ export default function LeadDetailPage() {
   const [generatingLinkedin, setGeneratingLinkedin] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
   const [enriching, setEnriching] = useState(false);
+  const [draftingPitch, setDraftingPitch] = useState(false);
 
   function load() {
     api
@@ -99,6 +100,20 @@ export default function LeadDetailPage() {
   }
 
   useEffect(load, [params.id]);
+
+  // GEMINI_DRAFTING and the manual-enrichment pipeline can both run for
+  // minutes with no user action in between — without a live refresh, the
+  // Agent activity / Agent review sections below only ever showed what was
+  // true at the moment the page loaded, which read as "stuck" even when the
+  // pipeline was genuinely still working (or, before the onStageEntered fix,
+  // looked identical to a lead where nothing had actually been triggered).
+  const liveStage = lead?.pipelineState?.stage;
+  useEffect(() => {
+    if (liveStage !== PipelineStage.GEMINI_DRAFTING) return;
+    const interval = setInterval(load, 8000);
+    return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveStage, params.id]);
 
   async function saveReview() {
     setSaving(true);
@@ -139,6 +154,23 @@ export default function LeadDetailPage() {
       setError((err as Error).message);
     } finally {
       setMoving(false);
+    }
+  }
+
+  /** (Re)triggers the Gemini pitch draft — recovers a lead stuck in
+   *  GEMINI_DRAFTING (see SequencerService.onStageEntered) or retries a
+   *  failed run, without needing to move back and forward again. */
+  async function generatePitch() {
+    setDraftingPitch(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.generatePitchDraft(params.id);
+      setNotice("Pitch draft requested — this section refreshes automatically while drafting is in progress.");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setDraftingPitch(false);
     }
   }
 
@@ -231,6 +263,16 @@ export default function LeadDetailPage() {
             </button>
           )}
           <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-medium">{stageLabel(stage)}</span>
+          {stage === PipelineStage.GEMINI_DRAFTING && (
+            <button
+              onClick={generatePitch}
+              disabled={draftingPitch}
+              title="Use this if the lead has sat here without the Agent activity trail below showing an email/scheduler run."
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+            >
+              {draftingPitch ? "Requesting…" : "Generate pitch draft"}
+            </button>
+          )}
           {nextStages.map((next) => (
             <button
               key={next}
@@ -324,10 +366,9 @@ export default function LeadDetailPage() {
             <section className="card p-5">
               <h2 className="mb-1 text-sm font-semibold tracking-tight">Agent activity</h2>
               <p className="mb-3 text-xs text-ink/50">
-                Every agent that has touched this lead, in order. This is a completed trail, not a
-                live view — the acquisition agents all finish before a lead becomes a card; the
-                email agent is the one exception, shown as &quot;Drafting…&quot; on the pipeline
-                board while it runs.
+                Every agent that has touched this lead, in order. Rows appear as each agent
+                finishes, not only once a whole pipeline completes — this page refreshes itself
+                every few seconds while the lead is in Drafting so you can watch it happen.
               </p>
               <div className="flex flex-col gap-1.5">
                 {lead.agentRuns.map((r: any) => (

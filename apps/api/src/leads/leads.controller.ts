@@ -153,6 +153,16 @@ export class LeadsController {
     return this.leadsService.receiveEmail3Draft(id, dto);
   }
 
+  /** (Re)triggers the Gemini pitch draft for a lead in GEMINI_DRAFTING —
+   *  recovers a lead stuck there (see SequencerService.onStageEntered) or
+   *  retries a run that failed. */
+  @Post(":id/pitch-draft/generate")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  generatePitchDraft(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.leadsService.requestPitchDraft(user.orgId, id);
+  }
+
   /** Triggers the LinkedInAgent for this lead — manual, not automatic on
    *  stage entry, since LinkedIn outreach itself stays human-sent. */
   @Post(":id/linkedin-draft/generate")

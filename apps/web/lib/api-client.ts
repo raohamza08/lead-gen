@@ -210,6 +210,7 @@ export const api = {
   resendEmail: (id: string, emailMessageId: string) =>
     request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
   generateLinkedinDraft: (id: string) => request(`/leads/${id}/linkedin-draft/generate`, { method: "POST" }),
+  generatePitchDraft: (id: string) => request(`/leads/${id}/pitch-draft/generate`, { method: "POST" }),
   enrichLead: (id: string) => request(`/leads/${id}/enrich`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),

@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 
@@ -78,12 +78,24 @@ class Orchestrator:
                 )
             available.update(agent.provides)
 
-    async def run(self, ctx: AgentContext) -> PipelineResult:
+    async def run(
+        self,
+        ctx: AgentContext,
+        *,
+        on_step: Callable[[AgentRunRecord], Awaitable[None]] | None = None,
+    ) -> PipelineResult:
+        """`on_step`, if given, is awaited with each agent's record the moment
+        that agent finishes — rather than only once the whole pipeline (which
+        can run for minutes, e.g. Gemini drafting or manual-lead enrichment)
+        completes. Lets a caller stream progress to the dashboard instead of a
+        single record dump that shows nothing until the very end."""
         result = PipelineResult(run_id=ctx.run_id, completed=False)
 
         for agent in self.agents:
             record = await self._run_with_retry(agent, ctx)
             result.records.append(record)
+            if on_step is not None:
+                await on_step(record)
 
             status = AgentStatus(record.status)
 

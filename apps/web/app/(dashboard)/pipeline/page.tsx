@@ -22,7 +22,7 @@ interface EmailSummary {
 
 interface LeadRow extends Lead {
   score: LeadScore | null;
-  pipelineState: { stage: string; previousStage: string | null } | null;
+  pipelineState: { stage: string; previousStage: string | null; enteredStageAt: string } | null;
   agentRuns?: AgentRunSummary[];
   emailMessages?: EmailSummary[];
 }
@@ -80,23 +80,60 @@ function timeAgo(iso: string | null | undefined): string | null {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
-/** What's actually happening on this card right now. Every other stage in the
- *  acquisition pipeline finishes all its agent work before the lead ever
- *  becomes a row here — GEMINI_DRAFTING is the one stage where an agent is
- *  still genuinely running in the background while the card sits on the
- *  board, so it gets a live indicator instead of a static "last agent" line. */
+/** The email_only pipeline (review -> email -> scheduler) behind GEMINI_DRAFTING. */
+const EMAIL_PIPELINE_AGENTS = new Set(["review", "email", "scheduler"]);
+const DRAFTING_STEP_LABELS: Record<string, string> = {
+  review: "Reviewing findings…",
+  email: "Drafting email…",
+  scheduler: "Scheduling follow-up…",
+};
+
+/**
+ * What's actually happening on this card right now. Every other stage in the
+ * acquisition pipeline finishes all its agent work before the lead ever
+ * becomes a row here — GEMINI_DRAFTING is the one stage where an agent can
+ * still genuinely be running in the background while the card sits on the
+ * board.
+ *
+ * This used to show a pulsing "drafting" dot for the entire time a lead sat
+ * in this stage, with no relation to whether anything was actually running —
+ * a lead advanced into GEMINI_DRAFTING without the pipeline ever being
+ * triggered (a bug in SequencerService.onStageEntered, since fixed) looked
+ * identical to one genuinely in progress. Now it checks for a real agentRun
+ * from this pipeline started after the lead entered the stage, and flags it
+ * as not-started (rather than "drafting…" forever) once enough time has
+ * passed that dispatch lag stops being a plausible excuse.
+ */
 function AgentActivity({ lead }: { lead: LeadRow }) {
   const stage = lead.pipelineState?.stage;
+  const last = lead.agentRuns?.[0];
+
   if (stage === "GEMINI_DRAFTING") {
+    const enteredAt = lead.pipelineState?.enteredStageAt ? new Date(lead.pipelineState.enteredStageAt).getTime() : null;
+    const minutesInStage = enteredAt ? Math.floor((Date.now() - enteredAt) / 60000) : 0;
+    const relevant =
+      last && enteredAt && EMAIL_PIPELINE_AGENTS.has(last.agent) && new Date(last.startedAt).getTime() >= enteredAt
+        ? last
+        : null;
+
+    if (!relevant && minutesInStage >= 2) {
+      return (
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gold" title="Open the lead and use &quot;Generate pitch draft&quot; to retry.">
+          <span className="h-1.5 w-1.5 rounded-full bg-gold" />
+          Not started · {minutesInStage}m
+        </div>
+      );
+    }
+
     return (
       <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        Email agent drafting…
+        {relevant ? DRAFTING_STEP_LABELS[relevant.agent] ?? "Drafting…" : "Starting…"}
+        {minutesInStage > 0 && <span className="text-ink/35">· {minutesInStage}m</span>}
       </div>
     );
   }
 
-  const last = lead.agentRuns?.[0];
   if (!last) return null;
   return (
     <div className="mt-1.5 flex items-center gap-1 text-[11px] text-ink/50">
@@ -210,7 +247,11 @@ export default function PipelinePage() {
     // transition and is the authority.
     const previous = leads;
     setLeads((rows) =>
-      rows.map((r) => (r.id === lead.id ? { ...r, pipelineState: { stage, previousStage: from } } : r)),
+      rows.map((r) =>
+        r.id === lead.id
+          ? { ...r, pipelineState: { stage, previousStage: from, enteredStageAt: new Date().toISOString() } }
+          : r,
+      ),
     );
 
     try {

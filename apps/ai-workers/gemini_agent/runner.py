@@ -27,6 +27,30 @@ async def run_personalization(lead_id: str, org_id: str | None = None, org_conte
     lead = lead_detail["lead"] if "lead" in lead_detail else lead_detail
     org_id = org_id or lead.get("orgId")
 
+    async def stream(record) -> None:
+        # Sent the moment each of review/email/scheduler finishes rather than
+        # batched at the end, so a lead sitting in GEMINI_DRAFTING shows real
+        # progress on its agent timeline instead of nothing for however long
+        # the whole pipeline takes. Mirrors record_agent_runs' own swallow-on-
+        # failure rule: losing one progress update must not abort the run.
+        if not org_id:
+            return
+        await api_client.record_agent_runs(
+            org_id,
+            None,
+            [
+                {
+                    "agent": record.agent,
+                    "status": record.status,
+                    "durationMs": record.duration_ms,
+                    "attempts": record.attempts,
+                    "error": record.error,
+                    "notes": record.notes,
+                    "leadId": lead_id,
+                }
+            ],
+        )
+
     orchestrator = build("email_only", seed_keys=("lead", "org_context", "case_study"))
     ctx = AgentContext(
         run_id=lead_id,
@@ -39,7 +63,7 @@ async def run_personalization(lead_id: str, org_id: str | None = None, org_conte
             "case_study": None,
         },
     )
-    result = await orchestrator.run(ctx)
+    result = await orchestrator.run(ctx, on_step=stream)
 
     draft = ctx.get("email_draft")
     if draft:
@@ -49,25 +73,4 @@ async def run_personalization(lead_id: str, org_id: str | None = None, org_conte
         logger.error(
             "Email 3 drafting pipeline produced no draft for lead %s: stopped at %s (%s)",
             lead_id, result.stopped_at, result.stop_reason,
-        )
-
-    # Mirrors claude_agent/runner.py's telemetry flush: failures here must
-    # never raise back into the FastAPI background task, since losing a
-    # dashboard row is trivial and this is already the terminal step.
-    if org_id:
-        await api_client.record_agent_runs(
-            org_id,
-            None,
-            [
-                {
-                    "agent": r.agent,
-                    "status": r.status,
-                    "durationMs": r.duration_ms,
-                    "attempts": r.attempts,
-                    "error": r.error,
-                    "notes": r.notes,
-                    "leadId": lead_id,
-                }
-                for r in result.records
-            ],
         )

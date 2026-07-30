@@ -534,6 +534,26 @@ export class LeadsService {
     return message;
   }
 
+  /**
+   * Manually (re)triggers the Gemini pitch draft for a lead already in
+   * GEMINI_DRAFTING. Exists for two cases: a lead stuck there from before
+   * SequencerService.onStageEntered had a case for this stage (advancing
+   * into it silently did nothing), and a run that genuinely failed —
+   * neither has any other way to recover short of moving back and forward
+   * again, which also re-syncs external state (ClickUp) unnecessarily.
+   */
+  async requestPitchDraft(orgId: string, leadId: string) {
+    await this.assertOwnership(orgId, leadId);
+    try {
+      await this.sequencer.dispatchGeminiDraft(leadId);
+    } catch (err) {
+      throw new ServiceUnavailableException(
+        `Could not reach the AI workers: ${(err as Error).message}`,
+      );
+    }
+    return { accepted: true };
+  }
+
   /** Fire-and-forget hand-off to the LinkedInAgent — mirrors requestGeminiDraft
    *  in SequencerService, but triggered manually from a lead's detail page
    *  rather than automatically on stage entry, since LinkedIn outreach stays

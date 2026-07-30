@@ -370,15 +370,35 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
     lead = await api_client.get_lead_detail(lead_id, org_id)
     candidate = _lead_to_candidate(lead)
 
+    async def stream(record) -> None:
+        # Sent the moment each of the six steps finishes rather than batched
+        # at the end — this pipeline runs several Claude CLI calls back to
+        # back and can take minutes, and without this the lead's agent
+        # timeline showed nothing at all until the whole thing was done.
+        record.lead_id = lead_id
+        await api_client.record_agent_runs(
+            org_id,
+            None,
+            [
+                {
+                    "agent": record.agent,
+                    "status": record.status,
+                    "durationMs": record.duration_ms,
+                    "attempts": record.attempts,
+                    "error": record.error,
+                    "notes": record.notes,
+                    "leadId": record.lead_id,
+                }
+            ],
+        )
+
     orchestrator = build("manual_lead_enrichment", seed_keys=("candidate", "org_context"))
     ctx = AgentContext(
         run_id=f"manual-enrich-{lead_id}",
         org_id=org_id,
         data={"candidate": candidate, "org_context": org_context},
     )
-    pipeline_result = await orchestrator.run(ctx)
-    for record in pipeline_result.records:
-        record.lead_id = lead_id
+    await orchestrator.run(ctx, on_step=stream)
 
     verification = ctx.get("verification") or {}
     scores = ctx.get("scores") or {}
@@ -408,23 +428,6 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
         await api_client.apply_enrichment(lead_id, org_id, patch)
     except Exception:
         logger.exception("failed to apply enrichment results for lead %s", lead_id)
-
-    await api_client.record_agent_runs(
-        org_id,
-        None,
-        [
-            {
-                "agent": r.agent,
-                "status": r.status,
-                "durationMs": r.duration_ms,
-                "attempts": r.attempts,
-                "error": r.error,
-                "notes": r.notes,
-                "leadId": r.lead_id,
-            }
-            for r in pipeline_result.records
-        ],
-    )
 
 
 async def run_manual_enrichment_in_background(

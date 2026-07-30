@@ -72,6 +72,15 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
         // via sendEmail2's own existing-message check.
         await this.sendEmail2(leadId);
         return this.scheduleWait(leadId, WAIT_1_2_DAYS_MS, "draft-email-3");
+      case PipelineStage.GEMINI_DRAFTING:
+        // The automatic path (handleWaitJob's "draft-email-3" branch) calls
+        // requestGeminiDraft directly and never reaches here. Without this
+        // case, a human advancing straight into this stage — a legal manual
+        // transition from WAITING_1_2_DAYS — silently did nothing: the board
+        // still showed the "Email agent drafting…" pulsing indicator (it
+        // renders off the stage alone, not off real agent activity) while no
+        // agent had ever been invoked. This is the fix for that bug.
+        return this.requestGeminiDraft(leadId);
       default:
         return; // other stages are human- or reply-driven, not sequencer-driven
     }
@@ -166,30 +175,39 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     await this.emailQueue.add("send", { emailMessageId: message.id });
   }
 
-  /** Hands off to the Gemini Personalization Agent (Part D2) via the AI workers service. */
-  private async requestGeminiDraft(leadId: string) {
-    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
-    const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { orgId: true } });
+  /** Automatic call sites (onStageEntered, the wait-timer job): a dispatch
+   *  failure here must never block or crash the caller, so it's logged and
+   *  swallowed rather than thrown. */
+  async requestGeminiDraft(leadId: string) {
     try {
-      // Without this, the drafting agent falls back to a hardcoded "our
-      // company" identity — the Settings branding fields would silently only
-      // affect Email 1/2 and not the Gemini-drafted Email 3.
-      const orgContext = lead?.orgId
-        ? await this.organization.getBranding(lead.orgId).then((b) => ({
-            name: b.emailOrgName,
-            services: "AI automation and lead-generation systems",
-            tone_of_voice: "direct, warm, no jargon, no em dashes",
-          }))
-        : undefined;
-      await fetch(`${aiWorkersUrl}/personalization/draft`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leadId, orgId: lead?.orgId, orgContext }),
-      });
+      await this.dispatchGeminiDraft(leadId);
     } catch (err) {
       this.logger.warn(`Failed to request Gemini draft for lead ${leadId}: ${(err as Error).message}`);
       // TODO(Part E7): retry with backoff via a dedicated queue instead of a bare fetch.
     }
+  }
+
+  /** Manual retry (LeadsService.requestPitchDraft): unlike the automatic path
+   *  above, a failure here must reach the person who clicked the button, so
+   *  this throws instead of swallowing. */
+  async dispatchGeminiDraft(leadId: string) {
+    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
+    const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { orgId: true } });
+    // Without this, the drafting agent falls back to a hardcoded "our
+    // company" identity — the Settings branding fields would silently only
+    // affect Email 1/2 and not the Gemini-drafted Email 3.
+    const orgContext = lead?.orgId
+      ? await this.organization.getBranding(lead.orgId).then((b) => ({
+          name: b.emailOrgName,
+          services: "AI automation and lead-generation systems",
+          tone_of_voice: "direct, warm, no jargon, no em dashes",
+        }))
+      : undefined;
+    await fetch(`${aiWorkersUrl}/personalization/draft`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ leadId, orgId: lead?.orgId, orgContext }),
+    });
   }
 
   /** Schedules the next automated step after a wait, storing the job id for cancellation. */
