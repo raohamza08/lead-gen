@@ -21,9 +21,27 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const errorClass = status >= 500 ? "transient" : "permanent";
     const traceId = request.headers["x-trace-id"] ?? randomUUID();
 
-    const message = isHttpException
-      ? exception.getResponse()
-      : "Internal server error";
+    // exception.getResponse() is not a string. Nest's built-in exceptions
+    // (ConflictException("text"), NotFoundException("text"), etc.) wrap a
+    // string argument into { statusCode, message, error }, and class-validator's
+    // BadRequestException puts an array of per-field messages in `message`.
+    // Putting that raw object straight into this filter's own `message` field
+    // double-nested it — the client received `{ message: { message: "..." } }`
+    // and every call site reading `body.message` got an object, which
+    // `new Error(...)` stringifies to the useless "[object Object]". Flatten
+    // it here once so every caller gets a plain string.
+    const rawResponse = isHttpException ? exception.getResponse() : null;
+    let message: string;
+    if (!isHttpException) {
+      message = "Internal server error";
+    } else if (typeof rawResponse === "string") {
+      message = rawResponse;
+    } else if (rawResponse && typeof rawResponse === "object" && "message" in rawResponse) {
+      const inner = (rawResponse as { message: unknown }).message;
+      message = Array.isArray(inner) ? inner.join(", ") : String(inner);
+    } else {
+      message = "Request failed";
+    }
 
     this.logger.error(
       JSON.stringify({
