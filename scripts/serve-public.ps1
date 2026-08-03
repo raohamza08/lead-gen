@@ -73,13 +73,20 @@ Start-Process -FilePath $cloudflared `
   -RedirectStandardError $log
 
 # cloudflared prints the assigned hostname to stderr a few seconds after start.
+# api.trycloudflare.com is cloudflared's own control-plane endpoint, not an
+# assigned tunnel hostname -- when provisioning fails it shows up in this same
+# log's error text (e.g. `Post "https://api.trycloudflare.com/tunnel": context
+# deadline exceeded`), which the old naive regex matched as if it were a real
+# hostname, reporting a tunnel as "up" when provisioning had actually failed.
 $tunnelUrl = $null
 foreach ($i in 1..30) {
   Start-Sleep -Seconds 2
   if (Test-Path $log) {
-    $match = Select-String -Path $log -Pattern "https://[a-z0-9-]+\.trycloudflare\.com" -ErrorAction SilentlyContinue |
+    $found = Select-String -Path $log -Pattern "https://[a-z0-9-]+\.trycloudflare\.com" -AllMatches -ErrorAction SilentlyContinue |
+             ForEach-Object { $_.Matches.Value } |
+             Where-Object { $_ -ne "https://api.trycloudflare.com" } |
              Select-Object -First 1
-    if ($match) { $tunnelUrl = $match.Matches[0].Value; break }
+    if ($found) { $tunnelUrl = $found; break }
   }
 }
 if (-not $tunnelUrl) { throw "Tunnel did not report a hostname within 60s. Check $log" }
@@ -136,8 +143,16 @@ try {
   }
   # Required, not optional: NEXT_PUBLIC_* is compiled in, so without this the
   # live site keeps calling the previous tunnel hostname.
+  #
+  # Do NOT pipe this through `2>&1 | Select-String` -- PowerShell 5.1 wraps a
+  # native command's stderr lines in a terminating NativeCommandError the
+  # moment they're redirected, even on exit code 0. vercel's CLI writes a
+  # harmless plugin-hint line to stderr, which was tripping this every time
+  # and aborting the script (under $ErrorActionPreference = "Stop") right
+  # before the redeploy actually ran. Let it print directly instead.
   Write-Host "Redeploying so the new URL is compiled in..." -ForegroundColor Cyan
-  vercel --prod --yes 2>&1 | Select-String "Aliased|Production" | Select-Object -First 2
+  vercel --prod --yes
+  if ($LASTEXITCODE -ne 0) { throw "vercel --prod failed (exit $LASTEXITCODE)" }
 } finally {
   Pop-Location
 }
