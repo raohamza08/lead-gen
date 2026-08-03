@@ -17,7 +17,7 @@ email has since been changed and isn't published here
 ```
 Vercel (dashboard)  ──HTTPS──>  Cloudflare Tunnel  ──>  workstation
                                                           ├── API        :4000  (NestJS)
-                                                          ├── AI workers :8000  (FastAPI, 13 agents)
+                                                          ├── AI workers :8000  (FastAPI, 14 agents)
                                                           └── Redis      :6379  (BullMQ)
                                                                  │
                                                           Supabase Postgres
@@ -32,7 +32,7 @@ never trigger extraction. See [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md).
 | Document | What it covers |
 |---|---|
 | [`docs/RESUME.md`](./docs/RESUME.md) | **Start here.** Restart commands, current state, known traps |
-| [`docs/AGENT_ARCHITECTURE.md`](./docs/AGENT_ARCHITECTURE.md) | The 13 agents, orchestrator contract, failure classification |
+| [`docs/AGENT_ARCHITECTURE.md`](./docs/AGENT_ARCHITECTURE.md) | The 14 agents, orchestrator contract, failure classification |
 | [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Vercel + tunnel setup, Render fallback |
 | [`lead-gen-system-architecture.md`](./lead-gen-system-architecture.md) | Original full design |
 | [`Instructions Doc.txt`](./Instructions%20Doc.txt), [`new.md.txt`](./new.md.txt) | Product specs this is built against |
@@ -104,9 +104,26 @@ This means the full pipeline — extraction → dedup → verify → score → i
 > doesn't, and what to build next — use [`docs/RESUME.md`](./docs/RESUME.md),
 > which is maintained as the source of truth.
 
+### Added since (2026-07-30/31)
+
+- **Fully autonomous, event-driven pipeline**: a lead now walks itself from
+  verification through `READY_FOR_OUTREACH` (Email #1 sends, LinkedIn draft
+  generates) with no manual advance; the AI-drafted pitch (Email #3) sends
+  itself by default (Settings toggle to require approval again)
+- **Real-time dashboard**: a WebSocket gateway pushes lead/stage/agent-run/
+  email events to every connected browser — no more polling or manual refresh
+- Every AI-worker dispatch call now goes through a retrying BullMQ queue
+  instead of a bare `fetch()`, with a **notifications** system (bell icon)
+  that surfaces only once automatic retry is exhausted
+- **Lead source layer** (`SURFACE_WEB`/`LICENSED_DATABASE`/`MANUAL`) and an
+  **Agent review** section — the `agent_review` agent (14th agent) fills in
+  the same fields Human review asks a person for, from its own research;
+  manually-added leads now get the full research/scoring pipeline too
+- Per-mailbox display name for outreach emails
+
 ### Added since (2026-07-28/29)
 
-- **13 specialised agents behind a workflow orchestrator** with contract
+- **14 specialised agents behind a workflow orchestrator** with contract
   validation and classified failure — `docs/AGENT_ARCHITECTURE.md`
 - **20-stage pipeline** matching the full sales flow, with the state machine
   shared between API and dashboard

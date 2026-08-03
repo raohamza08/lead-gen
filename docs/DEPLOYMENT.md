@@ -11,15 +11,24 @@ The frontend is on Vercel; the API, the Python workers and Redis all run on the
 workstation, published over HTTPS by a Cloudflare quick tunnel.
 
 ```
-Vercel (frontend, HTTPS)
+Vercel (frontend, HTTPS + WebSocket client)
    |  public HTTPS URL
 Cloudflare Tunnel  --->  workstation
-                           |-- API          :4000
+                           |-- API          :4000   <- also serves the WebSocket
+                           |                           gateway (socket.io) over
+                           |                           the same tunnel/origin
                            |-- ai-workers   :8000   <- the `claude` CLI lives here
                            +-- Redis        :6379   (Docker)
                                  |
                            Supabase (already cloud)
 ```
+
+The WebSocket gateway (`apps/api/src/realtime/`, added 2026-07-30) needs no
+separate publishing step — it rides the same tunnel and CORS allowlist as the
+REST API (`apps/api/src/common/cors.ts`, shared between `main.ts`'s
+`enableCors` and the gateway's `@WebSocketGateway({ cors: ... })`). If REST
+calls work through the tunnel, sockets do too; there is nothing extra to
+configure here.
 
 **Why this beats a managed API host here.** A cloud API cannot reach the
 workstation, so `AI_WORKERS_URL` is dead from the cloud: the "Run now" button
@@ -54,6 +63,18 @@ or whenever the tunnel drops.**
    both. For a hostname that survives restarts, use a *named* tunnel (free
    Cloudflare account plus a domain), which can also run as a Windows service
    and start on boot.
+
+   **This is not theoretical** — in one session (2026-07-30/31) the quick
+   tunnel failed twice: once because Cloudflare's edge stopped recognising the
+   session outright (`"Unauthorized: Tunnel not found"` in
+   `cloudflared.err.log`), once because a fresh hostname just didn't resolve
+   on this workstation's local DNS for several minutes (confirmed healthy the
+   whole time via an external resolver). Both required the full
+   restart-tunnel → update `.env` → update Vercel env (production **and**
+   preview) → redeploy → restart API sequence above, by hand, twice in one
+   day. See `docs/RESUME.md`'s Traps section for exactly how each was
+   diagnosed. If this keeps recurring, migrating to a named tunnel stops being
+   optional.
 
 2. **CORS.** `APP_BASE_URL` in `.env` must contain the Vercel origin. It takes a
    comma-separated list, so localhost can stay alongside it:
