@@ -19,6 +19,7 @@ export interface Lead {
   contactName: string | null;
   jobTitle: string | null;
   email: string | null;
+  personalEmail: string | null;
   phone: string | null;
   industry: string | null;
   subNiche: string | null;

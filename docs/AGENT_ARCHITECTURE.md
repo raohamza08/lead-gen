@@ -86,7 +86,7 @@ table below used to track several as "not yet an agent"; that gap is closed.
 | `lead_scoring` | Six-dimension rubric + priority score | always runs, always last |
 | `agent_review` | AI's own review note — same fields Human review asks a person to fill in | added 2026-07-30, feeds `manual_lead_enrichment` |
 | `review` | Merges the human's review note with AI findings for outreach copy | not the same agent as `agent_review` above — this one blends, that one authors from scratch |
-| `email` | Generates per-stage personalised emails (Gemini) | |
+| `email` | Drafts one email of the 5-email sequence (Claude CLI, not Gemini — see `docs/RESUME.md`'s 2026-08-12 entry) | step-aware via `sequence_step` in context |
 | `linkedin` | Drafts connection/follow-up copy only | sending itself is permanently out of scope (ToS/ban risk) — this has not changed and should not |
 | `scheduler` | Wait periods, follow-up timing | BullMQ sequencer in the API |
 | `analytics` | Campaign performance and optimisation suggestions | |
@@ -119,7 +119,7 @@ confident-sounding opportunities with nothing underneath.
                           -> buyer_intelligence -> ai_opportunity -> lead_scoring -> agent_review
 "rescore":                lead_scoring          # cheap re-score after a review-note edit
 "outreach":                review -> email -> linkedin -> scheduler
-"email_only":              review -> email -> scheduler         # drives the Gemini Email #3 draft
+"email_only":              review -> email -> scheduler         # drives every step of the 5-email sequence
 "linkedin_draft":          review -> linkedin
 "optimisation":            analytics -> learning                # cross-lead, not per-candidate
 ```

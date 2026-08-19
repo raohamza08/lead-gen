@@ -83,15 +83,26 @@ class Orchestrator:
         ctx: AgentContext,
         *,
         on_step: Callable[[AgentRunRecord], Awaitable[None]] | None = None,
+        on_start: Callable[[Agent], Awaitable[None]] | None = None,
     ) -> PipelineResult:
         """`on_step`, if given, is awaited with each agent's record the moment
         that agent finishes — rather than only once the whole pipeline (which
         can run for minutes, e.g. Gemini drafting or manual-lead enrichment)
         completes. Lets a caller stream progress to the dashboard instead of a
-        single record dump that shows nothing until the very end."""
+        single record dump that shows nothing until the very end.
+
+        `on_start`, if given, is awaited with the agent itself right before it
+        runs — the dashboard's only way to show "X is working on this lead
+        right now" instead of agents only appearing once they're already
+        done. Separate from `on_step` rather than folding a RUNNING status
+        into AgentRunRecord: a record represents a finished attempt (it has a
+        duration, a status, an attempt count), and a run in progress has none
+        of those yet."""
         result = PipelineResult(run_id=ctx.run_id, completed=False)
 
         for agent in self.agents:
+            if on_start is not None:
+                await on_start(agent)
             record = await self._run_with_retry(agent, ctx)
             result.records.append(record)
             if on_step is not None:

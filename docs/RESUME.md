@@ -1,27 +1,73 @@
 # Resume here
 
-State as of **2026-07-31**, commit `3428706`. Read this first.
+State as of **2026-08-10**. Read this first.
 
 ---
 
 ## Restart the stack
 
-Nothing survives a reboot. In four terminals (or via `Start-Process`):
+**As of 2026-08-11, this is mostly automatic.** API, web, and ai-workers each
+run under a restart-forever supervisor script
+(`C:\Users\ADMIN\BusinessAgentServices\service-*.ps1` — outside the repo,
+machine-local) instead of a bare `npm run dev:*` in a console window. If any
+of the three crashes or gets killed, the loop relaunches it within ~5
+seconds, no one needs to notice. A `.bat` in the current user's Startup
+folder (`shell:startup`) launches all three supervisors automatically at
+every logon, so a reboot recovers on its own too — **this needed no admin
+rights**, since `Register-ScheduledTask`/`schtasks` were both denied in this
+environment (see Traps); the Startup folder is fully user-writable and was
+the fallback.
+
+**Caveat proven by testing (2026-08-11):** killing only the leaf
+`dist/main` node process does NOT reliably trigger the supervisor — `nest
+start --watch` manages its compiled child internally and the outer `npm run
+dev:api` can be left running with no live server underneath, silently. If
+the API is unreachable but a supervisor-owned `npm`/`nest` process is still
+in the list, **kill the whole chain** (both the `npm run dev:api` node
+process and the `nest.js start --watch` one), not just the leaf — only then
+does the supervisor's own loop see the exit and restart cleanly. A genuine
+crash (unhandled exception, OOM, killed window) takes the whole tree down
+together and doesn't hit this caveat.
+
+Redis is not supervised this way — Docker Desktop containers already
+survive independently once started:
 
 ```powershell
-docker start leadgen-redis                                   # Redis
-npm run dev:api                                              # :4000
-npm run dev:web                                              # :3000
+docker start leadgen-redis                                   # Redis, if not already up
+```
+
+**For the user (no scripting needed):** two Desktop shortcuts —
+`Start Business Agent.bat` and `Stop Business Agent.bat` — do this by hand.
+Start is idempotent (safe to double-click even if things are already
+running; it just reports "already running" for each) and prints a plain
+pass/fail per service before waiting for a keypress to close. Stop kills the
+supervisors and whatever they're running, but leaves Redis (Docker) up.
+Both just call `C:\Users\ADMIN\BusinessAgentServices\StartAll.ps1` /
+`StopAll.ps1`.
+
+If the supervisors themselves are ever not running (e.g. after removing them,
+or on a machine where the Startup `.bat` hasn't fired yet), fall back to the
+plain manual start:
+
+```powershell
+npm run dev:api                                              # :4001
+npm run dev:web                                              # :3001
 cd apps/ai-workers; .venv\Scripts\python.exe -m uvicorn main:app --port 8000
 ```
 
-Then publish the API and repoint the deployed dashboard:
+Ports moved from the documented 4000/3000 to 4001/3001 because this
+workstation also runs an unrelated Docker-based app (`chatbot-server-1`,
+`chatbot-web-1`) permanently bound to 4000/3000. If that app is ever removed,
+the ports can move back — just update `API_PORT`/`WEB_PORT` in `.env`,
+`apps/web/package.json`'s `dev` script, and `apps/web/.env.local`'s
+`NEXT_PUBLIC_API_BASE_URL` together, or the three will disagree.
 
-```powershell
-.\scripts\serve-public.ps1
-```
+Public access is **Tailscale Funnel**, not the old Cloudflare quick tunnel —
+see "Public access" below. Unlike Cloudflare's, its hostname is stable, so
+after a plain restart (nothing reset the Funnel config) there is normally
+**nothing else to do** — skip straight to the health check.
 
-Check it worked: `curl http://localhost:4000/api/v1/health` should report
+Check it worked: `curl http://localhost:4001/api/v1/health` should report
 `database: up, redis: up`.
 
 **Login:** the seeded admin's email was changed directly in the database at
@@ -39,28 +85,116 @@ rather than sharing this seeded one further.
 **Dashboard:** https://lead-gen-dashboard-umber.vercel.app
 **Repo:** https://github.com/raohamza08/lead-gen
 
-> The Cloudflare quick tunnel gets a **new hostname every restart**, and
-> `NEXT_PUBLIC_API_BASE_URL` is compiled into the bundle at build time, so the
-> site must be redeployed after every tunnel restart. `serve-public.ps1` does
-> both. It forces `--protocol http2`; without that the tunnel dies within
-> minutes on this network while the process stays alive, so a dead tunnel looks
-> identical to a working one. **If the script's own health check fails, don't
-> assume the tunnel is broken** — this workstation's local DNS resolver can lag
-> behind a brand-new hostname for several minutes; see Traps below for the two
-> distinct failure modes hit in the same session and how to tell them apart.
+## Public access
+
+**As of 2026-08-10: Tailscale Funnel, not the Cloudflare quick tunnel.**
+Tailscale was already installed and used for another app on this machine
+(that app's Funnel occupies the default hostname/port 443, proxying to its
+own port 4000 — do not touch that config). This app's API is funneled on a
+**second port on the same node**, which coexists with it:
+
+```powershell
+tailscale funnel --bg --https=8443 4001
+```
+
+Public URL: `https://rao-hamza-badar.taild82cd0.ts.net:8443` → proxies to
+`127.0.0.1:4001` (this app's API). Check current state any time with
+`tailscale funnel status` — it lists every port funneled on this node.
+
+**Why this is better than the old Cloudflare setup:** the hostname is tied to
+the Tailscale *node*, not the tunnel process, so it does **not** change on
+restart. `API_PUBLIC_URL` (`.env`) and Vercel's `NEXT_PUBLIC_API_BASE_URL`
+(production + preview) were pointed at it once and should not need touching
+again for a routine API restart — only the API itself needs restarting to
+pick up `.env` changes (it's read once at boot). Contrast with the old
+`serve-public.ps1` flow (still in the repo, unused by default), which had to
+redo both of those on *every single restart* because Cloudflare's quick
+tunnel minted a brand-new hostname each time.
+
+**If this ever needs re-establishing** (Funnel was reset, or moved to a
+different local port):
+1. `tailscale funnel --bg --https=8443 4001` (adjust the port if 4001 changed)
+2. Update `API_PUBLIC_URL` in `.env` to the funnel URL, restart the API
+3. `vercel env add NEXT_PUBLIC_API_BASE_URL production --force` and same for
+   `preview` (value: `<funnel-url>/api/v1`), piping from a temp file — a
+   direct pipe into `vercel env add` hangs on Windows, see Traps in
+   [[deployment-setup]]
+4. `vercel --prod --yes` to redeploy (required: `NEXT_PUBLIC_*` is compiled
+   into the bundle at build time, not read at runtime)
+
+`APP_BASE_URL`'s CORS allowlist already contains the Vercel origin and does
+not change with any of this.
 
 ---
 
-## Current state (2026-07-31)
+## 5-email sequence, real drafting engine (2026-08-12)
+
+**Replaces the old 3-email flow (Email 1/2 static templates + a Gemini-drafted
+Email 3 that was, in practice, permanently broken).** The user reported real
+sent emails containing literal `[DEMO DRAFT]` text — root cause:
+`GOOGLE_GENAI_API_KEY` was never configured in this deployment, so every
+single Email 3 draft silently fell through to a hardcoded fallback template.
+Fixed by moving off Gemini entirely.
+
+**All 5 emails are now AI-drafted, on the Claude CLI** — the same engine
+already used for lead discovery/research/scoring, needing no separate API
+key:
+1. **Problem Trigger** — one felt industry pain point. The company is never
+   named except in the signature.
+2. **Industry Insight** — a real AI/automation shift in their industry, still
+   no pitch.
+3. **Proof** — first email allowed to name the company as the "who" behind a
+   result. No `CaseStudy` rows are seeded (table exists, empty) — the prompt
+   is instructed to write this as an observational pattern rather than
+   invent one, and never to guess a number.
+4. **Soft Offer** — first ask, must be low-friction (audit/framework/
+   question/call), not a services pitch.
+5. **Breakup** — short, no guilt, closes the sequence.
+
+3 business days between each (real business-day counting, weekends skipped
+in the count itself — see `sequencer.service.ts`'s `businessDaysDelayMs`).
+
+**Safety layer, because "never fabricate" can't just be a prompt
+instruction:** `gemini_agent/lint.py` mechanically checks every draft
+(150-word cap, 6-word subject cap, banned jargon list, no exclamation/emoji,
+no urgency language, no company name before step 3) and retries once if it
+fails. Separately, `EmailMessage.status` is forced to `PENDING_APPROVAL` —
+overriding the org's `autoSendEnabled` setting — whenever a draft contains an
+unresolved `[BRACKET PLACEHOLDER]`. Verified with real Claude CLI calls
+against throwaway test leads (cleaned up after), not just unit tests.
+
+**Recalibrated same day:** the model's own `flags` field originally also
+forced `PENDING_APPROVAL` on its own, on the theory that any self-reported
+uncertainty should get a human look. In practice this over-fired — a real
+Email 2 got flagged and blocked for a plain, unattributed industry
+observation ("teams putting something automated in front of that inbox
+first...") that never claimed anything false. `flags` still rides along in
+the AgentRun notes for visibility, but only the concrete bracket-placeholder
+check gates auto-send now — see `gemini_agent/drafting.py`'s
+`draft_and_validate`.
+
+Pipeline stages renamed/added to match:
+`EMAIL_1_SENT → WAITING_EMAIL_2 → EMAIL_2_SENT → WAITING_EMAIL_3 →
+EMAIL_3_SENT → WAITING_EMAIL_4 → EMAIL_4_SENT → WAITING_EMAIL_5 →
+EMAIL_5_SENT → LINKEDIN_OUTREACH`. Migrated by hand
+(`prisma/migrations/20260812120000_five_email_sequence`) since `prisma
+migrate dev` refuses to run non-interactively for a change that removes enum
+values — verified against production first that no live `PipelineState` row
+used any of the four removed values before writing the migration.
+
+---
+
+## Current state (2026-07-31, campaign facts stale — see lead count above)
 
 **Everything needed to run a campaign is configured and working:**
 
 - One active mailbox: `sales@euroshub.com` (SMTP), verified with a real test send.
 - One campaign ("Healthcare AI Campaign") linked to the "Healthcare" niche filter.
-- 2 leads currently live: one at `PERSONALIZED_PITCH` (EurosHub, walked
-  through with real emails sent), one at `UNDER_REVIEW` — that second one
-  predates the auto-advance work below and won't move on its own; a manual
-  advance or a fresh enrichment run would move it now.
+- As of 2026-08-12 there is exactly **one** lead in the pipeline, at
+  `CLIENT_ONBOARDING` (won). The "2 leads" and `PERSONALIZED_PITCH` reference
+  below is what this file said on 2026-07-31 and is no longer current —
+  `PERSONALIZED_PITCH` doesn't exist as a stage anymore either (see the
+  5-email sequence section above).
 
 **The pipeline is now autonomous end to end (2026-07-30/31 session) — this
 is the biggest behavioural change since launch:**
@@ -73,11 +207,12 @@ is the biggest behavioural change since launch:**
   "drag through review to Ready" step described in earlier versions of this
   doc — that step no longer exists as a gate (a human can still edit the
   review note, it just doesn't block anything anymore).
-- The AI-drafted personalized pitch (Email #3) **now sends itself by
-  default** — `/settings` has an "Automation" toggle to require approval
-  again per org.
+- Every AI-drafted email in the 5-email sequence (see above) **sends itself
+  by default** — `/settings` has an "Automation" toggle to require approval
+  again per org. A draft the worker's own safety checks flagged
+  (`needsReview`) always requires approval regardless of that setting.
 - LinkedIn **sending** is still human-only (ToS/ban risk, unchanged); only
-  copy-drafting is automatic now, generated alongside Email #1.
+  copy-drafting is automatic now, generated alongside Email 1.
 - The four AI-worker dispatch calls that used to be bare `fetch()` with no
   retry (manual enrichment, pitch drafting, LinkedIn drafting, extraction
   runs) now go through a BullMQ queue with retries; a notification (bell,
@@ -125,12 +260,27 @@ also be permanently deleted (pipeline card "Delete" button, ADMIN only, full
 history goes with it — no detach-and-keep) and exported as CSV (`/leads` →
 Export CSV, always the full org, not the page's filtered view).
 
-**Real-time (2026-07-30/31):** a WebSocket gateway (`apps/api/src/realtime/`)
-pushes `lead.created` / `lead.stageChanged` / `lead.updated` /
-`agentRun.recorded` / `email.sent` / `email.failed` / `notification.created`
-to every connected dashboard, scoped per org. `apps/web/lib/realtime.ts`'s
-`useRealtimeEvent`/`useRealtimeRefetch` hooks are how a page subscribes — the
-pipeline board and lead detail page both use it instead of polling.
+**Real-time (2026-07-30/31, extended 2026-08-12):** a WebSocket gateway
+(`apps/api/src/realtime/`) pushes `lead.created` / `lead.stageChanged` /
+`lead.updated` / `agentRun.started` / `agentRun.recorded` /
+`extractionRun.progress` / `email.sent` / `email.failed` /
+`notification.created` to every connected dashboard, scoped per org.
+`apps/web/lib/realtime.ts`'s `useRealtimeEvent`/`useRealtimeRefetch` hooks
+are how a page subscribes — the pipeline board and lead detail page both use
+it instead of polling. `/leads` now does too (`lead.created`, added
+2026-08-12 — it previously loaded once on mount and never refetched).
+
+**"Run now" live progress (2026-08-12):** hitting Run now on a niche filter
+(`/settings`) used to give zero feedback — the button just sat there for
+however long the run took, with nothing to tell you it was even working.
+`apps/ai-workers/claude_agent/runner.py`'s `run_extraction` now PATCHes
+`/extraction-runs/:id` once per candidate attempt (not just once at the very
+end), which the controller turns into a live `extractionRun.progress`
+event; `/settings` shows a per-filter "Running — N/target verified · N
+rejected" line that updates continuously, and the button disables itself
+while a run is in flight. Combined with `/leads` now subscribing to
+`lead.created`, newly-found leads also appear on that page without a manual
+refresh while a run is going.
 
 **Notifications** (`apps/api/src/notifications/`, bell icon top-right of the
 dashboard): fires only when automatic retry is exhausted — a queued
@@ -253,6 +403,26 @@ does not feed it stdin; `serve-public.ps1` redirects from a file instead.
 
 **Windows process management:** use `Stop-Process -Id <pid> -Confirm:$false`,
 never `taskkill //F`, which has killed unrelated dev servers here.
+
+**Tailscale Funnel can go dark after this workstation's network/IP changes**
+(confirmed 2026-08-10: `tailscaled`'s own log showed `gateway and self IP
+changed`, e.g. from a Wi-Fi reconnect or sleep/wake) — `tailscale funnel
+status` still reports both funnels "on" and `tailscale status` shows
+`BackendState: Running` with no reported health issues, but the public HTTPS
+listener stops accepting connections (TLS handshake fails, or `curl` gets no
+response at all) until it reconnects on its own, which was not observed to
+happen quickly. Affected **both** funnels on this node at once (this app's
+and the unrelated other app's), confirming it's a node-level Tailscale issue,
+not anything specific to this app's config. `Restart-Service Tailscale`
+needs admin rights this session doesn't have and fails silently. **What
+worked: `tailscale down` followed by `tailscale up`** (no admin needed) —
+funnel config is preserved across this and both endpoints came back within
+seconds. If the public API is unreachable but `curl http://localhost:4001/api/v1/health`
+is fine locally, try this before anything else.
+
+**Historical — applies only if reverting to `serve-public.ps1`/Cloudflare,
+not the current Tailscale Funnel setup (see "Public access" above).** Kept
+because the script and this failure mode still exist in the repo.
 
 **A Cloudflare quick tunnel's hostname can fail to resolve on this
 workstation's local DNS resolver right after starting**, even though the

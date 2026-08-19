@@ -56,6 +56,7 @@ export function EmailAccountsSection() {
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [reconciling, setReconciling] = useState(false);
 
   function refresh() {
     api
@@ -165,6 +166,28 @@ export function EmailAccountsSection() {
     }
   }
 
+  /** Finds emails stuck showing "queued" whose send actually already died
+   *  (e.g. after a mailbox's credentials went bad) and flips them to Failed
+   *  so they show up accurately and Resend becomes available — the
+   *  self-service replacement for asking someone to patch the database. */
+  async function reconcileStuck() {
+    setReconciling(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = (await api.reconcileStuckEmails()) as { checked: number; fixed: number };
+      setNotice(
+        result.fixed > 0
+          ? `Found ${result.fixed} email(s) stuck as "queued" that had actually failed — marked them Failed so they can be resent from the lead's page.`
+          : "No stuck emails found — everything queued is either sent or genuinely still in flight.",
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setReconciling(false);
+    }
+  }
+
   async function deleteAccount(account: MailboxHealth) {
     if (
       !window.confirm(
@@ -188,19 +211,30 @@ export function EmailAccountsSection() {
     <section className="rounded-xl border border-[var(--line)] p-5">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold tracking-tight">Email accounts</h2>
-        <button
-          type="button"
-          onClick={() => {
-            if (showForm) {
-              setDraft(EMPTY_DRAFT);
-              setEditingId(null);
-            }
-            setShowForm((v) => !v);
-          }}
-          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
-        >
-          {showForm ? "Cancel" : "Add mailbox"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={reconciling}
+            onClick={reconcileStuck}
+            title="Checks for emails still shown as “queued” whose send already failed for good (e.g. bad mailbox credentials), and marks them Failed so they can be resent."
+            className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+          >
+            {reconciling ? "Checking…" : "Check for stuck emails"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (showForm) {
+                setDraft(EMPTY_DRAFT);
+                setEditingId(null);
+              }
+              setShowForm((v) => !v);
+            }}
+            className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+          >
+            {showForm ? "Cancel" : "Add mailbox"}
+          </button>
+        </div>
       </div>
 
       {error && (

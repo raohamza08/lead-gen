@@ -3,12 +3,47 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api, downloadLeadsCsv } from "../../../lib/api-client";
+import { useRealtimeRefetch } from "../../../lib/realtime";
 import { PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 
 interface LeadRow extends Lead {
   score: LeadScore | null;
   pipelineState: { stage: string } | null;
+}
+
+/** Mirrors apps/api/src/leads/lead-import-mapping.ts's IMPORTABLE_FIELDS —
+ *  kept in sync by hand, same as that file's own note about
+ *  CreateManualLeadDto: it's a small, stable list. */
+const IMPORTABLE_FIELDS: { key: string; label: string }[] = [
+  { key: "companyName", label: "Company name" },
+  { key: "website", label: "Website" },
+  { key: "linkedinUrl", label: "Company LinkedIn" },
+  { key: "contactName", label: "Contact name" },
+  { key: "jobTitle", label: "Job title" },
+  { key: "contactLinkedinUrl", label: "Contact LinkedIn" },
+  { key: "email", label: "Email" },
+  { key: "personalEmail", label: "Personal email" },
+  { key: "phone", label: "Phone" },
+  { key: "industry", label: "Industry" },
+  { key: "country", label: "Country" },
+  { key: "city", label: "City" },
+  { key: "employeeCount", label: "Employee count" },
+  { key: "businessDescription", label: "Business description" },
+  { key: "notes", label: "Notes" },
+];
+
+interface ImportPreview {
+  headers: string[];
+  suggestedMapping: Record<string, string | null>;
+  previewRows: Record<string, string>[];
+  totalRows: number;
+}
+
+interface ImportResult {
+  created: number;
+  duplicates: number;
+  failed: { row: number; reason: string }[];
 }
 
 const EMPTY_LEAD = {
@@ -18,6 +53,7 @@ const EMPTY_LEAD = {
   contactName: "",
   jobTitle: "",
   email: "",
+  personalEmail: "",
   phone: "",
   industry: "",
   country: "",
@@ -84,6 +120,52 @@ export default function LeadsPage() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
 
+  // CSV import: file -> preview+mapping screen -> confirm -> result summary.
+  const [importCsv, setImportCsv] = useState<string | null>(null);
+  const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
+  const [importMapping, setImportMapping] = useState<Record<string, string | null>>({});
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  async function handleImportFileSelected(file: File) {
+    setError(null);
+    setImportResult(null);
+    try {
+      const text = await file.text();
+      const preview = (await api.previewLeadImport(text)) as ImportPreview;
+      setImportCsv(text);
+      setImportPreview(preview);
+      setImportMapping(preview.suggestedMapping);
+      setShowForm(false);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  function cancelImport() {
+    setImportCsv(null);
+    setImportPreview(null);
+    setImportMapping({});
+    setImportResult(null);
+  }
+
+  async function confirmImport() {
+    if (!importCsv) return;
+    setImporting(true);
+    setError(null);
+    try {
+      const result = (await api.importLeads(importCsv, importMapping)) as ImportResult;
+      setImportResult(result);
+      setImportPreview(null);
+      setImportCsv(null);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function exportCsv() {
     setExporting(true);
     setError(null);
@@ -105,13 +187,17 @@ export default function LeadsPage() {
 
   useEffect(load, []);
 
+  // New leads land here live during a "Run now" extraction (or auto-discovery)
+  // instead of only appearing after a manual refresh (Part: autonomous system).
+  useRealtimeRefetch(["lead.created"], load);
+
   // Filtered in the browser because the whole page is already loaded; going
   // back to the server for each keystroke would be slower and no more correct
   // at this size. Swap to server-side filtering past a few thousand leads.
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return leads.filter((l) => {
-      if (q && ![l.companyName, l.contactName, l.email, l.website].some((v) => v?.toLowerCase().includes(q))) return false;
+      if (q && ![l.companyName, l.contactName, l.email, l.personalEmail, l.website].some((v) => v?.toLowerCase().includes(q))) return false;
       if (industry && l.industry !== industry) return false;
       if (country && l.country !== country) return false;
       if (stage && (l.pipelineState?.stage ?? "") !== stage) return false;
@@ -170,9 +256,25 @@ export default function LeadsPage() {
           >
             {exporting ? "Exporting…" : "Export CSV"}
           </button>
+          <label className="cursor-pointer rounded-lg border border-[var(--line)] px-3.5 py-2 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5">
+            Import CSV
+            <input
+              type="file"
+              accept=".csv,text/csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = ""; // lets picking the same file twice still fire onChange
+                if (file) handleImportFileSelected(file);
+              }}
+            />
+          </label>
           <button
             type="button"
-            onClick={() => setShowForm((v) => !v)}
+            onClick={() => {
+              setShowForm((v) => !v);
+              cancelImport();
+            }}
             className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
           >
             {showForm ? "Cancel" : "+ Add lead"}
@@ -188,6 +290,112 @@ export default function LeadsPage() {
       {notice && (
         <div className="rounded-lg border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-3 py-2 text-sm text-good">
           {notice}
+        </div>
+      )}
+
+      {importResult && (
+        <div className="card p-5">
+          <h2 className="mb-1 text-sm font-semibold tracking-tight">Import finished</h2>
+          <p className="mt-2 text-sm text-ink/80">
+            <span className="font-semibold text-good">{importResult.created} created</span>
+            {importResult.duplicates > 0 && (
+              <span className="text-ink/55"> · {importResult.duplicates} already existed, skipped</span>
+            )}
+            {importResult.failed.length > 0 && (
+              <span className="text-bad"> · {importResult.failed.length} rows failed</span>
+            )}
+          </p>
+          <p className="mt-1 text-xs text-ink/50">
+            New leads start unverified and unscored, then run AI enrichment automatically,
+            one lead at a time — each one lands in the table below as it is processed.
+          </p>
+          {importResult.failed.length > 0 && (
+            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border border-[var(--line)] p-2 text-xs">
+              {importResult.failed.map((f) => (
+                <div key={f.row} className="border-t border-[var(--line)] py-1 first:border-t-0">
+                  Row {f.row}: {f.reason}
+                </div>
+              ))}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={() => setImportResult(null)}
+            className="mt-3 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {importPreview && (
+        <div className="card p-5">
+          <h2 className="mb-1 text-sm font-semibold tracking-tight">Map your columns</h2>
+          <p className="mb-4 text-xs text-ink/50">
+            {importPreview.totalRows} row{importPreview.totalRows === 1 ? "" : "s"} found. Columns are
+            matched automatically where possible — check them below and adjust anything mapped
+            incorrectly or left unmapped before importing. Company name must be mapped for a row to import.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-ink/55">
+                <tr className="border-b border-[var(--line)]">
+                  <th className="py-2 pr-3">CSV column</th>
+                  <th className="py-2 pr-3">Maps to</th>
+                  <th className="py-2 pr-3">Preview</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importPreview.headers.map((header) => (
+                  <tr key={header} className="border-b border-[var(--line)] last:border-0">
+                    <td className="py-2 pr-3 font-medium text-ink/80">{header}</td>
+                    <td className="py-2 pr-3">
+                      <select
+                        value={importMapping[header] ?? ""}
+                        onChange={(e) =>
+                          setImportMapping((m) => ({ ...m, [header]: e.target.value || null }))
+                        }
+                        className="rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-sm outline-none focus:border-[rgb(var(--accent-rgb)/0.6)]"
+                      >
+                        <option value="">Do not import</option>
+                        {IMPORTABLE_FIELDS.map((f) => (
+                          <option key={f.key} value={f.key}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="max-w-[220px] truncate py-2 pr-3 text-ink/50" title={importPreview.previewRows[0]?.[header]}>
+                      {importPreview.previewRows.slice(0, 2).map((r) => r[header]).filter(Boolean).join(" · ") || "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={confirmImport}
+              disabled={importing || !Object.values(importMapping).includes("companyName")}
+              className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+              title={
+                Object.values(importMapping).includes("companyName")
+                  ? undefined
+                  : "Map a column to Company name to enable import"
+              }
+            >
+              {importing ? "Importing…" : `Import ${importPreview.totalRows} lead${importPreview.totalRows === 1 ? "" : "s"}`}
+            </button>
+            <button
+              type="button"
+              onClick={cancelImport}
+              disabled={importing}
+              className="rounded-lg border border-[var(--line)] px-3.5 py-2 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -207,6 +415,7 @@ export default function LeadsPage() {
               ["contactName", "Contact name", "Jordan Blake"],
               ["jobTitle", "Job title", "Operations Director"],
               ["email", "Email", "jordan@acme.com"],
+              ["personalEmail", "Personal email", "jordan.blake@gmail.com"],
               ["phone", "Phone", "+1 555 0100"],
               ["industry", "Industry", "Healthcare"],
               ["country", "Country", "United States"],
@@ -218,7 +427,7 @@ export default function LeadsPage() {
                   value={draft[key]}
                   onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.value }))}
                   required={label.endsWith("*")}
-                  type={key === "email" ? "email" : "text"}
+                  type={key === "email" || key === "personalEmail" ? "email" : "text"}
                   placeholder={placeholder}
                   className="w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none transition-colors focus:border-[rgb(var(--accent-rgb)/0.6)]"
                 />
@@ -347,7 +556,12 @@ export default function LeadsPage() {
                     </>
                   ) : <span className="text-ink/40">—</span>}
                 </td>
-                <td className="px-4 py-3 text-ink/60">{lead.email ?? <span className="text-ink/40">—</span>}</td>
+                <td className="px-4 py-3 text-ink/60">
+                  {lead.email ?? <span className="text-ink/40">—</span>}
+                  {lead.personalEmail && (
+                    <div className="text-[11px] text-ink/40" title="Personal email">{lead.personalEmail}</div>
+                  )}
+                </td>
                 <td className={`tabular px-4 py-3 text-right font-semibold ${scoreTone(lead.score?.leadScore)}`}>
                   {lead.score?.leadScore ?? "—"}
                 </td>

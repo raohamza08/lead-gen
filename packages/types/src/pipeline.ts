@@ -24,12 +24,15 @@ export const ALLOWED_TRANSITIONS: Record<PipelineStage, PipelineStage[]> = {
   [PipelineStage.RESEARCH_COMPLETED]: [PipelineStage.UNDER_REVIEW],
   [PipelineStage.UNDER_REVIEW]: [PipelineStage.READY_FOR_OUTREACH],
   [PipelineStage.READY_FOR_OUTREACH]: [PipelineStage.EMAIL_1_SENT],
-  [PipelineStage.EMAIL_1_SENT]: [PipelineStage.WAITING_2_DAYS],
-  [PipelineStage.WAITING_2_DAYS]: [PipelineStage.EMAIL_2_SENT],
-  [PipelineStage.EMAIL_2_SENT]: [PipelineStage.WAITING_1_2_DAYS],
-  [PipelineStage.WAITING_1_2_DAYS]: [PipelineStage.GEMINI_DRAFTING],
-  [PipelineStage.GEMINI_DRAFTING]: [PipelineStage.PERSONALIZED_PITCH],
-  [PipelineStage.PERSONALIZED_PITCH]: [PipelineStage.LINKEDIN_OUTREACH],
+  [PipelineStage.EMAIL_1_SENT]: [PipelineStage.WAITING_EMAIL_2],
+  [PipelineStage.WAITING_EMAIL_2]: [PipelineStage.EMAIL_2_SENT],
+  [PipelineStage.EMAIL_2_SENT]: [PipelineStage.WAITING_EMAIL_3],
+  [PipelineStage.WAITING_EMAIL_3]: [PipelineStage.EMAIL_3_SENT],
+  [PipelineStage.EMAIL_3_SENT]: [PipelineStage.WAITING_EMAIL_4],
+  [PipelineStage.WAITING_EMAIL_4]: [PipelineStage.EMAIL_4_SENT],
+  [PipelineStage.EMAIL_4_SENT]: [PipelineStage.WAITING_EMAIL_5],
+  [PipelineStage.WAITING_EMAIL_5]: [PipelineStage.EMAIL_5_SENT],
+  [PipelineStage.EMAIL_5_SENT]: [PipelineStage.LINKEDIN_OUTREACH],
   [PipelineStage.LINKEDIN_OUTREACH]: [PipelineStage.LINKEDIN_FOLLOW_UP, PipelineStage.REPLIED],
   [PipelineStage.LINKEDIN_FOLLOW_UP]: [PipelineStage.REPLIED],
   [PipelineStage.REPLIED]: [PipelineStage.MEETING_BOOKED],
@@ -54,4 +57,45 @@ export function isValidTransition(from: PipelineStage, to: PipelineStage): boole
     return !NOT_ABANDONABLE.includes(from);
   }
   return ALLOWED_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/**
+ * The pipeline's rungs in forward order, LOST excluded — it's an abandon
+ * state reachable from almost anywhere (see isValidTransition above), not a
+ * position on this ladder. Enum declaration order already is this order
+ * (Object.values on a string enum preserves declaration order), so this is
+ * just that with LOST filtered out rather than a second source of truth to
+ * keep in sync.
+ *
+ * Backs rewind (below): moving a lead "back" means picking any rung earlier
+ * than its current one, not only the single step immediately before it —
+ * useful when a card was advanced several stages too far, or an automated
+ * action needs undoing from further along than one step back reaches.
+ */
+export const PIPELINE_STAGE_ORDER: PipelineStage[] = Object.values(PipelineStage).filter(
+  (stage) => stage !== PipelineStage.LOST,
+);
+
+/**
+ * Whether `to` is a legal rewind target from `from` — a correction, not a
+ * pipeline transition, so it deliberately ignores ALLOWED_TRANSITIONS
+ * entirely (that graph encodes what the automation does next, not what a
+ * human undoing a mistake should be allowed to pick).
+ *
+ * LOST is handled specially in both directions:
+ *   - as a destination, never valid here — marking a lead Lost is a distinct
+ *     action (isValidTransition) with its own meaning, not a "step back".
+ *   - as the current stage, treated as unconstrained rather than looked up
+ *     in PIPELINE_STAGE_ORDER (it isn't in there) — a lead can be marked
+ *     Lost from anywhere, so reviving one has no single "earlier" rung to
+ *     measure against; every real stage is a valid revival target.
+ */
+export function isValidRewind(from: PipelineStage, to: PipelineStage): boolean {
+  if (to === PipelineStage.LOST) return false;
+  if (from === PipelineStage.LOST) return PIPELINE_STAGE_ORDER.includes(to);
+
+  const fromIndex = PIPELINE_STAGE_ORDER.indexOf(from);
+  const toIndex = PIPELINE_STAGE_ORDER.indexOf(to);
+  if (fromIndex === -1 || toIndex === -1) return false;
+  return toIndex < fromIndex;
 }

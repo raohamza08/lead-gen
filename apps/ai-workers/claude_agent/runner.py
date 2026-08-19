@@ -13,11 +13,32 @@ from agents import AgentContext, build, build_for_filter
 
 logger = logging.getLogger("claude_agent.runner")
 
+# One entry per in-flight extraction run, keyed by run_id. The loop in
+# run_extraction only checks this between candidates — there's no cheap way to
+# interrupt a candidate already mid-CLI-call (subprocess.run is synchronous,
+# dispatched to a worker thread), so "stop" means "finish the current
+# candidate, start no more," not an instant kill.
+_cancel_events: dict[str, asyncio.Event] = {}
+
+
+def request_cancel(run_id: str) -> bool:
+    """Called from the /lead-gen/runs/{id}/cancel endpoint. Returns False if
+    the run isn't tracked here — already finished, or this worker process
+    restarted since it started (in-memory only, doesn't survive a restart)."""
+    event = _cancel_events.get(run_id)
+    if event is None:
+        return False
+    event.set()
+    return True
+
 
 async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | None = None) -> None:
     org_id = niche_filter["orgId"]
     daily_target = niche_filter.get("dailyTarget", 100)
     org_context = org_context or {}
+
+    cancel_event = asyncio.Event()
+    _cancel_events[run_id] = cancel_event
 
     verified = 0
     duplicates = 0
@@ -38,6 +59,26 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
         "LOW": daily_target - round(daily_target * 0.4) * 2,
     }
 
+    async def report_progress() -> None:
+        # Fired once per candidate attempt while the loop is RUNNING, so the
+        # dashboard's "Run now" button can show real progress instead of going
+        # quiet for however long the run takes. Swallowed on failure —
+        # unlike the final call below, a blip here must never abort an
+        # otherwise-healthy run over a missed progress ping.
+        try:
+            await api_client.update_extraction_run(
+                run_id,
+                {
+                    "leadsFound": attempts,
+                    "leadsVerified": verified,
+                    "duplicatesSkipped": duplicates,
+                    "status": "RUNNING",
+                    "priorityMix": priority_counts,
+                },
+            )
+        except Exception as err:  # noqa: BLE001
+            logger.warning("run %s: progress ping not recorded: %s", run_id, err)
+
     # Built once per run, not per candidate: construction validates that every
     # agent's requirements are satisfied by something earlier in the chain, and
     # paying that check 40 times would be waste.
@@ -54,6 +95,7 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
         verified < daily_target
         and attempts < settings.max_search_attempts
         and (time.monotonic() - started_at) < settings.max_runtime_seconds
+        and not cancel_event.is_set()
     ):
         attempts += 1
 
@@ -91,6 +133,7 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
             # means try the next one.
             if stopped == "lead_verification":
                 rejected += 1
+                await report_progress()
                 continue
 
             # Anything else genuinely broke; record it rather than reporting a
@@ -148,6 +191,8 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
             priority_counts[band] += 1
             verified += 1
 
+        await report_progress()
+
     # Flushed once at the end rather than per candidate: the records are only
     # read by dashboards, so batching them costs nothing and saves one HTTP
     # round trip per agent per candidate.
@@ -170,6 +215,8 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
 
     if search_failed:
         status = "FAILED"
+    elif cancel_event.is_set():
+        status = "CANCELLED"
     elif verified >= daily_target:
         status = "COMPLETED"
     else:
@@ -249,6 +296,7 @@ def _map_candidate_fields(candidate: dict) -> dict:
         "contactName": candidate.get("contactName"),
         "jobTitle": candidate.get("jobTitle"),
         "email": candidate.get("email"),
+        "personalEmail": candidate.get("personalEmail"),
         "phone": candidate.get("phone"),
         "industry": candidate.get("industry"),
         "subNiche": candidate.get("subIndustry"),
@@ -321,6 +369,11 @@ async def run_in_background(run_id: str, niche_filter: dict, org_context: dict |
     except Exception:
         logger.exception("run %s failed", run_id)
         await api_client.update_extraction_run(run_id, {"status": "FAILED", "finishedAt": _now_iso()})
+    finally:
+        # Registered at the top of run_extraction; cleared here (its one
+        # exit point, success or failure) rather than at the bottom of that
+        # function, so an exception raised mid-run can't leak the entry.
+        _cancel_events.pop(run_id, None)
 
 
 def _lead_to_candidate(lead: dict) -> dict:
@@ -335,6 +388,7 @@ def _lead_to_candidate(lead: dict) -> dict:
         "contactName": lead.get("contactName"),
         "jobTitle": lead.get("jobTitle"),
         "email": lead.get("email"),
+        "personalEmail": lead.get("personalEmail"),
         "phone": lead.get("phone"),
         "industry": lead.get("industry"),
         "subIndustry": lead.get("subNiche"),
@@ -370,6 +424,11 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
     lead = await api_client.get_lead_detail(lead_id, org_id)
     candidate = _lead_to_candidate(lead)
 
+    async def announce_start(agent) -> None:
+        # Fired right before each agent runs, so the lead's page shows "X is
+        # working on this now" instead of agents only appearing once done.
+        await api_client.record_agent_started(org_id, lead_id, agent.name, agent.responsibility)
+
     async def stream(record) -> None:
         # Sent the moment each of the six steps finishes rather than batched
         # at the end — this pipeline runs several Claude CLI calls back to
@@ -398,7 +457,7 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
         org_id=org_id,
         data={"candidate": candidate, "org_context": org_context},
     )
-    await orchestrator.run(ctx, on_step=stream)
+    await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
 
     verification = ctx.get("verification") or {}
     scores = ctx.get("scores") or {}

@@ -8,7 +8,7 @@ import type { AgentDispatchJob } from "./agent-dispatch.queue";
 
 const DISPATCH_PATH: Record<AgentDispatchJob["kind"], string> = {
   enrich: "/lead-gen/enrich",
-  pitch_draft: "/personalization/draft",
+  email_draft: "/personalization/draft",
   linkedin_draft: "/linkedin/draft",
   extraction_run: "/lead-gen/runs",
 };
@@ -17,8 +17,14 @@ function dispatchBody(data: AgentDispatchJob): Record<string, unknown> {
   switch (data.kind) {
     case "enrich":
       return { leadId: data.leadId, orgId: data.orgId };
-    case "pitch_draft":
-      return { leadId: data.leadId, orgId: data.orgId, orgContext: data.orgContext };
+    case "email_draft":
+      return {
+        leadId: data.leadId,
+        orgId: data.orgId,
+        step: data.step,
+        orgContext: data.orgContext,
+        caseStudy: data.caseStudy,
+      };
     case "linkedin_draft":
       return { leadId: data.leadId, orgId: data.orgId };
     case "extraction_run":

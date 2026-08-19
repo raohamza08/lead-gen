@@ -40,6 +40,12 @@ export class NicheFiltersController {
     return this.service.runNow(user.orgId, id);
   }
 
+  @Post(":id/runs/:runId/cancel")
+  @Roles(Role.ADMIN, Role.MANAGER)
+  cancelRun(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Param("runId") runId: string) {
+    return this.service.cancelRun(user.orgId, id, runId);
+  }
+
   /** What a delete would affect, so the UI can warn with real numbers first. */
   @Get(":id/deletion-impact")
   @Roles(Role.ADMIN, Role.MANAGER)

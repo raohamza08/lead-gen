@@ -82,7 +82,14 @@ export class AnalyticsService {
     const tasksWaiting = await this.prisma.pipelineState.count({
       where: {
         lead: { orgId },
-        stage: { in: [PipelineStage.WAITING_2_DAYS, PipelineStage.WAITING_1_2_DAYS] },
+        stage: {
+          in: [
+            PipelineStage.WAITING_EMAIL_2,
+            PipelineStage.WAITING_EMAIL_3,
+            PipelineStage.WAITING_EMAIL_4,
+            PipelineStage.WAITING_EMAIL_5,
+          ],
+        },
       },
     });
 

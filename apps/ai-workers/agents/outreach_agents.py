@@ -15,21 +15,26 @@ from datetime import datetime, timedelta, timezone
 
 from claude_agent import cli_client
 from gemini_agent.context_builder import build_context, fetch_website_excerpt
-from gemini_agent.critique import critique_draft
-from gemini_agent.drafting import draft_email
+from gemini_agent.drafting import append_signature, draft_and_validate
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 
 logger = logging.getLogger("agents.outreach")
 
-#: Sequence waits, in days, per the pipeline: Email 1 -> 2 days -> Email 2 ->
-#: 1-2 days -> Gemini pitch. 2 is used for the second wait so follow-ups land on
-#: a predictable cadence rather than drifting.
+#: Sequence waits, in business days, per the 5-email sequence (Part:
+#: 5-email sequence, 2026-08-12) — 3-4 business days between every step.
+#: The actual wait is computed by SequencerService (apps/api), which is the
+#: real scheduling authority; this dict is what SchedulerAgent reports for
+#: the dashboard's timeline display, kept in sync with it by convention.
 STAGE_WAIT_DAYS: dict[str, int] = {
-    "EMAIL_1_SENT": 2,
-    "EMAIL_2_SENT": 2,
-    "WAITING_2_DAYS": 0,
-    "WAITING_1_2_DAYS": 0,
+    "EMAIL_1_SENT": 3,
+    "EMAIL_2_SENT": 3,
+    "EMAIL_3_SENT": 3,
+    "EMAIL_4_SENT": 3,
+    "WAITING_EMAIL_2": 0,
+    "WAITING_EMAIL_3": 0,
+    "WAITING_EMAIL_4": 0,
+    "WAITING_EMAIL_5": 0,
 }
 
 
@@ -90,17 +95,18 @@ class ReviewAgent(Agent):
 
 
 class EmailAgent(Agent):
-    """Drafts the personalised email for the lead's current sequence step."""
+    """Drafts one email of the 5-email sequence for the lead's current step."""
 
     name = "email"
-    responsibility = "Generates the personalised email for the current sequence step."
-    requires = ("lead", "review_merged")
+    responsibility = "Generates one email of the 5-email sequence (Problem Trigger through Breakup)."
+    requires = ("lead", "review_merged", "sequence_step")
     provides = ("email_draft",)
 
     async def execute(self, ctx: AgentContext) -> AgentResult:
         lead = ctx.get("lead")
         merged = ctx.get("review_merged") or {}
         org_context = ctx.get("org_context") or {}
+        step = ctx.get("sequence_step")
 
         excerpt = await fetch_website_excerpt(lead.get("website"))
         context = build_context(lead, excerpt, ctx.get("case_study"))
@@ -124,25 +130,17 @@ class EmailAgent(Agent):
             if merged.get(merged_key):
                 reviewer_notes[prompt_key] = merged[merged_key]
 
-        notes: list[str] = []
-        draft = await draft_email(context, org_context)
-        if not draft or not draft.get("body_html"):
-            return AgentResult(status=AgentStatus.FAILED, error="drafting produced no body")
+        draft, notes, needs_review = await draft_and_validate(context, org_context, step)
+        if not draft:
+            return AgentResult(status=AgentStatus.FAILED, error="drafting produced no output", notes=notes)
 
-        # Mandatory groundedness pass (Part D2/D4): retry once on failure rather
-        # than submitting a draft that hallucinated a fact, silently correcting
-        # what a human reviewer would otherwise have to catch.
-        critique = await critique_draft(context, draft)
-        if not critique.get("pass"):
-            notes.append(f"failed self-critique ({critique.get('issues')}) — retried once")
-            draft = await draft_email(context, org_context)
-            critique = await critique_draft(context, draft)
-            if not critique.get("pass"):
-                notes.append("still fails self-critique after retry — needs human review before sending")
-
-        demo = "[DEMO DRAFT]" in json.dumps(draft)
-        if demo:
-            notes.append("template fallback — Gemini unavailable")
+        draft["body_html"] = append_signature(draft["body_html"])
+        draft["needsReview"] = needs_review
+        if needs_review:
+            # Surfaced on the /sequences approval card, not just in agent-run
+            # telemetry — the person approving it needs to see *why* without
+            # having to go dig through a separate history view.
+            draft.setdefault("rationale", {})["reviewNotes"] = notes
 
         return AgentResult(
             status=AgentStatus.DEGRADED if notes else AgentStatus.OK,

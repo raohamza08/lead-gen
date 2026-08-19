@@ -209,12 +209,18 @@ export const api = {
   advanceStage: (id: string, stage: string) =>
     request(`/leads/${id}/advance-stage`, { method: "POST", body: JSON.stringify({ stage }) }),
   moveBack: (id: string) => request(`/leads/${id}/move-back`, { method: "POST" }),
+  rewindLead: (id: string, stage: string) =>
+    request(`/leads/${id}/rewind`, { method: "POST", body: JSON.stringify({ stage }) }),
   resendEmail: (id: string, emailMessageId: string) =>
     request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),
   createManualLead: (body: Record<string, unknown>) =>
     request("/leads/manual", { method: "POST", body: JSON.stringify(body) }),
+  previewLeadImport: (csv: string) =>
+    request("/leads/import/preview", { method: "POST", body: JSON.stringify({ csv }) }),
+  importLeads: (csv: string, mapping: Record<string, string | null>) =>
+    request("/leads/import", { method: "POST", body: JSON.stringify({ csv, mapping }) }),
   deleteLead: (id: string) => request(`/leads/${id}`, { method: "DELETE" }),
   getNicheFilters: () => request("/niche-filters"),
   getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
@@ -224,6 +230,8 @@ export const api = {
   updateNicheFilter: (id: string, body: Record<string, unknown>) =>
     request(`/niche-filters/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   runNicheFilterNow: (id: string) => request(`/niche-filters/${id}/run-now`, { method: "POST" }),
+  cancelNicheFilterRun: (filterId: string, runId: string) =>
+    request(`/niche-filters/${filterId}/runs/${runId}/cancel`, { method: "POST" }),
   getPendingApprovals: () => request("/sequences/pending-approvals"),
   getUpcomingSends: () => request("/sequences/upcoming"),
   getEmailAccounts: () => request("/settings/email-accounts"),
@@ -233,6 +241,7 @@ export const api = {
   updateEmailAccount: (id: string, body: Record<string, unknown>) =>
     request(`/settings/email-accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   testEmailAccount: (id: string) => request(`/settings/email-accounts/${id}/test`, { method: "POST" }),
+  reconcileStuckEmails: () => request("/settings/email-accounts/reconcile-stuck", { method: "POST" }),
   deleteEmailAccount: (id: string) => request(`/settings/email-accounts/${id}`, { method: "DELETE" }),
   getEmailFunnel: () => request("/analytics/email-funnel"),
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { api } from "../../../../lib/api-client";
 import { useRealtimeEvent } from "../../../../lib/realtime";
-import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
+import { AGENT_LABELS } from "../../../../lib/agent-labels";
+import { ALLOWED_TRANSITIONS, PIPELINE_STAGE_ORDER, PipelineStage, isValidRewind } from "@leadgen/types";
 
 const REVIEW_FIELDS: { key: string; label: string; hint?: string }[] = [
   { key: "businessProblems", label: "Business problems" },
@@ -23,22 +24,6 @@ const REVIEW_FIELDS: { key: string; label: string; hint?: string }[] = [
 
 const stageLabel = (s: string) =>
   s.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
-
-const AGENT_LABELS: Record<string, string> = {
-  lead_discovery: "Lead discovery",
-  lead_verification: "Lead verification",
-  company_intelligence: "Company intelligence",
-  website_audit: "Website audit",
-  buyer_intelligence: "Buyer intelligence",
-  ai_opportunity: "AI opportunity",
-  lead_scoring: "Lead scoring",
-  email: "Email agent",
-  review: "Review",
-  linkedin: "LinkedIn",
-  scheduler: "Scheduler",
-  analytics: "Analytics",
-  learning: "Learning",
-};
 
 function agentStatusTone(status: string) {
   if (status === "OK") return "text-good";
@@ -86,6 +71,9 @@ export default function LeadDetailPage() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [runningAgent, setRunningAgent] = useState<{ agent: string; responsibility?: string } | null>(null);
+  const runningAgentRef = useRef<string | null>(null);
+  const staleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   function load() {
     api
@@ -99,19 +87,57 @@ export default function LeadDetailPage() {
 
   useEffect(load, [params.id]);
 
-  // Every agent-driven pipeline (Gemini drafting, manual-lead enrichment,
+  // Every agent-driven pipeline (email drafting, manual-lead enrichment,
   // LinkedIn copy) can run for minutes with no user action in between — this
-  // used to need an 8s poll while GEMINI_DRAFTING specifically; now every
-  // relevant event pushes live, for this lead specifically, the moment it
-  // happens, and nothing on this page ever needs a manual refresh.
+  // used to need an 8s poll while a draft was in flight; now every relevant
+  // event pushes live, for this lead specifically, the moment it happens,
+  // and nothing on this page ever needs a manual refresh.
   type LeadEvent = { leadId: string };
   const refetchIfThisLead = (payload: LeadEvent) => {
     if (payload.leadId === params.id) load();
   };
   useRealtimeEvent<LeadEvent>("lead.updated", refetchIfThisLead);
   useRealtimeEvent<LeadEvent>("lead.stageChanged", refetchIfThisLead);
-  useRealtimeEvent<LeadEvent & { agent: string; status: string }>("agentRun.recorded", refetchIfThisLead);
-  useRealtimeEvent<LeadEvent & { kind: string; status: string }>("agentDispatch.status", refetchIfThisLead);
+
+  // Live "an agent is working on this lead right now" indicator. `started`
+  // fires the instant the orchestrator picks the agent up; cleared once
+  // either that same agent's `recorded` (finished) event arrives, or a
+  // dispatch failure means it never will. A 5-minute stale-clear guards
+  // against the rare case neither arrives (worker crash mid-run) — every
+  // real agent step finishes well inside that.
+  const clearStaleTimer = () => {
+    if (staleTimer.current) clearTimeout(staleTimer.current);
+    staleTimer.current = null;
+  };
+  useRealtimeEvent<LeadEvent & { agent: string; responsibility?: string }>("agentRun.started", (payload) => {
+    if (payload.leadId !== params.id) return;
+    runningAgentRef.current = payload.agent;
+    setRunningAgent({ agent: payload.agent, responsibility: payload.responsibility });
+    clearStaleTimer();
+    staleTimer.current = setTimeout(() => {
+      runningAgentRef.current = null;
+      setRunningAgent(null);
+    }, 5 * 60 * 1000);
+  });
+  useRealtimeEvent<LeadEvent & { agent: string; status: string }>("agentRun.recorded", (payload) => {
+    if (payload.leadId !== params.id) return;
+    load();
+    if (runningAgentRef.current === payload.agent) {
+      runningAgentRef.current = null;
+      setRunningAgent(null);
+      clearStaleTimer();
+    }
+  });
+  useRealtimeEvent<LeadEvent & { kind: string; status: string }>("agentDispatch.status", (payload) => {
+    if (payload.leadId !== params.id) return;
+    load();
+    if (payload.status === "FAILED") {
+      runningAgentRef.current = null;
+      setRunningAgent(null);
+      clearStaleTimer();
+    }
+  });
+  useEffect(() => clearStaleTimer, []);
 
   async function saveReview() {
     setSaving(true);
@@ -140,13 +166,14 @@ export default function LeadDetailPage() {
     }
   }
 
-  /** Undo one step. Also how a failed automated send (e.g. no mailbox
-   *  configured yet) gets retried — back to Ready, then forward again. */
-  async function goBack() {
+  /** Back to any earlier stage, not only the one immediately before this —
+   *  also how a failed automated send (e.g. no mailbox configured yet) gets
+   *  retried: back to Ready, then forward again. */
+  async function rewind(toStage: string) {
     setMoving(true);
     setError(null);
     try {
-      await api.moveBack(params.id);
+      await api.rewindLead(params.id, toStage);
       load();
     } catch (err) {
       setError((err as Error).message);
@@ -186,6 +213,7 @@ export default function LeadDetailPage() {
   // transition when VERIFIED and RESEARCH_COMPLETED were added — the button
   // looked fine and the API rejected every click.
   const nextStages = ALLOWED_TRANSITIONS[stage] ?? [];
+  const backOptions = PIPELINE_STAGE_ORDER.filter((s) => isValidRewind(stage, s));
   const s = lead.score ?? {};
   const swot = lead.swotAnalysis ?? {};
   const hasSwot = Object.values(swot).some((v) => Array.isArray(v) && v.length);
@@ -202,15 +230,22 @@ export default function LeadDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {lead.pipelineState?.previousStage && (
-            <button
-              onClick={goBack}
+          {backOptions.length > 0 && (
+            <select
+              key={stage}
+              defaultValue=""
               disabled={moving}
-              title={`Move back to ${stageLabel(lead.pipelineState.previousStage)}`}
-              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+              onChange={(e) => {
+                if (e.target.value) rewind(e.target.value);
+              }}
+              title="Move this lead back to an earlier stage — a correction, not a transition, so it skips the forward automation."
+              className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
             >
-              ← Back
-            </button>
+              <option value="" disabled>← Back to…</option>
+              {backOptions.map((s) => (
+                <option key={s} value={s}>{stageLabel(s)}</option>
+              ))}
+            </select>
           )}
           <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-medium">{stageLabel(stage)}</span>
           {nextStages.map((next) => (
@@ -302,16 +337,26 @@ export default function LeadDetailPage() {
             <Field label="Research evidence">{lead.researchEvidence}</Field>
           </section>
 
-          {Array.isArray(lead.agentRuns) && lead.agentRuns.length > 0 && (
+          {((Array.isArray(lead.agentRuns) && lead.agentRuns.length > 0) || runningAgent) && (
             <section className="card p-5">
               <h2 className="mb-1 text-sm font-semibold tracking-tight">Agent activity</h2>
               <p className="mb-3 text-xs text-ink/50">
-                Every agent that has touched this lead, in order. Rows appear as each agent
-                finishes, not only once a whole pipeline completes — this page refreshes itself
-                every few seconds while the lead is in Drafting so you can watch it happen.
+                Every agent that has touched this lead, in order. Rows appear live, as each
+                agent starts and finishes — nothing here needs a manual refresh.
               </p>
+              {runningAgent && (
+                <div className="mb-2 flex items-center gap-2 rounded-lg border border-accent/25 bg-accent/8 px-3 py-2 text-xs">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+                  <span className="font-medium text-ink/80">
+                    {AGENT_LABELS[runningAgent.agent] ?? runningAgent.agent} is working on this lead now
+                  </span>
+                  {runningAgent.responsibility && (
+                    <span className="truncate text-ink/50">— {runningAgent.responsibility}</span>
+                  )}
+                </div>
+              )}
               <div className="flex flex-col gap-1.5">
-                {lead.agentRuns.map((r: any) => (
+                {(lead.agentRuns ?? []).map((r: any) => (
                   <div
                     key={r.id}
                     className="flex items-center justify-between gap-2 border-t border-[var(--line)] py-1.5 text-xs first:border-t-0"
@@ -362,6 +407,7 @@ export default function LeadDetailPage() {
               {lead.contactName ? `${lead.contactName}${lead.jobTitle ? ` — ${lead.jobTitle}` : ""}` : null}
             </Field>
             <Field label="Email">{lead.email}</Field>
+            <Field label="Personal email">{lead.personalEmail}</Field>
             <Field label="Phone">{lead.phone}</Field>
             <Field label="Website">
               {lead.website ? (

@@ -48,6 +48,26 @@ async def record_agent_runs(org_id: str, run_id: str | None, records: list[dict]
         logging.getLogger("shared.api_client").warning("agent telemetry not recorded: %s", err)
 
 
+async def record_agent_started(org_id: str, lead_id: str | None, agent: str, responsibility: str) -> None:
+    """Fire-and-forget signal that an agent has begun work on a lead — purely
+    for the dashboard's live "X is working on this now" indicator, nothing is
+    persisted for it. Swallowed on failure for the same reason as
+    record_agent_runs: losing a progress ping must never touch a real run.
+    """
+    if not lead_id:
+        return
+    try:
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=10) as client:
+            resp = await client.post(
+                "/agent-runs/started",
+                json={"orgId": org_id, "leadId": lead_id, "agent": agent, "responsibility": responsibility},
+                headers=_headers(),
+            )
+            resp.raise_for_status()
+    except Exception as err:  # noqa: BLE001
+        logging.getLogger("shared.api_client").warning("agent-started ping not recorded: %s", err)
+
+
 async def update_extraction_run(run_id: str, patch: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
         resp = await client.patch(f"/extraction-runs/{run_id}", json=patch, headers=_headers())
@@ -73,11 +93,19 @@ async def get_lead_detail(lead_id: str, org_id: str | None = None) -> dict:
         return resp.json()
 
 
-async def submit_email_draft(lead_id: str, subject: str, body_html: str, rationale: dict) -> None:
+async def submit_email_draft(
+    lead_id: str, step: int, subject: str, body_html: str, rationale: dict, needs_review: bool = False,
+) -> None:
     async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
         resp = await client.post(
             f"/leads/{lead_id}/draft-email",
-            json={"subject": subject, "bodyHtml": body_html, "rationale": rationale},
+            json={
+                "sequenceStep": step,
+                "subject": subject,
+                "bodyHtml": body_html,
+                "rationale": rationale,
+                "needsReview": needs_review,
+            },
             headers=_headers(),
         )
         resp.raise_for_status()

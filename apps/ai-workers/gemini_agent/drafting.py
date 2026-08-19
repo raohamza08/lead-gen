@@ -1,65 +1,211 @@
-"""Email #3 drafting (Part D2/D4) — never a template, always grounded in `context`."""
+"""
+Drafts one email of the 5-email sequence (Part: 5-email sequence, 2026-08-12).
+
+Runs on the Claude CLI — the same engine the rest of the app already depends
+on for discovery, research and scoring — not the Google Gemini API. The old
+Gemini integration required GOOGLE_GENAI_API_KEY, which this deployment never
+had configured, so every real draft silently fell back to a hardcoded
+"[DEMO DRAFT]" template. Moving to the CLI removes that failure mode
+entirely: it needs no separate key, just the same subscription already
+proven working everywhere else in this app.
+
+The model is asked for the email's STRUCTURAL PARTS (hook / insight /
+evidence / reframe / cta) rather than one free-form body_html blob, and this
+module assembles the final HTML itself. That's deliberate: it guarantees
+exactly one CTA by construction (one field, not "please write only one"),
+guarantees `evidence` can never leak into an Email 1/2 body even if the model
+slips, and makes the word-count/lint checks apply to exactly what gets sent.
+"""
 import json
-from pathlib import Path
+import logging
 
-from config import settings
+from claude_agent import cli_client
 
-try:
-    from google import genai
-except ImportError:  # pragma: no cover
-    genai = None
+from .lint import has_placeholder, lint_draft
 
-PROMPT_TEMPLATE = (Path(__file__).parent.parent / "shared" / "prompts" / "email3_draft.txt").read_text()
+logger = logging.getLogger("gemini_agent.drafting")
+
+STEP_NAMES = {1: "Problem Trigger", 2: "Industry Insight", 3: "Proof", 4: "Soft Offer", 5: "Breakup"}
+
+_STEP_BRIEF = {
+    1: """Open on ONE specific, felt pain point common in this exact industry/niche.
+Do not introduce or name {org_name} anywhere in your fields — the company
+appears only in the signature, which is appended separately after your
+content, not written by you. No pitch, no services list, no company
+description. Write like someone who understands this industry, not a vendor
+introducing themselves.""",
+    2: """Describe a real, current shift in how this industry is being affected by
+AI/automation, framed as a market observation, not company promotion. Still
+no direct pitch — this email builds credibility, not urgency. Do not name
+{org_name}.""",
+    3: """This is the FIRST email allowed to name {org_name} as the "who" behind a
+result. {case_study_instruction}""",
+    4: """This is the FIRST ask in the sequence, and it must be LOW-FRICTION: an
+audit, a short framework, a specific diagnostic question, or a quick call.
+Do not list {org_name}'s services or describe what it sells — that is not
+this email's job.""",
+    5: """Keep it short. No guilt, no "just following up", no "haven't heard from
+you". Acknowledge you'll stop reaching out, leave the door open, wish them
+well. This should read like a natural close, not a final sales attempt.""",
+}
+
+_VOICE_RULES = """VOICE AND STYLE RULES (mandatory, no exceptions):
+- No consulting jargon: no "digital transformation", "leverage", "streamline
+  your operations", "synergy", "cutting-edge", "game-changer", or similar.
+  Use plain, concrete language a business owner would use about their own day.
+- Exactly ONE clear next step across the whole email — a question or a
+  specific ask. Never write two competing asks.
+- Whole email under 150 words total (hook + insight + evidence + reframe + cta).
+- Subject line under 6 words, specific, non-salesy — not a mass-blast subject.
+- No exclamation points, no emojis, no urgency language ("limited time",
+  "don't miss out", "act now").
+- Never fabricate a statistic, client name, or result. If you reference one
+  you cannot verify, use a bracketed placeholder exactly like
+  [INSERT REAL, VERIFIED RESULT] and say so in "flags" — never estimate or
+  guess a number and present it as real.
+- Write like a person emailing a person: no "I hope this finds you well", no
+  em dashes, no corporate throat-clearing.
+- Do not write a signature or sign-off line — one is appended separately."""
 
 
-async def draft_email(context: dict, org_context: dict) -> dict:
-    if settings.google_genai_api_key and genai is not None:
-        return await _draft_via_gemini(context, org_context)
-    return _draft_demo(context, org_context)
+async def draft_email(context: dict, org_context: dict, step: int) -> dict:
+    org_name = org_context.get("name", "our company")
+    org_services = org_context.get("services", "AI automation and lead-generation systems")
+    tone = org_context.get("tone_of_voice", "direct, warm, no jargon")
 
+    case_study = context.get("case_study")
+    if step == 3:
+        if case_study:
+            case_study_instruction = (
+                f"A real case study is available — you may reference it directly: "
+                f"{case_study.get('title')}: {case_study.get('summary')}. If you need a specific "
+                f"number this case study doesn't give you, use a bracketed placeholder like "
+                f"[INSERT REAL, VERIFIED RESULT] instead of inventing or estimating one."
+            )
+        else:
+            case_study_instruction = (
+                "No verified case study is available yet. Do not invent one, a client name, or a "
+                "number. Write the evidence as an observational pattern instead — something you've "
+                "noticed happen for businesses like theirs — without claiming a specific result."
+            )
+    else:
+        case_study_instruction = ""
 
-async def _draft_via_gemini(context: dict, org_context: dict) -> dict:
-    client = genai.Client(api_key=settings.google_genai_api_key)
-    prompt = PROMPT_TEMPLATE.format(
-        org_name=org_context.get("name", "our company"),
-        org_services=org_context.get("services", "AI automation services"),
-        tone_of_voice=org_context.get("tone_of_voice", "direct, warm, no jargon"),
-        company_name=context["company_name"],
-        industry=context.get("industry"),
-        employee_count=context.get("employee_count"),
-        country=context.get("country"),
-        tech_stack=json.dumps(context.get("tech_stack")),
-        reviewer_notes=json.dumps(context.get("reviewer_notes")),
-        website_excerpt=context.get("website_excerpt", "")[:1500],
-        case_study_title=context.get("case_study_title") or "n/a",
-        case_study_metrics=json.dumps(context.get("case_study_metrics") or {}),
-    )
-    response = client.models.generate_content(model="gemini-2.5-pro", contents=prompt)
-    try:
-        return json.loads(response.text)
-    except (json.JSONDecodeError, AttributeError):
-        return _draft_demo(context, org_context)
+    brief = _STEP_BRIEF[step].format(org_name=org_name, case_study_instruction=case_study_instruction)
 
+    prompt = f"""You are writing email {step} of 5 in a cold outbound sequence for {org_name}
+({org_services}). This email's role in the sequence is "{STEP_NAMES[step]}".
 
-def _draft_demo(context: dict, org_context: dict) -> dict:
-    """DEMO MODE fallback — clearly labeled, not a substitute for a real Gemini call."""
-    hook = context.get("reviewer_notes", {}).get("suggested_hook") or f"what I noticed on {context['company_name']}'s site"
-    problems = [
-        context.get("reviewer_notes", {}).get("business_problems") or "manual lead follow-up eating rep time",
-    ]
+FULL SEQUENCE, for context only — you are writing just this one:
+1. Problem Trigger — one felt industry pain point, company never named.
+2. Industry Insight — a real AI/automation shift in their industry, no pitch.
+3. Proof — first email allowed to name {org_name}, with a real or observational result, never invented.
+4. Soft Offer — first ask, low-friction only (audit / framework / question / call), no services pitch.
+5. Breakup — short, no guilt, closes the door gently.
+
+THIS EMAIL'S JOB:
+{brief}
+
+STRUCTURE (mandatory): hook -> specific/felt insight{" -> evidence" if step >= 3 else ""} -> perspective/reframe -> ONE clear CTA.
+
+RECIPIENT:
+Company: {context.get('company_name')} ({context.get('industry')}, {context.get('employee_count')} employees, {context.get('country')})
+Tech stack: {json.dumps(context.get('tech_stack'))}
+What we know: {json.dumps(context.get('reviewer_notes'))}
+Website excerpt: {context.get('website_excerpt', '')[:1200]}
+
+{_VOICE_RULES}
+
+Tone: {tone}.
+
+Respond with ONLY JSON, no prose or code fences:
+{{
+  "subject": string,
+  "hook": string,
+  "insight": string,
+  "evidence": string|null,
+  "reframe": string,
+  "cta": string,
+  "flags": string[]
+}}"""
+
+    envelope = await cli_client.query(prompt)
+    data = cli_client.extract_json(envelope.get("result", "")) or {}
+    if not data or not data.get("subject"):
+        return {}
+
+    # Evidence is structurally impossible before step 3, even if the model
+    # slipped and returned one — dropped here rather than trusted.
+    evidence = data.get("evidence") if step >= 3 else None
+
+    parts = [data.get("hook"), data.get("insight"), evidence, data.get("reframe"), data.get("cta")]
+    body_html = "\n".join(f"<p>{p}</p>" for p in parts if p)
+
     return {
-        "subject": f"A specific idea for {context['company_name']}",
-        "body_html": (
-            f"<p>[DEMO DRAFT] Hi, following up on {hook}. For a {context.get('industry','')} team your size, "
-            f"the biggest lever is usually {problems[0]}. We could likely automate this in a few weeks with a "
-            f"payback inside a quarter. Worth a 15-minute call?</p>"
-            f"<p style=\"font-size:12px;color:#888\">{{{{org.postal_address}}}} · "
-            f"<a href=\"{{{{unsubscribe_link}}}}\">Unsubscribe</a></p>"
-        ),
+        "subject": data.get("subject", ""),
+        "body_html": body_html,
+        "flags": data.get("flags") or [],
         "rationale": {
-            "problems_identified": problems,
-            "automation_ideas": ["Automated lead follow-up sequencing", "AI-assisted intake triage"],
-            "roi_estimate_basis": "[DEMO] Estimated from comparable engagements in this industry band",
-            "roadmap_steps": ["Discovery call", "Pilot on one workflow", "Roll out org-wide"],
+            "hook": data.get("hook"),
+            "insight": data.get("insight"),
+            "evidence": evidence,
+            "reframe": data.get("reframe"),
+            "cta": data.get("cta"),
         },
     }
+
+
+def append_signature(body_html: str) -> str:
+    """The only place {org.name} can appear for Email 1/2, per the "company
+    only in the signature" rule — resolved at send time by
+    email-provider.service.ts, same as {{sender.name}}/{{unsubscribe_link}}."""
+    signature = (
+        '<p>{{sender.name}}<br>{{org.name}}</p>'
+        '<p style="font-size:12px;color:#888">{{org.postal_address}} · '
+        '<a href="{{unsubscribe_link}}">Unsubscribe</a></p>'
+    )
+    return f"{body_html}\n{signature}"
+
+
+async def draft_and_validate(context: dict, org_context: dict, step: int) -> tuple[dict, list[str], bool]:
+    """Drafts, lints, and retries once on failure — mirrors the single-retry
+    pattern already used elsewhere in this codebase (e.g. LeadVerification).
+    Returns (draft, notes, needs_review). needs_review is True if the draft
+    still breaks a rule after the retry, or contains an unresolved bracket
+    placeholder — either way the caller must route it to human approval
+    rather than auto-send, regardless of the org's autoSendEnabled setting."""
+    org_names = [org_context.get("name"), "EurosHub"]
+
+    draft = await draft_email(context, org_context, step)
+    if not draft:
+        return {}, ["drafting produced no output"], True
+
+    issues = lint_draft(step, draft["subject"], draft["body_html"], org_names)
+    notes: list[str] = []
+    if issues:
+        notes.append(f"failed voice/structure check ({'; '.join(issues)}) — retried once")
+        retry = await draft_email(context, org_context, step)
+        if retry:
+            draft = retry
+            issues = lint_draft(step, draft["subject"], draft["body_html"], org_names)
+        if issues:
+            notes.append(f"still failing after retry ({'; '.join(issues)}) — needs human review before sending")
+
+    # A literal [BRACKET PLACEHOLDER] left in the text is the one case worth
+    # hard-blocking on: it means an unresolved fact would otherwise land in a
+    # prospect's inbox verbatim. The model's own `flags` field is much
+    # softer — it can fire on a general, unattributed industry observation
+    # that never claims anything false (confirmed 2026-08-13: a flagged
+    # Email 2 draft read as ordinary market commentary, nothing fabricated).
+    # Treating any non-empty `flags` as a hard block was routing genuinely
+    # fine drafts to approval far more than intended, so only the concrete
+    # placeholder check gates auto-send now — `flags` still rides along in
+    # the rationale for a human to see, it just isn't load-bearing alone.
+    placeholder = has_placeholder(draft["subject"], draft["body_html"])
+    if placeholder:
+        notes.append("contains an unresolved [placeholder] flagged for human review before sending")
+    elif draft.get("flags"):
+        notes.append(f"model noted: {'; '.join(draft['flags'])}")
+
+    needs_review = bool(issues) or placeholder
+    return draft, notes, needs_review

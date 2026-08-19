@@ -26,12 +26,25 @@ export enum PipelineStage {
   RESEARCH_COMPLETED = "RESEARCH_COMPLETED",
   UNDER_REVIEW = "UNDER_REVIEW",
   READY_FOR_OUTREACH = "READY_FOR_OUTREACH",
+  /** Problem Trigger — one felt industry pain point. EurosHub is never named
+   *  in this email except the signature (Part: 5-email sequence, 2026-08-12). */
   EMAIL_1_SENT = "EMAIL_1_SENT",
-  WAITING_2_DAYS = "WAITING_2_DAYS",
+  WAITING_EMAIL_2 = "WAITING_EMAIL_2",
+  /** Industry Insight — a real AI/automation shift in their industry, framed
+   *  as market observation. Still no pitch. */
   EMAIL_2_SENT = "EMAIL_2_SENT",
-  WAITING_1_2_DAYS = "WAITING_1_2_DAYS",
-  GEMINI_DRAFTING = "GEMINI_DRAFTING",
-  PERSONALIZED_PITCH = "PERSONALIZED_PITCH",
+  WAITING_EMAIL_3 = "WAITING_EMAIL_3",
+  /** Proof — the first email allowed to name EurosHub as the "who" behind a
+   *  result. No invented statistics; an unverified figure must stay a
+   *  bracketed placeholder and routes to human approval, never auto-sends. */
+  EMAIL_3_SENT = "EMAIL_3_SENT",
+  WAITING_EMAIL_4 = "WAITING_EMAIL_4",
+  /** Soft Offer — the first ask, and it must be low-friction (an audit, a
+   *  quick call), never a services/solutions pitch. */
+  EMAIL_4_SENT = "EMAIL_4_SENT",
+  WAITING_EMAIL_5 = "WAITING_EMAIL_5",
+  /** Breakup — short, no guilt, closes the sequence. */
+  EMAIL_5_SENT = "EMAIL_5_SENT",
   LINKEDIN_OUTREACH = "LINKEDIN_OUTREACH",
   /** Connection accepted, follow-up message sent. */
   LINKEDIN_FOLLOW_UP = "LINKEDIN_FOLLOW_UP",

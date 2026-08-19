@@ -8,4 +8,10 @@
  * still the authority: it re-validates every transition regardless of what the
  * client believed was allowed.
  */
-export { ALLOWED_TRANSITIONS, NOT_ABANDONABLE, isValidTransition } from "@leadgen/types";
+export {
+  ALLOWED_TRANSITIONS,
+  NOT_ABANDONABLE,
+  PIPELINE_STAGE_ORDER,
+  isValidTransition,
+  isValidRewind,
+} from "@leadgen/types";

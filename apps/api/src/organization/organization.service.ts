@@ -40,9 +40,10 @@ export class OrganizationService {
 
   /**
    * autoSendEnabled defaults to true when unset (Part: autonomous system) —
-   * the AI-drafted pitch (Email #3) sends itself unless an org explicitly
-   * opts back into a human approving each one first. See
-   * LeadsService.receiveEmail3Draft for where this is actually read.
+   * every AI-drafted email in the 5-email sequence sends itself unless an
+   * org explicitly opts back into a human approving each one first. See
+   * LeadsService.receiveEmailDraft for where this is actually read (and for
+   * why a draft flagged `needsReview` overrides this regardless).
    */
   async getAutomationSettings(orgId: string): Promise<{ autoSendEnabled: boolean }> {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });

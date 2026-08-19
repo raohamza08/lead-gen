@@ -15,8 +15,10 @@ import { corsOriginValidator } from "../common/cors";
  * Event catalogue (payloads are intentionally thin — just enough to know
  * *what* changed; listeners refetch or already hold the rest):
  *   lead.created        { leadId }
+ *   extractionRun.progress { runId, filterId, status, leadsFound, leadsVerified, duplicatesSkipped, priorityMix, error? }
  *   lead.stageChanged    { leadId, stage, previousStage }
  *   lead.updated         { leadId }               — score/enrichment/review edited
+ *   agentRun.started     { leadId, agent, responsibility } — before it runs
  *   agentRun.recorded    { leadId?, agent, status, notes, durationMs }
  *   email.sent           { leadId, emailMessageId }
  *   email.failed         { leadId, emailMessageId }

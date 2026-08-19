@@ -16,8 +16,8 @@ SEEDS = {
     "lead_enrichment": ("candidate", "verification", "org_context"),
     "manual_lead_enrichment": ("candidate", "org_context"),
     "rescore": ("candidate", "verification", "org_context"),
-    "outreach": ("lead", "org_context", "case_study"),
-    "email_only": ("lead", "org_context", "case_study"),
+    "outreach": ("lead", "org_context", "case_study", "sequence_step"),
+    "email_only": ("lead", "org_context", "case_study", "sequence_step"),
     "linkedin_draft": ("lead",),
     "optimisation": ("performance", "outcomes"),
 }
@@ -68,7 +68,7 @@ class TestSchedulerAgent:
     def test_schedules_a_wait_after_email_one(self):
         result = asyncio.run(SchedulerAgent().run(ctx(
             lead={"pipelineState": {"stage": "EMAIL_1_SENT"}})))
-        assert result.data["schedule"]["waitDays"] == 2
+        assert result.data["schedule"]["waitDays"] == 3
         assert result.data["schedule"]["nextActionAt"] is not None
 
     def test_stops_the_sequence_once_they_reply(self):

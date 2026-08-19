@@ -3,21 +3,58 @@ import { Queue, Worker, Job } from "bullmq";
 import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
-import { buildEmail1, buildEmail2 } from "./email-templates";
 import { SyncService } from "../sync/sync.service";
 import { OrganizationService } from "../organization/organization.service";
 import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
 
-const WAIT_2_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
-const WAIT_1_2_DAYS_MS = 36 * 60 * 60 * 1000; // midpoint of the 1-2 day window (Part C6)
+//: 3 business days between every step of the 5-email sequence (Part: 5-email
+//: sequence, 2026-08-12). Weekends are skipped in the COUNT itself, not just
+//: pushed off if the final day happens to land on one — see
+//: businessDaysDelayMs — so "3 business days" means what it says regardless
+//: of which day of the week a step lands on.
+const SEQUENCE_WAIT_BUSINESS_DAYS = 3;
+
+//: Which stage a wait started in this stage should land in next, and which
+//: email step that stage exists to draft — the single source of truth
+//: onStageEntered reads, instead of a growing if/else chain per stage.
+const WAIT_AFTER: Partial<Record<PipelineStage, PipelineStage>> = {
+  [PipelineStage.EMAIL_1_SENT]: PipelineStage.WAITING_EMAIL_2,
+  [PipelineStage.EMAIL_2_SENT]: PipelineStage.WAITING_EMAIL_3,
+  [PipelineStage.EMAIL_3_SENT]: PipelineStage.WAITING_EMAIL_4,
+  [PipelineStage.EMAIL_4_SENT]: PipelineStage.WAITING_EMAIL_5,
+};
+
+const NEXT_EMAIL_STEP: Partial<Record<PipelineStage, number>> = {
+  [PipelineStage.WAITING_EMAIL_2]: 2,
+  [PipelineStage.WAITING_EMAIL_3]: 3,
+  [PipelineStage.WAITING_EMAIL_4]: 4,
+  [PipelineStage.WAITING_EMAIL_5]: 5,
+};
+
+/** How many business days from now, skipping Saturdays/Sundays in the count
+ *  itself (not just the landing day) — 3 business days starting Thursday
+ *  lands the following Tuesday, not Sunday pushed to Monday. */
+function businessDaysDelayMs(days: number): number {
+  const now = Date.now();
+  const d = new Date(now);
+  let count = 0;
+  while (count < days) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return d.getTime() - now;
+}
 
 /**
- * Owns the stage-driven email cadence (Part C6). Wait timers are BullMQ
- * delayed jobs, not a polling cron, so "wait exactly 2 days" is precise and
- * cancellable the instant a reply arrives (see cancelWaitTimer). The worker
- * that consumes those delayed jobs lives on this same service (not a separate
- * class) so it can drive stage transitions without a circular dependency on
- * LeadsService.
+ * Owns the stage-driven email cadence for the 5-email sequence (Part:
+ * 5-email sequence, 2026-08-12): Problem Trigger -> Industry Insight -> Proof
+ * -> Soft Offer -> Breakup, each AI-drafted, 3 business days apart. Wait
+ * timers are BullMQ delayed jobs, not a polling cron, so a wait is precise
+ * and cancellable the instant a reply arrives (see cancelWaitTimer). The
+ * worker that consumes those delayed jobs lives on this same service (not a
+ * separate class) so it can drive stage transitions without a circular
+ * dependency on LeadsService.
  */
 @Injectable()
 export class SequencerService implements OnModuleInit, OnModuleDestroy {
@@ -58,32 +95,30 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     await this.waitWorker?.close();
   }
 
+  /**
+   * Single dispatch point for every stage the sequence drives. Handles both
+   * the automatic path (handleWaitJob transitions into a stage, then calls
+   * this) and a human manually dragging a card straight into one of these
+   * stages — both go through the exact same code here, so neither path can
+   * silently do nothing the way the old GEMINI_DRAFTING-only special case
+   * used to require a comment to explain.
+   */
   async onStageEntered(leadId: string, stage: PipelineStage): Promise<void> {
-    switch (stage) {
-      case PipelineStage.READY_FOR_OUTREACH:
-        return this.sendEmail1(leadId);
-      case PipelineStage.EMAIL_1_SENT:
-        return this.scheduleWait(leadId, WAIT_2_DAYS_MS, "send-email-2");
-      case PipelineStage.EMAIL_2_SENT:
-        // Entering this stage always ensures Email #2 exists — covers both
-        // the normal path (handleWaitJob calls this after sending) and a
-        // human dragging straight into "Email 2 Sent" on the board, which
-        // otherwise looked like a send with none actually queued. Idempotent
-        // via sendEmail2's own existing-message check.
-        await this.sendEmail2(leadId);
-        return this.scheduleWait(leadId, WAIT_1_2_DAYS_MS, "draft-email-3");
-      case PipelineStage.GEMINI_DRAFTING:
-        // The automatic path (handleWaitJob's "draft-email-3" branch) calls
-        // dispatchGeminiDraft directly and never reaches here. Without this
-        // case, a human advancing straight into this stage — a legal manual
-        // transition from WAITING_1_2_DAYS — silently did nothing: the board
-        // still showed the "Email agent drafting…" pulsing indicator (it
-        // renders off the stage alone, not off real agent activity) while no
-        // agent had ever been invoked. This is the fix for that bug.
-        return this.dispatchGeminiDraft(leadId);
-      default:
-        return; // other stages are human- or reply-driven, not sequencer-driven
+    if (stage === PipelineStage.READY_FOR_OUTREACH) {
+      await this.setUpLinkedin(leadId);
+      return this.dispatchEmailDraft(leadId, 1);
     }
+
+    const waitInto = WAIT_AFTER[stage];
+    if (waitInto) {
+      return this.scheduleWait(leadId, waitInto);
+    }
+
+    const step = NEXT_EMAIL_STEP[stage];
+    if (step) {
+      return this.dispatchEmailDraft(leadId, step);
+    }
+    // other stages are human- or reply-driven, not sequencer-driven
   }
 
   /** Stages a lead walks through before it's ready to be contacted — the
@@ -141,128 +176,103 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async handleWaitJob(job: Job<{ leadId: string; nextAction: string }>) {
-    const { leadId, nextAction } = job.data;
+  private async handleWaitJob(job: Job<{ leadId: string; nextStage: PipelineStage }>) {
+    const { leadId, nextStage } = job.data;
 
     // A reply or manual override may have cancelled this timer already (Part C6);
     // re-check pipeline state before acting instead of trusting the queue alone.
     const state = await this.prisma.pipelineState.findUnique({ where: { leadId } });
     if (!state || state.waitJobId !== job.id) {
-      this.logger.log(`Skipping stale wait job for lead ${leadId} (${nextAction})`);
+      this.logger.log(`Skipping stale wait job for lead ${leadId} (-> ${nextStage})`);
       return;
     }
 
-    if (nextAction === "send-email-2") {
-      await this.prisma.pipelineState.update({
-        where: { leadId },
-        // previousStage records the immediate predecessor so "back" is
-        // accurate regardless of whether the move was human- or
-        // automation-driven — see the same note on advanceStage. The actual
-        // send happens inside onStageEntered below (sendEmail2), not here.
-        data: { stage: PipelineStage.EMAIL_2_SENT, previousStage: state.stage, enteredStageAt: new Date(), waitJobId: null },
-      });
-      await this.sync.onStageChanged(leadId, PipelineStage.EMAIL_2_SENT);
-      await this.onStageEntered(leadId, PipelineStage.EMAIL_2_SENT);
-    } else if (nextAction === "draft-email-3") {
-      await this.prisma.pipelineState.update({
-        where: { leadId },
-        data: { stage: PipelineStage.GEMINI_DRAFTING, previousStage: state.stage, enteredStageAt: new Date(), waitJobId: null },
-      });
-      await this.sync.onStageChanged(leadId, PipelineStage.GEMINI_DRAFTING);
-      await this.dispatchGeminiDraft(leadId);
-    }
-  }
-
-  /**
-   * Enters (or re-enters, on "back" then forward again) READY_FOR_OUTREACH.
-   * Idempotent by design: entering this stage a second time must never send a
-   * duplicate intro email to the same prospect. If Email #1 already sent or
-   * is still queued, this only re-syncs the pipeline stage. If it previously
-   * failed (e.g. no mailbox was configured yet), this is exactly how a retry
-   * happens — move back to Ready and forward again — so the failed row is
-   * replaced with a fresh queued attempt rather than left stuck forever.
-   */
-  private async sendEmail1(leadId: string) {
-    const existing = await this.prisma.emailMessage.findFirst({ where: { leadId, sequenceStep: 1 } });
-    if (!existing || existing.status === "FAILED") {
-      if (existing) await this.prisma.emailMessage.delete({ where: { id: existing.id } });
-
-      const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
-      const { subject, bodyHtml } = buildEmail1(lead as any);
-
-      const message = await this.prisma.emailMessage.create({
-        data: { leadId, sequenceStep: 1, subject, bodyHtml, generatedBy: "TEMPLATE", status: "QUEUED" },
-      });
-      await this.emailQueue.add("send", { emailMessageId: message.id });
-
-      // LinkedIn task is created in lockstep with Email #1 (Part C7). Copy is
-      // drafted automatically too (Part: autonomous system) — the actual
-      // send stays a human action (ToS/ban risk), but there's no reason to
-      // make someone click a button first just to get a draft ready.
-      const existingActivity = await this.prisma.linkedinActivity.findFirst({ where: { leadId } });
-      if (!existingActivity) {
-        await this.prisma.linkedinActivity.create({ data: { leadId, status: "NOT_STARTED" } });
-      }
-      if (lead.contactName) {
-        await this.agentDispatch.add({ kind: "linkedin_draft", leadId, orgId: lead.orgId });
-      }
-    }
-
-    // Advance the stage the moment the send is enqueued (same optimistic
-    // pattern as Email #2 in handleWaitJob below) so the wait-timer for
-    // Email #2 gets scheduled instead of leaving the lead stuck at
-    // READY_FOR_OUTREACH forever.
     await this.prisma.pipelineState.update({
       where: { leadId },
-      data: { stage: PipelineStage.EMAIL_1_SENT, previousStage: PipelineStage.READY_FOR_OUTREACH, enteredStageAt: new Date() },
+      data: { stage: nextStage, previousStage: state.stage, enteredStageAt: new Date(), waitJobId: null },
     });
-    await this.sync.onStageChanged(leadId, PipelineStage.EMAIL_1_SENT);
-    await this.onStageEntered(leadId, PipelineStage.EMAIL_1_SENT);
+    await this.sync.onStageChanged(leadId, nextStage);
+    await this.onStageEntered(leadId, nextStage);
   }
 
-  /** Same idempotency/retry reasoning as sendEmail1 above. */
-  private async sendEmail2(leadId: string) {
-    const existing = await this.prisma.emailMessage.findFirst({ where: { leadId, sequenceStep: 2 } });
-    if (existing && existing.status !== "FAILED") return;
-    if (existing) await this.prisma.emailMessage.delete({ where: { id: existing.id } });
-
+  /** LinkedIn task + copy draft, created in lockstep with Email #1 (Part C7).
+   *  The actual send stays a human action (ToS/ban risk) — this only removes
+   *  the blank-page problem for the person sending it. */
+  private async setUpLinkedin(leadId: string) {
     const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
-    const caseStudy = await this.prisma.caseStudy.findFirst({ where: { orgId: lead.orgId, industry: lead.industry ?? undefined } });
-    const { subject, bodyHtml } = buildEmail2(lead as any, caseStudy?.summary);
-
-    const message = await this.prisma.emailMessage.create({
-      data: { leadId, sequenceStep: 2, subject, bodyHtml, generatedBy: "TEMPLATE", status: "QUEUED" },
-    });
-    await this.emailQueue.add("send", { emailMessageId: message.id });
+    const existingActivity = await this.prisma.linkedinActivity.findFirst({ where: { leadId } });
+    if (!existingActivity) {
+      await this.prisma.linkedinActivity.create({ data: { leadId, status: "NOT_STARTED" } });
+    }
+    if (lead.contactName) {
+      await this.agentDispatch.add({ kind: "linkedin_draft", leadId, orgId: lead.orgId });
+    }
   }
 
   /**
-   * Enqueues the Gemini pitch draft (Part: autonomous system) — used by both
-   * the automatic path (onStageEntered, the wait-timer job) and the manual
-   * retry (LeadsService.requestPitchDraft). Retries and failure notification
-   * are the queue's job now (see AgentDispatchWorker), not this method's —
-   * enqueueing itself only fails if Redis itself is unreachable.
+   * Dispatches an AI draft for one step of the 5-email sequence (Part:
+   * 5-email sequence, 2026-08-12) — used by both the automatic path
+   * (onStageEntered) and the manual retry (LeadsService.requestEmailDraft).
+   * Retries and failure notification are the queue's job now (see
+   * AgentDispatchWorker), not this method's — enqueueing itself only fails
+   * if Redis itself is unreachable.
+   *
+   * Idempotent: a non-failed message already existing for this step means
+   * skip — this is what makes moving a lead back a stage and forward again
+   * a safe retry rather than a duplicate draft landing in the send queue
+   * twice.
    */
-  async dispatchGeminiDraft(leadId: string) {
-    const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { orgId: true } });
+  async dispatchEmailDraft(leadId: string, step: number): Promise<void> {
+    const existing = await this.prisma.emailMessage.findFirst({ where: { leadId, sequenceStep: step } });
+    if (existing) {
+      if (existing.status !== "FAILED") return;
+      await this.prisma.emailMessage.delete({ where: { id: existing.id } });
+    }
+
+    const lead = await this.prisma.lead.findUnique({
+      where: { id: leadId },
+      select: { orgId: true, industry: true },
+    });
     if (!lead) return;
+
     // Without this, the drafting agent falls back to a hardcoded "our
     // company" identity — the Settings branding fields would silently only
-    // affect Email 1/2 and not the Gemini-drafted Email 3.
-    const orgContext = await this.organization.getBranding(lead.orgId).then((b) => ({
-      name: b.emailOrgName,
+    // affect nothing rather than every AI-drafted email.
+    const branding = await this.organization.getBranding(lead.orgId);
+    const orgContext = {
+      name: branding.emailOrgName,
       services: "AI automation and lead-generation systems",
       tone_of_voice: "direct, warm, no jargon, no em dashes",
-    }));
-    await this.agentDispatch.add({ kind: "pitch_draft", leadId, orgId: lead.orgId, orgContext });
+    };
+
+    // Only Email 3 ("Proof") is allowed to reference a case study — see the
+    // 5-email sequence spec. Fetched here rather than in the worker because
+    // the worker never talks to the DB directly (Part B1).
+    let caseStudy: { title: string; summary: string; metrics: unknown } | null = null;
+    if (step === 3) {
+      const cs = await this.prisma.caseStudy.findFirst({
+        where: { orgId: lead.orgId, industry: lead.industry ?? undefined },
+      });
+      if (cs) caseStudy = { title: cs.title, summary: cs.summary, metrics: cs.metrics };
+    }
+
+    await this.agentDispatch.add({
+      kind: "email_draft",
+      leadId,
+      orgId: lead.orgId,
+      step,
+      orgContext,
+      caseStudy,
+    });
   }
 
   /** Schedules the next automated step after a wait, storing the job id for cancellation. */
-  private async scheduleWait(leadId: string, delayMs: number, nextAction: "send-email-2" | "draft-email-3") {
+  private async scheduleWait(leadId: string, nextStage: PipelineStage): Promise<void> {
+    const delayMs = businessDaysDelayMs(SEQUENCE_WAIT_BUSINESS_DAYS);
     const job = await this.waitQueue.add(
-      nextAction,
-      { leadId, nextAction },
-      { delay: delayMs, jobId: `wait:${leadId}:${nextAction}:${Date.now()}` },
+      "advance",
+      { leadId, nextStage },
+      { delay: delayMs, jobId: `wait:${leadId}:${nextStage}:${Date.now()}` },
     );
     await this.prisma.pipelineState.update({
       where: { leadId },

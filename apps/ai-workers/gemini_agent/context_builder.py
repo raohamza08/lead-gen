@@ -45,6 +45,8 @@ def build_context(lead_detail: dict, website_excerpt: str, case_study: dict | No
             "urgency_level": review.get("urgencyLevel"),
         },
         "website_excerpt": website_excerpt,
-        "case_study_title": case_study.get("title") if case_study else None,
-        "case_study_metrics": case_study.get("metrics") if case_study else None,
+        # Whole dict rather than split title/metrics fields — Email 3 ("Proof")
+        # is the only step that reads this, and it needs to tell "a real case
+        # study exists" apart from "none does" as one clean truthy check.
+        "case_study": case_study,
     }

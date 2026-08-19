@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../../../lib/api-client";
+import { useRealtimeEvent } from "../../../lib/realtime";
 import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../components/filter-controls";
 import { EmailAccountsSection } from "../../../components/email-accounts-section";
 import { TeamSection } from "../../../components/team-section";
@@ -61,6 +62,56 @@ const ENRICHMENT_AGENTS: { key: string; label: string; hint: string }[] = [
   { key: "buyer_intelligence", label: "Buyer intelligence", hint: "Persona of the decision maker" },
 ];
 
+interface RunProgress {
+  runId: string;
+  status: "RUNNING" | "COMPLETED" | "COMPLETED_SHORT_OF_TARGET" | "FAILED" | "CANCELLED";
+  leadsFound: number;
+  leadsVerified: number;
+  duplicatesSkipped: number;
+  error?: string | null;
+}
+
+/** Live "Run now" progress, one row's worth. `leadsFound` is actually attempts
+ *  made (existing ExtractionRun naming, not renamed here), so rejected is
+ *  derived rather than tracked as its own column. */
+function RunProgressLine({ p, target }: { p: RunProgress; target: number }) {
+  const rejected = Math.max(0, p.leadsFound - p.leadsVerified - p.duplicatesSkipped);
+  if (p.status === "RUNNING") {
+    return (
+      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-accent">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+        Running — {p.leadsVerified}/{target} verified · {rejected} rejected
+        {p.duplicatesSkipped > 0 && <> · {p.duplicatesSkipped} dup</>}
+      </div>
+    );
+  }
+  if (p.status === "FAILED") {
+    return (
+      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-bad" title={p.error ?? undefined}>
+        <span className="h-1.5 w-1.5 rounded-full bg-bad" />
+        Failed{p.error ? `: ${p.error}` : ""}
+      </div>
+    );
+  }
+  if (p.status === "CANCELLED") {
+    return (
+      <div className="mt-1 flex items-center gap-1.5 text-[11px] text-ink/50">
+        <span className="h-1.5 w-1.5 rounded-full bg-ink/40" />
+        Stopped — {p.leadsVerified}/{target} verified · {rejected} rejected
+        {p.duplicatesSkipped > 0 && <> · {p.duplicatesSkipped} dup</>}
+      </div>
+    );
+  }
+  const tone = p.status === "COMPLETED" ? "text-good" : "text-gold";
+  return (
+    <div className={`mt-1 flex items-center gap-1.5 text-[11px] ${tone}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${p.status === "COMPLETED" ? "bg-good" : "bg-gold"}`} />
+      Done — {p.leadsVerified}/{target} verified · {rejected} rejected
+      {p.duplicatesSkipped > 0 && <> · {p.duplicatesSkipped} dup</>}
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const [filters, setFilters] = useState<NicheFilter[]>([]);
   const [draft, setDraft] = useState<FilterDraft>(EMPTY);
@@ -70,6 +121,9 @@ export default function SettingsPage() {
   const [showBuilder, setShowBuilder] = useState(false);
   const [togglingCost, setTogglingCost] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [runningNow, setRunningNow] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [runProgress, setRunProgress] = useState<Record<string, RunProgress>>({});
 
   function refresh() {
     api
@@ -79,6 +133,61 @@ export default function SettingsPage() {
   }
 
   useEffect(refresh, []);
+
+  // Live progress for whichever filter(s) currently have a "Run now" extraction
+  // in flight — pushed once per candidate attempt by the worker, not just once
+  // at the very end, so this updates continuously while a run is going.
+  useRealtimeEvent<RunProgress & { filterId: string }>("extractionRun.progress", (payload) => {
+    setRunProgress((cur) => ({ ...cur, [payload.filterId]: payload }));
+  });
+
+  async function runNow(filter: NicheFilter) {
+    setRunningNow(filter.id);
+    setError(null);
+    try {
+      const run = (await api.runNicheFilterNow(filter.id)) as { id: string; status: string };
+      // Optimistic seed so the row shows "Running…" immediately rather than
+      // waiting for the worker's first progress ping, which can be many
+      // seconds away (dispatch queue + first candidate's web search).
+      setRunProgress((cur) => ({
+        ...cur,
+        [filter.id]: {
+          runId: run.id,
+          status: "RUNNING",
+          leadsFound: 0,
+          leadsVerified: 0,
+          duplicatesSkipped: 0,
+        },
+      }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRunningNow(null);
+    }
+  }
+
+  /** Stops a run in flight. The worker finishes whatever candidate it's
+   *  already mid-search on rather than cutting it off instantly — see the
+   *  comment on the API's cancelRun for why. Optimistically flips the row to
+   *  CANCELLED now rather than waiting for that to land, same reasoning as
+   *  runNow's optimistic seed above. */
+  async function cancelRun(filter: NicheFilter) {
+    const runId = runProgress[filter.id]?.runId;
+    if (!runId) return;
+    setCancellingId(filter.id);
+    setError(null);
+    try {
+      await api.cancelNicheFilterRun(filter.id, runId);
+      setRunProgress((cur) => {
+        const current = cur[filter.id];
+        return current ? { ...cur, [filter.id]: { ...current, status: "CANCELLED" } } : cur;
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setCancellingId(null);
+    }
+  }
 
   const set = <K extends keyof FilterDraft>(key: K, value: FilterDraft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
@@ -318,11 +427,25 @@ export default function SettingsPage() {
                   <td className="py-2">
                     <div className="flex items-center gap-2">
                       <button
-                        onClick={() => api.runNicheFilterNow(f.id).catch((e) => setError((e as Error).message))}
-                        className="rounded-md bg-accent px-2.5 py-1 text-xs text-white transition-opacity hover:opacity-90"
+                        onClick={() => runNow(f)}
+                        disabled={runningNow === f.id || runProgress[f.id]?.status === "RUNNING"}
+                        className="rounded-md bg-accent px-2.5 py-1 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                       >
-                        Run now
+                        {runningNow === f.id
+                          ? "Starting…"
+                          : runProgress[f.id]?.status === "RUNNING"
+                            ? "Running…"
+                            : "Run now"}
                       </button>
+                      {runProgress[f.id]?.status === "RUNNING" && (
+                        <button
+                          onClick={() => cancelRun(f)}
+                          disabled={cancellingId === f.id}
+                          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)] disabled:opacity-50"
+                        >
+                          {cancellingId === f.id ? "Stopping…" : "Stop"}
+                        </button>
+                      )}
                       <button
                         onClick={() => startEdit(f)}
                         className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
@@ -336,6 +459,7 @@ export default function SettingsPage() {
                         Delete
                       </button>
                     </div>
+                    {runProgress[f.id] && <RunProgressLine p={runProgress[f.id]} target={f.dailyTarget} />}
                   </td>
                 </tr>
               ))}

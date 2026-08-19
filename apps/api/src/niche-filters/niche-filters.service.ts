@@ -1,10 +1,12 @@
 import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronJob } from "cron";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { UpsertNicheFilterDto } from "./dto/upsert-niche-filter.dto";
 import { buildSearchBrief } from "./search-brief";
 import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
+import { RealtimeGateway } from "../realtime/realtime.gateway";
 
 /**
  * Part E6 scheduler supervisor: one dynamic CronJob per active NicheFilter,
@@ -24,6 +26,8 @@ export class NicheFiltersService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly agentDispatch: AgentDispatchQueue,
+    private readonly config: ConfigService,
+    private readonly realtime: RealtimeGateway,
   ) {}
 
   /** Registers a cron job for every active filter that already exists at boot. */
@@ -173,5 +177,60 @@ export class NicheFiltersService implements OnModuleInit {
     // RUNNING past that point is a genuine failure, not something this call
     // needs to guess at with its own try/catch.
     return run;
+  }
+
+  /**
+   * Manual stop for a run in flight. Called directly (not through the
+   * dispatch queue) because the user is waiting on the response, and there's
+   * nothing to retry — either the worker is still tracking the run and stops
+   * it, or it isn't and there's nothing to do.
+   *
+   * The worker's cancellation is cooperative and in-memory (see
+   * claude_agent/runner.py): it stops starting new candidates but lets one
+   * already in flight finish, and it only knows about runs it started itself
+   * since its last restart. Either way this call marks the row CANCELLED
+   * immediately so the UI reflects the stop request rather than waiting on
+   * the worker's own final PATCH, which — for a run the worker has already
+   * forgotten — would never come.
+   */
+  async cancelRun(orgId: string, filterId: string, runId: string) {
+    const run = await this.prisma.extractionRun.findFirst({
+      where: { id: runId, filterId },
+      include: { filter: { select: { orgId: true } } },
+    });
+    if (!run || run.filter.orgId !== orgId) {
+      throw new NotFoundException("Extraction run not found");
+    }
+    if (run.status !== "RUNNING") {
+      return run;
+    }
+
+    const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
+    try {
+      await fetch(`${aiWorkersUrl}/lead-gen/runs/${runId}/cancel`, { method: "POST" });
+    } catch (err) {
+      // The worker being unreachable doesn't change what the user asked for
+      // — still mark it cancelled below, rather than leaving the row stuck
+      // RUNNING because the stop request itself couldn't be delivered.
+      this.logger.warn(`cancel request for run ${runId} could not reach the AI workers: ${(err as Error).message}`);
+    }
+
+    const cancelled = await this.prisma.extractionRun.update({
+      where: { id: runId },
+      data: { status: "CANCELLED", finishedAt: new Date() },
+    });
+
+    this.realtime.emitToOrg(orgId, "extractionRun.progress", {
+      runId: cancelled.id,
+      filterId: cancelled.filterId,
+      status: cancelled.status,
+      leadsFound: cancelled.leadsFound,
+      leadsVerified: cancelled.leadsVerified,
+      duplicatesSkipped: cancelled.duplicatesSkipped,
+      priorityMix: cancelled.priorityMix,
+      error: cancelled.error,
+    });
+
+    return cancelled;
   }
 }

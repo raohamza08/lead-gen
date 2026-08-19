@@ -20,9 +20,32 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
     lead = lead_detail["lead"] if "lead" in lead_detail else lead_detail
     org_id = org_id or lead.get("orgId")
 
+    async def announce_start(agent) -> None:
+        if not org_id:
+            return
+        await api_client.record_agent_started(org_id, lead_id, agent.name, agent.responsibility)
+
+    async def stream(record) -> None:
+        # Both steps ("review" then "linkedin") can each spend a Claude CLI
+        # call, so stream them live rather than dumping both only once the
+        # pipeline finishes.
+        if not org_id:
+            return
+        await api_client.record_agent_runs(
+            org_id,
+            None,
+            [
+                {
+                    "agent": record.agent, "status": record.status, "durationMs": record.duration_ms,
+                    "attempts": record.attempts, "error": record.error, "notes": record.notes,
+                    "leadId": lead_id,
+                }
+            ],
+        )
+
     orchestrator = build("linkedin_draft", seed_keys=("lead",))
     ctx = AgentContext(run_id=lead_id, org_id=org_id or "", data={"lead": lead_detail})
-    result = await orchestrator.run(ctx)
+    result = await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
 
     messages = ctx.get("linkedin_messages")
     if messages:
@@ -32,19 +55,6 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
         logger.error(
             "LinkedIn drafting pipeline produced nothing for lead %s: stopped at %s (%s)",
             lead_id, result.stopped_at, result.stop_reason,
-        )
-
-    if org_id:
-        await api_client.record_agent_runs(
-            org_id,
-            None,
-            [
-                {
-                    "agent": r.agent, "status": r.status, "durationMs": r.duration_ms,
-                    "attempts": r.attempts, "error": r.error, "notes": r.notes, "leadId": lead_id,
-                }
-                for r in result.records
-            ],
         )
 
 

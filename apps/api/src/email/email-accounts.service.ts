@@ -1,6 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { EmailAccount } from "@prisma/client";
+import { Queue } from "bullmq";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { UpsertEmailAccountDto } from "./dto/upsert-email-account.dto";
 import { GmailProvider } from "./providers/gmail.provider";
 import { SmtpProvider } from "./providers/smtp.provider";
@@ -19,6 +21,8 @@ function sanitize(account: EmailAccount) {
  */
 @Injectable()
 export class EmailAccountsService {
+  private readonly emailQueue = new Queue(QUEUE_NAMES.EMAIL_SEND, { connection: getRedisConnection() });
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gmail: GmailProvider,
@@ -92,6 +96,42 @@ export class EmailAccountsService {
     if (!existing) throw new NotFoundException("Email account not found");
     const updated = await this.prisma.emailAccount.update({ where: { id }, data: dto });
     return sanitize(updated);
+  }
+
+  /**
+   * Finds emails stuck showing QUEUED whose send job has actually already
+   * died in the queue (every retry exhausted) and marks them FAILED so they
+   * become visible and resendable, instead of sitting invisibly "queued"
+   * forever.
+   *
+   * This is a safety net, not the primary fix — EmailSendWorker.onFailed
+   * marks a message FAILED itself the moment its job's retries exhaust, so a
+   * message sent through the normal flow never needs this. It exists for
+   * whatever that path doesn't (or didn't, before it was added) catch: a
+   * worker that crashed between the last retry and writing the status, a
+   * Redis hiccup, digging up chunk older cases from a bug — anything that
+   * leaves BullMQ and the database disagreeing about whether a send is dead.
+   * Org-scoped even though the queue itself is shared across every org,
+   * since an admin here should only ever be able to affect their own leads.
+   */
+  async reconcileStuck(orgId: string) {
+    const failedJobs = await this.emailQueue.getJobs(["failed"]);
+    const deadIds = [
+      ...new Set(
+        failedJobs
+          .map((job) => (job.data as { emailMessageId?: string }).emailMessageId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    if (deadIds.length === 0) {
+      return { checked: 0, fixed: 0 };
+    }
+
+    const result = await this.prisma.emailMessage.updateMany({
+      where: { id: { in: deadIds }, status: "QUEUED", lead: { orgId } },
+      data: { status: "FAILED" },
+    });
+    return { checked: deadIds.length, fixed: result.count };
   }
 
   /** Mailbox health for the Sequences dashboard (Part F1) — sends today vs. daily limit. */

@@ -33,11 +33,14 @@ enum PipelineStage {
   UNDER_REVIEW
   READY_FOR_OUTREACH
   EMAIL_1_SENT
-  WAITING_2_DAYS
+  WAITING_EMAIL_2
   EMAIL_2_SENT
-  WAITING_1_2_DAYS
-  GEMINI_DRAFTING
-  PERSONALIZED_PITCH
+  WAITING_EMAIL_3
+  EMAIL_3_SENT
+  WAITING_EMAIL_4
+  EMAIL_4_SENT
+  WAITING_EMAIL_5
+  EMAIL_5_SENT
   LINKEDIN_OUTREACH
   LINKEDIN_FOLLOW_UP
   REPLIED
@@ -74,6 +77,7 @@ enum ExtractionRunStatus {
   COMPLETED
   COMPLETED_SHORT_OF_TARGET
   FAILED
+  CANCELLED
 }
 
 enum EmailProvider {
@@ -361,6 +365,7 @@ model Lead {
   contactName         String?  @map("contact_name")
   jobTitle            String?  @map("job_title")
   email               String?
+  personalEmail       String?  @map("personal_email")
   phone               String?
   industry            String?
   subNiche            String?  @map("sub_niche")

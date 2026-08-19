@@ -8,7 +8,10 @@ interface PendingApproval {
   id: string;
   subject: string;
   bodyHtml: string;
-  rationale: { problemsIdentified?: string[]; roiEstimateBasis?: string } | null;
+  rationale: {
+    hook?: string; insight?: string; evidence?: string | null; reframe?: string; cta?: string;
+    reviewNotes?: string[];
+  } | null;
   lead: { id: string; companyName: string; contactName: string | null; email: string | null };
 }
 
@@ -82,8 +85,13 @@ export default function SequencesPage() {
                     {a.lead.companyName}
                   </Link>
                   <p className="mt-1 text-sm font-medium">{a.subject}</p>
-                  {a.rationale?.roiEstimateBasis && (
-                    <p className="mt-1 text-xs text-ink/60">ROI basis: {a.rationale.roiEstimateBasis}</p>
+                  {a.rationale?.evidence && (
+                    <p className="mt-1 text-xs text-ink/60">Evidence used: {a.rationale.evidence}</p>
+                  )}
+                  {a.rationale?.reviewNotes && a.rationale.reviewNotes.length > 0 && (
+                    <p className="mt-1 rounded bg-gold/10 px-2 py-1 text-xs text-gold">
+                      Needs a look: {a.rationale.reviewNotes.join("; ")}
+                    </p>
                   )}
                   <div
                     className="prose prose-sm mt-2 max-w-none text-xs text-ink/80"

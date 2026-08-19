@@ -23,6 +23,7 @@ export class CreateManualLeadDto {
   // Validated as an email so a typo is caught at entry rather than becoming a
   // bounce that damages the sending domain's reputation.
   @IsOptional() @IsEmail({}, { message: "email must be a valid address" }) email?: string;
+  @IsOptional() @IsEmail({}, { message: "personalEmail must be a valid address" }) personalEmail?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() contactLinkedinUrl?: string;
   @IsOptional() @IsString() industry?: string;

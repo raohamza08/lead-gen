@@ -15,11 +15,13 @@ import { ReviewNoteDto } from "./dto/review-note.dto";
 import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { ApproveEmailAction, ApproveEmailDto } from "./dto/approve-email.dto";
-import { isValidTransition } from "./pipeline-transitions";
+import { isValidRewind, isValidTransition } from "./pipeline-transitions";
 import { SequencerService } from "../sequencer/sequencer.service";
 import { SyncService } from "../sync/sync.service";
 import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
+import { ImportEnrichmentQueue } from "../common/queue/import-enrichment.queue";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
+import { mapRowToDto, parseCsvHeaders, parseCsvRows, suggestMapping } from "./lead-import-mapping";
 
 export interface CreateLeadResult {
   status: "created" | "duplicate";
@@ -35,6 +37,7 @@ export class LeadsService {
     private readonly sequencer: SequencerService,
     private readonly sync: SyncService,
     private readonly agentDispatch: AgentDispatchQueue,
+    private readonly importEnrichment: ImportEnrichmentQueue,
     private readonly realtime: RealtimeGateway,
   ) {}
 
@@ -89,6 +92,7 @@ export class LeadsService {
             contactName: dto.contactName,
             jobTitle: dto.jobTitle,
             email: dto.email,
+            personalEmail: dto.personalEmail,
             phone: dto.phone,
             industry: dto.industry,
             subNiche: dto.subNiche,
@@ -160,8 +164,12 @@ export class LeadsService {
         return created;
       });
 
-      // Fire-and-forget sync to Sheets + ClickUp (Part C4/C5). Failures here are
-      // retried by the sync queue, never block the lead from existing.
+      // Fire-and-forget sync to Sheets + ClickUp (Part C4/C5), which is also
+      // the "lead.created" realtime emit's only choke point (SyncService's
+      // own doc comment) — /leads picking it up is what makes new leads
+      // appear live during a "Run now" extraction instead of needing a
+      // manual refresh. Failures here are retried by the sync queue, never
+      // block the lead from existing.
       this.sync.onLeadCreated(lead.id).catch((err) =>
         this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
       );
@@ -272,7 +280,7 @@ export class LeadsService {
 
     const columns = [
       "Company", "Website", "Industry", "Country", "City",
-      "Contact name", "Job title", "Email", "Phone",
+      "Contact name", "Job title", "Email", "Personal email", "Phone",
       "Lead score", "AI opportunity score", "Stage", "Created at",
     ];
 
@@ -291,6 +299,7 @@ export class LeadsService {
         lead.contactName,
         lead.jobTitle,
         lead.email,
+        lead.personalEmail,
         lead.phone,
         lead.score?.leadScore,
         lead.score?.aiOpportunityScore,
@@ -478,6 +487,47 @@ export class LeadsService {
     return updated;
   }
 
+  /**
+   * Moves a lead back to any earlier stage the caller picks, not only the one
+   * immediately before it — moveBack's one-step undo doesn't reach far enough
+   * when a card was advanced several stages too far, or when correcting a
+   * mistake made a while ago (e.g. un-marking Lost, or pulling a lead back
+   * out of the email sequence entirely). isValidRewind is the only gate: it
+   * ignores the forward state machine (ALLOWED_TRANSITIONS) on purpose,
+   * since a human undoing a mistake isn't constrained by what the automation
+   * does next.
+   *
+   * Same reasoning as moveBack for the rest: cancels any pending wait timer
+   * so rewinding out of a WAITING_* stage can't leave a stale send scheduled
+   * against a stage the lead has left, and deliberately does NOT call
+   * sequencer.onStageEntered — this is a correction, not a forward action,
+   * and re-firing it could send a duplicate of an email that already went
+   * out.
+   */
+  async rewindTo(orgId: string, id: string, toStage: PipelineStage) {
+    await this.assertOwnership(orgId, id);
+    const current = await this.prisma.pipelineState.findUniqueOrThrow({ where: { leadId: id } });
+
+    if (!isValidRewind(current.stage as PipelineStage, toStage)) {
+      throw new BadRequestException(`Cannot move lead from ${current.stage} back to ${toStage}`);
+    }
+
+    await this.sequencer.cancelWaitTimer(id);
+
+    const updated = await this.prisma.pipelineState.update({
+      where: { leadId: id },
+      data: { stage: toStage, previousStage: current.stage, enteredStageAt: new Date() },
+    });
+
+    await this.prisma.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
+
+    this.sync.onStageChanged(id, toStage).catch((err) =>
+      this.logger.warn(`ClickUp sync failed for lead ${id}: ${(err as Error).message}`),
+    );
+
+    return updated;
+  }
+
   /** Retries an email that failed to send — e.g. it failed because no mailbox
    *  was configured yet, and one has since been added. */
   async resendEmail(orgId: string, leadId: string, emailMessageId: string) {
@@ -515,37 +565,66 @@ export class LeadsService {
     return approved;
   }
 
+  /** Which pipeline stage each step of the 5-email sequence lands the lead
+   *  in once its draft arrives (Part: 5-email sequence, 2026-08-12). */
+  private static readonly STAGE_FOR_STEP: Record<number, PipelineStage> = {
+    1: PipelineStage.EMAIL_1_SENT,
+    2: PipelineStage.EMAIL_2_SENT,
+    3: PipelineStage.EMAIL_3_SENT,
+    4: PipelineStage.EMAIL_4_SENT,
+    5: PipelineStage.EMAIL_5_SENT,
+  };
+
+  /** The stage a lead must be in for a (re)draft of a given step to make
+   *  sense — the inverse of STAGE_FOR_STEP, plus READY_FOR_OUTREACH for
+   *  step 1, which has no distinct "waiting" stage of its own. */
+  private static readonly STEP_FOR_WAITING_STAGE: Partial<Record<PipelineStage, number>> = {
+    [PipelineStage.READY_FOR_OUTREACH]: 1,
+    [PipelineStage.WAITING_EMAIL_2]: 2,
+    [PipelineStage.WAITING_EMAIL_3]: 3,
+    [PipelineStage.WAITING_EMAIL_4]: 4,
+    [PipelineStage.WAITING_EMAIL_5]: 5,
+  };
+
   /**
-   * Called by the Gemini agent (via the internal-token-guarded endpoint) once
-   * Email #3 is drafted. Defaults to auto-send (Part: autonomous system) —
-   * an org can opt back into a human approving each one first via the
-   * Settings toggle (Organization.settings.autoSendEnabled), but the
-   * unattended default is now the norm rather than the exception.
+   * Called by the ai-workers "email" agent (via the internal-token-guarded
+   * endpoint) once one step of the 5-email sequence is drafted. Defaults to
+   * auto-send (Part: autonomous system) — an org can opt back into a human
+   * approving each one first via the Settings toggle
+   * (Organization.settings.autoSendEnabled) — but `needsReview` overrides
+   * that setting unconditionally: a draft the worker's own lint flagged
+   * (an unresolved [BRACKET PLACEHOLDER], or a voice/structure rule still
+   * broken after one retry) must reach a human before it can reach a
+   * prospect, no matter what the org configured.
    */
-  async receiveEmail3Draft(leadId: string, dto: { subject: string; bodyHtml: string; rationale: unknown }) {
+  async receiveEmailDraft(
+    leadId: string,
+    dto: { sequenceStep: number; subject: string; bodyHtml: string; rationale: unknown; needsReview?: boolean },
+  ) {
     const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: lead.orgId } });
     const autoSendEnabled = (org.settings as Record<string, unknown>)?.autoSendEnabled !== false;
+    const status = dto.needsReview ? "PENDING_APPROVAL" : autoSendEnabled ? "QUEUED" : "PENDING_APPROVAL";
 
     const message = await this.prisma.emailMessage.create({
       data: {
         leadId,
-        sequenceStep: 3,
+        sequenceStep: dto.sequenceStep,
         subject: dto.subject,
         bodyHtml: dto.bodyHtml,
         rationale: dto.rationale as Prisma.InputJsonValue,
-        generatedBy: "GEMINI",
-        status: autoSendEnabled ? "QUEUED" : "PENDING_APPROVAL",
+        generatedBy: "CLAUDE",
+        status,
       },
     });
 
-    await this.prisma.pipelineState.update({
-      where: { leadId },
-      data: { stage: PipelineStage.PERSONALIZED_PITCH, enteredStageAt: new Date() },
-    });
-    await this.sync.onStageChanged(leadId, PipelineStage.PERSONALIZED_PITCH);
+    const stage = LeadsService.STAGE_FOR_STEP[dto.sequenceStep];
+    if (stage) {
+      await this.prisma.pipelineState.update({ where: { leadId }, data: { stage, enteredStageAt: new Date() } });
+      await this.sync.onStageChanged(leadId, stage);
+    }
 
-    if (autoSendEnabled) {
+    if (status === "QUEUED") {
       await this.sequencer.enqueueApprovedSend(message.id);
     }
 
@@ -553,23 +632,30 @@ export class LeadsService {
   }
 
   /**
-   * Manually (re)triggers the Gemini pitch draft for a lead already in
-   * GEMINI_DRAFTING. Exists for two cases: a lead stuck there from before
-   * SequencerService.onStageEntered had a case for this stage (advancing
-   * into it silently did nothing), and a run that genuinely failed —
-   * neither has any other way to recover short of moving back and forward
-   * again, which also re-syncs external state (ClickUp) unnecessarily.
+   * Manually (re)triggers the AI draft for whichever step the lead is
+   * currently waiting on. Exists for two cases: a lead stuck at a waiting
+   * stage from before SequencerService.onStageEntered had a case for it, and
+   * a run that genuinely failed — neither has any other way to recover
+   * short of moving back and forward again, which also re-syncs external
+   * state (ClickUp) unnecessarily.
    */
-  async requestPitchDraft(orgId: string, leadId: string) {
+  async requestEmailDraft(orgId: string, leadId: string) {
     await this.assertOwnership(orgId, leadId);
+    const state = await this.prisma.pipelineState.findUnique({ where: { leadId } });
+    const step = state ? LeadsService.STEP_FOR_WAITING_STAGE[state.stage as PipelineStage] : undefined;
+    if (!step) {
+      throw new BadRequestException(
+        `Lead is not at a stage where an email draft can be (re)requested (currently ${state?.stage ?? "unknown"})`,
+      );
+    }
     try {
-      await this.sequencer.dispatchGeminiDraft(leadId);
+      await this.sequencer.dispatchEmailDraft(leadId, step);
     } catch (err) {
       throw new ServiceUnavailableException(
         `Could not reach the AI workers: ${(err as Error).message}`,
       );
     }
-    return { accepted: true };
+    return { accepted: true, step };
   }
 
   /**
@@ -644,7 +730,34 @@ export class LeadsService {
       );
     }
 
-    const lead = await this.prisma.$transaction(async (tx) => {
+    const lead = await this.insertManualLead(orgId, dto, websiteDomain);
+
+    this.sync.onLeadCreated(lead.id).catch((err) =>
+      this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
+    );
+
+    // A hand-entered lead skips discovery, but everything discovery would
+    // otherwise have triggered — verification, company/website/buyer
+    // research, AI opportunity, scoring, and the AI's own review note — still
+    // needs to happen. Fire-and-forget, same as the sync dispatch above: a
+    // worker outage must not block the lead from being created.
+    this.dispatchEnrichment(orgId, lead.id).catch((err) =>
+      this.logger.warn(`Enrichment dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
+    );
+
+    return { status: "created", leadId: lead.id };
+  }
+
+  /** The insert core shared by createManual (one lead from the form) and
+   *  importLeads (many from a CSV) — duplicate-checking, sync dispatch, and
+   *  which enrichment queue to use differ between the two callers, so only
+   *  the actual row-creation lives here. */
+  private async insertManualLead(
+    orgId: string,
+    dto: Partial<CreateManualLeadDto> & { companyName: string },
+    websiteDomain?: string,
+  ): Promise<{ id: string }> {
+    return this.prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
         data: {
           orgId,
@@ -659,6 +772,7 @@ export class LeadsService {
           contactLinkedinUrl: dto.contactLinkedinUrl,
           jobTitle: dto.jobTitle,
           email: dto.email,
+          personalEmail: dto.personalEmail,
           phone: dto.phone,
           industry: dto.industry,
           country: dto.country,
@@ -691,21 +805,107 @@ export class LeadsService {
 
       return created;
     });
+  }
 
-    this.sync.onLeadCreated(lead.id).catch((err) =>
-      this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
-    );
+  /**
+   * Parses just enough of an uploaded CSV to drive the column-mapping
+   * screen (Part: lead import): the headers, a best-guess mapping for each
+   * (see lead-import-mapping.ts), and a handful of preview rows so the user
+   * can sanity-check the guess against real data before committing to it.
+   */
+  previewImport(csv: string): {
+    headers: string[];
+    suggestedMapping: Record<string, string | null>;
+    previewRows: Record<string, string>[];
+    totalRows: number;
+  } {
+    let headers: string[];
+    let rows: Record<string, string>[];
+    try {
+      headers = parseCsvHeaders(csv);
+      rows = parseCsvRows(csv);
+    } catch (err) {
+      throw new BadRequestException(`Could not parse this file as CSV: ${(err as Error).message}`);
+    }
+    if (headers.length === 0) {
+      throw new BadRequestException("This file has no header row to map.");
+    }
 
-    // A hand-entered lead skips discovery, but everything discovery would
-    // otherwise have triggered — verification, company/website/buyer
-    // research, AI opportunity, scoring, and the AI's own review note — still
-    // needs to happen. Fire-and-forget, same as the sync dispatch above: a
-    // worker outage must not block the lead from being created.
-    this.dispatchEnrichment(orgId, lead.id).catch((err) =>
-      this.logger.warn(`Enrichment dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
-    );
+    return {
+      headers,
+      suggestedMapping: suggestMapping(headers),
+      previewRows: rows.slice(0, 5),
+      totalRows: rows.length,
+    };
+  }
 
-    return { status: "created", leadId: lead.id };
+  /**
+   * Bulk-creates leads from a CSV against a confirmed column mapping (Part:
+   * lead import). Each row gets the exact same duplicate check a single
+   * manual add does — a company already in the system is skipped, never
+   * merged or overwritten. Enrichment for every created lead is queued
+   * through ImportEnrichmentQueue (concurrency 1) only after every row has
+   * been inserted, so the AI work happens one lead at a time and a slow
+   * first lead never delays the 50th from even being created.
+   */
+  async importLeads(
+    orgId: string,
+    csv: string,
+    mapping: Record<string, string | null>,
+  ): Promise<{ created: number; duplicates: number; failed: { row: number; reason: string }[] }> {
+    let rows: Record<string, string>[];
+    try {
+      rows = parseCsvRows(csv);
+    } catch (err) {
+      throw new BadRequestException(`Could not parse this file as CSV: ${(err as Error).message}`);
+    }
+
+    const createdIds: string[] = [];
+    let duplicateCount = 0;
+    const failed: { row: number; reason: string }[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      // +2: 1-indexed for a human, plus the header row itself isn't a data row.
+      const rowNumber = i + 2;
+      const fields = mapRowToDto(rows[i], mapping);
+      const companyName = typeof fields.companyName === "string" ? fields.companyName.trim() : "";
+
+      if (companyName.length < 2) {
+        failed.push({ row: rowNumber, reason: "missing or too-short company name" });
+        continue;
+      }
+      const dto = { ...fields, companyName } as Partial<CreateManualLeadDto> & { companyName: string };
+
+      try {
+        const websiteDomain = extractDomain(dto.website);
+        const existing = await this.findExistingDuplicate(
+          orgId,
+          { companyName: dto.companyName, email: dto.email, linkedinUrl: dto.linkedinUrl },
+          websiteDomain,
+        );
+        if (existing) {
+          duplicateCount++;
+          continue;
+        }
+
+        const lead = await this.insertManualLead(orgId, dto, websiteDomain);
+        createdIds.push(lead.id);
+
+        this.sync.onLeadCreated(lead.id).catch((err) =>
+          this.logger.warn(`Sync dispatch failed for imported lead ${lead.id}: ${(err as Error).message}`),
+        );
+      } catch (err) {
+        failed.push({ row: rowNumber, reason: (err as Error).message });
+      }
+    }
+
+    for (const leadId of createdIds) {
+      await this.importEnrichment.add({ leadId, orgId }).catch((err) =>
+        this.logger.warn(`Import-enrichment dispatch failed for lead ${leadId}: ${(err as Error).message}`),
+      );
+    }
+
+    return { created: createdIds.length, duplicates: duplicateCount, failed };
   }
 
   /**

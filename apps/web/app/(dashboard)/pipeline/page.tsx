@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../lib/api-client";
-import { useRealtimeRefetch } from "../../../lib/realtime";
-import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
+import { useRealtimeEvent, useRealtimeRefetch } from "../../../lib/realtime";
+import { AGENT_LABELS } from "../../../lib/agent-labels";
+import { ALLOWED_TRANSITIONS, PIPELINE_STAGE_ORDER, PipelineStage, isValidRewind } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 
 interface AgentRunSummary {
@@ -46,23 +47,6 @@ function SourceBadge({ source }: { source?: string }) {
   );
 }
 
-/** Human-readable agent names, matching the registry in apps/ai-workers. */
-const AGENT_LABELS: Record<string, string> = {
-  lead_discovery: "Discovery",
-  lead_verification: "Verification",
-  company_intelligence: "Company intel",
-  website_audit: "Website audit",
-  buyer_intelligence: "Buyer intel",
-  ai_opportunity: "Opportunity",
-  lead_scoring: "Scoring",
-  email: "Email agent",
-  review: "Review",
-  linkedin: "LinkedIn",
-  scheduler: "Scheduler",
-  analytics: "Analytics",
-  learning: "Learning",
-};
-
 function agentTone(status: string) {
   if (status === "OK") return "text-good";
   if (status === "DEGRADED") return "text-gold";
@@ -81,35 +65,51 @@ function timeAgo(iso: string | null | undefined): string | null {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
-/** The email_only pipeline (review -> email -> scheduler) behind GEMINI_DRAFTING. */
+/** The email_only pipeline (review -> email -> scheduler) that drafts each
+ *  step of the 5-email sequence. */
 const EMAIL_PIPELINE_AGENTS = new Set(["review", "email", "scheduler"]);
-const DRAFTING_STEP_LABELS: Record<string, string> = {
-  review: "Reviewing findings…",
-  email: "Drafting email…",
-  scheduler: "Scheduling follow-up…",
-};
+
+/** Stages where an AI draft could plausibly be in flight in the background —
+ *  every waiting stage of the 5-email sequence, plus READY_FOR_OUTREACH
+ *  itself (Email 1 drafts the instant that stage is entered). */
+const DRAFTING_POSSIBLE_STAGES = new Set([
+  "READY_FOR_OUTREACH", "WAITING_EMAIL_2", "WAITING_EMAIL_3", "WAITING_EMAIL_4", "WAITING_EMAIL_5",
+]);
+
+interface RunningAgent {
+  agent: string;
+  responsibility?: string;
+}
 
 /**
- * What's actually happening on this card right now. Every other stage in the
- * acquisition pipeline finishes all its agent work before the lead ever
- * becomes a row here — GEMINI_DRAFTING is the one stage where an agent can
- * still genuinely be running in the background while the card sits on the
- * board.
+ * What's actually happening on this card right now. `running`, if given, is a
+ * live "agentRun.started" signal for this specific lead — the accurate,
+ * general answer to "which agent is working and what is it doing" across
+ * every stage.
  *
- * This used to show a pulsing "drafting" dot for the entire time a lead sat
- * in this stage, with no relation to whether anything was actually running —
- * a lead advanced into GEMINI_DRAFTING without the pipeline ever being
- * triggered (a bug in SequencerService.onStageEntered, since fixed) looked
- * identical to one genuinely in progress. Now it checks for a real agentRun
- * from this pipeline started after the lead entered the stage, and flags it
- * as not-started (rather than "drafting…" forever) once enough time has
- * passed that dispatch lag stops being a plausible excuse.
+ * The drafting-possible stages keep one extra fallback below: a lead can sit
+ * there for minutes with no live signal ever having arrived (a lead advanced
+ * into the stage without the pipeline actually being triggered — a real bug
+ * hit once, see SequencerService.onStageEntered) — that case flags as "Not
+ * started" rather than showing nothing.
  */
-function AgentActivity({ lead }: { lead: LeadRow }) {
+function AgentActivity({ lead, running }: { lead: LeadRow; running?: RunningAgent }) {
   const stage = lead.pipelineState?.stage;
   const last = lead.agentRuns?.[0];
 
-  if (stage === "GEMINI_DRAFTING") {
+  if (running) {
+    return (
+      <div
+        className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent"
+        title={running.responsibility}
+      >
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+        <span className="truncate">{AGENT_LABELS[running.agent] ?? running.agent} working…</span>
+      </div>
+    );
+  }
+
+  if (stage && DRAFTING_POSSIBLE_STAGES.has(stage)) {
     const enteredAt = lead.pipelineState?.enteredStageAt ? new Date(lead.pipelineState.enteredStageAt).getTime() : null;
     const minutesInStage = enteredAt ? Math.floor((Date.now() - enteredAt) / 60000) : 0;
     const relevant =
@@ -125,14 +125,14 @@ function AgentActivity({ lead }: { lead: LeadRow }) {
         </div>
       );
     }
-
-    return (
-      <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        {relevant ? DRAFTING_STEP_LABELS[relevant.agent] ?? "Drafting…" : "Starting…"}
-        {minutesInStage > 0 && <span className="text-ink/35">· {minutesInStage}m</span>}
-      </div>
-    );
+    if (!relevant) {
+      return (
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+          Starting…
+        </div>
+      );
+    }
   }
 
   if (!last) return null;
@@ -173,12 +173,15 @@ const LABELS: Record<string, string> = {
   RESEARCH_COMPLETED: "Research Done",
   UNDER_REVIEW: "Under Review",
   READY_FOR_OUTREACH: "Ready",
-  EMAIL_1_SENT: "Email 1 Sent",
-  WAITING_2_DAYS: "Waiting 2d",
-  EMAIL_2_SENT: "Email 2 Sent",
-  WAITING_1_2_DAYS: "Waiting 1-2d",
-  GEMINI_DRAFTING: "Drafting",
-  PERSONALIZED_PITCH: "Pitch Sent",
+  EMAIL_1_SENT: "Email 1: Trigger",
+  WAITING_EMAIL_2: "Waiting (E2)",
+  EMAIL_2_SENT: "Email 2: Insight",
+  WAITING_EMAIL_3: "Waiting (E3)",
+  EMAIL_3_SENT: "Email 3: Proof",
+  WAITING_EMAIL_4: "Waiting (E4)",
+  EMAIL_4_SENT: "Email 4: Offer",
+  WAITING_EMAIL_5: "Waiting (E5)",
+  EMAIL_5_SENT: "Email 5: Breakup",
   LINKEDIN_OUTREACH: "LinkedIn",
   LINKEDIN_FOLLOW_UP: "LinkedIn F/U",
   REPLIED: "Replied",
@@ -216,6 +219,11 @@ export default function PipelinePage() {
   const [dragging, setDragging] = useState<LeadRow | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // Live "which agent is working on which lead right now" — keyed by leadId,
+  // separate from `leads` because it must update the instant an
+  // agentRun.started event lands, not on the 400ms-debounced full refetch
+  // below (agentRun.recorded's status/notes still come from that refetch).
+  const [runningAgents, setRunningAgents] = useState<Record<string, RunningAgent & { at: number }>>({});
 
   function load() {
     api
@@ -234,6 +242,39 @@ export default function PipelinePage() {
     ["lead.created", "lead.stageChanged", "lead.updated", "agentRun.recorded", "agentDispatch.status"],
     load,
   );
+
+  // Prunes entries older than 5 minutes — a safety net for the rare case an
+  // agent's "started" is never followed by a "recorded" (worker crash
+  // mid-run), so a card can't show "working…" forever.
+  const pruneStale = (map: Record<string, RunningAgent & { at: number }>) => {
+    const cutoff = Date.now() - 5 * 60 * 1000;
+    const next: Record<string, RunningAgent & { at: number }> = {};
+    for (const [id, v] of Object.entries(map)) if (v.at >= cutoff) next[id] = v;
+    return next;
+  };
+  useRealtimeEvent<{ leadId: string; agent: string; responsibility?: string }>("agentRun.started", (payload) => {
+    setRunningAgents((cur) => ({
+      ...pruneStale(cur),
+      [payload.leadId]: { agent: payload.agent, responsibility: payload.responsibility, at: Date.now() },
+    }));
+  });
+  useRealtimeEvent<{ leadId: string; agent: string }>("agentRun.recorded", (payload) => {
+    setRunningAgents((cur) => {
+      if (cur[payload.leadId]?.agent !== payload.agent) return cur;
+      const next = { ...cur };
+      delete next[payload.leadId];
+      return next;
+    });
+  });
+  useRealtimeEvent<{ leadId: string; status: string }>("agentDispatch.status", (payload) => {
+    if (payload.status !== "FAILED") return;
+    setRunningAgents((cur) => {
+      if (!(payload.leadId in cur)) return cur;
+      const next = { ...cur };
+      delete next[payload.leadId];
+      return next;
+    });
+  });
 
   const byStage = useMemo(() => {
     const grouped = new Map<string, LeadRow[]>();
@@ -275,16 +316,14 @@ export default function PipelinePage() {
     }
   }
 
-  /** Undo one step — swaps stage<->previousStage server-side. Also how a
-   *  failed automated send (e.g. no mailbox configured yet) gets retried:
-   *  back to Ready, then forward again. */
-  async function moveBack(lead: LeadRow, e: React.MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
+  /** Back to any earlier stage the user picks, not only the one immediately
+   *  before this one — also how a failed automated send (e.g. no mailbox
+   *  configured yet) gets retried: back to Ready, then forward again. */
+  async function rewind(lead: LeadRow, toStage: string) {
     setBusy(lead.id);
     setError(null);
     try {
-      await api.moveBack(lead.id);
+      await api.rewindLead(lead.id, toStage);
       load();
     } catch (err) {
       setError(`Could not move ${lead.companyName} back: ${(err as Error).message}`);
@@ -407,21 +446,33 @@ export default function PipelinePage() {
                       {lead.country && (
                         <div className="mt-1 text-[11px] text-ink/40">{lead.country}</div>
                       )}
-                      <AgentActivity lead={lead} />
+                      <AgentActivity lead={lead} running={runningAgents[lead.id]} />
                       <LastEmail lead={lead} />
                     </Link>
                     <div className="mt-1.5 flex items-center gap-1.5">
-                      {lead.pipelineState?.previousStage && (
-                        <button
-                          type="button"
-                          disabled={busy === lead.id}
-                          onClick={(e) => moveBack(lead, e)}
-                          title={`Move back to ${LABELS[lead.pipelineState.previousStage] ?? lead.pipelineState.previousStage}`}
-                          className="rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-ink/50 transition-colors hover:bg-ink/5 hover:text-ink/80 disabled:opacity-50"
-                        >
-                          ← Back
-                        </button>
-                      )}
+                      {(() => {
+                        const currentStage = (lead.pipelineState?.stage ?? "NEW_LEAD") as PipelineStage;
+                        const backOptions = PIPELINE_STAGE_ORDER.filter((s) => isValidRewind(currentStage, s));
+                        if (backOptions.length === 0) return null;
+                        return (
+                          <select
+                            key={`${lead.id}-${currentStage}`}
+                            defaultValue=""
+                            disabled={busy === lead.id}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => {
+                              if (e.target.value) rewind(lead, e.target.value);
+                            }}
+                            title="Move this lead back to an earlier stage — a correction, skips the forward automation."
+                            className="rounded border border-[var(--line)] bg-transparent px-1.5 py-0.5 text-[10px] text-ink/50 transition-colors hover:bg-ink/5 hover:text-ink/80 disabled:opacity-50"
+                          >
+                            <option value="" disabled>← Back to…</option>
+                            {backOptions.map((s) => (
+                              <option key={s} value={s}>{LABELS[s] ?? s}</option>
+                            ))}
+                          </select>
+                        );
+                      })()}
                       <button
                         type="button"
                         disabled={busy === lead.id}

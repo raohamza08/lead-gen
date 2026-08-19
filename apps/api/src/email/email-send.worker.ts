@@ -46,11 +46,24 @@ export class EmailSendWorker implements OnModuleInit, OnModuleDestroy {
     const maxAttempts = job.opts.attempts ?? 1;
     if (job.attemptsMade < maxAttempts) return;
 
+    // Retries are exhausted and BullMQ will never touch this job again, so the
+    // row must be marked FAILED here — this used to only notify, leaving the
+    // message stuck showing QUEUED forever (indistinguishable from "still in
+    // flight") with no way to resend, since resendFailedMessage requires
+    // status FAILED. A transient-looking error (network blip, provider 5xx)
+    // that genuinely exhausts 3 attempts is not actually transient in
+    // practice, so this is the right terminal state for it too, same as the
+    // ComplianceGateError path in handle() above.
     const message = await this.prisma.emailMessage.findUnique({
       where: { id: job.data.emailMessageId },
-      select: { leadId: true, lead: { select: { orgId: true } } },
+      select: { leadId: true, status: true, lead: { select: { orgId: true } } },
     });
-    if (!message) return;
+    if (!message || message.status !== "QUEUED") return;
+
+    await this.prisma.emailMessage.update({
+      where: { id: job.data.emailMessageId },
+      data: { status: "FAILED" },
+    });
     await this.notifications.notify(message.lead.orgId, {
       type: "EMAIL_SEND_FAILED",
       severity: "ERROR",

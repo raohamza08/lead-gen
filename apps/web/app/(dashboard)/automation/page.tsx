@@ -53,8 +53,8 @@ interface FleetReport {
 }
 
 /** Pipelines actually invoked at runtime: `lead_acquisition` per candidate,
- *  `lead_enrichment`/`rescore` on demand, `email_only` behind the
- *  GEMINI_DRAFTING stage, `linkedin_draft` behind the lead detail page's
+ *  `lead_enrichment`/`rescore` on demand, `email_only` behind every waiting
+ *  stage of the 5-email sequence, `linkedin_draft` behind the lead detail page's
  *  "Generate LinkedIn copy" button, and `optimisation` behind the Analytics
  *  page's "Run analysis" button. `outreach` alone (review->email->linkedin->
  *  scheduler as one combined chain) still has no caller — email and LinkedIn

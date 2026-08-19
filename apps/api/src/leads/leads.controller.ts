@@ -3,6 +3,8 @@ import { Response } from "express";
 import { LeadsService } from "./leads.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
+import { PreviewImportDto } from "./dto/preview-import.dto";
+import { ImportLeadsDto } from "./dto/import-leads.dto";
 import { ReviewNoteDto } from "./dto/review-note.dto";
 import { AdvanceStageDto } from "./dto/advance-stage.dto";
 import { ApproveEmailDto } from "./dto/approve-email.dto";
@@ -41,6 +43,25 @@ export class LeadsController {
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   createManual(@CurrentUser() user: JwtClaims, @Body() dto: CreateManualLeadDto) {
     return this.leadsService.createManual(user.orgId, dto);
+  }
+
+  /** Headers, a suggested column mapping, and a preview of the first few
+   *  rows for the CSV-import mapping screen (Part: lead import). Read-only —
+   *  doesn't touch the database, just parses. */
+  @Post("import/preview")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
+  previewImport(@Body() dto: PreviewImportDto) {
+    return this.leadsService.previewImport(dto.csv);
+  }
+
+  /** Bulk-creates leads from a CSV against a confirmed column mapping (Part:
+   *  lead import). Same duplicate checks and role gate as a single manual add. */
+  @Post("import")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
+  importLeads(@CurrentUser() user: JwtClaims, @Body() dto: ImportLeadsDto) {
+    return this.leadsService.importLeads(user.orgId, dto.csv, dto.mapping);
   }
 
   @Get()
@@ -128,6 +149,14 @@ export class LeadsController {
     return this.leadsService.moveBack(user.orgId, id);
   }
 
+  /** Back to any earlier stage the caller picks — see LeadsService.rewindTo. */
+  @Post(":id/rewind")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  rewind(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: AdvanceStageDto) {
+    return this.leadsService.rewindTo(user.orgId, id, dto.stage);
+  }
+
   @Post(":id/emails/:emailMessageId/resend")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP)
@@ -146,21 +175,22 @@ export class LeadsController {
     return this.leadsService.approveEmail(user.orgId, id, dto);
   }
 
-  /** Called by the Gemini agent once Email #3 is drafted (Part D2). */
+  /** Called by the ai-workers "email" agent once one step of the 5-email
+   *  sequence is drafted (Part: 5-email sequence, 2026-08-12). */
   @Post(":id/draft-email")
   @UseGuards(InternalAuthGuard)
   receiveDraft(@Param("id") id: string, @Body() dto: CreateEmailDraftDto) {
-    return this.leadsService.receiveEmail3Draft(id, dto);
+    return this.leadsService.receiveEmailDraft(id, dto);
   }
 
-  /** (Re)triggers the Gemini pitch draft for a lead in GEMINI_DRAFTING —
-   *  recovers a lead stuck there (see SequencerService.onStageEntered) or
-   *  retries a run that failed. */
+  /** (Re)triggers the AI draft for whichever step the lead is currently
+   *  waiting on — recovers a lead stuck at a waiting stage (see
+   *  SequencerService.onStageEntered) or retries a draft that failed. */
   @Post(":id/pitch-draft/generate")
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   generatePitchDraft(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
-    return this.leadsService.requestPitchDraft(user.orgId, id);
+    return this.leadsService.requestEmailDraft(user.orgId, id);
   }
 
   /** Triggers the LinkedInAgent for this lead — manual, not automatic on

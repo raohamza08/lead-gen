@@ -98,10 +98,21 @@ VERIFY BEFORE RETURNING
 4. There is a concrete business opportunity for automation or software work.
 5. You can explain why this company is worth contacting.
 
+CONTACT EMAILS
+Report two distinct kinds of email if you can find them, and keep them apart:
+- `email`: their work/company address (site domain, staff page, press
+  contact, verified LinkedIn "Contact info").
+- `personalEmail`: an address of theirs NOT on the company domain — found on
+  a personal site/portfolio, a GitHub/Stack Overflow profile, a conference
+  speaker bio, or their own LinkedIn "Contact info" if it lists one. Leave it
+  null far more often than `email` — most people never surface one publicly,
+  and that is the expected, normal result, not a gap to fill by guessing.
+
 HARD RULES
-- Never invent a company, a person, or an email address. A guessed address
-  bounces, and bounces damage the sending reputation of every mailbox in the
-  system — null is always the correct answer when unsure.
+- Never invent a company, a person, or an email address — for either `email`
+  or `personalEmail`. A guessed address bounces, and bounces damage the
+  sending reputation of every mailbox in the system — null is always the
+  correct answer when unsure.
 - Apply every EXCLUDE rule as a hard reject, however well the company scores.
 - Reject freelancers, sole traders, and companies with no real digital presence
   or no budget capacity.
@@ -122,7 +133,8 @@ Respond with ONLY a JSON object — no prose, no markdown code fences:
   "businessDescription": string,
 
   "contactName": string|null, "jobTitle": string|null,
-  "contactLinkedinUrl": string|null, "email": string|null, "phone": string|null,
+  "contactLinkedinUrl": string|null, "email": string|null,
+  "personalEmail": string|null, "phone": string|null,
 
   "techStack": string[], "currentCrm": string|null,
   "websitePlatform": string|null, "automationTools": string[], "aiUsage": string|null,

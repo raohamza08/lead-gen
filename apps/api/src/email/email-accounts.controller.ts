@@ -23,6 +23,19 @@ export class EmailAccountsController {
     return this.service.health(user.orgId);
   }
 
+  /**
+   * Safety-net cleanup for emails stuck showing QUEUED after their send job
+   * already died in the queue (e.g. a mailbox's credentials went bad and
+   * every retry failed) — replaces manually patching the database. See
+   * EmailAccountsService.reconcileStuck for why this exists alongside the
+   * worker's own automatic handling.
+   */
+  @Post("reconcile-stuck")
+  @Roles(Role.ADMIN)
+  reconcileStuck(@CurrentUser() user: JwtClaims) {
+    return this.service.reconcileStuck(user.orgId);
+  }
+
   @Post()
   @Roles(Role.ADMIN)
   create(@CurrentUser() user: JwtClaims, @Body() dto: UpsertEmailAccountDto) {

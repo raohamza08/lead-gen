@@ -20,6 +20,7 @@ export class CreateLeadDto {
   @IsOptional() @IsString() contactName?: string;
   @IsOptional() @IsString() jobTitle?: string;
   @IsOptional() @IsString() email?: string;
+  @IsOptional() @IsString() personalEmail?: string;
   @IsOptional() @IsString() phone?: string;
   @IsOptional() @IsString() industry?: string;
   @IsOptional() @IsString() subNiche?: string;

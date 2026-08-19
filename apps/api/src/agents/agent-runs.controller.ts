@@ -78,6 +78,27 @@ export class AgentRunsController {
   }
 
   /**
+   * Live "this agent is working on this lead right now" ping — fired by the
+   * orchestrator right before an agent runs, not persisted anywhere (nothing
+   * to query later; it's superseded within seconds by the real record()
+   * call once the agent finishes). Purely a realtime broadcast so a lead's
+   * page can show progress instead of dead air while a multi-minute
+   * pipeline is mid-flight.
+   */
+  @Post("started")
+  @UseGuards(InternalAuthGuard)
+  started(
+    @Body("orgId") orgId: string,
+    @Body("leadId") leadId: string,
+    @Body("agent") agent: string,
+    @Body("responsibility") responsibility: string | undefined,
+  ) {
+    if (!orgId || !leadId || !agent) return { ok: false };
+    this.realtime.emitToOrg(orgId, "agentRun.started", { leadId, agent, responsibility });
+    return { ok: true };
+  }
+
+  /**
    * Fleet health for the Automation / AI Performance dashboards: per-agent
    * volume, failure rate and latency over a trailing window.
    */
