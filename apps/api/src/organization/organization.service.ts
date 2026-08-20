@@ -7,6 +7,11 @@ import { UpdateOrgBrandingDto } from "./dto/update-org-branding.dto";
 export interface OrgBranding {
   emailOrgName: string;
   emailSenderName: string;
+  /** Physical mailing address rendered into {{org.postal_address}} — a
+   *  CAN-SPAM requirement for commercial email, same as the unsubscribe
+   *  link. Empty until an admin sets one; see email-provider.service.ts for
+   *  what renders in its place until then. */
+  postalAddress: string;
 }
 
 export interface AgentPrompt {
@@ -37,6 +42,7 @@ export class OrganizationService {
     return {
       emailOrgName: (settings.emailOrgName as string) || org.name,
       emailSenderName: (settings.emailSenderName as string) || "The Team",
+      postalAddress: (settings.postalAddress as string) || "",
     };
   }
 

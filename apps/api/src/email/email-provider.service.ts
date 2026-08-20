@@ -74,7 +74,13 @@ export class EmailProviderService {
     const apiRoot = apiPublicUrl();
     let renderedBody = bodyHtml
       .replace(/\{\{unsubscribe_link\}\}/g, `${apiRoot}/unsubscribe?lead=${lead.id}`)
-      .replace(/\{\{org\.postal_address\}\}/g, process.env.ORG_POSTAL_ADDRESS ?? "[postal address required by CAN-SPAM]")
+      // `|| fallback`, not `?? fallback`: an org that has never set one gets
+      // an empty string back from getBranding, not null/undefined — `??`
+      // only catches those two, so it let an empty address through as an
+      // empty string and every sent email quietly read "· Unsubscribe" with
+      // nothing before the bullet. Confirmed live in this org's own sent
+      // mail before this fix.
+      .replace(/\{\{org\.postal_address\}\}/g, branding.postalAddress || "[postal address required by CAN-SPAM — set one in Settings]")
       .replace(/\{\{org\.name\}\}/g, branding.emailOrgName)
       .replace(/\{\{sender\.name\}\}/g, branding.emailSenderName);
 

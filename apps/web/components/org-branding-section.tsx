@@ -6,6 +6,7 @@ import { api } from "../lib/api-client";
 interface Branding {
   emailOrgName: string;
   emailSenderName: string;
+  postalAddress: string;
 }
 
 /**
@@ -16,7 +17,7 @@ interface Branding {
  */
 export function OrgBrandingSection() {
   const [branding, setBranding] = useState<Branding | null>(null);
-  const [draft, setDraft] = useState<Branding>({ emailOrgName: "", emailSenderName: "" });
+  const [draft, setDraft] = useState<Branding>({ emailOrgName: "", emailSenderName: "", postalAddress: "" });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -87,6 +88,23 @@ export function OrgBrandingSection() {
             placeholder="e.g. The EurosHub Team, or a person's name"
             className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
           />
+        </label>
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-xs text-ink/60">
+            Postal address (signature — required by CAN-SPAM for commercial email)
+          </span>
+          <input
+            value={draft.postalAddress}
+            onChange={(e) => setDraft((d) => ({ ...d, postalAddress: e.target.value }))}
+            placeholder="e.g. 123 Main St, Suite 400, Austin, TX 78701"
+            className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+          />
+          {!draft.postalAddress && (
+            <span className="mt-1 block text-[11px] text-gold">
+              Not set — every outreach email&apos;s footer currently shows a placeholder instead of a
+              real address.
+            </span>
+          )}
         </label>
         <div className="sm:col-span-2">
           <button

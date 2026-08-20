@@ -10,4 +10,9 @@ export class UpdateOrgBrandingDto {
    *  recipients see a person/company name instead of the bare mailbox address. */
   @IsOptional() @IsString() @MaxLength(120)
   emailSenderName?: string;
+
+  /** Substituted for {{org.postal_address}} — required by CAN-SPAM in every
+   *  commercial email, same as the unsubscribe link. */
+  @IsOptional() @IsString() @MaxLength(300)
+  postalAddress?: string;
 }

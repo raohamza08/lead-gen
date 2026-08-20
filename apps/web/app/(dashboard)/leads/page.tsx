@@ -33,6 +33,35 @@ const IMPORTABLE_FIELDS: { key: string; label: string }[] = [
   { key: "notes", label: "Notes" },
 ];
 
+/**
+ * `File.text()` always decodes as UTF-8 — that's the Blob spec, not a bug we
+ * can configure around. A CSV exported by Excel outside the US (very common
+ * for names with accented characters — "Geschäftsführer" and similar) is
+ * usually saved as Windows-1252, not UTF-8, and every non-ASCII character in
+ * it silently becomes U+FFFD ("�") when read as UTF-8. Traced from a real
+ * batch of imported leads: one had "Geschäftsführer" corrupted into
+ * "Gesch�ftsf�hrer" this exact way.
+ *
+ * Detected properly, not guessed: strict UTF-8 decoding (`fatal: true`)
+ * throws on a real Windows-1252 accented byte (e.g. 0xFC for "ü") because
+ * it's not a legal UTF-8 sequence. If it throws, the file was never UTF-8 to
+ * begin with, so Windows-1252 — the overwhelmingly common alternative for a
+ * spreadsheet CSV export — is the correct fallback, not one guess among many.
+ */
+async function decodeCsvFile(file: File): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
+  } catch {
+    return new TextDecoder("windows-1252").decode(buffer);
+  }
+}
+
+/** Same pattern as the backend's EMAIL_LIKE in lead-import-mapping.ts — used
+ *  only to flag a suspicious mapping on the confirm screen, not to validate
+ *  anything (the backend is still the actual gate on import). */
+const EMAIL_LIKE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 interface ImportPreview {
   headers: string[];
   suggestedMapping: Record<string, string | null>;
@@ -131,7 +160,7 @@ export default function LeadsPage() {
     setError(null);
     setImportResult(null);
     try {
-      const text = await file.text();
+      const text = await decodeCsvFile(file);
       const preview = (await api.previewLeadImport(text)) as ImportPreview;
       setImportCsv(text);
       setImportPreview(preview);
@@ -346,7 +375,23 @@ export default function LeadsPage() {
                 </tr>
               </thead>
               <tbody>
-                {importPreview.headers.map((header) => (
+                {importPreview.headers.map((header) => {
+                  const previewValues = importPreview.previewRows.map((r) => r[header]).filter(Boolean);
+                  const mappedField = importMapping[header];
+                  // Traced a real batch of imported leads where the "Email"
+                  // column had been mapped to "Country" — every non-empty
+                  // preview value looking like an email address, sitting
+                  // under a field that isn't email/personalEmail, is exactly
+                  // that mistake. A human catches this in a glance; nothing
+                  // downstream validates a "country" cell for looking like
+                  // an address, so this is the only place it gets caught.
+                  const looksMisrouted =
+                    mappedField &&
+                    mappedField !== "email" &&
+                    mappedField !== "personalEmail" &&
+                    previewValues.length > 0 &&
+                    previewValues.every((v) => EMAIL_LIKE.test(v));
+                  return (
                   <tr key={header} className="border-b border-[var(--line)] last:border-0">
                     <td className="py-2 pr-3 font-medium text-ink/80">{header}</td>
                     <td className="py-2 pr-3">
@@ -355,7 +400,9 @@ export default function LeadsPage() {
                         onChange={(e) =>
                           setImportMapping((m) => ({ ...m, [header]: e.target.value || null }))
                         }
-                        className="rounded-lg border border-[var(--line)] bg-transparent px-2 py-1 text-sm outline-none focus:border-[rgb(var(--accent-rgb)/0.6)]"
+                        className={`rounded-lg border bg-transparent px-2 py-1 text-sm outline-none focus:border-[rgb(var(--accent-rgb)/0.6)] ${
+                          looksMisrouted ? "border-bad" : "border-[var(--line)]"
+                        }`}
                       >
                         <option value="">Do not import</option>
                         {IMPORTABLE_FIELDS.map((f) => (
@@ -364,12 +411,19 @@ export default function LeadsPage() {
                           </option>
                         ))}
                       </select>
+                      {looksMisrouted && (
+                        <p className="mt-1 text-[11px] text-bad">
+                          These values look like email addresses — check this is really {" "}
+                          {IMPORTABLE_FIELDS.find((f) => f.key === mappedField)?.label ?? mappedField}.
+                        </p>
+                      )}
                     </td>
                     <td className="max-w-[220px] truncate py-2 pr-3 text-ink/50" title={importPreview.previewRows[0]?.[header]}>
                       {importPreview.previewRows.slice(0, 2).map((r) => r[header]).filter(Boolean).join(" · ") || "—"}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
