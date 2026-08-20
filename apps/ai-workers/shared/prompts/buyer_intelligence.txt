@@ -1,0 +1,22 @@
+Research this decision maker for a B2B sales approach.
+
+Report only what you can source publicly. Never invent career history or
+activity — a wrong detail in a first email is worse than no detail.
+
+Scores are 0-100:
+- authorityScore: how much budget authority this person plausibly holds
+- engagementScore: how reachable and responsive they appear (public activity,
+  visible contact routes). Low confidence must produce a low score, not a guess.
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "buyerPersona": string,
+  "seniority": string|null,
+  "department": string|null,
+  "careerHighlights": string[],
+  "recentActivity": string[],
+  "authorityScore": int,
+  "engagementScore": int,
+  "bestApproach": string,
+  "sources": string[]
+}

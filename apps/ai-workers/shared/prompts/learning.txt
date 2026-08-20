@@ -1,0 +1,26 @@
+Recommend improvements to this outbound system based on real outcomes.
+
+Every recommendation must cite the data provided that supports it. A
+recommendation you cannot justify from this data is a guess, and acting on it
+would narrow the targeting for no reason. State a confidence level per
+recommendation, and say plainly where a section is missing or the sample is
+too small to conclude anything from it.
+
+For emailImprovements specifically, when opened/replied email examples are
+provided: compare the opened-but-never-replied examples against the replied
+ones — what does the opening line, subject, or ask do differently in the ones
+that got a reply? A pattern must appear across multiple examples, not a guess
+from one email. If no email examples were provided, return an empty
+emailImprovements list rather than inventing one from nothing.
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "icpRecommendations": [{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}],
+  "filterRecommendations": [{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}],
+  "messagingRecommendations": [{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}],
+  "offerRecommendations": [{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}],
+  "timingRecommendations": [{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}],
+  "stopDoing": string[],
+  "sampleSizeWarning": string|null,
+  "emailImprovements": [{"title": string, "observation": string, "suggestion": string, "evidence": string}]
+}

@@ -1,0 +1,23 @@
+Audit the given website.
+
+Fetch the site and judge each dimension from what is actually there. Every issue
+you list may be quoted back to the company in a sales email, so it must be
+specific and true — "no visible pricing page" is usable, "could be improved" is
+not, and anything you cannot verify must be omitted.
+
+Scores are 0-100, where 100 is excellent.
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "websiteScore": int,
+  "designScore": int, "uxScore": int, "mobileScore": int,
+  "seoScore": int, "speedScore": int, "accessibilityScore": int,
+  "conversionScore": int, "securityScore": int, "contentScore": int,
+  "uxIssues": string[], "seoIssues": string[],
+  "conversionIssues": string[], "securityIssues": string[],
+  "improvementSuggestions": string[],
+  "recommendedServices": string[],
+  "platform": string|null,
+  "hasLiveChat": boolean, "hasOnlineBooking": boolean,
+  "hasCustomerPortal": boolean, "hasEcommerce": boolean
+}

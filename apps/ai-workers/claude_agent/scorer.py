@@ -1,12 +1,11 @@
 """Lead scoring against the explicit rubric in Part D3/D4 — never a black-box number."""
 import logging
-from pathlib import Path
+
+from shared.prompts import load_prompt
 
 from . import cli_client
 
 logger = logging.getLogger("claude_agent.scorer")
-
-PROMPT_TEMPLATE = (Path(__file__).parent.parent / "shared" / "prompts" / "lead_scoring.txt").read_text()
 
 
 async def score_candidate(candidate: dict, org_context: dict) -> dict:
@@ -20,13 +19,30 @@ async def score_candidate(candidate: dict, org_context: dict) -> dict:
 async def _score_via_cli(candidate: dict, org_context: dict) -> dict:
     import json
 
-    prompt = PROMPT_TEMPLATE.format(
-        org_name=org_context.get("name", "our company"),
-        org_services=org_context.get("services", "AI automation services"),
-        icp_definition=org_context.get("icp_definition", "growing SMB/mid-market companies"),
-        candidate_json=json.dumps(candidate),
-        site_text_excerpt=candidate.get("businessDescription", ""),
-    )
+    # An org's saved override is used verbatim (no .format() substitution) —
+    # same reasoning as every other agent's prompt file: editing it in
+    # Settings must never be able to raise a KeyError over a mistyped
+    # placeholder. The shipped default still uses named placeholders because
+    # it's controlled here, not in Settings.
+    template = load_prompt("lead_scoring", org_context)
+    is_override = bool((org_context or {}).get("promptOverrides", {}).get("lead_scoring"))
+    if is_override:
+        prompt = (
+            f"{template}\n\n"
+            f"ORG: {org_context.get('name', 'our company')} — "
+            f"{org_context.get('services', 'AI automation services')}\n"
+            f"ICP: {org_context.get('icp_definition', 'growing SMB/mid-market companies')}\n"
+            f"CANDIDATE: {json.dumps(candidate)}\n"
+            f"SITE EXCERPT: {candidate.get('businessDescription', '')}"
+        )
+    else:
+        prompt = template.format(
+            org_name=org_context.get("name", "our company"),
+            org_services=org_context.get("services", "AI automation services"),
+            icp_definition=org_context.get("icp_definition", "growing SMB/mid-market companies"),
+            candidate_json=json.dumps(candidate),
+            site_text_excerpt=candidate.get("businessDescription", ""),
+        )
     envelope = await cli_client.query(prompt)
     data = cli_client.extract_json(envelope.get("result", ""))
     if data is None:

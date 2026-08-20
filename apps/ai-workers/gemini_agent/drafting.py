@@ -20,6 +20,7 @@ import json
 import logging
 
 from claude_agent import cli_client
+from shared.prompts import load_prompt
 
 from .lint import has_placeholder, lint_draft
 
@@ -27,45 +28,12 @@ logger = logging.getLogger("gemini_agent.drafting")
 
 STEP_NAMES = {1: "Problem Trigger", 2: "Industry Insight", 3: "Proof", 4: "Soft Offer", 5: "Breakup"}
 
-_STEP_BRIEF = {
-    1: """Open on ONE specific, felt pain point common in this exact industry/niche.
-Do not introduce or name {org_name} anywhere in your fields — the company
-appears only in the signature, which is appended separately after your
-content, not written by you. No pitch, no services list, no company
-description. Write like someone who understands this industry, not a vendor
-introducing themselves.""",
-    2: """Describe a real, current shift in how this industry is being affected by
-AI/automation, framed as a market observation, not company promotion. Still
-no direct pitch — this email builds credibility, not urgency. Do not name
-{org_name}.""",
-    3: """This is the FIRST email allowed to name {org_name} as the "who" behind a
-result. {case_study_instruction}""",
-    4: """This is the FIRST ask in the sequence, and it must be LOW-FRICTION: an
-audit, a short framework, a specific diagnostic question, or a quick call.
-Do not list {org_name}'s services or describe what it sells — that is not
-this email's job.""",
-    5: """Keep it short. No guilt, no "just following up", no "haven't heard from
-you". Acknowledge you'll stop reaching out, leave the door open, wish them
-well. This should read like a natural close, not a final sales attempt.""",
-}
-
-_VOICE_RULES = """VOICE AND STYLE RULES (mandatory, no exceptions):
-- No consulting jargon: no "digital transformation", "leverage", "streamline
-  your operations", "synergy", "cutting-edge", "game-changer", or similar.
-  Use plain, concrete language a business owner would use about their own day.
-- Exactly ONE clear next step across the whole email — a question or a
-  specific ask. Never write two competing asks.
-- Whole email under 150 words total (hook + insight + evidence + reframe + cta).
-- Subject line under 6 words, specific, non-salesy — not a mass-blast subject.
-- No exclamation points, no emojis, no urgency language ("limited time",
-  "don't miss out", "act now").
-- Never fabricate a statistic, client name, or result. If you reference one
-  you cannot verify, use a bracketed placeholder exactly like
-  [INSERT REAL, VERIFIED RESULT] and say so in "flags" — never estimate or
-  guess a number and present it as real.
-- Write like a person emailing a person: no "I hope this finds you well", no
-  em dashes, no corporate throat-clearing.
-- Do not write a signature or sign-off line — one is appended separately."""
+# Editable in Settings as email_step_1..5 and email_voice_rules. NOTE: the
+# word-count, banned-phrase and single-CTA rules stated in email_voice_rules
+# are also enforced separately and deterministically by lint.py — editing the
+# wording here changes what the model is told, not what draft_and_validate
+# below actually accepts, so a loosened voice-rules override still gets
+# retried/flagged for review the same as today if it violates lint.py.
 
 
 async def draft_email(context: dict, org_context: dict, step: int) -> dict:
@@ -91,7 +59,8 @@ async def draft_email(context: dict, org_context: dict, step: int) -> dict:
     else:
         case_study_instruction = ""
 
-    brief = _STEP_BRIEF[step].format(org_name=org_name, case_study_instruction=case_study_instruction)
+    brief = load_prompt(f"email_step_{step}", org_context)
+    voice_rules = load_prompt("email_voice_rules", org_context)
 
     prompt = f"""You are writing email {step} of 5 in a cold outbound sequence for {org_name}
 ({org_services}). This email's role in the sequence is "{STEP_NAMES[step]}".
@@ -105,6 +74,7 @@ FULL SEQUENCE, for context only — you are writing just this one:
 
 THIS EMAIL'S JOB:
 {brief}
+{f"CASE STUDY CONTEXT: {case_study_instruction}" if case_study_instruction else ""}
 
 STRUCTURE (mandatory): hook -> specific/felt insight{" -> evidence" if step >= 3 else ""} -> perspective/reframe -> ONE clear CTA.
 
@@ -114,7 +84,7 @@ Tech stack: {json.dumps(context.get('tech_stack'))}
 What we know: {json.dumps(context.get('reviewer_notes'))}
 Website excerpt: {context.get('website_excerpt', '')[:1200]}
 
-{_VOICE_RULES}
+{voice_rules}
 
 Tone: {tone}.
 

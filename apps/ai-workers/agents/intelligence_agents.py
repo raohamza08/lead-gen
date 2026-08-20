@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 
 from claude_agent import cli_client
+from shared.prompts import load_prompt
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 
@@ -49,38 +50,10 @@ class CompanyIntelligenceAgent(Agent):
                 notes=["no website to analyse"],
             )
 
-        prompt = f"""Analyse this company for a B2B sales conversation. Fetch its website
-and search for recent public information about it.
-
-Company: {candidate.get('companyName')}
-Website: {website}
-
-Report only what you can source. A fabricated competitor, funding round or news
-item destroys credibility the moment a prospect reads it back to you, so leave a
-field null rather than guessing.
-
-Scores are 0-100 and must be justified by what you actually observed:
-- digitalMaturityScore: how digitally developed their operation is
-- aiReadinessScore: how prepared they are to adopt AI (data, systems, appetite)
-- automationOpportunityScore: how much repetitive work is visibly automatable
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "executiveSummary": string,
-  "products": string[], "services": string[],
-  "businessModel": string|null,
-  "revenueSignals": string|null,
-  "growthIndicators": string[],
-  "competitors": string[],
-  "techStack": string[], "crm": string|null,
-  "marketingStack": string[],
-  "recentNews": string[], "hiringActivity": string|null,
-  "swot": {{"strengths": string[], "weaknesses": string[],
-            "opportunities": string[], "threats": string[]}},
-  "digitalMaturityScore": int, "aiReadinessScore": int,
-  "automationOpportunityScore": int,
-  "sources": string[]
-}}"""
+        prompt = (
+            f"{load_prompt('company_intelligence', ctx.get('org_context'))}\n\n"
+            f"Company: {candidate.get('companyName')}\nWebsite: {website}"
+        )
 
         data, err = await _ask_json(prompt)
         if data is None:
@@ -116,29 +89,7 @@ class WebsiteAuditAgent(Agent):
                 notes=["no website to audit"],
             )
 
-        prompt = f"""Audit this website: {website}
-
-Fetch the site and judge each dimension from what is actually there. Every issue
-you list may be quoted back to the company in a sales email, so it must be
-specific and true — "no visible pricing page" is usable, "could be improved" is
-not, and anything you cannot verify must be omitted.
-
-Scores are 0-100, where 100 is excellent.
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "websiteScore": int,
-  "designScore": int, "uxScore": int, "mobileScore": int,
-  "seoScore": int, "speedScore": int, "accessibilityScore": int,
-  "conversionScore": int, "securityScore": int, "contentScore": int,
-  "uxIssues": string[], "seoIssues": string[],
-  "conversionIssues": string[], "securityIssues": string[],
-  "improvementSuggestions": string[],
-  "recommendedServices": string[],
-  "platform": string|null,
-  "hasLiveChat": boolean, "hasOnlineBooking": boolean,
-  "hasCustomerPortal": boolean, "hasEcommerce": boolean
-}}"""
+        prompt = f"{load_prompt('website_audit', ctx.get('org_context'))}\n\nWebsite: {website}"
 
         data, err = await _ask_json(prompt)
         if data is None:
@@ -173,34 +124,12 @@ class BuyerIntelligenceAgent(Agent):
                 notes=["no named contact — buyer research skipped"],
             )
 
-        prompt = f"""Research this decision maker for a B2B sales approach.
-
-Name: {contact}
-Title: {candidate.get('jobTitle') or 'unknown'}
-Company: {company}
-Company site: {candidate.get('website') or 'unknown'}
-LinkedIn: {candidate.get('contactLinkedinUrl') or 'unknown'}
-
-Report only what you can source publicly. Never invent career history or
-activity — a wrong detail in a first email is worse than no detail.
-
-Scores are 0-100:
-- authorityScore: how much budget authority this person plausibly holds
-- engagementScore: how reachable and responsive they appear (public activity,
-  visible contact routes). Low confidence must produce a low score, not a guess.
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "buyerPersona": string,
-  "seniority": string|null,
-  "department": string|null,
-  "careerHighlights": string[],
-  "recentActivity": string[],
-  "authorityScore": int,
-  "engagementScore": int,
-  "bestApproach": string,
-  "sources": string[]
-}}"""
+        prompt = (
+            f"{load_prompt('buyer_intelligence', ctx.get('org_context'))}\n\n"
+            f"Name: {contact}\nTitle: {candidate.get('jobTitle') or 'unknown'}\n"
+            f"Company: {company}\nCompany site: {candidate.get('website') or 'unknown'}\n"
+            f"LinkedIn: {candidate.get('contactLinkedinUrl') or 'unknown'}"
+        )
 
         data, err = await _ask_json(prompt)
         if data is None:

@@ -1,0 +1,25 @@
+Identify the concrete opportunities to sell our services to this company.
+
+Base every opportunity on something in the company data provided. An
+opportunity you cannot tie to an observed fact is a guess, and a guess in a
+first email is obvious to the reader — omit it instead.
+
+Be specific: "automate the manual quote-to-invoice handoff across their three
+systems" is usable; "improve efficiency with AI" is not.
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "manualWorkflows": string[],
+  "operationalBottlenecks": string[],
+  "topAiOpportunities": [
+    {"opportunity": string, "expectedRoi": string, "estimatedImpact": string,
+      "complexity": "LOW"|"MEDIUM"|"HIGH", "evidence": string}
+  ],
+  "crmImprovements": string[],
+  "automationOpportunities": string[],
+  "saasOpportunities": string[],
+  "painPoints": string,
+  "suggestedServices": string[],
+  "estimatedDealSize": number,
+  "projectComplexity": "LOW"|"MEDIUM"|"HIGH"
+}

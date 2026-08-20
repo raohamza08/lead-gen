@@ -19,6 +19,7 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
     lead_detail = await api_client.get_lead_detail(lead_id, org_id)
     lead = lead_detail["lead"] if "lead" in lead_detail else lead_detail
     org_id = org_id or lead.get("orgId")
+    org_context = {"promptOverrides": await api_client.get_prompt_overrides(org_id)}
 
     async def announce_start(agent) -> None:
         if not org_id:
@@ -44,7 +45,9 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
         )
 
     orchestrator = build("linkedin_draft", seed_keys=("lead",))
-    ctx = AgentContext(run_id=lead_id, org_id=org_id or "", data={"lead": lead_detail})
+    ctx = AgentContext(
+        run_id=lead_id, org_id=org_id or "", data={"lead": lead_detail, "org_context": org_context},
+    )
     result = await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
 
     messages = ctx.get("linkedin_messages")
@@ -71,10 +74,16 @@ async def run_optimisation(
     emailImprovements.
     """
     orchestrator = build("optimisation", seed_keys=("performance", "outcomes"))
+    org_context = {"promptOverrides": await api_client.get_prompt_overrides(org_id)}
     ctx = AgentContext(
         run_id=org_id,
         org_id=org_id,
-        data={"performance": performance, "outcomes": outcomes, "email_samples": email_samples or {}},
+        data={
+            "performance": performance,
+            "outcomes": outcomes,
+            "email_samples": email_samples or {},
+            "org_context": org_context,
+        },
     )
     result = await orchestrator.run(ctx)
 

@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from claude_agent import cli_client
 from gemini_agent.context_builder import build_context, fetch_website_excerpt
 from gemini_agent.drafting import append_signature, draft_and_validate
+from shared.prompts import load_prompt
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 
@@ -174,24 +175,12 @@ class LinkedInAgent(Agent):
                 notes=["no named contact — nothing to personalise a request around"],
             )
 
-        prompt = f"""Write LinkedIn outreach copy for a human to send manually.
-
-Contact: {lead.get('contactName')} ({lead.get('jobTitle') or 'unknown role'})
-Company: {lead.get('companyName')} — {lead.get('industry') or 'unknown industry'}
-What we know: {json.dumps(merged)[:1500]}
-
-The connection note has a HARD 300-character limit; anything longer cannot be
-sent. Write like a person, not a marketer: no "I hope this finds you well", no
-flattery, no pitch in the connection request itself, and no em dashes anywhere
-in the output — use periods or commas instead.
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "connectionNote": string,
-  "followUpMessage": string,
-  "secondFollowUp": string,
-  "rationale": string
-}}"""
+        prompt = (
+            f"{load_prompt('linkedin', ctx.get('org_context'))}\n\n"
+            f"Contact: {lead.get('contactName')} ({lead.get('jobTitle') or 'unknown role'})\n"
+            f"Company: {lead.get('companyName')} — {lead.get('industry') or 'unknown industry'}\n"
+            f"What we know: {json.dumps(merged)[:1500]}"
+        )
 
         try:
             envelope = await cli_client.query(prompt)

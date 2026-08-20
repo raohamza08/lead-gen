@@ -16,6 +16,7 @@ from claude_agent import cli_client
 from claude_agent.scorer import score_candidate
 from claude_agent.search_tools import find_candidate
 from claude_agent.verifier import verify_candidate
+from shared.prompts import load_prompt
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 
@@ -35,6 +36,7 @@ class LeadDiscoveryAgent(Agent):
             ctx.get("niche_filter"),
             ctx.get("attempt", 0),
             ctx.get("already_found") or [],
+            ctx.get("org_context"),
         )
         if candidate is None:
             # Not an error: the niche is saturated for this run. The extraction
@@ -119,35 +121,13 @@ class AiOpportunityAgent(Agent):
             default=str,
         )[:6000]
 
-        services = (ctx.get("org_context") or {}).get("services", "AI automation services")
+        org_context = ctx.get("org_context") or {}
+        services = org_context.get("services", "AI automation services")
 
-        prompt = f"""Identify the concrete opportunities to sell {services} to this company.
-
-{context_json}
-
-Base every opportunity on something in the data above. An opportunity you cannot
-tie to an observed fact is a guess, and a guess in a first email is obvious to
-the reader — omit it instead.
-
-Be specific: "automate the manual quote-to-invoice handoff across their three
-systems" is usable; "improve efficiency with AI" is not.
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "manualWorkflows": string[],
-  "operationalBottlenecks": string[],
-  "topAiOpportunities": [
-    {{"opportunity": string, "expectedRoi": string, "estimatedImpact": string,
-      "complexity": "LOW"|"MEDIUM"|"HIGH", "evidence": string}}
-  ],
-  "crmImprovements": string[],
-  "automationOpportunities": string[],
-  "saasOpportunities": string[],
-  "painPoints": string,
-  "suggestedServices": string[],
-  "estimatedDealSize": number,
-  "projectComplexity": "LOW"|"MEDIUM"|"HIGH"
-}}"""
+        prompt = (
+            f"{load_prompt('ai_opportunity', org_context)}\n\n"
+            f"OUR SERVICES: {services}\n\nCOMPANY DATA\n{context_json}"
+        )
 
         try:
             envelope = await cli_client.query(prompt)

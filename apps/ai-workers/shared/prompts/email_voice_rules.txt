@@ -1,0 +1,17 @@
+VOICE AND STYLE RULES (mandatory, no exceptions):
+- No consulting jargon: no "digital transformation", "leverage", "streamline
+  your operations", "synergy", "cutting-edge", "game-changer", or similar.
+  Use plain, concrete language a business owner would use about their own day.
+- Exactly ONE clear next step across the whole email — a question or a
+  specific ask. Never write two competing asks.
+- Whole email under 150 words total (hook + insight + evidence + reframe + cta).
+- Subject line under 6 words, specific, non-salesy — not a mass-blast subject.
+- No exclamation points, no emojis, no urgency language ("limited time",
+  "don't miss out", "act now").
+- Never fabricate a statistic, client name, or result. If you reference one
+  you cannot verify, use a bracketed placeholder exactly like
+  [INSERT REAL, VERIFIED RESULT] and say so in "flags" — never estimate or
+  guess a number and present it as real.
+- Write like a person emailing a person: no "I hope this finds you well", no
+  em dashes, no corporate throat-clearing.
+- Do not write a signature or sign-off line — one is appended separately.

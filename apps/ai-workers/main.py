@@ -17,6 +17,33 @@ from claude_agent.runner import run_in_background as run_extraction_in_backgroun
 from claude_agent.runner import run_manual_enrichment_in_background
 from gemini_agent.runner import run_email_draft
 from outreach_runner import run_linkedin_draft, run_optimisation
+from shared.prompts import default_prompt
+
+#: Every agent whose prompt is a plain, editable instructions block — the
+#: roster the Settings "Agent prompts" page lists. Deliberately not every
+#: name in registry.py: `review` and `scheduler` are pure deterministic
+#: Python (no model call, nothing to edit), and `email` is split into six
+#: rows here (one per sequence step plus the shared voice rules) since those
+#: are genuinely different text a human would want to edit independently,
+#: even though they're all one agent in the pipeline sense.
+PROMPTABLE_AGENTS: dict[str, str] = {
+    "lead_discovery": "Finds verified companies matching the configured filters.",
+    "ai_opportunity": "Identifies manual workflows, automation ideas, ROI and estimated deal size.",
+    "lead_scoring": "Scores business fit, AI opportunity, intent, budget, tech gap and DM access.",
+    "company_intelligence": "Company overview, SWOT, competitors, growth signals, digital maturity.",
+    "website_audit": "Audits design, UX, mobile, SEO, speed, accessibility, conversion and security.",
+    "buyer_intelligence": "Builds the buyer persona and scores authority and engagement.",
+    "linkedin": "Drafts LinkedIn connection requests and follow-ups for a human to send.",
+    "analytics": "Interprets campaign performance and flags what is and isn't working.",
+    "learning": "Learns which niches, offers and messages perform, and proposes improvements.",
+    "agent_review": "AI-authored review note — same fields a human reviewer fills in, from what the agents found.",
+    "email_step_1": "Email 1 of 5 — Problem Trigger.",
+    "email_step_2": "Email 2 of 5 — Industry Insight.",
+    "email_step_3": "Email 3 of 5 — Proof.",
+    "email_step_4": "Email 4 of 5 — Soft Offer.",
+    "email_step_5": "Email 5 of 5 — Breakup.",
+    "email_voice_rules": "Shared tone/style rules applied to every email in the sequence.",
+}
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI(title="Lead-Gen AI Workers")
@@ -72,6 +99,18 @@ async def list_agents():
     forgotten.
     """
     return {"agents": describe_fleet(), "pipelines": {k: list(v) for k, v in PIPELINES.items()}}
+
+
+@app.get("/agents/prompts")
+async def list_agent_prompts():
+    """Shipped default prompt text for every editable agent — what Settings'
+    "Agent prompts" page shows and what "Restore default" reverts to. Org
+    overrides are NestJS's concern (Organization.settings), not this
+    process's — this endpoint only ever answers "what did we ship"."""
+    return {
+        name: {"responsibility": responsibility, "defaultPrompt": default_prompt(name)}
+        for name, responsibility in PROMPTABLE_AGENTS.items()
+    }
 
 
 @app.post("/lead-gen/runs")

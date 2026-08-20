@@ -29,10 +29,11 @@ async def run_email_draft(
     org_context: dict | None = None,
     case_study: dict | None = None,
 ) -> None:
-    org_context = org_context or DEFAULT_ORG_CONTEXT
+    org_context = dict(org_context or DEFAULT_ORG_CONTEXT)
     lead_detail = await api_client.get_lead_detail(lead_id, org_id)
     lead = lead_detail["lead"] if "lead" in lead_detail else lead_detail
     org_id = org_id or lead.get("orgId")
+    org_context["promptOverrides"] = await api_client.get_prompt_overrides(org_id)
 
     async def announce_start(agent) -> None:
         if not org_id:

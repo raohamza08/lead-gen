@@ -16,6 +16,30 @@ def _headers() -> dict:
     }
 
 
+async def get_prompt_overrides(org_id: str) -> dict:
+    """Org-saved agent-prompt overrides from Settings (Part: agent prompts),
+    keyed by agent name — merged into `org_context["promptOverrides"]` at the
+    top of each pipeline entry point so a run doesn't need every caller to
+    remember to thread it through. Never raises: a missing org_id, a network
+    blip, or the org simply never having customised anything all just mean
+    "no overrides", not a reason to fail a pipeline that would otherwise run
+    fine on shipped defaults."""
+    if not org_id:
+        return {}
+    try:
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=10) as client:
+            resp = await client.get(
+                "/settings/organization/prompt-overrides", params={"orgId": org_id}, headers=_headers()
+            )
+            resp.raise_for_status()
+            return resp.json() or {}
+    except Exception as err:  # noqa: BLE001
+        logging.getLogger("shared.api_client").warning(
+            "could not fetch prompt overrides for org %s: %s", org_id, err
+        )
+        return {}
+
+
 async def create_lead(org_id: str, lead_payload: dict) -> dict:
     async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
         resp = await client.post("/leads", json={"orgId": org_id, **lead_payload}, headers=_headers())

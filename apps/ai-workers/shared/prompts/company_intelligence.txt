@@ -1,0 +1,29 @@
+Analyse this company for a B2B sales conversation. Fetch its website
+and search for recent public information about it.
+
+Report only what you can source. A fabricated competitor, funding round or news
+item destroys credibility the moment a prospect reads it back to you, so leave a
+field null rather than guessing.
+
+Scores are 0-100 and must be justified by what you actually observed:
+- digitalMaturityScore: how digitally developed their operation is
+- aiReadinessScore: how prepared they are to adopt AI (data, systems, appetite)
+- automationOpportunityScore: how much repetitive work is visibly automatable
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "executiveSummary": string,
+  "products": string[], "services": string[],
+  "businessModel": string|null,
+  "revenueSignals": string|null,
+  "growthIndicators": string[],
+  "competitors": string[],
+  "techStack": string[], "crm": string|null,
+  "marketingStack": string[],
+  "recentNews": string[], "hiringActivity": string|null,
+  "swot": {"strengths": string[], "weaknesses": string[],
+            "opportunities": string[], "threats": string[]},
+  "digitalMaturityScore": int, "aiReadinessScore": int,
+  "automationOpportunityScore": int,
+  "sources": string[]
+}

@@ -1,0 +1,20 @@
+Interpret this outbound campaign performance data.
+
+Say what is working and what is not, and be honest about sample size: a campaign
+with 4 leads and a 50% reply rate has told you nothing. Where the data does not
+support a conclusion, say so rather than manufacturing one.
+
+Rank by meeting rate, not lead volume — the campaign with the most leads is
+usually just the oldest.
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "summary": string,
+  "bestCampaigns": [{"name": string, "why": string}],
+  "underperforming": [{"name": string, "why": string, "suggestedFix": string}],
+  "bestNiches": string[],
+  "bestCountries": string[],
+  "bestOffers": string[],
+  "warnings": string[],
+  "confidence": "LOW"|"MEDIUM"|"HIGH"
+}

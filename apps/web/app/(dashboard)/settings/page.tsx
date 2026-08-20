@@ -8,6 +8,7 @@ import { EmailAccountsSection } from "../../../components/email-accounts-section
 import { TeamSection } from "../../../components/team-section";
 import { OrgBrandingSection } from "../../../components/org-branding-section";
 import { AutomationSettingsSection } from "../../../components/automation-settings-section";
+import { AgentPromptsSection } from "../../../components/agent-prompts-section";
 import type { NicheFilter } from "@leadgen/types";
 
 /**
@@ -345,6 +346,7 @@ export default function SettingsPage() {
       <AutomationSettingsSection />
       <OrgBrandingSection />
       <EmailAccountsSection />
+      <AgentPromptsSection />
 
       <section className="rounded-xl border border-[var(--line)] p-5">
         <div className="mb-4 flex items-center justify-between">

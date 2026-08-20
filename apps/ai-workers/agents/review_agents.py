@@ -13,6 +13,7 @@ import json
 import logging
 
 from claude_agent import cli_client
+from shared.prompts import load_prompt
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 
@@ -56,33 +57,10 @@ class AgentReviewAgent(Agent):
             default=str,
         )[:8000]
 
-        prompt = f"""You are filling in a sales lead's review note — the same form a human
-reviewer completes before this lead is contacted. Base every field ONLY on the
-research below; a claim you cannot trace back to it is a guess, and a guess a
-salesperson repeats to the prospect destroys credibility on contact. Leave a
-field null rather than inventing something plausible.
-
-{context_json}
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "websiteIssues": string|null,
-  "businessProblems": string|null,
-  "opportunities": string|null,
-  "automationOpportunities": string|null,
-  "crmIssues": string|null,
-  "salesIssues": string|null,
-  "marketingIssues": string|null,
-  "operationalIssues": string|null,
-  "suggestedService": string|null,
-  "suggestedOffer": string|null,
-  "suggestedCaseStudy": string|null,
-  "suggestedHook": string|null,
-  "painPoints": string|null,
-  "urgencyLevel": "LOW"|"MEDIUM"|"HIGH"|null,
-  "expectedValue": number|null,
-  "notes": string|null
-}}"""
+        prompt = (
+            f"{load_prompt('agent_review', ctx.get('org_context'))}\n\n"
+            f"RESEARCH\n{context_json}"
+        )
 
         try:
             envelope = await cli_client.query(prompt)

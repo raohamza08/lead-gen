@@ -13,6 +13,7 @@ import json
 import logging
 
 from claude_agent import cli_client
+from shared.prompts import load_prompt
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
 
@@ -45,28 +46,10 @@ class AnalyticsAgent(Agent):
                 ],
             )
 
-        prompt = f"""Interpret this outbound campaign performance data.
-
-{json.dumps(performance, default=str)[:6000]}
-
-Say what is working and what is not, and be honest about sample size: a campaign
-with 4 leads and a 50% reply rate has told you nothing. Where the data does not
-support a conclusion, say so rather than manufacturing one.
-
-Rank by meeting rate, not lead volume — the campaign with the most leads is
-usually just the oldest.
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "summary": string,
-  "bestCampaigns": [{{"name": string, "why": string}}],
-  "underperforming": [{{"name": string, "why": string, "suggestedFix": string}}],
-  "bestNiches": string[],
-  "bestCountries": string[],
-  "bestOffers": string[],
-  "warnings": string[],
-  "confidence": "LOW"|"MEDIUM"|"HIGH"
-}}"""
+        prompt = (
+            f"{load_prompt('analytics', ctx.get('org_context'))}\n\n"
+            f"PERFORMANCE DATA\n{json.dumps(performance, default=str)[:6000]}"
+        )
 
         try:
             envelope = await cli_client.query(prompt)
@@ -141,34 +124,10 @@ class LearningAgent(Agent):
                 + json.dumps(replied, default=str)[:6000]
             )
 
-        prompt = f"""Recommend improvements to this outbound system based on real outcomes.
-
-{chr(10).join(f"{i+1}. {s}" for i, s in enumerate(sections))}
-
-Every recommendation must cite the data above that supports it. A
-recommendation you cannot justify from this data is a guess, and acting on it
-would narrow the targeting for no reason. State a confidence level per
-recommendation, and say plainly where a section above is missing or the
-sample is too small to conclude anything from it.
-
-{"For emailImprovements specifically: compare the opened-but-never-replied "
- "examples against the replied ones — what does the opening line, subject, or "
- "ask do differently in the ones that got a reply? A pattern must appear "
- "across multiple examples, not a guess from one email. If a section above "
- "was omitted, return an empty emailImprovements list rather than inventing "
- "one from nothing." if has_email_sample else ""}
-
-Respond with ONLY JSON, no prose or code fences:
-{{
-  "icpRecommendations": [{{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}}],
-  "filterRecommendations": [{{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}}],
-  "messagingRecommendations": [{{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}}],
-  "offerRecommendations": [{{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}}],
-  "timingRecommendations": [{{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}}],
-  "stopDoing": string[],
-  "sampleSizeWarning": string|null,
-  "emailImprovements": [{{"title": string, "observation": string, "suggestion": string, "evidence": string}}]
-}}"""
+        prompt = (
+            f"{load_prompt('learning', ctx.get('org_context'))}\n\n"
+            f"DATA\n{chr(10).join(f'{i + 1}. {s}' for i, s in enumerate(sections))}"
+        )
 
         try:
             envelope = await cli_client.query(prompt)

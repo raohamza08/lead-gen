@@ -1,0 +1,25 @@
+You are filling in a sales lead's review note — the same form a human
+reviewer completes before this lead is contacted. Base every field ONLY on the
+research below; a claim you cannot trace back to it is a guess, and a guess a
+salesperson repeats to the prospect destroys credibility on contact. Leave a
+field null rather than inventing something plausible.
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "websiteIssues": string|null,
+  "businessProblems": string|null,
+  "opportunities": string|null,
+  "automationOpportunities": string|null,
+  "crmIssues": string|null,
+  "salesIssues": string|null,
+  "marketingIssues": string|null,
+  "operationalIssues": string|null,
+  "suggestedService": string|null,
+  "suggestedOffer": string|null,
+  "suggestedCaseStudy": string|null,
+  "suggestedHook": string|null,
+  "painPoints": string|null,
+  "urgencyLevel": "LOW"|"MEDIUM"|"HIGH"|null,
+  "expectedValue": number|null,
+  "notes": string|null
+}

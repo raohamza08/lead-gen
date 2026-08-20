@@ -35,7 +35,11 @@ def request_cancel(run_id: str) -> bool:
 async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | None = None) -> None:
     org_id = niche_filter["orgId"]
     daily_target = niche_filter.get("dailyTarget", 100)
-    org_context = org_context or {}
+    # Fetched once per run, not per candidate — this pipeline runs the same
+    # prompt-bearing agents (discovery, opportunity, intelligence, scoring)
+    # up to `daily_target` times, and the override set doesn't change mid-run.
+    org_context = dict(org_context or {})
+    org_context["promptOverrides"] = await api_client.get_prompt_overrides(org_id)
 
     cancel_event = asyncio.Event()
     _cancel_events[run_id] = cancel_event
@@ -420,7 +424,8 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
     and verification runs in its non-rejecting form — see
     "lead_verification_soft" in the registry.
     """
-    org_context = org_context or {}
+    org_context = dict(org_context or {})
+    org_context["promptOverrides"] = await api_client.get_prompt_overrides(org_id)
     lead = await api_client.get_lead_detail(lead_id, org_id)
     candidate = _lead_to_candidate(lead)
 
