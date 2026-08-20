@@ -57,6 +57,7 @@ export function EmailAccountsSection() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [reconciling, setReconciling] = useState(false);
+  const [resending, setResending] = useState(false);
 
   function refresh() {
     api
@@ -188,6 +189,28 @@ export function EmailAccountsSection() {
     }
   }
 
+  /** Bulk follow-up to fixing a mailbox — none of the emails a bad password
+   *  (or other now-resolved problem) failed retry on their own once BullMQ
+   *  gives up on a job, so this is what actually gets a fixed backlog moving
+   *  again instead of each one needing its own Resend click. */
+  async function resendAllFailed() {
+    setResending(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = (await api.resendAllFailedEmails()) as { resent: number };
+      setNotice(
+        result.resent > 0
+          ? `Re-queued ${result.resent} failed email(s) for another send attempt.`
+          : "No failed emails to resend.",
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setResending(false);
+    }
+  }
+
   async function deleteAccount(account: MailboxHealth) {
     if (
       !window.confirm(
@@ -220,6 +243,15 @@ export function EmailAccountsSection() {
             className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
           >
             {reconciling ? "Checking…" : "Check for stuck emails"}
+          </button>
+          <button
+            type="button"
+            disabled={resending}
+            onClick={resendAllFailed}
+            title="Re-queues every email currently showing Failed for another send attempt — use this after fixing whatever made them fail (e.g. a mailbox password)."
+            className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+          >
+            {resending ? "Resending…" : "Resend all failed"}
           </button>
           <button
             type="button"

@@ -134,6 +134,36 @@ export class EmailAccountsService {
     return { checked: deadIds.length, fixed: result.count };
   }
 
+  /**
+   * Re-queues every FAILED email for another attempt in one action — the bulk
+   * counterpart to LeadsService.resendEmail, which does the same thing but
+   * one message at a time from a lead's page. Exists for exactly the case
+   * that follows fixing a mailbox: a bad password (or hit compliance gate)
+   * can fail a whole backlog at once, and a fix on the account doesn't retry
+   * any of them by itself — BullMQ never revisits a job once it's dead, and
+   * without this each one would need its own click.
+   *
+   * FAILED is the only eligible status for the same reason resendFailedMessage
+   * restricts to it: resending an already-SENT message would email the same
+   * prospect twice.
+   */
+  async resendAllFailed(orgId: string) {
+    const failed = await this.prisma.emailMessage.findMany({
+      where: { status: "FAILED", lead: { orgId } },
+      select: { id: true },
+    });
+    if (failed.length === 0) {
+      return { resent: 0 };
+    }
+
+    await this.prisma.emailMessage.updateMany({
+      where: { id: { in: failed.map((m) => m.id) } },
+      data: { status: "QUEUED" },
+    });
+    await Promise.all(failed.map((m) => this.emailQueue.add("send", { emailMessageId: m.id })));
+    return { resent: failed.length };
+  }
+
   /** Mailbox health for the Sequences dashboard (Part F1) — sends today vs. daily limit. */
   async health(orgId: string) {
     const accounts = await this.prisma.emailAccount.findMany({ where: { orgId }, orderBy: { createdAt: "asc" } });

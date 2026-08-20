@@ -36,6 +36,17 @@ export class EmailAccountsController {
     return this.service.reconcileStuck(user.orgId);
   }
 
+  /**
+   * Re-queues every FAILED email in one click — the follow-up to fixing a
+   * mailbox (e.g. a bad password): none of the backlog it caused retries on
+   * its own once BullMQ has given up on it. See EmailAccountsService.resendAllFailed.
+   */
+  @Post("resend-all-failed")
+  @Roles(Role.ADMIN)
+  resendAllFailed(@CurrentUser() user: JwtClaims) {
+    return this.service.resendAllFailed(user.orgId);
+  }
+
   @Post()
   @Roles(Role.ADMIN)
   create(@CurrentUser() user: JwtClaims, @Body() dto: UpsertEmailAccountDto) {

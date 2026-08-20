@@ -242,6 +242,7 @@ export const api = {
     request(`/settings/email-accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   testEmailAccount: (id: string) => request(`/settings/email-accounts/${id}/test`, { method: "POST" }),
   reconcileStuckEmails: () => request("/settings/email-accounts/reconcile-stuck", { method: "POST" }),
+  resendAllFailedEmails: () => request("/settings/email-accounts/resend-all-failed", { method: "POST" }),
   deleteEmailAccount: (id: string) => request(`/settings/email-accounts/${id}`, { method: "DELETE" }),
   getEmailFunnel: () => request("/analytics/email-funnel"),
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),
