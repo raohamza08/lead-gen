@@ -2,6 +2,7 @@ import { Controller, Get, Param, Query, Res } from "@nestjs/common";
 import { Response } from "express";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { SequencerService } from "../sequencer/sequencer.service";
+import { dashboardUrl } from "../common/cors";
 
 // 1x1 transparent GIF, served for open tracking.
 const TRACKING_PIXEL = Buffer.from(
@@ -40,7 +41,13 @@ export class TrackingController {
     await this.prisma.emailEvent
       .create({ data: { messageId: emailMessageId, eventType: "CLICKED", meta: { to } } })
       .catch(() => undefined);
-    res.redirect(to || process.env.APP_BASE_URL || "/");
+    // `to` is always populated in practice (the real link the email pointed
+    // to) — this fallback only fires if that query param is somehow missing,
+    // and previously used the raw multi-origin APP_BASE_URL directly, which
+    // produces a single malformed URL with a literal comma in it whenever
+    // more than one origin is configured. dashboardUrl() is the fix — same
+    // bug, same fix, as the unsubscribe redirect below.
+    res.redirect(to || dashboardUrl());
   }
 
   @Get("unsubscribe")
@@ -54,6 +61,6 @@ export class TrackingController {
       });
       await this.sequencer.cancelWaitTimer(leadId);
     }
-    res.redirect(`${process.env.APP_BASE_URL}/unsubscribed`);
+    res.redirect(`${dashboardUrl()}/unsubscribed`);
   }
 }

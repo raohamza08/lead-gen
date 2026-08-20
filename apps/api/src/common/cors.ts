@@ -17,6 +17,20 @@ export function allowedOrigins(): string[] {
     .filter(Boolean);
 }
 
+/**
+ * First of the `APP_BASE_URL` list — the one real origin to put in a link
+ * that leaves the server (an email, a redirect), as opposed to `allowedOrigins`
+ * above which needs the whole list. Using the raw env var directly at a call
+ * site is the bug this exists to prevent: `APP_BASE_URL` is a comma-separated
+ * string by design (see above), so `${process.env.APP_BASE_URL}/path` silently
+ * produces a single malformed URL with a literal comma in it whenever more
+ * than one origin is configured — confirmed doing exactly that in the
+ * unsubscribe redirect before this existed.
+ */
+export function dashboardUrl(): string {
+  return allowedOrigins()[0] ?? "http://localhost:3000";
+}
+
 /** Shared validator for both Express's `cors()` and socket.io's gateway
  *  `cors.origin` option — both accept the same `(origin, callback)` shape. */
 export function corsOriginValidator(

@@ -4,13 +4,8 @@ import * as bcrypt from "bcryptjs";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { TransactionalEmailService } from "../email/transactional-email.service";
 import { OrganizationService } from "../organization/organization.service";
+import { dashboardUrl } from "../common/cors";
 import { Role } from "@leadgen/types";
-
-/** First of a comma-separated APP_BASE_URL list — the production dashboard,
- *  not a preview/localhost origin, since this link goes into a real inbox. */
-function dashboardUrl(): string {
-  return (process.env.APP_BASE_URL ?? "http://localhost:3000").split(",")[0].trim().replace(/\/$/, "");
-}
 
 function credentialsEmailHtml(params: { recipientName: string; orgName: string; email: string; password: string }): string {
   const { recipientName, orgName, email, password } = params;
