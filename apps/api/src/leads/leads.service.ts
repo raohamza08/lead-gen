@@ -209,17 +209,42 @@ export class LeadsService {
     const [items, total] = await Promise.all([
       this.prisma.lead.findMany({
         where,
-        include: {
+        // `select`, not `include`: the leads table and pipeline board (the
+        // only two callers of this endpoint) render a fixed, small set of
+        // fields — matches @leadgen/types' Lead interface exactly, which
+        // already omits the AI-research columns (swotAnalysis, competitors,
+        // recentNews, researchEvidence, growthSignals, and more). `include`
+        // returns every scalar column on the base model regardless, so this
+        // endpoint had been shipping all of that per row, per page load, for
+        // data the list view never reads — measured at ~3.2KB/lead (651KB
+        // for a 200-row page) before this change, most of it those columns.
+        select: {
+          id: true, orgId: true, runId: true, assignedUserId: true,
+          companyName: true, sourceLayer: true, website: true, websiteDomain: true,
+          linkedinUrl: true, contactName: true, jobTitle: true, email: true,
+          personalEmail: true, phone: true, industry: true, subNiche: true,
+          country: true, city: true, companySize: true, revenueBand: true,
+          employeeCount: true, techStack: true, businessModel: true, b2bOrB2c: true,
+          businessDescription: true, currentCrm: true, verifiedEmail: true,
+          verifiedLinkedin: true, verifiedWebsite: true, possibleDuplicate: true,
+          createdAt: true, lastActivityAt: true,
           score: true,
           pipelineState: true,
           // Cheap summaries for the pipeline board: the single most recent
           // agent touch and email attempt, not the full history — a card
           // needs "what happened last", the lead detail page has the trail.
           agentRuns: { orderBy: { startedAt: "desc" }, take: 1 },
+          // select, not include, here too — bodyHtml is the full rendered
+          // email (every paragraph of real copy) and was going out for every
+          // lead's most recent message on every list/board load; the list
+          // view only ever reads the four fields below plus the open event.
           emailMessages: {
             orderBy: { sequenceStep: "desc" },
             take: 1,
-            include: { events: { where: { eventType: "OPENED" }, orderBy: { occurredAt: "desc" }, take: 1 } },
+            select: {
+              subject: true, status: true, sequenceStep: true, sentAt: true,
+              events: { where: { eventType: "OPENED" }, orderBy: { occurredAt: "desc" }, take: 1, select: { occurredAt: true } },
+            },
           },
         },
         orderBy: { createdAt: "desc" },
@@ -274,7 +299,13 @@ export class LeadsService {
   async exportCsv(orgId: string): Promise<string> {
     const leads = await this.prisma.lead.findMany({
       where: { orgId },
-      include: { score: true, pipelineState: true },
+      select: {
+        companyName: true, website: true, industry: true, country: true, city: true,
+        contactName: true, jobTitle: true, email: true, personalEmail: true, phone: true,
+        createdAt: true,
+        score: { select: { leadScore: true, aiOpportunityScore: true } },
+        pipelineState: { select: { stage: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
