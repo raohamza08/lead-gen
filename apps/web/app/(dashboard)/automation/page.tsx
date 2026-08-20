@@ -53,18 +53,29 @@ interface FleetReport {
 }
 
 /** Pipelines actually invoked at runtime: `lead_acquisition` per candidate,
- *  `lead_enrichment`/`rescore` on demand, `email_only` behind every waiting
- *  stage of the 5-email sequence, `linkedin_draft` behind the lead detail page's
- *  "Generate LinkedIn copy" button, and `optimisation` behind the Analytics
- *  page's "Run analysis" button. `outreach` alone (review->email->linkedin->
- *  scheduler as one combined chain) still has no caller — email and LinkedIn
- *  drafting are triggered independently rather than as one hop. Shown rather
- *  than hidden, since an agent that never runs should be visible as such, not
+ *  `manual_lead_enrichment` when a manual lead is created or re-enriched
+ *  (POST /lead-gen/enrich — includes agent_review, the AI's own review-note
+ *  draft), `email_only` behind every waiting stage of the 5-email sequence,
+ *  `linkedin_draft` behind the lead detail page's "Generate LinkedIn copy"
+ *  button, and `optimisation` behind the Analytics page's "Run analysis"
+ *  button.
+ *
+ *  Three defined pipelines still have no caller anywhere in the codebase —
+ *  confirmed by grepping for every `build("<name>", ...)` call, not just
+ *  assumed: `outreach` (review->email->linkedin->scheduler as one combined
+ *  chain — email and LinkedIn drafting are triggered independently instead),
+ *  `lead_enrichment` (re-enrich an existing lead without re-verifying it —
+ *  `manual_lead_enrichment` is used everywhere that need comes up, making
+ *  this a strict subset nothing currently reaches), and `rescore` (intended
+ *  to re-run scoring after a human edits the review note, per its own
+ *  comment in registry.py — genuinely un-wired, not just unreached: even if
+ *  something called it today, LeadScoringAgent doesn't read reviewNote, so
+ *  it would recompute an identical score). Shown rather than hidden, since
+ *  an agent/pipeline that never runs should be visible as such, not
  *  silently indistinguishable from one that does. */
 const LIVE_PIPELINES = new Set([
   "lead_acquisition",
-  "lead_enrichment",
-  "rescore",
+  "manual_lead_enrichment",
   "email_only",
   "linkedin_draft",
   "optimisation",
