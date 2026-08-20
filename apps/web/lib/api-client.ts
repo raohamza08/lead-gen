@@ -206,6 +206,8 @@ export const api = {
   getLead: (id: string) => request(`/leads/${id}`),
   updateReview: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/review`, { method: "PATCH", body: JSON.stringify(body) }),
+  updateLeadContact: (id: string, body: Record<string, unknown>) =>
+    request(`/leads/${id}/contact`, { method: "PATCH", body: JSON.stringify(body) }),
   advanceStage: (id: string, stage: string) =>
     request(`/leads/${id}/advance-stage`, { method: "POST", body: JSON.stringify({ stage }) }),
   moveBack: (id: string) => request(`/leads/${id}/move-back`, { method: "POST" }),

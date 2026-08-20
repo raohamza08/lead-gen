@@ -62,7 +62,7 @@ export class EmailSendWorker implements OnModuleInit, OnModuleDestroy {
 
     await this.prisma.emailMessage.update({
       where: { id: job.data.emailMessageId },
-      data: { status: "FAILED" },
+      data: { status: "FAILED", failureReason: `Failed after ${job.attemptsMade} attempts: ${err.message}` },
     });
     await this.notifications.notify(message.lead.orgId, {
       type: "EMAIL_SEND_FAILED",
@@ -108,7 +108,10 @@ export class EmailSendWorker implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       if (err instanceof ComplianceGateError) {
         this.logger.warn(`Compliance gate blocked send for message ${emailMessageId}: ${err.message}`);
-        await this.prisma.emailMessage.update({ where: { id: emailMessageId }, data: { status: "FAILED" } });
+        await this.prisma.emailMessage.update({
+          where: { id: emailMessageId },
+          data: { status: "FAILED", failureReason: err.message },
+        });
         const lead = await this.prisma.lead.findUnique({ where: { id: message.leadId }, select: { orgId: true } });
         if (lead) {
           this.realtime.emitToOrg(lead.orgId, "email.failed", { leadId: message.leadId, emailMessageId });

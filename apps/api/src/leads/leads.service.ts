@@ -12,6 +12,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
 import { ReviewNoteDto } from "./dto/review-note.dto";
+import { UpdateLeadContactDto } from "./dto/update-lead-contact.dto";
 import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { ApproveEmailAction, ApproveEmailDto } from "./dto/approve-email.dto";
@@ -358,6 +359,29 @@ export class LeadsService {
   }
 
   /**
+   * Fixes a lead's contact details after creation — most importantly, adding
+   * an email to a hand-entered lead that was created without one and got
+   * stuck unable to reach outreach (advanceStage rejects that transition
+   * without a verified email; see the gate there). The only self-service way
+   * to recover a lead in that state, short of editing the database directly.
+   */
+  async updateContact(orgId: string, id: string, dto: UpdateLeadContactDto) {
+    await this.assertOwnership(orgId, id);
+    const lead = await this.prisma.lead.update({
+      where: { id },
+      data: {
+        email: dto.email,
+        contactName: dto.contactName,
+        jobTitle: dto.jobTitle,
+        phone: dto.phone,
+        verifiedEmail: dto.verifiedEmail,
+      },
+    });
+    this.realtime.emitToOrg(orgId, "lead.updated", { leadId: id });
+    return lead;
+  }
+
+  /**
    * Called by the AI workers once the manual-lead enrichment pipeline
    * finishes (lead_verification/company_intelligence/website_audit/
    * buyer_intelligence/ai_opportunity/lead_scoring/agent_review). Unlike
@@ -459,6 +483,18 @@ export class LeadsService {
 
     if (!isValidTransition(current.stage as PipelineStage, toStage)) {
       throw new BadRequestException(`Cannot move lead from ${current.stage} to ${toStage}`);
+    }
+
+    // Same gate autoAdvanceToOutreach already enforces for the automatic path
+    // — a manual drag into READY_FOR_OUTREACH bypassed it entirely, letting a
+    // lead with no verified email reach the send queue, where every attempt
+    // then fails permanently at EmailProviderService's compliance gate (no
+    // way to recover except editing the lead's email and trying again). Catch
+    // it here instead, with a message that says what to actually do.
+    if (toStage === PipelineStage.READY_FOR_OUTREACH && !lead.verifiedEmail) {
+      throw new BadRequestException(
+        "This lead has no verified email address — add and verify one before starting outreach, or every send will fail.",
+      );
     }
 
     const updated = await this.prisma.pipelineState.update({

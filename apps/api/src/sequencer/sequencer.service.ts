@@ -311,7 +311,10 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     if (message.status !== "FAILED") {
       throw new BadRequestException(`Only a failed email can be resent (this one is ${message.status})`);
     }
-    await this.prisma.emailMessage.update({ where: { id: emailMessageId }, data: { status: "QUEUED" } });
+    await this.prisma.emailMessage.update({
+      where: { id: emailMessageId },
+      data: { status: "QUEUED", failureReason: null },
+    });
     await this.emailQueue.add("send", { emailMessageId });
   }
 }

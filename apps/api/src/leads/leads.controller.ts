@@ -6,6 +6,7 @@ import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
 import { PreviewImportDto } from "./dto/preview-import.dto";
 import { ImportLeadsDto } from "./dto/import-leads.dto";
 import { ReviewNoteDto } from "./dto/review-note.dto";
+import { UpdateLeadContactDto } from "./dto/update-lead-contact.dto";
 import { AdvanceStageDto } from "./dto/advance-stage.dto";
 import { ApproveEmailDto } from "./dto/approve-email.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
@@ -107,6 +108,13 @@ export class LeadsController {
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER)
   updateReview(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: ReviewNoteDto) {
     return this.leadsService.updateReviewNote(user.orgId, id, user.sub, dto);
+  }
+
+  @Patch(":id/contact")
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  updateContact(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateLeadContactDto) {
+    return this.leadsService.updateContact(user.orgId, id, dto);
   }
 
   /**

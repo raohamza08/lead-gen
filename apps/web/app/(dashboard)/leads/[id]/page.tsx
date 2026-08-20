@@ -69,6 +69,11 @@ export default function LeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [editingContact, setEditingContact] = useState(false);
+  const [contactDraft, setContactDraft] = useState({
+    email: "", contactName: "", jobTitle: "", phone: "", verifiedEmail: false,
+  });
+  const [savingContact, setSavingContact] = useState(false);
   const [openEmailId, setOpenEmailId] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [runningAgent, setRunningAgent] = useState<{ agent: string; responsibility?: string } | null>(null);
@@ -187,6 +192,34 @@ export default function LeadDetailPage() {
       setCopied(label);
       setTimeout(() => setCopied(null), 1500);
     });
+  }
+
+  function openContactEditor() {
+    setContactDraft({
+      email: lead.email ?? "",
+      contactName: lead.contactName ?? "",
+      jobTitle: lead.jobTitle ?? "",
+      phone: lead.phone ?? "",
+      verifiedEmail: Boolean(lead.verifiedEmail),
+    });
+    setEditingContact(true);
+  }
+
+  async function saveContact(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingContact(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.updateLeadContact(params.id, contactDraft);
+      setEditingContact(false);
+      setNotice("Contact info updated.");
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingContact(false);
+    }
   }
 
   async function resend(emailMessageId: string) {
@@ -402,43 +435,124 @@ export default function LeadDetailPage() {
 
         <div className="flex flex-col gap-4">
           <section className="card p-5">
-            <h2 className="mb-3 text-sm font-semibold tracking-tight">Contact</h2>
-            <Field label="Decision maker">
-              {lead.contactName ? `${lead.contactName}${lead.jobTitle ? ` — ${lead.jobTitle}` : ""}` : null}
-            </Field>
-            <Field label="Email">{lead.email}</Field>
-            <Field label="Personal email">{lead.personalEmail}</Field>
-            <Field label="Phone">{lead.phone}</Field>
-            <Field label="Website">
-              {lead.website ? (
-                <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                  {lead.website.replace(/^https?:\/\//, "")}
-                </a>
-              ) : null}
-            </Field>
-            <Field label="Company LinkedIn">
-              {lead.linkedinUrl ? (
-                <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
-                  View profile
-                </a>
-              ) : null}
-            </Field>
-            <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--line)] pt-3">
-              {[
-                ["Website", lead.verifiedWebsite],
-                ["Email", lead.verifiedEmail],
-                ["LinkedIn", lead.verifiedLinkedin],
-              ].map(([label, ok]) => (
-                <span
-                  key={label as string}
-                  className={`rounded-full px-2 py-0.5 text-[11px] ${
-                    ok ? "bg-[rgb(var(--good-rgb)/0.12)] text-good" : "bg-ink/8 text-ink/50"
-                  }`}
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-sm font-semibold tracking-tight">Contact</h2>
+              {!editingContact && (
+                <button
+                  onClick={openContactEditor}
+                  className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 hover:bg-ink/5"
                 >
-                  {ok ? "✓" : "○"} {label as string} {ok ? "verified" : "unverified"}
-                </span>
-              ))}
+                  Edit
+                </button>
+              )}
             </div>
+
+            {!lead.email && !editingContact && (
+              <div className="mb-3 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-xs text-bad">
+                No email on file — outreach cannot start and every send will fail until one is added.
+              </div>
+            )}
+
+            {editingContact ? (
+              <form onSubmit={saveContact} className="flex flex-col gap-2.5">
+                <label className="block">
+                  <span className="mb-1 block text-[10px] uppercase tracking-wide text-ink/50">Email</span>
+                  <input
+                    type="email"
+                    value={contactDraft.email}
+                    onChange={(e) => setContactDraft((d) => ({ ...d, email: e.target.value }))}
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[10px] uppercase tracking-wide text-ink/50">Decision maker</span>
+                  <input
+                    value={contactDraft.contactName}
+                    onChange={(e) => setContactDraft((d) => ({ ...d, contactName: e.target.value }))}
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[10px] uppercase tracking-wide text-ink/50">Job title</span>
+                  <input
+                    value={contactDraft.jobTitle}
+                    onChange={(e) => setContactDraft((d) => ({ ...d, jobTitle: e.target.value }))}
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-[10px] uppercase tracking-wide text-ink/50">Phone</span>
+                  <input
+                    value={contactDraft.phone}
+                    onChange={(e) => setContactDraft((d) => ({ ...d, phone: e.target.value }))}
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-sm"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-xs text-ink/70">
+                  <input
+                    type="checkbox"
+                    checked={contactDraft.verifiedEmail}
+                    onChange={(e) => setContactDraft((d) => ({ ...d, verifiedEmail: e.target.checked }))}
+                  />
+                  I&apos;ve confirmed this email is real and reachable — required before outreach can start.
+                </label>
+                <div className="mt-1 flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={savingContact}
+                    className="rounded-md bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-50"
+                  >
+                    {savingContact ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditingContact(false)}
+                    className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 hover:bg-ink/5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <>
+                <Field label="Decision maker">
+                  {lead.contactName ? `${lead.contactName}${lead.jobTitle ? ` — ${lead.jobTitle}` : ""}` : null}
+                </Field>
+                <Field label="Email">{lead.email}</Field>
+                <Field label="Personal email">{lead.personalEmail}</Field>
+                <Field label="Phone">{lead.phone}</Field>
+                <Field label="Website">
+                  {lead.website ? (
+                    <a href={lead.website} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                      {lead.website.replace(/^https?:\/\//, "")}
+                    </a>
+                  ) : null}
+                </Field>
+                <Field label="Company LinkedIn">
+                  {lead.linkedinUrl ? (
+                    <a href={lead.linkedinUrl} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                      View profile
+                    </a>
+                  ) : null}
+                </Field>
+                <div className="mt-3 flex flex-wrap gap-1.5 border-t border-[var(--line)] pt-3">
+                  {[
+                    ["Website", lead.verifiedWebsite],
+                    ["Email", lead.verifiedEmail],
+                    ["LinkedIn", lead.verifiedLinkedin],
+                  ].map(([label, ok]) => (
+                    <span
+                      key={label as string}
+                      className={`rounded-full px-2 py-0.5 text-[11px] ${
+                        ok ? "bg-[rgb(var(--good-rgb)/0.12)] text-good" : "bg-ink/8 text-ink/50"
+                      }`}
+                    >
+                      {ok ? "✓" : "○"} {label as string} {ok ? "verified" : "unverified"}
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
 
           {Array.isArray(lead.emailMessages) && lead.emailMessages.length > 0 && (
@@ -459,6 +573,9 @@ export default function LeadDetailPage() {
                               ? "Failed to send"
                               : "Queued"}
                         </div>
+                        {m.status === "FAILED" && m.failureReason && (
+                          <div className="mt-1 text-[11px] text-bad">{m.failureReason}</div>
+                        )}
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-1">
                         <span
