@@ -251,7 +251,7 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     let caseStudy: { title: string; summary: string; metrics: unknown } | null = null;
     if (step === 3) {
       const cs = await this.prisma.caseStudy.findFirst({
-        where: { orgId: lead.orgId, industry: lead.industry ?? undefined },
+        where: { orgId: lead.orgId, industry: lead.industry ?? undefined, status: "READY" },
       });
       if (cs) caseStudy = { title: cs.title, summary: cs.summary, metrics: cs.metrics };
     }

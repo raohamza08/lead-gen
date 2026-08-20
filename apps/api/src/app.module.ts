@@ -23,6 +23,7 @@ import { AgentsModule } from "./agents/agents.module";
 import { CampaignsModule } from "./campaigns/campaigns.module";
 import { OrganizationModule } from "./organization/organization.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { CaseStudiesModule } from "./case-studies/case-studies.module";
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { NotificationsModule } from "./notifications/notifications.module";
     CampaignsModule,
     OrganizationModule,
     NotificationsModule,
+    CaseStudiesModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

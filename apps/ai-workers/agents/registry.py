@@ -8,6 +8,7 @@ names rather than imports.
 from __future__ import annotations
 
 from .base import Agent
+from .case_study_agent import CaseStudyReviewAgent
 from .intelligence_agents import (
     BuyerIntelligenceAgent,
     CompanyIntelligenceAgent,
@@ -42,6 +43,7 @@ AGENTS: dict[str, Agent] = {
         AnalyticsAgent(),
         LearningAgent(),
         AgentReviewAgent(),
+        CaseStudyReviewAgent(),
     )
 }
 # A second instance of the same agent under a distinct registry key, used only
@@ -110,6 +112,10 @@ PIPELINES: dict[str, tuple[str, ...]] = {
     # Cross-lead analysis. Separate from every per-lead pipeline because it
     # reads aggregates, not one candidate.
     "optimisation": ("analytics", "learning"),
+    # One agent, its own pipeline: reviewing a submitted case study for niche
+    # fit and email-ready wording, triggered from Settings when an operator
+    # adds one.
+    "case_study_review": ("case_study_review",),
 }
 
 

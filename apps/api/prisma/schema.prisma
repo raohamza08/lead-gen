@@ -703,15 +703,51 @@ model SheetsSync {
   @@map("sheets_syncs")
 }
 
+enum CaseStudyStatus {
+  /// Submitted, waiting on (or mid-) AI review — never matched for a real send
+  /// (see SequencerService.dispatchEmailDraft's `status: READY` filter), so a
+  /// draft still being reviewed can never reach a prospect.
+  PENDING_REVIEW
+  READY
+  /// The review agent couldn't run (Claude CLI unavailable) or produced
+  /// nothing usable — the raw submission is kept, but excluded from sends
+  /// the same as PENDING_REVIEW, and surfaced in Settings for a retry.
+  NEEDS_ATTENTION
+}
+
 model CaseStudy {
   id       String   @id @default(uuid())
   orgId    String   @map("org_id")
   org      Organization @relation(fields: [orgId], references: [id])
+
+  /// Finalised by the review agent — what Email 3 ("Proof") actually reads.
+  /// Starts as a copy of the raw submission and is only ever tightened for
+  /// email use, never expanded with anything the raw story didn't say (see
+  /// shared/prompts/case_study_review.txt's hard rule against inventing
+  /// numbers).
   industry String
   title    String
   summary  String
   metrics  Json     @default("{}")
+  status   CaseStudyStatus @default(PENDING_REVIEW)
 
+  /// The operator's own words, preserved verbatim — what the review agent
+  /// actually read, and what a re-review re-reads if the org edits the
+  /// niche or asks for another pass. Never shown to a prospect directly.
+  rawStory          String
+  /// What the submitter picked in the niche dropdown — kept even if the
+  /// review agent's `industry` above ends up different, so the mismatch
+  /// itself (visible in Settings) is evidence, not silently overwritten.
+  submittedIndustry String @map("submitted_industry")
+  /// The review agent's own account of what it changed or flagged — shown
+  /// in Settings so "why does this say a different niche than I picked" or
+  /// "why is this still Needs attention" has a real answer, not a guess.
+  reviewNotes       String? @map("review_notes")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([orgId, industry])
   @@map("case_studies")
 }
 

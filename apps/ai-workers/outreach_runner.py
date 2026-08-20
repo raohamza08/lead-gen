@@ -1,11 +1,12 @@
 """
-Entry points for the two agents that had no live caller at all: LinkedIn copy
-generation (triggered on demand from a lead's detail page, never
-automatically — LinkedIn outreach itself stays human-driven, ToS/ban risk)
-and the cross-lead optimisation pipeline (analytics + learning), triggered on
-demand from the Analytics dashboard rather than on a schedule, since it costs
-a Claude CLI call and its output is a recommendation a human reviews, not
-something that needs to be fresh every minute.
+Entry points for agents with no scheduled/pipeline caller — each triggered
+on demand by a specific human action rather than automatically: LinkedIn copy
+generation (from a lead's detail page — LinkedIn outreach itself stays
+human-driven, ToS/ban risk), the cross-lead optimisation pipeline (analytics +
+learning, from the Analytics dashboard, since it costs a Claude CLI call and
+its output is a recommendation a human reviews, not something that needs to
+be fresh every minute), and case-study review (from Settings, the moment an
+operator submits one).
 """
 import logging
 
@@ -107,4 +108,49 @@ async def run_optimisation(
         "stoppedAt": result.stopped_at,
         "stopReason": result.stop_reason,
         "notes": [n for r in result.records for n in r.notes],
+    }
+
+
+async def run_case_study_review(
+    org_id: str, title: str | None, raw_story: str, submitted_industry: str,
+) -> dict:
+    """Synchronous, same reasoning as run_optimisation above: the caller is
+    someone sitting on the Settings page waiting to see their case study
+    listed, not a background job."""
+    org_context = {"promptOverrides": await api_client.get_prompt_overrides(org_id)}
+    orchestrator = build("case_study_review", seed_keys=("case_study_input", "org_context"))
+    ctx = AgentContext(
+        run_id=org_id,
+        org_id=org_id,
+        data={
+            "case_study_input": {
+                "title": title, "rawStory": raw_story, "submittedIndustry": submitted_industry,
+            },
+            "org_context": org_context,
+        },
+    )
+    result = await orchestrator.run(ctx)
+
+    await api_client.record_agent_runs(
+        org_id,
+        None,
+        [
+            {
+                "agent": r.agent, "status": r.status, "durationMs": r.duration_ms,
+                "attempts": r.attempts, "error": r.error, "notes": r.notes,
+            }
+            for r in result.records
+        ],
+    )
+
+    review = ctx.get("case_study_result") or {}
+    return {
+        "usable": bool(review.get("usable", bool(review))),
+        "title": review.get("title") or title or "",
+        "summary": review.get("summary") or "",
+        "metrics": review.get("metrics") or {},
+        "industry": review.get("industry") or submitted_industry,
+        "reviewNotes": review.get("reviewNotes") or "",
+        "completed": result.completed,
+        "stopReason": result.stop_reason,
     }

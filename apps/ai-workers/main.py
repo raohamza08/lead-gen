@@ -16,7 +16,7 @@ from claude_agent.runner import request_cancel as request_extraction_cancel
 from claude_agent.runner import run_in_background as run_extraction_in_background
 from claude_agent.runner import run_manual_enrichment_in_background
 from gemini_agent.runner import run_email_draft
-from outreach_runner import run_linkedin_draft, run_optimisation
+from outreach_runner import run_case_study_review, run_linkedin_draft, run_optimisation
 from shared.prompts import default_prompt
 
 #: Every agent whose prompt is a plain, editable instructions block — the
@@ -43,6 +43,7 @@ PROMPTABLE_AGENTS: dict[str, str] = {
     "email_step_4": "Email 4 of 5 — Soft Offer.",
     "email_step_5": "Email 5 of 5 — Breakup.",
     "email_voice_rules": "Shared tone/style rules applied to every email in the sequence.",
+    "case_study_review": "Reviews a submitted case study for real niche fit and email-ready wording, never inventing a number.",
 }
 
 logging.basicConfig(level=logging.INFO)
@@ -83,6 +84,13 @@ class OptimisationRequest(BaseModel):
     performance: list = []
     outcomes: dict = {}
     emailSamples: dict = {}
+
+
+class CaseStudyReviewRequest(BaseModel):
+    orgId: str
+    title: str | None = None
+    rawStory: str
+    submittedIndustry: str
 
 
 @app.get("/health")
@@ -159,3 +167,10 @@ async def start_optimisation(req: OptimisationRequest):
     # Not backgrounded: the caller is a dashboard button waiting on the result,
     # and a single Claude CLI call is well within an HTTP request's timeout.
     return await run_optimisation(req.orgId, req.performance, req.outcomes, req.emailSamples)
+
+
+@app.post("/case-study/review")
+async def review_case_study(req: CaseStudyReviewRequest):
+    # Not backgrounded, same reasoning as optimisation above — Settings is
+    # waiting on this to show the finalised case study.
+    return await run_case_study_review(req.orgId, req.title, req.rawStory, req.submittedIndustry)

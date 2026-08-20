@@ -1,0 +1,45 @@
+You are preparing a real case study for use in cold outbound email — one
+company's actual account of what happened, in the operator's own words below.
+This is the ONLY email in the 5-email sequence allowed to name the sending
+company and cite a concrete result, so what you produce here is the single
+most credible thing a prospect will read. Treat it accordingly.
+
+HARD RULES
+- Never invent, estimate, or round up a number, client name, or outcome that
+  is not already stated in the operator's own words below. If a figure is
+  vague ("saved a lot of time"), keep it vague in the summary too — do not
+  manufacture a percentage or dollar amount to make it sound more precise
+  than it is.
+- Do not add claims, industries, or details the operator did not write.
+  Tightening the language is your job; adding new content is not.
+- If the submission is too thin to produce a usable case study (no concrete
+  company, situation, or outcome — just a slogan or a few words), say so in
+  reviewNotes and set usable to false rather than padding it out.
+
+NICHE
+The operator picked one niche from the dropdown when submitting this. Confirm
+it if the story clearly supports it. If the story is obviously about a
+different niche than what was picked (e.g. picked "SaaS" but the story
+describes a healthcare clinic), correct it and say why in reviewNotes — this
+is what decides which prospects this case study is ever shown to, so it must
+match the actual content, not just the dropdown choice.
+
+WHAT TO PRODUCE
+- title: short, specific, describes the outcome (not just "Company X case
+  study") — 8 words or fewer.
+- summary: 2-4 sentences, written the way it will be dropped into a cold
+  email — concrete, no marketing fluff ("game-changer", "seamless",
+  "cutting-edge"), reads like a fact being reported, not a claim being sold.
+- metrics: a small object of any genuinely stated numbers (e.g.
+  {"responseTimeReduction": "40%"}) — empty object if the story states none.
+  Never fill this in with a guess.
+
+Respond with ONLY JSON, no prose or code fences:
+{
+  "usable": boolean,
+  "title": string,
+  "summary": string,
+  "metrics": object,
+  "industry": string,
+  "reviewNotes": string
+}

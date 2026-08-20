@@ -277,6 +277,11 @@ export const api = {
   getOrgBranding: () => request("/settings/organization/branding"),
   updateOrgBranding: (body: Record<string, unknown>) =>
     request("/settings/organization/branding", { method: "PATCH", body: JSON.stringify(body) }),
+  getCaseStudies: () => request("/settings/case-studies"),
+  createCaseStudy: (body: { title?: string; rawStory: string; submittedIndustry: string }) =>
+    request("/settings/case-studies", { method: "POST", body: JSON.stringify(body) }),
+  retryCaseStudy: (id: string) => request(`/settings/case-studies/${id}/retry`, { method: "POST" }),
+  deleteCaseStudy: (id: string) => request(`/settings/case-studies/${id}`, { method: "DELETE" }),
   getUsers: () => request("/users"),
   createUser: (body: Record<string, unknown>) =>
     request("/users", { method: "POST", body: JSON.stringify(body) }),

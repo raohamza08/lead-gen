@@ -9,6 +9,7 @@ import { TeamSection } from "../../../components/team-section";
 import { OrgBrandingSection } from "../../../components/org-branding-section";
 import { AutomationSettingsSection } from "../../../components/automation-settings-section";
 import { AgentPromptsSection } from "../../../components/agent-prompts-section";
+import { CaseStudiesSection } from "../../../components/case-studies-section";
 import type { NicheFilter } from "@leadgen/types";
 
 /**
@@ -346,6 +347,7 @@ export default function SettingsPage() {
       <AutomationSettingsSection />
       <OrgBrandingSection />
       <EmailAccountsSection />
+      <CaseStudiesSection />
       <AgentPromptsSection />
 
       <section className="rounded-xl border border-[var(--line)] p-5">
