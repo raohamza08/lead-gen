@@ -55,6 +55,7 @@ class OptimisationRequest(BaseModel):
     orgId: str
     performance: list = []
     outcomes: dict = {}
+    emailSamples: dict = {}
 
 
 @app.get("/health")
@@ -118,4 +119,4 @@ async def start_manual_enrichment(req: ManualEnrichmentRequest, background_tasks
 async def start_optimisation(req: OptimisationRequest):
     # Not backgrounded: the caller is a dashboard button waiting on the result,
     # and a single Claude CLI call is well within an HTTP request's timeout.
-    return await run_optimisation(req.orgId, req.performance, req.outcomes)
+    return await run_optimisation(req.orgId, req.performance, req.outcomes, req.emailSamples)

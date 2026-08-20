@@ -29,10 +29,10 @@ import type {
   CohortTrendPoint,
   CohortTrendsReport,
   EmailFunnelReport,
+  EmailImprovement,
+  EmailListItem,
   EmailStepPerformance,
   LinkedinFunnelReport,
-  RevenuePipelineReport,
-  RevenuePipelineStage,
 } from "@leadgen/types";
 
 const TREND_WINDOWS = [7, 30, 90] as const;
@@ -44,7 +44,6 @@ const STEP_LABELS: Record<number, string> = {
   3: "Email 3 — Gemini pitch",
 };
 
-const money = (n: number) => `$${formatCompact(n)}`;
 const pct = (n: number) => `${n}%`;
 const stageLabel = (stage: string) =>
   stage.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
@@ -62,6 +61,7 @@ const TREND_SERIES = [
 ] as const;
 
 interface AiInsights {
+  generatedAt?: string;
   insights: {
     summary?: string;
     bestCampaigns?: { name: string; why: string }[];
@@ -75,20 +75,37 @@ interface AiInsights {
     stopDoing?: string[];
     sampleSizeWarning?: string | null;
   };
-  notes: string[];
+  emailImprovements?: EmailImprovement[];
+  /** Only present right after "Run analysis" — the persisted snapshot a page
+   *  reload loads doesn't carry these ephemeral run diagnostics. */
+  notes?: string[];
+}
+
+function timeAgo(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
 }
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState<number>(30);
   const [email, setEmail] = useState<EmailFunnelReport | null>(null);
   const [linkedin, setLinkedin] = useState<LinkedinFunnelReport | null>(null);
-  const [revenue, setRevenue] = useState<RevenuePipelineReport | null>(null);
   const [trends, setTrends] = useState<CohortTrendsReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [emailTab, setEmailTab] = useState<"OPENED" | "REPLIED">("OPENED");
+  const [emailList, setEmailList] = useState<EmailListItem[] | null>(null);
+  const [emailListLoading, setEmailListLoading] = useState(false);
+  const [emailListError, setEmailListError] = useState<string | null>(null);
 
   async function runAiInsights() {
     setAiLoading(true);
@@ -105,17 +122,11 @@ export default function AnalyticsPage() {
   useEffect(() => {
     let cancelled = false;
     setRefreshing(true);
-    Promise.all([
-      api.getEmailFunnel(),
-      api.getLinkedinFunnel(),
-      api.getRevenuePipeline(),
-      api.getCohortTrends(days),
-    ])
-      .then(([e, l, r, t]) => {
+    Promise.all([api.getEmailFunnel(), api.getLinkedinFunnel(), api.getCohortTrends(days)])
+      .then(([e, l, t]) => {
         if (cancelled) return;
         setEmail(e as EmailFunnelReport);
         setLinkedin(l as LinkedinFunnelReport);
-        setRevenue(r as RevenuePipelineReport);
         setTrends(t as CohortTrendsReport);
         setError(null);
       })
@@ -126,8 +137,38 @@ export default function AnalyticsPage() {
     };
   }, [days]);
 
+  // The last real analysis, persisted server-side — loads on mount instead
+  // of only appearing after a manual "Run analysis" click, so navigating
+  // away and back doesn't lose it.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getLatestAiInsights()
+      .then((res) => !cancelled && res && setAiInsights(res as AiInsights))
+      .catch(() => {
+        /* no persisted run yet, or a fetch blip — the manual button still works */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setEmailListLoading(true);
+    setEmailListError(null);
+    api
+      .getEmailList(emailTab)
+      .then((res) => !cancelled && setEmailList(res as EmailListItem[]))
+      .catch((err) => !cancelled && setEmailListError((err as Error).message))
+      .finally(() => !cancelled && setEmailListLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [emailTab]);
+
   if (error) return <p className="text-bad">{error}</p>;
-  if (!email || !linkedin || !revenue || !trends) return <p className="text-ink/60">Loading…</p>;
+  if (!email || !linkedin || !trends) return <p className="text-ink/60">Loading…</p>;
 
   const o = email.overall;
   // Sent -> Delivered -> Opened -> Clicked -> Replied is an ordered funnel, so
@@ -186,7 +227,7 @@ export default function AnalyticsPage() {
           {aiError && <p className="text-sm text-bad">{aiError}</p>}
           {aiInsights && (
             <div className="flex flex-col gap-3">
-              {aiInsights.notes.length > 0 && (
+              {!!aiInsights.notes?.length && (
                 <p className="rounded-lg bg-ink/5 px-3 py-2 text-xs text-ink/60">
                   {aiInsights.notes.join(" · ")}
                 </p>
@@ -237,6 +278,28 @@ export default function AnalyticsPage() {
               {aiInsights.recommendations.sampleSizeWarning && (
                 <p className="text-xs text-ink/45">{aiInsights.recommendations.sampleSizeWarning}</p>
               )}
+              {!!aiInsights.emailImprovements?.length && (
+                <div className="rounded-lg border border-[var(--line)] p-3">
+                  <div className="mb-2 text-[10px] uppercase tracking-wide text-ink/50">
+                    Email improvements — from comparing opened-but-unanswered emails against replied ones
+                  </div>
+                  <ul className="flex flex-col gap-2">
+                    {aiInsights.emailImprovements.map((imp, i) => (
+                      <li key={i} className="text-xs text-ink/75">
+                        <strong className="text-ink/90">{imp.title}</strong>
+                        <p className="mt-0.5 text-ink/60">{imp.observation}</p>
+                        <p className="mt-0.5">
+                          <span className="text-accent">Try:</span> {imp.suggestion}
+                        </p>
+                        <p className="mt-0.5 text-ink/40">Evidence: {imp.evidence}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {aiInsights.generatedAt && (
+                <p className="text-[11px] text-ink/40">Last run {timeAgo(aiInsights.generatedAt)}.</p>
+              )}
             </div>
           )}
         </section>
@@ -259,6 +322,97 @@ export default function AnalyticsPage() {
               tone={o.spamComplaints > 0 ? "bad" : undefined}
             />
           </div>
+        </section>
+
+        <ChartWithTable
+          title="Daily emails sent"
+          subtitle={`Emails sent per day over the last ${trends.days} days (UTC).`}
+          chart={
+            <div className="h-56 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={trends.points} margin={{ top: 16, right: 8, left: 0, bottom: 8 }}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="date" {...AXIS_PROPS} minTickGap={24} tickFormatter={(d: string) => d.slice(5)} />
+                  <YAxis allowDecimals={false} width={44} {...AXIS_PROPS} />
+                  <Tooltip {...TOOLTIP_STYLE} />
+                  <Bar dataKey="emailsSent" name="Emails sent" fill={SINGLE_SERIES} radius={[4, 4, 0, 0]} maxBarSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          }
+          table={
+            <DataTable<CohortTrendPoint>
+              rows={[...trends.points].reverse()}
+              rowKey={(r) => r.date}
+              columns={[
+                { key: "date", header: "Date", render: (r) => r.date },
+                { key: "emailsSent", header: "Emails sent", numeric: true, render: (r) => r.emailsSent },
+              ]}
+            />
+          }
+        />
+
+        <section className="rounded-xl border border-[var(--line)] p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight">Opened / Replied emails</h2>
+              <p className="mt-0.5 text-xs text-ink/50">
+                Every individual message that was opened or replied to, newest first.
+              </p>
+            </div>
+            <div className="flex rounded-lg border border-[var(--line)] p-0.5">
+              {(["OPENED", "REPLIED"] as const).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setEmailTab(t)}
+                  aria-pressed={emailTab === t}
+                  className={`rounded-md px-3 py-1 text-xs transition-colors ${
+                    emailTab === t ? "bg-ink/10 font-medium text-ink" : "text-ink/60 hover:bg-ink/5"
+                  }`}
+                >
+                  {t === "OPENED" ? "Opened" : "Replied"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {emailListError && <p className="text-sm text-bad">{emailListError}</p>}
+          {emailListLoading ? (
+            <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
+          ) : !emailList || emailList.length === 0 ? (
+            <p className="py-8 text-center text-sm text-ink/50">
+              No emails {emailTab === "OPENED" ? "opened" : "replied to"} yet.
+            </p>
+          ) : (
+            <DataTable<EmailListItem>
+              rows={emailList}
+              rowKey={(r) => r.id}
+              columns={[
+                {
+                  key: "company",
+                  header: "Company",
+                  render: (r) => (
+                    <a href={`/leads/${r.leadId}`} className="hover:underline">
+                      {r.companyName}
+                    </a>
+                  ),
+                },
+                { key: "contact", header: "Contact", render: (r) => r.contactName ?? "—" },
+                { key: "subject", header: "Subject", render: (r) => r.subject },
+                { key: "step", header: "Step", numeric: true, render: (r) => r.sequenceStep },
+                {
+                  key: "sentAt",
+                  header: "Sent",
+                  render: (r) => (r.sentAt ? new Date(r.sentAt).toLocaleString() : "—"),
+                },
+                {
+                  key: "eventAt",
+                  header: emailTab === "OPENED" ? "Opened" : "Replied",
+                  render: (r) => new Date(r.eventAt).toLocaleString(),
+                },
+              ]}
+            />
+          )}
         </section>
 
         <ChartWithTable
@@ -355,59 +509,6 @@ export default function AnalyticsPage() {
                 { key: "replies", header: "Replies", numeric: true, render: (r) => r.replies },
                 { key: "meetingsBooked", header: "Meetings", numeric: true, render: (r) => r.meetingsBooked },
                 { key: "avgLeadScore", header: "Avg score", numeric: true, render: (r) => r.avgLeadScore },
-              ]}
-            />
-          }
-        />
-
-        <section>
-          <h2 className="mb-3 text-sm font-semibold tracking-tight">Revenue pipeline</h2>
-          {/* The one hero figure on this view. */}
-          <div className="mb-3 rounded-xl border border-[var(--line)] px-5 py-4">
-            <div className="text-[11px] uppercase tracking-wide text-ink/55">Open pipeline value</div>
-            <div className="mt-1 text-5xl font-semibold tracking-tight">
-              {money(revenue.openPipelineValue)}
-            </div>
-            <div className="mt-1 text-xs text-ink/45">
-              Excludes won and lost. Reviewer estimates take precedence over AI estimates.
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatTile label="Won" value={money(revenue.wonValue)} tone="good" />
-            <StatTile label="Lost" value={money(revenue.lostValue)} tone={revenue.lostValue > 0 ? "bad" : undefined} />
-            <StatTile label="Win rate" value={pct(revenue.winRate)} />
-            <StatTile label="Avg deal" value={money(revenue.avgDealValue)} />
-          </div>
-        </section>
-
-        <ChartWithTable
-          title="Pipeline value by stage"
-          subtitle="All time. Every stage is shown, including empty ones."
-          chart={
-            <div className="h-[420px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={revenue.stages.map((s) => ({ ...s, label: stageLabel(s.stage) }))}
-                  layout="vertical"
-                  margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
-                >
-                  <CartesianGrid {...GRID_PROPS} vertical horizontal={false} />
-                  <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v: number) => money(v)} />
-                  <YAxis type="category" dataKey="label" width={140} {...AXIS_PROPS} />
-                  <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => money(v)} />
-                  <Bar dataKey="value" fill={SINGLE_SERIES} radius={[0, 4, 4, 0]} maxBarSize={18} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          }
-          table={
-            <DataTable<RevenuePipelineStage>
-              rows={revenue.stages}
-              rowKey={(r) => r.stage}
-              columns={[
-                { key: "stage", header: "Stage", render: (r) => stageLabel(r.stage) },
-                { key: "count", header: "Leads", numeric: true, render: (r) => r.count },
-                { key: "value", header: "Value", numeric: true, render: (r) => money(r.value) },
               ]}
             />
           }

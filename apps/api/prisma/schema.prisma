@@ -146,6 +146,7 @@ model Organization {
   agentRuns    AgentRun[]
   campaigns    Campaign[]
   notifications Notification[]
+  aiInsightSnapshot AiInsightSnapshot?
 
   @@map("organizations")
 }
@@ -335,6 +336,24 @@ model AgentRun {
   @@index([orgId, agent, status])
   @@index([leadId, startedAt])
   @@map("agent_runs")
+}
+
+/// The analytics/learning agents' latest output, persisted so it survives a
+/// page reload instead of living only in the browser's React state until the
+/// next "Run analysis" click. One row per org — each run overwrites the
+/// last, since this is "what should we do next", not a growing history.
+model AiInsightSnapshot {
+  id                String   @id @default(uuid())
+  orgId             String   @unique @map("org_id")
+  org               Organization @relation(fields: [orgId], references: [id])
+  generatedAt       DateTime @default(now()) @map("generated_at")
+  insights          Json     @default("{}")
+  recommendations   Json     @default("{}")
+  /// Copy-level feedback tied to real sent-email excerpts (opened-without-
+  /// reply vs. replied), not just aggregate rates — see LearningAgent.
+  emailImprovements Json     @default("[]") @map("email_improvements")
+
+  @@map("ai_insight_snapshots")
 }
 
 model Lead {

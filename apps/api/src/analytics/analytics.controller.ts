@@ -26,6 +26,13 @@ export class AnalyticsController {
     return this.analyticsService.getEmailFunnel(user.orgId);
   }
 
+  /** Backs the Analytics page's Opened/Replied tabs — row-level, unlike
+   *  every other endpoint here which returns only aggregate counts. */
+  @Get("emails")
+  getEmailList(@CurrentUser() user: JwtClaims, @Query("event") event: "OPENED" | "REPLIED") {
+    return this.analyticsService.getEmailList(user.orgId, event);
+  }
+
   @Get("linkedin-funnel")
   getLinkedinFunnel(@CurrentUser() user: JwtClaims) {
     return this.analyticsService.getLinkedinFunnel(user.orgId);
@@ -53,5 +60,12 @@ export class AnalyticsController {
   @Roles(Role.ADMIN, Role.MANAGER)
   getAiInsights(@CurrentUser() user: JwtClaims) {
     return this.analyticsService.getAiInsights(user.orgId);
+  }
+
+  /** The persisted result of the last run above — what the page loads on
+   *  mount, open to any authenticated user in-org same as the other reads. */
+  @Get("ai-insights/latest")
+  getLatestAiInsights(@CurrentUser() user: JwtClaims) {
+    return this.analyticsService.getLatestAiInsights(user.orgId);
   }
 }

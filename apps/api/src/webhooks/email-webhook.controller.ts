@@ -84,10 +84,34 @@ export class EmailWebhookController {
     return { ok: true, translated: events.length };
   }
 
-  /** Reply detection short-circuits the whole sequence (Part C6) — cancel any pending wait timer immediately. */
+  /**
+   * Reply detection short-circuits the whole sequence (Part C6) — cancel any
+   * pending wait timer immediately.
+   *
+   * Also records an EmailEvent{REPLIED} against whichever message this lead
+   * most recently received — without it, reply rate has no row to count:
+   * analytics.service.ts's getEmailFunnel counts REPLIED strictly from
+   * email_events, and every path into this method (the generic
+   * /email-events ingest, Gmail, and Graph) previously only updated
+   * PipelineState, so replyRate has been silently stuck at 0% however many
+   * real replies came in. The most-recently-SENT message is the one being
+   * replied to; a lead with none yet (replied before any send somehow
+   * recorded) has nothing to attach the event to, so that case is skipped
+   * rather than guessed.
+   */
   private async handleReply(leadEmail: string) {
     const lead = await this.prisma.lead.findFirst({ where: { email: leadEmail } });
     if (!lead) return { ignored: true, reason: "unknown recipient" };
+
+    const lastSent = await this.prisma.emailMessage.findFirst({
+      where: { leadId: lead.id, status: "SENT" },
+      orderBy: { sentAt: "desc" },
+    });
+    if (lastSent) {
+      await this.prisma.emailEvent.create({
+        data: { messageId: lastSent.id, eventType: "REPLIED" },
+      });
+    }
 
     await this.sequencer.cancelWaitTimer(lead.id);
     await this.prisma.pipelineState.update({

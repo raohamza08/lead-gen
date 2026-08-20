@@ -58,15 +58,23 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
         )
 
 
-async def run_optimisation(org_id: str, performance: list, outcomes: dict) -> dict:
+async def run_optimisation(
+    org_id: str, performance: list, outcomes: dict, email_samples: dict | None = None,
+) -> dict:
     """Synchronous by design (unlike the two background-task entry points
     above): the caller is a dashboard button waiting to render the result, not
-    a fire-and-forget sequencer hop."""
+    a fire-and-forget sequencer hop.
+
+    `email_samples` is optional (not in seed_keys) — LearningAgent treats it
+    as optional context (see MIN_EMAIL_SAMPLE there), so an org with too
+    little email history still gets ordinary recommendations, just no
+    emailImprovements.
+    """
     orchestrator = build("optimisation", seed_keys=("performance", "outcomes"))
     ctx = AgentContext(
         run_id=org_id,
         org_id=org_id,
-        data={"performance": performance, "outcomes": outcomes},
+        data={"performance": performance, "outcomes": outcomes, "email_samples": email_samples or {}},
     )
     result = await orchestrator.run(ctx)
 
@@ -85,6 +93,7 @@ async def run_optimisation(org_id: str, performance: list, outcomes: dict) -> di
     return {
         "insights": ctx.get("insights") or {},
         "recommendations": ctx.get("recommendations") or {},
+        "emailImprovements": ctx.get("email_improvements") or [],
         "completed": result.completed,
         "stoppedAt": result.stopped_at,
         "stopReason": result.stop_reason,

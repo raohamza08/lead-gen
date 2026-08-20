@@ -1,12 +1,15 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CampaignsService } from "../campaigns/campaigns.service";
 import {
+  AiInsightsSnapshot,
   AnalyticsSummary,
   CohortTrendPoint,
   CohortTrendsReport,
   EmailFunnelReport,
+  EmailListItem,
   EmailPerformance,
   EmailStepPerformance,
   FunnelStageCount,
@@ -225,6 +228,78 @@ export class AnalyticsService {
   }
 
   /**
+   * Row-level backing for the Analytics page's Opened/Replied tabs — the
+   * email-funnel above only ever returns counts, never which specific
+   * messages they're counts of. One row per message that has an event of
+   * the requested type, taking the *earliest* occurrence (a message opened
+   * five times is one row, not five, and shows when it was first opened).
+   */
+  async getEmailList(orgId: string, event: "OPENED" | "REPLIED"): Promise<EmailListItem[]> {
+    const rows = await this.prisma.$queryRaw<
+      {
+        id: string; leadId: string; companyName: string; contactName: string | null;
+        subject: string; sequenceStep: number; sentAt: Date | null; eventAt: Date;
+      }[]
+    >`
+      SELECT m.id, m.lead_id AS "leadId", l.company_name AS "companyName",
+             l.contact_name AS "contactName", m.subject, m.sequence_step AS "sequenceStep",
+             m.sent_at AS "sentAt", MIN(e.occurred_at) AS "eventAt"
+      FROM email_events e
+      JOIN email_messages m ON m.id = e.message_id
+      JOIN leads l ON l.id = m.lead_id
+      WHERE l.org_id = ${orgId} AND e.event_type = ${event}::"EmailEventType"
+      GROUP BY m.id, l.company_name, l.contact_name
+      ORDER BY MIN(e.occurred_at) DESC
+      LIMIT 200
+    `;
+    return rows.map((r) => ({
+      ...r,
+      sentAt: r.sentAt?.toISOString() ?? null,
+      eventAt: r.eventAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Real sent-email excerpts for the learning agent's copy-level review
+   * (Part: email improvements) — opened-but-never-replied is the group whose
+   * subject/opening line is worth questioning (it got attention and then
+   * lost it), replied is what's already working and worth reinforcing.
+   * Bodies are stripped of markup and truncated: this goes into a prompt,
+   * not a mailbox, and a full HTML email is mostly boilerplate/signature.
+   */
+  private async getEmailSamples(orgId: string) {
+    const strip = (html: string) =>
+      html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 600);
+
+    const [opened, replied] = await Promise.all([
+      this.prisma.$queryRaw<{ subject: string; bodyHtml: string; sequenceStep: number }[]>`
+        SELECT m.subject, m.body_html AS "bodyHtml", m.sequence_step AS "sequenceStep"
+        FROM email_messages m
+        JOIN leads l ON l.id = m.lead_id
+        WHERE l.org_id = ${orgId}
+          AND EXISTS (SELECT 1 FROM email_events e WHERE e.message_id = m.id AND e.event_type = 'OPENED')
+          AND NOT EXISTS (SELECT 1 FROM email_events e WHERE e.message_id = m.id AND e.event_type = 'REPLIED')
+        ORDER BY m.sent_at DESC
+        LIMIT 15
+      `,
+      this.prisma.$queryRaw<{ subject: string; bodyHtml: string; sequenceStep: number }[]>`
+        SELECT m.subject, m.body_html AS "bodyHtml", m.sequence_step AS "sequenceStep"
+        FROM email_messages m
+        JOIN leads l ON l.id = m.lead_id
+        WHERE l.org_id = ${orgId}
+          AND EXISTS (SELECT 1 FROM email_events e WHERE e.message_id = m.id AND e.event_type = 'REPLIED')
+        ORDER BY m.sent_at DESC
+        LIMIT 15
+      `,
+    ]);
+
+    return {
+      openedNoReply: opened.map((m) => ({ ...m, bodyExcerpt: strip(m.bodyHtml), bodyHtml: undefined })),
+      replied: replied.map((m) => ({ ...m, bodyExcerpt: strip(m.bodyHtml), bodyHtml: undefined })),
+    };
+  }
+
+  /**
    * LinkedIn is tracked but never automated (ToS/ban risk) — these numbers come
    * from whatever a human recorded against the lead, so an empty report means
    * "nobody logged anything", not "the integration is broken".
@@ -388,26 +463,70 @@ export class AnalyticsService {
    * every minute — matches the "give me the control, don't just spend the
    * quota" pattern already used for enrichment cost elsewhere in this app.
    */
-  async getAiInsights(orgId: string) {
-    const [performance, won, lost] = await Promise.all([
+  async getAiInsights(orgId: string): Promise<AiInsightsSnapshot & { notes: string[] }> {
+    const [performance, won, lost, emailSamples] = await Promise.all([
       this.campaigns.performance(orgId),
       this.prisma.pipelineState.count({ where: { stage: PipelineStage.WON, lead: { orgId } } }),
       this.prisma.pipelineState.count({ where: { stage: PipelineStage.LOST, lead: { orgId } } }),
+      this.getEmailSamples(orgId),
     ]);
 
     const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
+    let result: { insights?: unknown; recommendations?: unknown; emailImprovements?: unknown; notes?: string[] };
     try {
       const res = await fetch(`${aiWorkersUrl}/optimisation/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId, performance, outcomes: { won, lost } }),
+        body: JSON.stringify({ orgId, performance, outcomes: { won, lost }, emailSamples }),
       });
       if (!res.ok) throw new Error(`worker responded ${res.status}`);
-      return res.json();
+      result = await res.json();
     } catch (err) {
       throw new ServiceUnavailableException(
         `Could not reach the AI workers for insights: ${(err as Error).message}`,
       );
     }
+
+    // Persisted so the page shows the last real result on load rather than
+    // going blank until someone clicks "Run analysis" again — one row per
+    // org, each run replacing the last (see AiInsightSnapshot's doc comment).
+    const snapshot = await this.prisma.aiInsightSnapshot.upsert({
+      where: { orgId },
+      create: {
+        orgId,
+        insights: (result.insights ?? {}) as Prisma.InputJsonValue,
+        recommendations: (result.recommendations ?? {}) as Prisma.InputJsonValue,
+        emailImprovements: (result.emailImprovements ?? []) as Prisma.InputJsonValue,
+      },
+      update: {
+        generatedAt: new Date(),
+        insights: (result.insights ?? {}) as Prisma.InputJsonValue,
+        recommendations: (result.recommendations ?? {}) as Prisma.InputJsonValue,
+        emailImprovements: (result.emailImprovements ?? []) as Prisma.InputJsonValue,
+      },
+    });
+    // notes are run diagnostics (skip reasons, "requires human approval"),
+    // not part of the persisted insight itself — returned alongside the
+    // snapshot for the just-ran page, but getLatestAiInsights below (a page
+    // reload) won't have them, same as any other ephemeral log line.
+    return { ...this.toSnapshotDto(snapshot), notes: result.notes ?? [] };
+  }
+
+  /** What the Analytics page loads on mount — the last run's result, or null
+   *  if analysis has never been run for this org. Read-only, no CLI cost. */
+  async getLatestAiInsights(orgId: string): Promise<AiInsightsSnapshot | null> {
+    const snapshot = await this.prisma.aiInsightSnapshot.findUnique({ where: { orgId } });
+    return snapshot ? this.toSnapshotDto(snapshot) : null;
+  }
+
+  private toSnapshotDto(snapshot: {
+    generatedAt: Date; insights: unknown; recommendations: unknown; emailImprovements: unknown;
+  }): AiInsightsSnapshot {
+    return {
+      generatedAt: snapshot.generatedAt.toISOString(),
+      insights: snapshot.insights as AiInsightsSnapshot["insights"],
+      recommendations: snapshot.recommendations as AiInsightsSnapshot["recommendations"],
+      emailImprovements: snapshot.emailImprovements as AiInsightsSnapshot["emailImprovements"],
+    };
   }
 }

@@ -98,3 +98,36 @@ export interface CohortTrendsReport {
   days: number;
   points: CohortTrendPoint[];
 }
+
+/** One row in the Opened/Replied lists on the Analytics page — a message
+ *  with enough lead context to be useful without a second lookup. */
+export interface EmailListItem {
+  id: string;
+  leadId: string;
+  companyName: string;
+  contactName: string | null;
+  subject: string;
+  sequenceStep: number;
+  sentAt: string | null;
+  /** When the event this list is filtered to (opened/replied) occurred. A
+   *  message opened more than once takes the earliest open. */
+  eventAt: string;
+}
+
+/** One piece of copy-level feedback from the learning agent, tied to real
+ *  sent-email excerpts rather than only aggregate rates. */
+export interface EmailImprovement {
+  title: string;
+  observation: string;
+  suggestion: string;
+  evidence: string;
+}
+
+/** Persisted result of the analytics/learning agent pipeline — survives a
+ *  page reload instead of only living in React state until the next click. */
+export interface AiInsightsSnapshot {
+  generatedAt: string;
+  insights: Record<string, unknown> | null;
+  recommendations: Record<string, unknown> | null;
+  emailImprovements: EmailImprovement[];
+}
