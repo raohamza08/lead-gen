@@ -234,6 +234,7 @@ export const api = {
     request(`/niche-filters/${filterId}/runs/${runId}/cancel`, { method: "POST" }),
   getPendingApprovals: () => request("/sequences/pending-approvals"),
   getUpcomingSends: () => request("/sequences/upcoming"),
+  getSendQueue: () => request("/sequences/send-queue"),
   getEmailAccounts: () => request("/settings/email-accounts"),
   getEmailAccountsHealth: () => request("/settings/email-accounts/health"),
   createEmailAccount: (body: Record<string, unknown>) =>

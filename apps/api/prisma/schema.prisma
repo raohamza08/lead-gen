@@ -651,6 +651,12 @@ model EmailMessage {
   status        EmailMessageStatus @default(DRAFT)
   scheduledAt   DateTime? @map("scheduled_at")
   sentAt        DateTime? @map("sent_at")
+  /// When this row was drafted — the only reliable proxy for "which queued
+  /// email sends first" (the email-send BullMQ queue has no delay and
+  /// processes FIFO, so draft order is send order). `scheduledAt` above and
+  /// EmailEventType.QUEUED both look like they'd answer this but neither is
+  /// ever written anywhere in the codebase.
+  createdAt     DateTime @default(now()) @map("created_at")
 
   events        EmailEvent[]
 

@@ -52,6 +52,58 @@ interface FleetReport {
   pipelines: Record<string, string[]>;
 }
 
+interface QueuedEmail {
+  id: string;
+  subject: string;
+  sequenceStep: number;
+  createdAt: string;
+  lead: { id: string; companyName: string };
+  account: { address: string } | null;
+}
+
+interface WaitingLead {
+  leadId: string;
+  lead: { id: string; companyName: string };
+  nextStep: number;
+  nextActionAt: string | null;
+}
+
+interface SendQueue {
+  queued: QueuedEmail[];
+  waiting: WaitingLead[];
+}
+
+/** Canonical 5-email sequence step names — matches agent-prompts-section.tsx
+ *  and clickup-sync.worker.ts's pipeline-stage labels, so "step 2" reads the
+ *  same everywhere in the dashboard. */
+const STEP_LABEL: Record<number, string> = {
+  1: "Problem Trigger",
+  2: "Industry Insight",
+  3: "Proof",
+  4: "Soft Offer",
+  5: "Breakup",
+};
+
+function timeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(ms / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.round(hours / 24)}d ago`;
+}
+
+function timeUntil(iso: string): string {
+  const ms = new Date(iso).getTime() - Date.now();
+  if (ms <= 0) return "any moment now";
+  const mins = Math.round(ms / 60000);
+  if (mins < 60) return `in ${mins}m`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `in ${hours}h`;
+  return `in ${Math.round(hours / 24)}d`;
+}
+
 /** Pipelines actually invoked at runtime: `lead_acquisition` per candidate,
  *  `manual_lead_enrichment` when a manual lead is created or re-enriched
  *  (POST /lead-gen/enrich — includes agent_review, the AI's own review-note
@@ -102,6 +154,8 @@ export default function AutomationPage() {
   const [runs, setRuns] = useState<AgentRun[]>([]);
   const [fleet, setFleet] = useState<FleetReport | null>(null);
   const [fleetError, setFleetError] = useState<string | null>(null);
+  const [sendQueue, setSendQueue] = useState<SendQueue | null>(null);
+  const [sendQueueError, setSendQueueError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -128,6 +182,17 @@ export default function AutomationPage() {
       .getAgentFleet()
       .then((f) => !cancelled && setFleet(f as FleetReport))
       .catch((err) => !cancelled && setFleetError((err as Error).message));
+    return () => { cancelled = true; };
+  }, []);
+
+  // Also independent of the health window — "what's about to send" is a
+  // live queue state, not a historical stat over a chosen time range.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .getSendQueue()
+      .then((q) => !cancelled && setSendQueue(q as SendQueue))
+      .catch((err) => !cancelled && setSendQueueError((err as Error).message));
     return () => { cancelled = true; };
   }, []);
 
@@ -179,6 +244,80 @@ export default function AutomationPage() {
             hint={slowest?.agent}
           />
         </section>
+
+        <SectionCard
+          title="Send queue"
+          subtitle="Everything between drafted and sent, in the order it will actually happen — queued emails go out within moments; scheduled ones are counting down a real wait timer."
+        >
+          {sendQueueError ? (
+            <p className="py-8 text-center text-sm text-bad">{sendQueueError}</p>
+          ) : !sendQueue ? (
+            <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
+          ) : (
+            <div className="flex flex-col gap-5">
+              <div>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">
+                  Queued — sending next, in this order ({sendQueue.queued.length})
+                </h3>
+                {sendQueue.queued.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink/50">Nothing queued right now.</p>
+                ) : (
+                  <DataTable<QueuedEmail>
+                    rows={sendQueue.queued}
+                    rowKey={(q) => q.id}
+                    columns={[
+                      {
+                        key: "order",
+                        header: "#",
+                        numeric: true,
+                        render: (q) => sendQueue.queued.indexOf(q) + 1,
+                      },
+                      { key: "company", header: "Company", render: (q) => q.lead.companyName },
+                      {
+                        key: "step",
+                        header: "Email",
+                        render: (q) => `#${q.sequenceStep} — ${STEP_LABEL[q.sequenceStep] ?? ""}`,
+                      },
+                      { key: "subject", header: "Subject", render: (q) => q.subject },
+                      { key: "mailbox", header: "Mailbox", render: (q) => q.account?.address ?? "—" },
+                      { key: "queued", header: "Queued", render: (q) => timeAgo(q.createdAt) },
+                    ]}
+                  />
+                )}
+              </div>
+
+              <div>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">
+                  Scheduled — waiting on the sequence timer ({sendQueue.waiting.length})
+                </h3>
+                {sendQueue.waiting.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink/50">No leads currently waiting.</p>
+                ) : (
+                  <DataTable<WaitingLead>
+                    rows={sendQueue.waiting}
+                    rowKey={(w) => w.leadId}
+                    columns={[
+                      { key: "company", header: "Company", render: (w) => w.lead.companyName },
+                      {
+                        key: "step",
+                        header: "Next email",
+                        render: (w) => `#${w.nextStep} — ${STEP_LABEL[w.nextStep] ?? ""}`,
+                      },
+                      {
+                        key: "due",
+                        header: "Drafts & sends",
+                        render: (w) =>
+                          w.nextActionAt
+                            ? `${timeUntil(w.nextActionAt)} (${new Date(w.nextActionAt).toLocaleString()})`
+                            : "—",
+                      },
+                    ]}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+        </SectionCard>
 
         <SectionCard
           title="Agent performance"
