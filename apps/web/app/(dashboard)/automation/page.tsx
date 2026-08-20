@@ -109,8 +109,10 @@ function timeUntil(iso: string): string {
  *  (POST /lead-gen/enrich — includes agent_review, the AI's own review-note
  *  draft), `email_only` behind every waiting stage of the 5-email sequence,
  *  `linkedin_draft` behind the lead detail page's "Generate LinkedIn copy"
- *  button, and `optimisation` behind the Analytics page's "Run analysis"
- *  button.
+ *  button, `optimisation` behind the Analytics page's "Run analysis" button,
+ *  and `case_study_review` behind Settings' "Submit for review" (Case
+ *  studies section — CaseStudiesService.create/retry call
+ *  POST /case-study/review on every submission and retry).
  *
  *  Three defined pipelines still have no caller anywhere in the codebase —
  *  confirmed by grepping for every `build("<name>", ...)` call, not just
@@ -131,6 +133,7 @@ const LIVE_PIPELINES = new Set([
   "email_only",
   "linkedin_draft",
   "optimisation",
+  "case_study_review",
 ]);
 
 const WINDOWS = [1, 24, 168] as const;
