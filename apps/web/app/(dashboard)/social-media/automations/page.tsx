@@ -150,7 +150,7 @@ export default function AutomationsPage() {
           />
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={notifyOnly} onChange={(e) => setNotifyOnly(e.target.checked)} />
-            Just notify me — don't draft a post
+            Just notify me — don&apos;t draft a post
           </label>
           {!notifyOnly && (
             <>

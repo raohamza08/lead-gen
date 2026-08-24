@@ -81,7 +81,7 @@ export default function PostsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Posts</h1>
-        <p className="mt-0.5 text-xs text-ink/50">Every post, at whatever stage it's in.</p>
+        <p className="mt-0.5 text-xs text-ink/50">Every post, at whatever stage it&apos;s in.</p>
       </div>
 
       <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--line)] p-1">

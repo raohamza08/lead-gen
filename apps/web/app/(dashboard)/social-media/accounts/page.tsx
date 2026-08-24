@@ -252,7 +252,7 @@ export default function SocialAccountsPage() {
         ))}
         {accounts.length === 0 && (
           <p className="col-span-full py-8 text-center text-sm text-ink/50">
-            No accounts yet. Click "Add account" to add your first platform account.
+            No accounts yet. Click &quot;Add account&quot; to add your first platform account.
           </p>
         )}
       </div>

@@ -86,7 +86,7 @@ export default function SocialMediaOverviewPage() {
           <Link href="/social-media/automations" className="card card-interactive p-4">
             <h3 className="text-sm font-semibold">3. Automate</h3>
             <p className="mt-1 text-xs text-ink/50">
-              Auto-draft a post whenever a new lead comes in, so there's never a blank page.
+              Auto-draft a post whenever a new lead comes in, so there&apos;s never a blank page.
             </p>
           </Link>
         </div>
