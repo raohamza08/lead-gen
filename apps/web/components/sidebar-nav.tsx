@@ -38,6 +38,7 @@ const NAV: NavItem[] = [
       { href: "/campaigns", label: "Campaigns" },
       { href: "/analytics", label: "Analytics" },
       { href: "/automation", label: "Automation" },
+      { href: "/settings/lead-generation", label: "Settings" },
     ],
   },
   {
@@ -50,7 +51,7 @@ const NAV: NavItem[] = [
       { href: "/email-hub?view=followups", label: "Follow-ups", matchSearch: "view=followups" },
       { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored" },
       { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent" },
-      { href: "/settings#email-hub-accounts", label: "Accounts" },
+      { href: "/settings/email-hub", label: "Settings" },
     ],
   },
   { type: "link", href: "/settings", label: "Settings" },
