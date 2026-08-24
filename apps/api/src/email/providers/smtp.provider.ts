@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EmailAccount } from "@prisma/client";
 import nodemailer from "nodemailer";
+import { EncryptionService } from "../../common/crypto/encryption.service";
 import { EmailProvider, formatFrom, OutboundEmail } from "../email-provider.interface";
 
 const PROVIDER_DEFAULTS: Record<string, { host: string; port: number }> = {
@@ -17,6 +18,8 @@ const PROVIDER_DEFAULTS: Record<string, { host: string; port: number }> = {
 export class SmtpProvider implements EmailProvider {
   private readonly logger = new Logger(SmtpProvider.name);
 
+  constructor(private readonly encryption: EncryptionService) {}
+
   async send(account: EmailAccount, email: OutboundEmail): Promise<{ providerMessageId: string }> {
     if (!account.smtpUsername || !account.smtpPassword) {
       this.logger.log(`[stub] would send via SMTP: to=${email.toAddress} subject="${email.subject}"`);
@@ -26,12 +29,18 @@ export class SmtpProvider implements EmailProvider {
     const defaults = PROVIDER_DEFAULTS[account.provider] ?? { host: "", port: 587 };
     const host = account.smtpHost ?? defaults.host;
     const port = account.smtpPort ?? defaults.port;
+    // Encrypted at rest since the Email Hub migration; tolerates a
+    // still-plaintext legacy row (looksEncrypted distinguishes the two) so
+    // no separate backfill blocks this from shipping.
+    const password = this.encryption.looksEncrypted(account.smtpPassword)
+      ? this.encryption.decrypt(account.smtpPassword)
+      : account.smtpPassword;
 
     const transport = nodemailer.createTransport({
       host,
       port,
       secure: port === 465,
-      auth: { user: account.smtpUsername, pass: account.smtpPassword },
+      auth: { user: account.smtpUsername, pass: password },
     });
 
     const info = await transport.sendMail({

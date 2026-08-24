@@ -18,6 +18,14 @@ interface MailboxHealth {
   smtpHost: string | null;
   smtpPort: number | null;
   smtpUsername: string | null;
+  // Email Hub: inbound IMAP sync
+  imapConfigured: boolean;
+  imapHost: string | null;
+  imapPort: number | null;
+  imapEncryption: string | null;
+  imapUsername: string | null;
+  mailboxLabel: string | null;
+  inboundSyncEnabled: boolean;
 }
 
 const EMPTY_DRAFT = {
@@ -31,6 +39,13 @@ const EMPTY_DRAFT = {
   smtpUsername: "",
   smtpPassword: "",
   oauthRefreshToken: "",
+  mailboxLabel: "",
+  inboundSyncEnabled: false,
+  imapHost: "",
+  imapPort: 993,
+  imapEncryption: "SSL" as "SSL" | "STARTTLS" | "NONE",
+  imapUsername: "",
+  imapPassword: "",
 };
 
 /**
@@ -85,6 +100,8 @@ export function EmailAccountsSection() {
         displayName: draft.displayName,
         dailyLimit: draft.dailyLimit,
         hourlyLimit: draft.hourlyLimit,
+        mailboxLabel: draft.mailboxLabel,
+        inboundSyncEnabled: draft.inboundSyncEnabled,
       };
       if (draft.provider === "GMAIL") {
         // On edit, the API never returns the existing refresh token (it's a
@@ -96,6 +113,17 @@ export function EmailAccountsSection() {
         body.smtpPort = draft.smtpPort;
         body.smtpUsername = draft.smtpUsername;
         if (draft.smtpPassword || !editingId) body.smtpPassword = draft.smtpPassword;
+      }
+      if (draft.inboundSyncEnabled) {
+        // Every provider (including Gmail/Workspace) connects for inbound
+        // sync via plain IMAP + an app password in V1 — see the Email Hub's
+        // provider-independent design; there is no separate Gmail-API path
+        // here yet.
+        body.imapHost = draft.imapHost;
+        body.imapPort = draft.imapPort;
+        body.imapEncryption = draft.imapEncryption;
+        body.imapUsername = draft.imapUsername;
+        if (draft.imapPassword || !editingId) body.imapPassword = draft.imapPassword;
       }
 
       if (editingId) {
@@ -127,6 +155,13 @@ export function EmailAccountsSection() {
       smtpUsername: account.smtpUsername ?? "",
       smtpPassword: "",
       oauthRefreshToken: "",
+      mailboxLabel: account.mailboxLabel ?? "",
+      inboundSyncEnabled: account.inboundSyncEnabled,
+      imapHost: account.imapHost ?? "",
+      imapPort: account.imapPort ?? 993,
+      imapEncryption: (account.imapEncryption as typeof EMPTY_DRAFT.imapEncryption) ?? "SSL",
+      imapUsername: account.imapUsername ?? "",
+      imapPassword: "",
     });
     setShowForm(true);
   }
@@ -231,9 +266,14 @@ export function EmailAccountsSection() {
   }
 
   return (
-    <section className="rounded-xl border border-[var(--line)] p-5">
+    <section id="email-hub-accounts" className="scroll-mt-6 rounded-xl border border-[var(--line)] p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-sm font-semibold tracking-tight">Email accounts</h2>
+        <div>
+          <h2 className="text-sm font-semibold tracking-tight">Email accounts</h2>
+          <p className="mt-0.5 text-xs text-ink/50">
+            Sending config for outreach, plus optional inbound IMAP sync for the Email Hub&apos;s unified inbox.
+          </p>
+        </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -290,6 +330,7 @@ export function EmailAccountsSection() {
               <th className="py-2 pr-3">Status</th>
               <th className="py-2 pr-3">Sent today</th>
               <th className="py-2 pr-3">Credentials</th>
+              <th className="py-2 pr-3">Inbox sync</th>
               <th className="py-2" />
             </tr>
           </thead>
@@ -325,6 +366,15 @@ export function EmailAccountsSection() {
                 </td>
                 <td className="py-2 pr-3 text-xs text-ink/60">
                   {a.oauthConfigured || a.smtpConfigured ? "Configured" : "Not configured"}
+                </td>
+                <td className="py-2 pr-3 text-xs">
+                  {a.inboundSyncEnabled ? (
+                    <span className="rounded bg-good/20 px-2 py-0.5 text-good">
+                      On{a.mailboxLabel ? ` — ${a.mailboxLabel}` : ""}
+                    </span>
+                  ) : (
+                    <span className="text-ink/35">Off</span>
+                  )}
                 </td>
                 <td className="py-2">
                   <div className="flex items-center gap-2">
@@ -362,7 +412,7 @@ export function EmailAccountsSection() {
             ))}
             {accounts.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-sm text-ink/50">
+                <td colSpan={8} className="py-6 text-center text-sm text-ink/50">
                   No mailboxes configured. Add one, then use &ldquo;Send test&rdquo; before running a campaign
                   — a mailbox that fails to send is the most common reason outreach silently stalls.
                 </td>
@@ -490,6 +540,87 @@ export function EmailAccountsSection() {
               </label>
             </div>
           )}
+
+          <div className="border-t border-[var(--line)] pt-3">
+            <label className="mb-1 block text-xs font-medium text-ink/70">Email Hub — inbound sync</label>
+            <p className="mb-2 text-xs text-ink/50">
+              Pulls this mailbox&apos;s received email into the unified inbox. Off by default — turning it on for a
+              new mailbox never happens silently.
+            </p>
+            <label className="mb-3 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.inboundSyncEnabled}
+                onChange={(e) => set("inboundSyncEnabled", e.target.checked)}
+              />
+              Sync this mailbox into the Email Hub
+            </label>
+
+            {draft.inboundSyncEnabled && (
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block sm:col-span-2">
+                  <span className="mb-1 block text-xs text-ink/60">Internal label (shown in Email Hub only)</span>
+                  <input
+                    value={draft.mailboxLabel}
+                    onChange={(e) => set("mailboxLabel", e.target.value)}
+                    placeholder="e.g. Sales inbox — leave blank to show the address"
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-ink/60">IMAP host</span>
+                  <input
+                    value={draft.imapHost}
+                    onChange={(e) => set("imapHost", e.target.value)}
+                    placeholder="imap.gmail.com"
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+                  />
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-ink/60">Port</span>
+                    <input
+                      type="number"
+                      value={draft.imapPort}
+                      onChange={(e) => set("imapPort", Number(e.target.value))}
+                      className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="mb-1 block text-xs text-ink/60">Encryption</span>
+                    <select
+                      value={draft.imapEncryption}
+                      onChange={(e) => set("imapEncryption", e.target.value as typeof draft.imapEncryption)}
+                      className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+                    >
+                      <option value="SSL">SSL</option>
+                      <option value="STARTTLS">STARTTLS</option>
+                      <option value="NONE">None</option>
+                    </select>
+                  </label>
+                </div>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-ink/60">IMAP username</span>
+                  <input
+                    value={draft.imapUsername}
+                    onChange={(e) => set("imapUsername", e.target.value)}
+                    placeholder="usually the full email address"
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs text-ink/60">IMAP password / app password</span>
+                  <input
+                    type="password"
+                    value={draft.imapPassword}
+                    onChange={(e) => set("imapPassword", e.target.value)}
+                    placeholder={editingId ? "Leave blank to keep the current password" : "Gmail/Workspace: use an app password"}
+                    className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+                  />
+                </label>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center gap-3">
             <button

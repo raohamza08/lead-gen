@@ -1,4 +1,5 @@
-import { Nav } from "../../components/nav";
+import { Suspense } from "react";
+import { SidebarNav } from "../../components/sidebar-nav";
 import { AuthGuard } from "../../components/auth-guard";
 import { SignOutButton } from "../../components/sign-out-button";
 import { ThemeToggle } from "../../components/theme-toggle";
@@ -7,10 +8,8 @@ import { NotificationsBell } from "../../components/notifications-bell";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthGuard>
-      <div className="min-h-screen">
-        {/* Sticky so the nav stays reachable on the pipeline board, which
-            scrolls horizontally and can be long vertically. */}
-        <header className="sticky top-0 z-20 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur">
+      <div className="flex h-screen flex-col">
+        <header className="shrink-0 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur">
           <div className="flex items-center justify-between px-6 py-3">
             <div className="flex items-center gap-2.5">
               <span
@@ -21,7 +20,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </span>
               <div>
                 <div className="text-sm font-semibold leading-tight tracking-tight">Sales OS</div>
-                <div className="text-[11px] leading-tight text-ink/45">Revenue intelligence</div>
+                <div className="text-[11px] leading-tight text-ink/45">Business Communication & Lead Management</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -30,9 +29,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <SignOutButton />
             </div>
           </div>
-          <Nav />
         </header>
-        <main className="mx-auto max-w-[1600px] p-6">{children}</main>
+        <div className="flex min-h-0 flex-1">
+          <Suspense fallback={<div className="w-56 shrink-0 border-r border-[var(--line)]" />}>
+            <SidebarNav />
+          </Suspense>
+          <main className="min-w-0 flex-1 overflow-y-auto p-6">
+            <div className="mx-auto max-w-[1600px]">{children}</div>
+          </main>
+        </div>
       </div>
     </AuthGuard>
   );

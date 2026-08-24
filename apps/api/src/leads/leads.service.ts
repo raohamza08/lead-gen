@@ -976,6 +976,33 @@ export class LeadsService {
   }
 
   /**
+   * Looks up a lead by the same identities findExistingDuplicate checks
+   * (email, LinkedIn URL, normalised company name), returning the actual
+   * row instead of just a reason string — for callers that need to link to
+   * an existing lead rather than merely reject a duplicate insert. Built for
+   * the Email Hub's "Add to Lead" (Part: Lead Integration): a reply from a
+   * known contact must link to their existing lead, never create a second
+   * one for the same person.
+   */
+  async findLeadByContact(
+    orgId: string,
+    contact: { email?: string; companyName?: string; linkedinUrl?: string },
+  ) {
+    const checks: Prisma.LeadWhereInput[] = [];
+    if (contact.email) checks.push({ orgId, email: { equals: contact.email, mode: "insensitive" } });
+    const linkedin = normaliseLinkedin(contact.linkedinUrl);
+    if (linkedin) checks.push({ orgId, linkedinSlug: linkedin });
+    const name = normaliseCompanyName(contact.companyName);
+    if (name) checks.push({ orgId, companyNameKey: name });
+
+    for (const where of checks) {
+      const lead = await this.prisma.lead.findFirst({ where });
+      if (lead) return lead;
+    }
+    return null;
+  }
+
+  /**
    * Tier-2 duplicate detection (Part C2), covering the identities the database
    * unique constraints cannot.
    *

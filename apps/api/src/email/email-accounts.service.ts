@@ -1,7 +1,8 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { EmailAccount } from "@prisma/client";
+import { EmailAccount, Prisma } from "@prisma/client";
 import { Queue } from "bullmq";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { EncryptionService } from "../common/crypto/encryption.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { UpsertEmailAccountDto } from "./dto/upsert-email-account.dto";
 import { GmailProvider } from "./providers/gmail.provider";
@@ -9,15 +10,21 @@ import { SmtpProvider } from "./providers/smtp.provider";
 
 /** Never send raw credentials back to the dashboard — just whether one is set. */
 function sanitize(account: EmailAccount) {
-  const { oauthRefreshToken, smtpPassword, ...rest } = account;
-  return { ...rest, oauthConfigured: Boolean(oauthRefreshToken), smtpConfigured: Boolean(smtpPassword) };
+  const { oauthRefreshToken, smtpPassword, imapPasswordEnc, ...rest } = account;
+  return {
+    ...rest,
+    oauthConfigured: Boolean(oauthRefreshToken),
+    smtpConfigured: Boolean(smtpPassword),
+    imapConfigured: Boolean(imapPasswordEnc),
+  };
 }
 
 /**
  * Backs `GET/PATCH /settings/email-accounts` (Part E2) — mailbox rotation
- * config (daily/hourly limits, warmup, status). Credentials (OAuth refresh
- * token / SMTP password) are accepted here for the scaffold but belong in a
- * secrets manager before this goes live (Part E4), same caveat as elsewhere.
+ * config (daily/hourly limits, warmup, status) plus, since the Email Hub
+ * addition, IMAP inbound-sync credentials. Every credential field
+ * (oauthRefreshToken/smtpPassword/imapPasswordEnc) is encrypted at rest via
+ * EncryptionService before it reaches Prisma — see encryptCredentials below.
  */
 @Injectable()
 export class EmailAccountsService {
@@ -27,7 +34,21 @@ export class EmailAccountsService {
     private readonly prisma: PrismaService,
     private readonly gmail: GmailProvider,
     private readonly smtp: SmtpProvider,
+    private readonly encryption: EncryptionService,
   ) {}
+
+  /** Maps the DTO's plaintext `imapPassword` onto the encrypted
+   *  `imapPasswordEnc` column, and encrypts smtpPassword/oauthRefreshToken
+   *  in place — the one point every credential passes through on the way
+   *  into the database, on both create and update. */
+  private encryptCredentials(dto: Partial<UpsertEmailAccountDto>) {
+    const { imapPassword, ...rest } = dto;
+    const data: Record<string, unknown> = { ...rest };
+    if (imapPassword) data.imapPasswordEnc = this.encryption.encrypt(imapPassword);
+    if (dto.smtpPassword) data.smtpPassword = this.encryption.encrypt(dto.smtpPassword);
+    if (dto.oauthRefreshToken) data.oauthRefreshToken = this.encryption.encrypt(dto.oauthRefreshToken);
+    return data;
+  }
 
   /**
    * Sends a real test email through this mailbox.
@@ -87,15 +108,53 @@ export class EmailAccountsService {
   }
 
   async create(orgId: string, dto: UpsertEmailAccountDto) {
-    const created = await this.prisma.emailAccount.create({ data: { orgId, ...dto } });
+    const created = await this.prisma.emailAccount.create({
+      data: { orgId, ...this.encryptCredentials(dto) } as unknown as Prisma.EmailAccountCreateInput,
+    });
     return sanitize(created);
   }
 
   async update(orgId: string, id: string, dto: Partial<UpsertEmailAccountDto>) {
     const existing = await this.prisma.emailAccount.findFirst({ where: { id, orgId } });
     if (!existing) throw new NotFoundException("Email account not found");
-    const updated = await this.prisma.emailAccount.update({ where: { id }, data: dto });
+    const updated = await this.prisma.emailAccount.update({
+      where: { id },
+      data: this.encryptCredentials(dto),
+    });
     return sanitize(updated);
+  }
+
+  // ---- Email Hub: per-user account access grants (Part: User Access & Permissions) ----
+
+  /** Everyone with a grant for this account, for the Settings access-list UI. */
+  async listAccessForAccount(orgId: string, accountId: string) {
+    const account = await this.prisma.emailAccount.findFirst({ where: { id: accountId, orgId } });
+    if (!account) throw new NotFoundException("Email account not found");
+    return this.prisma.emailAccountAccess.findMany({
+      where: { accountId },
+      include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    });
+  }
+
+  async grantAccess(orgId: string, accountId: string, userId: string, canReply: boolean) {
+    const [account, user] = await Promise.all([
+      this.prisma.emailAccount.findFirst({ where: { id: accountId, orgId } }),
+      this.prisma.user.findFirst({ where: { id: userId, orgId } }),
+    ]);
+    if (!account) throw new NotFoundException("Email account not found");
+    if (!user) throw new NotFoundException("User not found");
+    return this.prisma.emailAccountAccess.upsert({
+      where: { userId_accountId: { userId, accountId } },
+      create: { userId, accountId, canReply },
+      update: { canReply },
+    });
+  }
+
+  async revokeAccess(orgId: string, accountId: string, userId: string) {
+    const account = await this.prisma.emailAccount.findFirst({ where: { id: accountId, orgId } });
+    if (!account) throw new NotFoundException("Email account not found");
+    const res = await this.prisma.emailAccountAccess.deleteMany({ where: { accountId, userId } });
+    return { revoked: res.count };
   }
 
   /**

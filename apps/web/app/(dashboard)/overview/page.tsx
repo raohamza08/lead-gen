@@ -271,6 +271,55 @@ export default function OverviewPage() {
           </div>
         ))}
       </section>
+
+      <EmailOverviewSection />
     </div>
+  );
+}
+
+interface EmailHubStats {
+  connectedAccounts: number;
+  unread: number;
+  important: number;
+  receivedToday: number;
+  receivedThisWeek: number;
+  leadsFromEmail: number;
+  ignored: number;
+}
+
+/** Dashboard Statistics (Part 15) — every number here is a `Link` straight
+ *  into the matching filtered Email Hub view, per the spec's explicit
+ *  "should be clickable" requirement, not just a static count. */
+function EmailOverviewSection() {
+  const [stats, setStats] = useState<EmailHubStats | null>(null);
+
+  useEffect(() => {
+    api.getEmailHubStats().then((s) => setStats(s as EmailHubStats)).catch(() => {});
+  }, []);
+
+  if (!stats || stats.connectedAccounts === 0) return null;
+
+  const tiles: { label: string; value: number; href: string }[] = [
+    { label: "Connected accounts", value: stats.connectedAccounts, href: "/settings#email-hub-accounts" },
+    { label: "Unread", value: stats.unread, href: "/email-hub" },
+    { label: "Important", value: stats.important, href: "/email-hub?view=important" },
+    { label: "Potential leads", value: stats.leadsFromEmail, href: "/email-hub?view=leads" },
+    { label: "Received today", value: stats.receivedToday, href: "/email-hub" },
+    { label: "Ignored", value: stats.ignored, href: "/email-hub?view=ignored" },
+  ];
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-sm font-semibold tracking-tight">Email Overview</h2>
+      <p className="mb-4 mt-0.5 text-xs text-ink/50">Across every mailbox you have access to.</p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {tiles.map((t) => (
+          <Link key={t.label} href={t.href} className="card card-interactive px-4 py-3.5">
+            <div className="text-[11px] uppercase tracking-wide text-ink/55">{t.label}</div>
+            <div className="mt-1 text-2xl font-semibold tracking-tight">{t.value}</div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }

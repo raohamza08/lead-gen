@@ -83,4 +83,28 @@ export class EmailAccountsController {
   remove(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.service.remove(user.orgId, id);
   }
+
+  // ---- Email Hub: per-user account access grants (Part: User Access & Permissions) ----
+
+  @Get(":id/access")
+  @Roles(Role.ADMIN)
+  listAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.listAccessForAccount(user.orgId, id);
+  }
+
+  @Post(":id/access")
+  @Roles(Role.ADMIN)
+  grantAccess(
+    @CurrentUser() user: JwtClaims,
+    @Param("id") id: string,
+    @Body() body: { userId: string; canReply?: boolean },
+  ) {
+    return this.service.grantAccess(user.orgId, id, body.userId, body.canReply ?? true);
+  }
+
+  @Delete(":id/access/:userId")
+  @Roles(Role.ADMIN)
+  revokeAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Param("userId") userId: string) {
+    return this.service.revokeAccess(user.orgId, id, userId);
+  }
 }

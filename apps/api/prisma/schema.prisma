@@ -147,6 +147,8 @@ model Organization {
   campaigns    Campaign[]
   notifications Notification[]
   aiInsightSnapshot AiInsightSnapshot?
+  inboundEmailThreads InboundEmailThread[]
+  emailTags    EmailTag[]
 
   @@map("organizations")
 }
@@ -167,6 +169,7 @@ model User {
   linkedinActivities LinkedinActivity[]
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
+  emailAccountAccess EmailAccountAccess[]
 
   @@map("users")
 }
@@ -454,6 +457,7 @@ model Lead {
   /// per-lead trail behind the Automation dashboard's aggregate view.
   agentRuns           AgentRun[]
   notifications       Notification[]
+  inboundEmailThreads InboundEmailThread[]
 
   // Tier-1 exact-match dedup (Part C2) — unique per org on domain and email.
   @@unique([orgId, websiteDomain], name: "org_domain_unique")
@@ -617,22 +621,55 @@ model EmailAccount {
   // GMAIL: OAuth2 refresh token for this mailbox (gmail.send + gmail.readonly
   // scopes — Part G1). Obtained out-of-band via a one-time consent flow, not
   // stored in .env since it's per-mailbox, not per-deployment.
+  // Encrypted at rest (EncryptionService) since the Email Hub migration —
+  // EmailAccountsService.EncryptionService.looksEncrypted() distinguishes a
+  // still-plaintext legacy value from a real ciphertext on read, so no
+  // separate backfill migration is required before this can ship.
   oauthRefreshToken String? @map("oauth_refresh_token")
   // Cursor into Gmail's history API (Part E2 gmail webhook) — lets the push
   // adapter fetch only what changed since the last processed notification
-  // instead of replaying the whole mailbox history on every event.
+  // instead of replaying the whole mailbox history on every event. Unused
+  // until the Phase 2 Gmail-API push reader ships; the Email Hub's own V1
+  // sync (IMAP, see lastImapUid below) doesn't touch this.
   lastHistoryId     String? @map("last_history_id")
 
-  // MICROSOFT_365 / SMTP: plain SMTP AUTH credentials. TODO(Part E4): these
-  // belong in a secrets manager (Doppler/AWS Secrets Manager), not a plaintext
-  // DB column — same caveat the design doc raises for provider API keys in
-  // general; acceptable for this scaffold, flagged before going live.
+  // MICROSOFT_365 / SMTP: plain SMTP AUTH credentials, used for *sending*.
+  // Encrypted at rest since the Email Hub migration (see oauthRefreshToken
+  // comment above for the legacy-plaintext transition note).
   smtpHost     String? @map("smtp_host")
   smtpPort     Int?    @map("smtp_port")
   smtpUsername String? @map("smtp_username")
   smtpPassword String? @map("smtp_password")
 
-  emailMessages EmailMessage[]
+  // ---- Email Hub: inbound IMAP sync (Part: Email Hub V1) ----
+  // A mailbox can be sent-from (above), read via IMAP (below), or both —
+  // most accounts will be both, but e.g. a pure notification mailbox might
+  // only ever be read. Kept on the same row rather than a separate model:
+  // one EmailAccount is still one mailbox, just capable of more now.
+  imapHost           String?  @map("imap_host")
+  imapPort           Int?     @map("imap_port")
+  /// "SSL" | "STARTTLS" | "NONE"
+  imapEncryption     String?  @map("imap_encryption")
+  imapUsername       String?  @map("imap_username")
+  /// Encrypted at rest (EncryptionService) — never plaintext, unlike the
+  /// legacy smtpPassword/oauthRefreshToken columns above.
+  imapPasswordEnc    String?  @map("imap_password_enc")
+  /// IMAP UID of the last message the sync worker has already processed for
+  /// this account's INBOX — the poll cursor. Null means "never synced yet."
+  lastImapUid        Int?     @map("last_imap_uid")
+  /// Internal display name for this mailbox in the Email Hub UI — distinct
+  /// from `displayName` above, which is the outbound From name a *recipient*
+  /// sees. Falls back to `address` when unset.
+  mailboxLabel       String?  @map("mailbox_label")
+  /// Whether the sync worker should poll this account at all — off by
+  /// default so adding sending-only credentials never silently starts an
+  /// inbox sync nobody asked for.
+  inboundSyncEnabled Boolean  @default(false) @map("inbound_sync_enabled")
+
+  emailMessages   EmailMessage[]
+  inboundThreads  InboundEmailThread[]
+  inboundMessages InboundEmailMessage[]
+  accessGrants    EmailAccountAccess[]
 
   @@map("email_accounts")
 }
@@ -679,6 +716,149 @@ model EmailEvent {
   meta       Json     @default("{}")
 
   @@map("email_events")
+}
+
+// ============================================================================
+// Email Hub (V1): a provider-independent unified inbox across every
+// EmailAccount, kept fully separate from the outbound-sending models above
+// (EmailMessage/EmailEvent are lead-scoped, sequence-driven sends — inbound
+// mail has none of those constraints: no lead may exist yet, no sequence
+// step, arbitrary senders, folders, and per-message flags a human sets).
+// ============================================================================
+
+/// One conversation in one mailbox — messages are grouped into a thread by
+/// Message-ID/References/In-Reply-To headers (falling back to a normalized
+/// subject when a provider omits them), same idea as any email client's
+/// "conversation view."
+model InboundEmailThread {
+  id            String   @id @default(uuid())
+  orgId         String   @map("org_id")
+  org           Organization @relation(fields: [orgId], references: [id])
+  accountId     String   @map("account_id")
+  account       EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  subject       String
+  /// [{name, email}] snapshot of everyone on the thread — denormalized so the
+  /// unified-inbox list can render "From" without a join per row across
+  /// what may be thousands of threads.
+  participants  Json     @default("[]")
+  /// Set once a human clicks "Add to Lead," or automatically when a reply
+  /// arrives from an address that matches an existing lead (Part: Lead
+  /// Integration) — reuses LeadsService.findExistingDuplicate, never creates
+  /// a second lead for the same person.
+  leadId        String?  @map("lead_id")
+  lead          Lead?    @relation(fields: [leadId], references: [id])
+  lastMessageAt DateTime @map("last_message_at")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  messages InboundEmailMessage[]
+
+  @@index([orgId, accountId, lastMessageAt])
+  @@index([orgId, leadId])
+  @@map("inbound_email_threads")
+}
+
+/// One received message. Deliberately not merged into EmailMessage above —
+/// see the section comment — even though both describe "an email that
+/// touched this mailbox."
+model InboundEmailMessage {
+  id                String   @id @default(uuid())
+  threadId          String   @map("thread_id")
+  thread            InboundEmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  accountId         String   @map("account_id")
+  account           EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// The provider's own message id (IMAP UID today; Gmail API message id
+  /// once the Phase 2 reader ships) — paired with accountId as the dedupe
+  /// key so a sync retry or a re-poll of the same UID never inserts twice.
+  providerMessageId String   @map("provider_message_id")
+  /// RFC 5322 `Message-ID` header — the threading key a later message's
+  /// `In-Reply-To`/`References` headers point back to. Not every message has
+  /// one (some providers omit it); threading falls back to normalized
+  /// subject when absent. See EmailHubSyncWorker.findOrCreateThreadId.
+  messageIdHeader   String?  @map("message_id_header")
+  fromName          String?  @map("from_name")
+  fromEmail         String   @map("from_email")
+  toEmails          String[] @map("to_emails")
+  ccEmails          String[] @map("cc_emails")
+  bccEmails         String[] @map("bcc_emails")
+  subject           String
+  bodyText          String   @map("body_text")
+  bodyHtml          String?  @map("body_html")
+  receivedAt        DateTime @map("received_at")
+  folder            String   @default("INBOX")
+  isRead            Boolean  @default(false) @map("is_read")
+  isImportant       Boolean  @default(false) @map("is_important")
+  /// Removed from the working inbox view without touching the real mailbox
+  /// (Part: Ignore/Noise Management) — a filter flag, never a delete.
+  isIgnored         Boolean  @default(false) @map("is_ignored")
+  hasAttachments    Boolean  @default(false) @map("has_attachments")
+  /// [{filename, size, contentId}] — metadata only; attachment bytes are
+  /// fetched from the mailbox on demand when a human opens one, not stored
+  /// here, so a sync never has to move large binaries through Postgres.
+  attachments       Json     @default("[]")
+  /// AI-ready, unpopulated in V1 (Part: Smart Email Classification) — a
+  /// future classification agent writes a suggestion here; nothing reads or
+  /// acts on it automatically. See aiSuggestedAction below for the same
+  /// contract applied to a proposed next action rather than a category.
+  suggestedCategory String?  @map("suggested_category")
+  aiSuggestedAction String?  @map("ai_suggested_action")
+  createdAt         DateTime @default(now()) @map("created_at")
+  /// GENERATED ALWAYS AS (...) STORED column added by raw SQL in this
+  /// model's migration — Prisma has no native tsvector type, so it's
+  /// declared Unsupported (excluded from the generated client, never
+  /// written by application code) purely so `prisma migrate dev` doesn't
+  /// read it as drift and try to drop it on a future migration.
+  searchVector      Unsupported("tsvector")? @map("search_vector")
+
+  tags InboundEmailMessageTag[]
+
+  @@unique([accountId, providerMessageId])
+  @@index([threadId])
+  @@index([accountId, isRead])
+  @@index([accountId, isIgnored])
+  @@index([accountId, messageIdHeader])
+  @@map("inbound_email_messages")
+}
+
+/// User-defined, never hardcoded (Part: Email Tags) — an org creates its own
+/// tag vocabulary from Settings or inline while tagging a message.
+model EmailTag {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id])
+  name      String
+  color     String   @default("#6b7280")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  messages InboundEmailMessageTag[]
+
+  @@unique([orgId, name])
+  @@map("email_tags")
+}
+
+model InboundEmailMessageTag {
+  messageId String   @map("message_id")
+  message   InboundEmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  tagId     String   @map("tag_id")
+  tag       EmailTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, tagId])
+  @@map("inbound_email_message_tags")
+}
+
+/// Account-level permission grant (Part: User Access & Permissions) — an
+/// ADMIN implicitly sees every account with no row needed here; a
+/// non-admin's Email Hub queries are scoped to exactly the accounts they
+/// have a grant for. Absence of a row means no access, not "view-only."
+model EmailAccountAccess {
+  userId    String   @map("user_id")
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String   @map("account_id")
+  account   EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  canReply  Boolean  @default(true) @map("can_reply")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, accountId])
+  @@map("email_account_access")
 }
 
 model LinkedinActivity {

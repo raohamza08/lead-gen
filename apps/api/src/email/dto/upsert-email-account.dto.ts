@@ -1,4 +1,4 @@
-import { IsBoolean, IsEmail, IsEnum, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsBoolean, IsEmail, IsEnum, IsIn, IsInt, IsOptional, IsString, Max, Min } from "class-validator";
 import { EmailProvider, EmailAccountStatus } from "@prisma/client";
 
 export class UpsertEmailAccountDto {
@@ -38,4 +38,32 @@ export class UpsertEmailAccountDto {
 
   @IsOptional() @IsString()
   smtpPassword?: string;
+
+  // ---- Email Hub: inbound IMAP sync ----
+  @IsOptional() @IsString()
+  imapHost?: string;
+
+  @IsOptional() @IsInt()
+  imapPort?: number;
+
+  @IsOptional() @IsIn(["SSL", "STARTTLS", "NONE"])
+  imapEncryption?: string;
+
+  @IsOptional() @IsString()
+  imapUsername?: string;
+
+  /** Plaintext in the request; encrypted at rest by EmailAccountsService
+   *  before it ever touches the database. Blank/omitted on an update means
+   *  "keep the existing one" — same convention the frontend already uses
+   *  for smtpPassword/oauthRefreshToken. */
+  @IsOptional() @IsString()
+  imapPassword?: string;
+
+  /** Internal label shown in the Email Hub UI — distinct from displayName
+   *  (the outbound From name a recipient sees). */
+  @IsOptional() @IsString()
+  mailboxLabel?: string;
+
+  @IsOptional() @IsBoolean()
+  inboundSyncEnabled?: boolean;
 }

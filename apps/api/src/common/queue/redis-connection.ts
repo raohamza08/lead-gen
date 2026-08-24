@@ -25,4 +25,7 @@ export const QUEUE_NAMES = {
   // explicitly wants imported leads processed one after another, not in a
   // burst. See import-enrichment.worker.ts.
   IMPORT_ENRICHMENT: "import-enrichment",
+  // Polls every inboundSyncEnabled EmailAccount on a repeatable schedule
+  // (Part: Email Hub) — see email-hub-sync.worker.ts.
+  EMAIL_SYNC: "email-sync",
 } as const;

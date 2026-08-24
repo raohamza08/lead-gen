@@ -291,4 +291,29 @@ export const api = {
   activateUser: (id: string) => request(`/users/${id}/activate`, { method: "PATCH" }),
   deactivateUser: (id: string) => request(`/users/${id}/deactivate`, { method: "PATCH" }),
   changeUserRole: (id: string, role: string) => request(`/users/${id}/role/${role}`, { method: "PATCH" }),
+
+  // ---- Email Hub ----
+  getEmailHubAccounts: () => request("/email-hub/accounts"),
+  getEmailHubStats: () => request("/email-hub/stats"),
+  getEmailTags: () => request("/email-hub/tags"),
+  createEmailTag: (body: { name: string; color?: string }) =>
+    request("/email-hub/tags", { method: "POST", body: JSON.stringify(body) }),
+  updateEmailTag: (id: string, body: { name?: string; color?: string }) =>
+    request(`/email-hub/tags/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteEmailTag: (id: string) => request(`/email-hub/tags/${id}`, { method: "DELETE" }),
+  getEmailMessages: (params: Record<string, string> = {}) =>
+    request(`/email-hub/messages?${new URLSearchParams(params).toString()}`),
+  bulkEmailAction: (body: { messageIds: string[]; action: string; tagId?: string }) =>
+    request("/email-hub/messages/bulk", { method: "POST", body: JSON.stringify(body) }),
+  replyToEmail: (messageId: string, body: { bodyHtml: string; replyAll?: boolean }) =>
+    request(`/email-hub/messages/${messageId}/reply`, { method: "POST", body: JSON.stringify(body) }),
+  composeEmail: (body: { accountId: string; to: string[]; cc?: string[]; bcc?: string[]; subject: string; bodyHtml: string }) =>
+    request("/email-hub/compose", { method: "POST", body: JSON.stringify(body) }),
+  getEmailThread: (id: string) => request(`/email-hub/threads/${id}`),
+  addEmailThreadToLead: (id: string) => request(`/email-hub/threads/${id}/add-to-lead`, { method: "POST" }),
+  getEmailAccountAccess: (accountId: string) => request(`/settings/email-accounts/${accountId}/access`),
+  grantEmailAccountAccess: (accountId: string, body: { userId: string; canReply?: boolean }) =>
+    request(`/settings/email-accounts/${accountId}/access`, { method: "POST", body: JSON.stringify(body) }),
+  revokeEmailAccountAccess: (accountId: string, userId: string) =>
+    request(`/settings/email-accounts/${accountId}/access/${userId}`, { method: "DELETE" }),
 };

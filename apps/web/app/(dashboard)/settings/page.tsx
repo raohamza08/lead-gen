@@ -5,6 +5,7 @@ import { api } from "../../../lib/api-client";
 import { useRealtimeEvent } from "../../../lib/realtime";
 import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../components/filter-controls";
 import { EmailAccountsSection } from "../../../components/email-accounts-section";
+import { EmailHubAccessSection } from "../../../components/email-hub-access-section";
 import { TeamSection } from "../../../components/team-section";
 import { OrgBrandingSection } from "../../../components/org-branding-section";
 import { AutomationSettingsSection } from "../../../components/automation-settings-section";
@@ -347,6 +348,7 @@ export default function SettingsPage() {
       <AutomationSettingsSection />
       <OrgBrandingSection />
       <EmailAccountsSection />
+      <EmailHubAccessSection />
       <CaseStudiesSection />
       <AgentPromptsSection />
 

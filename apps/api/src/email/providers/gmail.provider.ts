@@ -6,6 +6,7 @@ import { google } from "googleapis";
 // boundaries, base64 body) — reused here purely as a message builder, no SMTP
 // transport involved; the built message is handed to the Gmail API instead.
 import MailComposer from "nodemailer/lib/mail-composer";
+import { EncryptionService } from "../../common/crypto/encryption.service";
 import { EmailProvider, formatFrom, OutboundEmail } from "../email-provider.interface";
 
 /**
@@ -20,7 +21,10 @@ import { EmailProvider, formatFrom, OutboundEmail } from "../email-provider.inte
 export class GmailProvider implements EmailProvider {
   private readonly logger = new Logger(GmailProvider.name);
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly encryption: EncryptionService,
+  ) {}
 
   async send(account: EmailAccount, email: OutboundEmail): Promise<{ providerMessageId: string }> {
     const gmail = this.getAuthenticatedClient(account);
@@ -44,8 +48,15 @@ export class GmailProvider implements EmailProvider {
     const clientSecret = this.config.get<string>("GMAIL_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret || !account.oauthRefreshToken) return null;
 
+    // Encrypted at rest since the Email Hub migration; tolerates a
+    // still-plaintext legacy row (looksEncrypted distinguishes the two) so
+    // no separate backfill blocks this from shipping.
+    const refreshToken = this.encryption.looksEncrypted(account.oauthRefreshToken)
+      ? this.encryption.decrypt(account.oauthRefreshToken)
+      : account.oauthRefreshToken;
+
     const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
-    oauth2Client.setCredentials({ refresh_token: account.oauthRefreshToken });
+    oauth2Client.setCredentials({ refresh_token: refreshToken });
     return google.gmail({ version: "v1", auth: oauth2Client });
   }
 

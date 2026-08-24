@@ -4,6 +4,7 @@ import { ScheduleModule } from "@nestjs/schedule";
 import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { PrismaModule } from "./common/prisma/prisma.module";
+import { CryptoModule } from "./common/crypto/crypto.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { AgentDispatchModule } from "./common/queue/agent-dispatch.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
@@ -24,6 +25,7 @@ import { CampaignsModule } from "./campaigns/campaigns.module";
 import { OrganizationModule } from "./organization/organization.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { CaseStudiesModule } from "./case-studies/case-studies.module";
+import { EmailHubModule } from "./email-hub/email-hub.module";
 
 @Module({
   imports: [
@@ -34,6 +36,7 @@ import { CaseStudiesModule } from "./case-studies/case-studies.module";
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ["../../.env", ".env"] }),
     ScheduleModule.forRoot(),
     PrismaModule,
+    CryptoModule,
     RealtimeModule,
     AgentDispatchModule,
     AuthModule,
@@ -51,6 +54,7 @@ import { CaseStudiesModule } from "./case-studies/case-studies.module";
     OrganizationModule,
     NotificationsModule,
     CaseStudiesModule,
+    EmailHubModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

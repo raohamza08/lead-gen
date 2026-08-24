@@ -1,8 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { EmailAccount } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { GmailProvider } from "./providers/gmail.provider";
 import { SmtpProvider } from "./providers/smtp.provider";
 import { OrganizationService } from "../organization/organization.service";
+import { OutboundEmail } from "./email-provider.interface";
 
 /**
  * Internal, non-outreach sends (new-user credentials, password resets later)
@@ -51,5 +53,28 @@ export class TransactionalEmailService {
       this.logger.warn(`Failed to send "${subject}" to ${toAddress}: ${(err as Error).message}`);
       return false;
     }
+  }
+
+  /**
+   * Sends from a *specific* account rather than "any active mailbox for the
+   * org" — for the Email Hub, where a reply must go out from the exact
+   * mailbox the original message arrived on (Part: Sending Emails), and a
+   * new compose lets the user pick any account they have access to. Same
+   * no-lead-gate reasoning as `send()` above: an inbound sender's address is
+   * already known-real (they just emailed it), so the outreach-specific
+   * suppression/unsubscribe-link machinery in EmailProviderService.sendForLead
+   * doesn't apply here — this is a reply, not a cold email.
+   */
+  async sendFromAccount(
+    account: EmailAccount,
+    email: Omit<OutboundEmail, "fromAddress" | "fromName">,
+  ): Promise<{ providerMessageId: string }> {
+    const branding = await this.organization.getBranding(account.orgId);
+    const provider = account.provider === "GMAIL" ? this.gmail : this.smtp;
+    return provider.send(account, {
+      ...email,
+      fromAddress: account.address,
+      fromName: account.displayName || branding.emailSenderName,
+    });
   }
 }
