@@ -22,7 +22,7 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      <section className="grid gap-3 sm:grid-cols-2">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <Link
           href="/settings/lead-generation"
           className="card card-interactive p-5"
@@ -39,6 +39,15 @@ export default function SettingsPage() {
           <h2 className="text-sm font-semibold tracking-tight">Email Hub Settings</h2>
           <p className="mt-1 text-xs text-ink/50">
             Connected mailboxes, per-user access, and tags for the unified inbox.
+          </p>
+        </Link>
+        <Link
+          href="/settings/social-media"
+          className="card card-interactive p-5"
+        >
+          <h2 className="text-sm font-semibold tracking-tight">Social Media Settings</h2>
+          <p className="mt-1 text-xs text-ink/50">
+            Per-account defaults, approval requirements, and who can publish or approve.
           </p>
         </Link>
       </section>

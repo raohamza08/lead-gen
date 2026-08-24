@@ -24,6 +24,7 @@ from .ops_agents import AnalyticsAgent, LearningAgent
 from .orchestrator import Orchestrator
 from .outreach_agents import EmailAgent, LinkedInAgent, ReviewAgent, SchedulerAgent
 from .review_agents import AgentReviewAgent
+from .social_content_agent import SocialContentAgent
 
 #: Every agent the system can run, keyed by its stable name.
 AGENTS: dict[str, Agent] = {
@@ -44,6 +45,7 @@ AGENTS: dict[str, Agent] = {
         LearningAgent(),
         AgentReviewAgent(),
         CaseStudyReviewAgent(),
+        SocialContentAgent(),
     )
 }
 # A second instance of the same agent under a distinct registry key, used only
@@ -116,6 +118,10 @@ PIPELINES: dict[str, tuple[str, ...]] = {
     # fit and email-ready wording, triggered from Settings when an operator
     # adds one.
     "case_study_review": ("case_study_review",),
+    # One agent, its own pipeline: drafts or repurposes a social post caption
+    # from a brief (Part: Social Media Management), triggered on demand from
+    # the composer or an automation's CREATE_DRAFT action.
+    "social_content": ("social_content",),
 }
 
 

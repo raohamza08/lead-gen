@@ -149,6 +149,13 @@ model Organization {
   aiInsightSnapshot AiInsightSnapshot?
   inboundEmailThreads InboundEmailThread[]
   emailTags    EmailTag[]
+  socialAccounts   SocialAccount[]
+  socialPosts      SocialPost[]
+  mediaAssets      MediaAsset[]
+  mediaFolders     MediaFolder[]
+  hashtagGroups    HashtagGroup[]
+  contentTemplates ContentTemplate[]
+  socialAutomations SocialAutomation[]
 
   @@map("organizations")
 }
@@ -170,6 +177,7 @@ model User {
   auditLogs     AuditLog[]
   refreshTokens RefreshToken[]
   emailAccountAccess EmailAccountAccess[]
+  socialAccountAccess SocialAccountAccess[]
 
   @@map("users")
 }
@@ -306,6 +314,7 @@ model Campaign {
   updatedAt     DateTime @updatedAt @map("updated_at")
 
   leads         Lead[]
+  socialPosts   SocialPost[]
 
   @@index([orgId, active])
   @@map("campaigns")
@@ -995,4 +1004,298 @@ model Notification {
 
   @@index([orgId, read, createdAt])
   @@map("notifications")
+}
+
+// ============================================================================
+// Social Media Management (V1): connect multiple accounts per platform,
+// compose platform-specific content, schedule/approve/publish, with a
+// provider abstraction so a platform with no real connection yet still
+// gets an honest UI state instead of a fake one. See
+// SocialPlatformProvider (src/social-media/providers) for the capability
+// registry every platform declares truthfully.
+// ============================================================================
+
+enum SocialPlatform {
+  INSTAGRAM
+  FACEBOOK
+  LINKEDIN
+  X
+  TIKTOK
+  YOUTUBE
+}
+
+enum SocialAccountStatus {
+  CONNECTED
+  EXPIRED
+  DISCONNECTED
+  ERROR
+}
+
+enum SocialPostStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHING
+  PUBLISHED
+  FAILED
+  REJECTED
+}
+
+model SocialAccount {
+  id                String   @id @default(uuid())
+  orgId             String   @map("org_id")
+  org               Organization @relation(fields: [orgId], references: [id])
+  platform          SocialPlatform
+  /// The platform's own account id, set once a real connection exists —
+  /// null for an account row created ahead of connecting (Part: Add
+  /// Account lets you configure defaults before OAuth even runs).
+  externalAccountId String?  @map("external_account_id")
+  /// Handle/username, e.g. "@brand1" — required even pre-connection since
+  /// it's how a human tells accounts on the same platform apart.
+  username          String
+  /// Internal label, distinct from the platform-reported name — same
+  /// "mailboxLabel" idea as EmailAccount.
+  displayName       String?  @map("display_name")
+  profileImageUrl   String?  @map("profile_image_url")
+  /// "business" | "personal" | "page" — platform-reported once connected,
+  /// operator-guessed before that; free text since each platform's own
+  /// vocabulary differs (Instagram "business/creator" vs LinkedIn "page").
+  accountType       String?  @map("account_type")
+  status            SocialAccountStatus @default(DISCONNECTED)
+  /// Encrypted at rest (EncryptionService) — same convention as
+  /// EmailAccount's credential columns, never plaintext.
+  accessTokenEnc    String?  @map("access_token_enc")
+  refreshTokenEnc   String?  @map("refresh_token_enc")
+  tokenExpiresAt    DateTime? @map("token_expires_at")
+  connectedByUserId String?  @map("connected_by_user_id")
+  connectedAt       DateTime? @map("connected_at")
+  lastSyncAt        DateTime? @map("last_sync_at")
+  defaultTimezone   String?  @map("default_timezone")
+  defaultHashtags   String[] @default([]) @map("default_hashtags")
+  defaultCta        String?  @map("default_cta")
+  brandVoice        String?  @map("brand_voice")
+  /// Whether a post targeting this account must pass PENDING_REVIEW before
+  /// it can be scheduled — Part: Approval Workflow, per-account since
+  /// different brands/accounts may need different rigor.
+  approvalRequired  Boolean  @default(true) @map("approval_required")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  accessGrants SocialAccountAccess[]
+  postVersions SocialPostVersion[]
+
+  /// One row per (platform, handle) per org — reconnecting the same
+  /// account edits this row rather than creating a duplicate.
+  @@unique([orgId, platform, username])
+  @@map("social_accounts")
+}
+
+/// Account-level permission grant — same shape and same "absence means no
+/// access, not read-only" contract as EmailAccountAccess.
+model SocialAccountAccess {
+  userId     String  @map("user_id")
+  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId  String  @map("account_id")
+  account    SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  canPublish Boolean @default(false) @map("can_publish")
+  canApprove Boolean @default(false) @map("can_approve")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([userId, accountId])
+  @@map("social_account_access")
+}
+
+/// The logical post — one row regardless of how many accounts/platforms
+/// it targets. Content itself lives on SocialPostVersion, one per
+/// targeted account, since the spec explicitly forbids blindly
+/// duplicating identical content across platforms.
+model SocialPost {
+  id               String   @id @default(uuid())
+  orgId            String   @map("org_id")
+  org              Organization @relation(fields: [orgId], references: [id])
+  createdByUserId  String   @map("created_by_user_id")
+  /// Optional link into the existing lead-gen Campaign entity, for
+  /// cross-module reporting — new relation, no prior pattern to match
+  /// (only Lead.campaignId existed before this).
+  campaignId       String?  @map("campaign_id")
+  campaign         Campaign? @relation(fields: [campaignId], references: [id])
+  status           SocialPostStatus @default(DRAFT)
+  scheduledAt      DateTime? @map("scheduled_at")
+  timezone         String?
+  /// {frequency, daysOfWeek, endDate} — null means one-off. Recurrence
+  /// materializes concrete future SocialPost rows (Part: Recurring
+  /// Posts) rather than being evaluated live, so each occurrence stays
+  /// independently editable/skippable/cancellable.
+  recurrenceRule   Json?    @map("recurrence_rule")
+  approvedByUserId String?  @map("approved_by_user_id")
+  approvedAt       DateTime? @map("approved_at")
+  rejectionReason  String?  @map("rejection_reason")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  versions SocialPostVersion[]
+  media    SocialPostMedia[]
+
+  @@index([orgId, status])
+  @@index([orgId, scheduledAt])
+  @@map("social_posts")
+}
+
+model SocialPostVersion {
+  id             String   @id @default(uuid())
+  postId         String   @map("post_id")
+  post           SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  accountId      String   @map("account_id")
+  account        SocialAccount @relation(fields: [accountId], references: [id])
+  content        String
+  hashtags       String[] @default([])
+  /// Set once actually published through the provider — the platform's
+  /// own post id, for building a permalink / fetching performance later.
+  externalPostId String?  @map("external_post_id")
+  publishedAt    DateTime? @map("published_at")
+  /// Why the last publish attempt failed (provider error, or "not
+  /// connected" if the account has no real credentials yet) — Part:
+  /// Failed Publishing's explicit "do not silently mark as published."
+  publishError   String?  @map("publish_error")
+  lastAttemptAt  DateTime? @map("last_attempt_at")
+
+  @@unique([postId, accountId])
+  @@map("social_post_versions")
+}
+
+model MediaAsset {
+  id               String   @id @default(uuid())
+  orgId            String   @map("org_id")
+  org              Organization @relation(fields: [orgId], references: [id])
+  uploadedByUserId String   @map("uploaded_by_user_id")
+  folderId         String?  @map("folder_id")
+  folder           MediaFolder? @relation(fields: [folderId], references: [id])
+  filename         String
+  /// Opaque locator MediaStorageService understands — a relative disk
+  /// path in the V1 local implementation, an S3/R2 key if that's ever
+  /// swapped in later. Never a full URL (that's derived, not stored).
+  storageKey       String   @map("storage_key")
+  mimeType         String   @map("mime_type")
+  sizeBytes        Int      @map("size_bytes")
+  tags             String[] @default([])
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  posts SocialPostMedia[]
+
+  @@index([orgId, folderId])
+  @@map("media_assets")
+}
+
+model MediaFolder {
+  id       String  @id @default(uuid())
+  orgId    String  @map("org_id")
+  org      Organization @relation(fields: [orgId], references: [id])
+  name     String
+  parentId String? @map("parent_id")
+
+  assets MediaAsset[]
+
+  @@map("media_folders")
+}
+
+model SocialPostMedia {
+  postId  String @map("post_id")
+  post    SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mediaId String @map("media_id")
+  media   MediaAsset @relation(fields: [mediaId], references: [id])
+
+  @@id([postId, mediaId])
+  @@map("social_post_media")
+}
+
+/// Reusable, user-defined hashtag sets (Part: Hashtag / Content
+/// Organization) — never hardcoded, same philosophy as EmailTag.
+model HashtagGroup {
+  id       String   @id @default(uuid())
+  orgId    String   @map("org_id")
+  org      Organization @relation(fields: [orgId], references: [id])
+  name     String
+  hashtags String[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([orgId, name])
+  @@map("hashtag_groups")
+}
+
+/// Reusable post starting points (Part: Content Templates) — "Product
+/// Announcement," "Testimonial," etc. `bodyTemplate` is plain text with
+/// placeholders a human fills in, not executable.
+model ContentTemplate {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  org          Organization @relation(fields: [orgId], references: [id])
+  name         String
+  category     String
+  bodyTemplate String   @map("body_template")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("content_templates")
+}
+
+/// WHEN this happens -> DO this (Part: Social Media Automations). V1
+/// only ever sets/reads triggerType = "NEW_LEAD" — the one trigger that
+/// maps to something real in this codebase (Lead creation). Other
+/// trigger types described in the spec (e.g. "new blog published") have
+/// no source module to fire from yet, so they're not represented here
+/// rather than being faked.
+model SocialAutomation {
+  id              String   @id @default(uuid())
+  orgId           String   @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  name            String
+  triggerType     String   @map("trigger_type")
+  conditions      Json     @default("{}")
+  /// [{type: "CREATE_DRAFT", platforms: [...], templateId?}, {type:
+  /// "NOTIFY", userId}] — a short, fixed action vocabulary, not a
+  /// scripting language.
+  actions         Json
+  active          Boolean  @default(true)
+  createdByUserId String   @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  runs SocialAutomationRun[]
+
+  @@map("social_automations")
+}
+
+/// One row per time an automation actually fired — the execution log a
+/// human can audit ("why did this draft appear").
+model SocialAutomationRun {
+  id           String   @id @default(uuid())
+  automationId String   @map("automation_id")
+  automation   SocialAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  /// Free-text reference to whatever triggered this (e.g. a Lead id) —
+  /// not a hard FK, since the whole point of the trigger vocabulary is to
+  /// grow to sources this table shouldn't need to know about individually.
+  triggerRef   String?  @map("trigger_ref")
+  status       String   // OK | FAILED
+  resultNote   String?  @map("result_note")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("social_automation_runs")
+}
+
+/// Dedicated audit trail for this module — NOT the existing global
+/// AuditLog, which is hard-wired to a lead-only FK via a blanket
+/// interceptor (confirmed by reading audit-log.interceptor.ts) and has
+/// no field to hang a social-post reference off of. Written explicitly
+/// at the points that matter (approve, reject, publish, connect/
+/// disconnect), not on every mutating request.
+model SocialAuditLog {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  actorId   String?  @map("actor_id")
+  action    String
+  postId    String?  @map("post_id")
+  accountId String?  @map("account_id")
+  diff      Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@map("social_audit_logs")
 }

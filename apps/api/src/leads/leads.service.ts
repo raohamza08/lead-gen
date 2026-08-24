@@ -22,6 +22,7 @@ import { SyncService } from "../sync/sync.service";
 import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
 import { ImportEnrichmentQueue } from "../common/queue/import-enrichment.queue";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
+import { SocialMediaService } from "../social-media/social-media.service";
 import { mapRowToDto, parseCsvHeaders, parseCsvRows, suggestMapping } from "./lead-import-mapping";
 
 export interface CreateLeadResult {
@@ -40,6 +41,7 @@ export class LeadsService {
     private readonly agentDispatch: AgentDispatchQueue,
     private readonly importEnrichment: ImportEnrichmentQueue,
     private readonly realtime: RealtimeGateway,
+    private readonly socialMedia: SocialMediaService,
   ) {}
 
   /**
@@ -173,6 +175,13 @@ export class LeadsService {
       // block the lead from existing.
       this.sync.onLeadCreated(lead.id).catch((err) =>
         this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
+      );
+
+      // Fire-and-forget, same pattern as the sync dispatch above — a NEW_LEAD
+      // social automation (Part: Social Media Management) never blocks or
+      // fails lead creation.
+      this.socialMedia.runAutomationsForNewLead(lead).catch((err) =>
+        this.logger.warn(`Social automation dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
       );
 
       // A lead reaching here has already passed verification (and usually
@@ -802,6 +811,9 @@ export class LeadsService {
     this.sync.onLeadCreated(lead.id).catch((err) =>
       this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
     );
+    this.socialMedia
+      .runAutomationsForNewLead({ id: lead.id, orgId, companyName: dto.companyName, industry: dto.industry })
+      .catch((err) => this.logger.warn(`Social automation dispatch failed for lead ${lead.id}: ${(err as Error).message}`));
 
     // A hand-entered lead skips discovery, but everything discovery would
     // otherwise have triggered — verification, company/website/buyer
@@ -961,6 +973,9 @@ export class LeadsService {
         this.sync.onLeadCreated(lead.id).catch((err) =>
           this.logger.warn(`Sync dispatch failed for imported lead ${lead.id}: ${(err as Error).message}`),
         );
+        this.socialMedia
+          .runAutomationsForNewLead({ id: lead.id, orgId, companyName: dto.companyName, industry: dto.industry })
+          .catch((err) => this.logger.warn(`Social automation dispatch failed for imported lead ${lead.id}: ${(err as Error).message}`));
       } catch (err) {
         failed.push({ row: rowNumber, reason: (err as Error).message });
       }

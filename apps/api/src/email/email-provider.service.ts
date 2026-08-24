@@ -4,17 +4,7 @@ import { GmailProvider } from "./providers/gmail.provider";
 import { SmtpProvider } from "./providers/smtp.provider";
 import { EmailProvider } from "./email-provider.interface";
 import { OrganizationService } from "../organization/organization.service";
-
-/** The API's own public root — where an email client fetches the open-tracking
- *  pixel and follows the unsubscribe link back to. Distinct from APP_BASE_URL
- *  (the dashboard's origin, used for CORS and browser redirects): those two
- *  links must hit this NestJS process, not the Next.js frontend, which has no
- *  route to handle either of them. Falls back to localhost for dev, where the
- *  pixel simply won't resolve from an external mail client — acceptable, since
- *  no real recipient exists in dev. */
-function apiPublicUrl(): string {
-  return (process.env.API_PUBLIC_URL || `http://localhost:${process.env.PORT ?? process.env.API_PORT ?? 4000}`).replace(/\/$/, "");
-}
+import { apiPublicUrl } from "../common/api-url";
 
 export class ComplianceGateError extends Error {}
 

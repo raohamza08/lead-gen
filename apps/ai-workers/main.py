@@ -16,7 +16,7 @@ from claude_agent.runner import request_cancel as request_extraction_cancel
 from claude_agent.runner import run_in_background as run_extraction_in_background
 from claude_agent.runner import run_manual_enrichment_in_background
 from gemini_agent.runner import run_email_draft
-from outreach_runner import run_case_study_review, run_linkedin_draft, run_optimisation
+from outreach_runner import run_case_study_review, run_linkedin_draft, run_optimisation, run_social_content
 from shared.prompts import default_prompt
 
 #: Every agent whose prompt is a plain, editable instructions block — the
@@ -44,6 +44,8 @@ PROMPTABLE_AGENTS: dict[str, str] = {
     "email_step_5": "Email 5 of 5 — Breakup.",
     "email_voice_rules": "Shared tone/style rules applied to every email in the sequence.",
     "case_study_review": "Reviews a submitted case study for real niche fit and email-ready wording, never inventing a number.",
+    "social_content_generate": "Drafts a social media caption from a brief, platform-appropriate, never inventing a claim.",
+    "social_content_repurpose": "Adapts an existing social post's content for a different platform, never blindly duplicating it.",
 }
 
 logging.basicConfig(level=logging.INFO)
@@ -84,6 +86,20 @@ class OptimisationRequest(BaseModel):
     performance: list = []
     outcomes: dict = {}
     emailSamples: dict = {}
+
+
+class SocialContentRequest(BaseModel):
+    orgId: str
+    # "generate" (from a brief) or "repurpose" (from existing content on
+    # another platform) — see SocialContentAgent for the prompt this selects.
+    mode: str = "generate"
+    platform: str
+    brief: str | None = None
+    sourceContent: str | None = None
+    sourcePlatform: str | None = None
+    brandVoice: str | None = None
+    defaultHashtags: list[str] = []
+    defaultCta: str | None = None
 
 
 class CaseStudyReviewRequest(BaseModel):
@@ -174,3 +190,21 @@ async def review_case_study(req: CaseStudyReviewRequest):
     # Not backgrounded, same reasoning as optimisation above — Settings is
     # waiting on this to show the finalised case study.
     return await run_case_study_review(req.orgId, req.title, req.rawStory, req.submittedIndustry)
+
+
+@app.post("/social-content/generate")
+async def generate_social_content(req: SocialContentRequest):
+    # Not backgrounded — the composer (or an automation waiting to create a
+    # draft) is waiting on this single Claude CLI call, same budget as
+    # /case-study/review.
+    content_input = {
+        "mode": req.mode,
+        "platform": req.platform,
+        "brief": req.brief,
+        "sourceContent": req.sourceContent,
+        "sourcePlatform": req.sourcePlatform,
+        "brandVoice": req.brandVoice,
+        "defaultHashtags": req.defaultHashtags,
+        "defaultCta": req.defaultCta,
+    }
+    return await run_social_content(req.orgId, content_input)

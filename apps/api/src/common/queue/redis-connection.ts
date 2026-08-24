@@ -28,4 +28,7 @@ export const QUEUE_NAMES = {
   // Polls every inboundSyncEnabled EmailAccount on a repeatable schedule
   // (Part: Email Hub) — see email-hub-sync.worker.ts.
   EMAIL_SYNC: "email-sync",
+  // Polls due SCHEDULED SocialPosts on a repeatable schedule (Part: Social
+  // Media Management) — see social-publish.worker.ts.
+  SOCIAL_PUBLISH: "social-publish",
 } as const;

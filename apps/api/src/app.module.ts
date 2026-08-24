@@ -26,6 +26,7 @@ import { OrganizationModule } from "./organization/organization.module";
 import { NotificationsModule } from "./notifications/notifications.module";
 import { CaseStudiesModule } from "./case-studies/case-studies.module";
 import { EmailHubModule } from "./email-hub/email-hub.module";
+import { SocialMediaModule } from "./social-media/social-media.module";
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { EmailHubModule } from "./email-hub/email-hub.module";
     NotificationsModule,
     CaseStudiesModule,
     EmailHubModule,
+    SocialMediaModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

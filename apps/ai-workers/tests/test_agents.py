@@ -20,6 +20,8 @@ SEEDS = {
     "email_only": ("lead", "org_context", "case_study", "sequence_step"),
     "linkedin_draft": ("lead",),
     "optimisation": ("performance", "outcomes"),
+    "case_study_review": ("case_study_input", "org_context"),
+    "social_content": ("social_content_input", "org_context"),
 }
 
 

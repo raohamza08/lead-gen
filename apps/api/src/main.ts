@@ -15,7 +15,9 @@ async function bootstrap() {
   // (Part: autonomous system) needs this to actually accept connections.
   app.useWebSocketAdapter(new IoAdapter(app));
 
-  app.setGlobalPrefix("api/v1", { exclude: ["webhooks/(.*)", "track/(.*)", "unsubscribe"] });
+  app.setGlobalPrefix("api/v1", {
+    exclude: ["webhooks/(.*)", "track/(.*)", "unsubscribe", "media/(.*)", "social-oauth/(.*)"],
+  });
 
   // Managed hosts (Render, Railway, Fly) inject the port to bind and route to
   // the container's external interface, so binding to 0.0.0.0 is required —

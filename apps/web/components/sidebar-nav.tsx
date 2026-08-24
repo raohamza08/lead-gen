@@ -54,6 +54,21 @@ const NAV: NavItem[] = [
       { href: "/settings/email-hub", label: "Settings" },
     ],
   },
+  {
+    type: "group",
+    label: "Social Media",
+    links: [
+      { href: "/social-media", label: "Overview" },
+      { href: "/social-media/accounts", label: "Accounts" },
+      { href: "/social-media/create", label: "Create Post" },
+      { href: "/social-media/posts", label: "Posts" },
+      { href: "/social-media/calendar", label: "Calendar" },
+      { href: "/social-media/media", label: "Media Library" },
+      { href: "/social-media/templates", label: "Templates" },
+      { href: "/social-media/automations", label: "Automations" },
+      { href: "/settings/social-media", label: "Settings" },
+    ],
+  },
   { type: "link", href: "/settings", label: "Settings" },
 ];
 

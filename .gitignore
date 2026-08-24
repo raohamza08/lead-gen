@@ -31,6 +31,9 @@ Thumbs.db
 # prisma
 apps/api/prisma/dev.db
 
+# local media storage (Social Media module, V1 local-disk MediaStorageService)
+apps/api/storage/
+
 # deploy tooling (local project linkage + pulled env, both machine-specific)
 .vercel/
 

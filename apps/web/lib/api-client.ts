@@ -316,4 +316,86 @@ export const api = {
     request(`/settings/email-accounts/${accountId}/access`, { method: "POST", body: JSON.stringify(body) }),
   revokeEmailAccountAccess: (accountId: string, userId: string) =>
     request(`/settings/email-accounts/${accountId}/access/${userId}`, { method: "DELETE" }),
+
+  // ---- Social Media ----
+  getSocialCapabilities: () => request("/social-media/capabilities"),
+  getSocialAccounts: () => request("/social-media/accounts"),
+  getSocialStats: () => request("/social-media/stats"),
+  getSocialPosts: (params: Record<string, string> = {}) =>
+    request(`/social-media/posts?${new URLSearchParams(params).toString()}`),
+  getSocialPost: (id: string) => request(`/social-media/posts/${id}`),
+  createSocialPost: (body: Record<string, unknown>) =>
+    request("/social-media/posts", { method: "POST", body: JSON.stringify(body) }),
+  updateSocialPost: (id: string, body: Record<string, unknown>) =>
+    request(`/social-media/posts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  submitSocialPost: (id: string) => request(`/social-media/posts/${id}/submit`, { method: "POST" }),
+  approveSocialPost: (id: string) => request(`/social-media/posts/${id}/approve`, { method: "POST" }),
+  rejectSocialPost: (id: string, reason: string) =>
+    request(`/social-media/posts/${id}/reject`, { method: "POST", body: JSON.stringify({ reason }) }),
+  scheduleSocialPost: (id: string, scheduledAt?: string) =>
+    request(`/social-media/posts/${id}/schedule`, { method: "POST", body: JSON.stringify({ scheduledAt }) }),
+  unscheduleSocialPost: (id: string) => request(`/social-media/posts/${id}/unschedule`, { method: "POST" }),
+  retrySocialPost: (id: string) => request(`/social-media/posts/${id}/retry`, { method: "POST" }),
+  deleteSocialPost: (id: string) => request(`/social-media/posts/${id}`, { method: "DELETE" }),
+  generateSocialContent: (body: Record<string, unknown>) =>
+    request("/social-media/generate", { method: "POST", body: JSON.stringify(body) }),
+
+  getSocialMedia: (folderId?: string) => request(`/social-media/media${folderId ? `?folderId=${folderId}` : ""}`),
+  uploadSocialMedia: async (file: File, folderId?: string) => {
+    const token = getAccessToken();
+    const form = new FormData();
+    form.append("file", file);
+    if (folderId) form.append("folderId", folderId);
+    const res = await fetch(`${API_BASE_URL}/social-media/media`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message ?? `Upload failed with ${res.status}`);
+    }
+    return res.json();
+  },
+  deleteSocialMedia: (id: string) => request(`/social-media/media/${id}`, { method: "DELETE" }),
+  getSocialMediaFolders: () => request("/social-media/media-folders"),
+  createSocialMediaFolder: (body: { name: string; parentId?: string }) =>
+    request("/social-media/media-folders", { method: "POST", body: JSON.stringify(body) }),
+
+  getSocialHashtagGroups: () => request("/social-media/hashtag-groups"),
+  createSocialHashtagGroup: (body: { name: string; hashtags: string[] }) =>
+    request("/social-media/hashtag-groups", { method: "POST", body: JSON.stringify(body) }),
+  updateSocialHashtagGroup: (id: string, body: { name?: string; hashtags?: string[] }) =>
+    request(`/social-media/hashtag-groups/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSocialHashtagGroup: (id: string) => request(`/social-media/hashtag-groups/${id}`, { method: "DELETE" }),
+
+  getSocialTemplates: () => request("/social-media/templates"),
+  createSocialTemplate: (body: { name: string; category: string; bodyTemplate: string }) =>
+    request("/social-media/templates", { method: "POST", body: JSON.stringify(body) }),
+  updateSocialTemplate: (id: string, body: { name?: string; category?: string; bodyTemplate?: string }) =>
+    request(`/social-media/templates/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSocialTemplate: (id: string) => request(`/social-media/templates/${id}`, { method: "DELETE" }),
+
+  getSocialAutomations: () => request("/social-media/automations"),
+  createSocialAutomation: (body: Record<string, unknown>) =>
+    request("/social-media/automations", { method: "POST", body: JSON.stringify(body) }),
+  updateSocialAutomation: (id: string, body: Record<string, unknown>) =>
+    request(`/social-media/automations/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteSocialAutomation: (id: string) => request(`/social-media/automations/${id}`, { method: "DELETE" }),
+  getSocialAutomationRuns: (id: string) => request(`/social-media/automations/${id}/runs`),
+
+  // ---- Social Media Settings ----
+  getSocialSettingsAccounts: () => request("/settings/social-media/accounts"),
+  createSocialAccount: (body: { platform: string; username: string; displayName?: string }) =>
+    request("/settings/social-media/accounts", { method: "POST", body: JSON.stringify(body) }),
+  updateSocialAccountSettings: (id: string, body: Record<string, unknown>) =>
+    request(`/settings/social-media/accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  disconnectSocialAccount: (id: string) => request(`/settings/social-media/accounts/${id}/disconnect`, { method: "POST" }),
+  connectSocialAccount: (platform: string) =>
+    request<{ url: string }>(`/settings/social-media/accounts/${platform}/connect`, { method: "POST" }),
+  getSocialAccountAccess: (accountId: string) => request(`/settings/social-media/accounts/${accountId}/access`),
+  grantSocialAccountAccess: (accountId: string, body: { userId: string; canPublish?: boolean; canApprove?: boolean }) =>
+    request(`/settings/social-media/accounts/${accountId}/access`, { method: "POST", body: JSON.stringify(body) }),
+  revokeSocialAccountAccess: (accountId: string, userId: string) =>
+    request(`/settings/social-media/accounts/${accountId}/access/${userId}`, { method: "DELETE" }),
 };
