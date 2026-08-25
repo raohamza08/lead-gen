@@ -229,13 +229,16 @@ export class EmailAccountsService {
     const since = new Date();
     since.setHours(0, 0, 0, 0);
 
-    return Promise.all(
-      accounts.map(async (account) => {
-        const sentToday = await this.prisma.emailMessage.count({
-          where: { accountId: account.id, sentAt: { gte: since } },
-        });
-        return { ...sanitize(account), sentToday };
-      }),
-    );
+    // One grouped query instead of one count() per mailbox — each was its
+    // own DB round trip before, all fired in parallel but still each paying
+    // this DB's real per-query latency rather than sharing one trip.
+    const sentCounts = await this.prisma.emailMessage.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: accounts.map((a) => a.id) }, sentAt: { gte: since } },
+      _count: { _all: true },
+    });
+    const sentByAccount = new Map(sentCounts.map((c) => [c.accountId, c._count._all]));
+
+    return accounts.map((account) => ({ ...sanitize(account), sentToday: sentByAccount.get(account.id) ?? 0 }));
   }
 }

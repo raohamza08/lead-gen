@@ -116,10 +116,18 @@ export class EmailProviderService {
     const since = new Date();
     since.setHours(0, 0, 0, 0);
 
+    // One grouped query instead of one count() per account — this ran in a
+    // loop before, paying a full DB round trip per mailbox in sequence
+    // (~400ms each against this DB's region) on every single outbound send.
+    const sentCounts = await this.prisma.emailMessage.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: accounts.map((a) => a.id) }, sentAt: { gte: since } },
+      _count: { _all: true },
+    });
+    const sentByAccount = new Map(sentCounts.map((c) => [c.accountId, c._count._all]));
+
     for (const account of accounts) {
-      const sentToday = await this.prisma.emailMessage.count({
-        where: { accountId: account.id, sentAt: { gte: since } },
-      });
+      const sentToday = sentByAccount.get(account.id) ?? 0;
       if (sentToday < account.dailyLimit) {
         return account;
       }
