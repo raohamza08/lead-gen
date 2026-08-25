@@ -241,4 +241,30 @@ export class EmailAccountsService {
 
     return accounts.map((account) => ({ ...sanitize(account), sentToday: sentByAccount.get(account.id) ?? 0 }));
   }
+
+  /**
+   * Read-only view for Lead Generation Settings — which mailbox(es) will
+   * actually be used to send, nothing else. Full setup (credentials, IMAP,
+   * the sendingEnabled switch itself) lives only in Email Hub Settings now;
+   * this is deliberately not `@Roles(ADMIN)` since any Lead Gen user should
+   * be able to see what will send, just not change it.
+   */
+  async listSendingOptions(orgId: string) {
+    const accounts = await this.prisma.emailAccount.findMany({
+      where: { orgId, status: "ACTIVE", sendingEnabled: true },
+      select: { id: true, address: true, displayName: true, dailyLimit: true },
+      orderBy: { address: "asc" },
+    });
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
+
+    const sentCounts = await this.prisma.emailMessage.groupBy({
+      by: ["accountId"],
+      where: { accountId: { in: accounts.map((a) => a.id) }, sentAt: { gte: since } },
+      _count: { _all: true },
+    });
+    const sentByAccount = new Map(sentCounts.map((c) => [c.accountId, c._count._all]));
+
+    return accounts.map((a) => ({ ...a, sentToday: sentByAccount.get(a.id) ?? 0 }));
+  }
 }

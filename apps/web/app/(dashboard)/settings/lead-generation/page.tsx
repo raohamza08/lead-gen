@@ -5,7 +5,7 @@ import Link from "next/link";
 import { api } from "../../../../lib/api-client";
 import { useRealtimeEvent } from "../../../../lib/realtime";
 import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../../components/filter-controls";
-import { EmailAccountsSection } from "../../../../components/email-accounts-section";
+import { SendingMailboxesSection } from "../../../../components/sending-mailboxes-section";
 import { AutomationSettingsSection } from "../../../../components/automation-settings-section";
 import { AgentPromptsSection } from "../../../../components/agent-prompts-section";
 import { CaseStudiesSection } from "../../../../components/case-studies-section";
@@ -353,7 +353,7 @@ export default function LeadGenerationSettingsPage() {
       </div>
 
       <AutomationSettingsSection />
-      <EmailAccountsSection />
+      <SendingMailboxesSection />
       <CaseStudiesSection />
       <AgentPromptsSection />
 

@@ -7,20 +7,40 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 
-/** Part E2: `GET/PATCH /api/v1/settings/email-accounts` — Admin full, Manager view-only (Part A4 RBAC table). */
+/**
+ * Full mailbox setup (sending config + inbound IMAP sync) — Email Hub
+ * Settings only, admin-only end to end: every route here is `@Roles(ADMIN)`,
+ * no view-only tier. Lead Generation never manages accounts directly — it
+ * only reads which mailboxes are actually eligible to send, via the
+ * unrestricted `sending-options` endpoint below.
+ */
 @Controller("settings/email-accounts")
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EmailAccountsController {
   constructor(private readonly service: EmailAccountsService) {}
 
   @Get()
+  @Roles(Role.ADMIN)
   findAll(@CurrentUser() user: JwtClaims) {
     return this.service.findAllForOrg(user.orgId);
   }
 
   @Get("health")
+  @Roles(Role.ADMIN)
   health(@CurrentUser() user: JwtClaims) {
     return this.service.health(user.orgId);
+  }
+
+  /**
+   * The one thing Lead Generation is allowed to see about mailboxes: which
+   * ones are actually eligible to send right now. No @Roles() — any
+   * authenticated user with Lead Generation access reads this, same as any
+   * other Lead Gen data; the full account list/credentials above stay
+   * admin-only in Email Hub Settings.
+   */
+  @Get("sending-options")
+  sendingOptions(@CurrentUser() user: JwtClaims) {
+    return this.service.listSendingOptions(user.orgId);
   }
 
   /**

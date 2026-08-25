@@ -246,6 +246,7 @@ export const api = {
   testEmailAccount: (id: string) => request(`/settings/email-accounts/${id}/test`, { method: "POST" }),
   reconcileStuckEmails: () => request("/settings/email-accounts/reconcile-stuck", { method: "POST" }),
   resendAllFailedEmails: () => request("/settings/email-accounts/resend-all-failed", { method: "POST" }),
+  getSendingMailboxes: () => request("/settings/email-accounts/sending-options"),
   getAgentPrompts: () => request("/settings/organization/agent-prompts"),
   updateAgentPrompt: (name: string, prompt: string) =>
     request(`/settings/organization/agent-prompts/${name}`, {
