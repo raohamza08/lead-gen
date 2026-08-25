@@ -50,6 +50,19 @@ export class ImapReaderProvider implements MailboxReader {
       logger: false, // imapflow's own pino logger is far too verbose for a per-account poll worker
     });
 
+    // ImapFlow emits 'error' on socket-level failures (e.g. a timeout on the
+    // underlying TLSSocket) independently of connect()/fetch()'s own promise
+    // rejections — a well-known Node EventEmitter trap: an 'error' event with
+    // no listener throws and crashes the whole process, not just this call.
+    // Confirmed live: a bad password left a socket that later hit ETIMEOUT
+    // during cleanup and took the entire API down, not just this account's
+    // sync. The real failure (auth, connect, fetch) is still surfaced
+    // normally via the rejected promises below — this only stops a stray
+    // async error from being fatal.
+    client.on("error", (err) => {
+      this.logger.warn(`IMAP socket error for ${account.address} (non-fatal): ${(err as Error).message}`);
+    });
+
     await client.connect();
     try {
       const lock = await client.getMailboxLock("INBOX");
