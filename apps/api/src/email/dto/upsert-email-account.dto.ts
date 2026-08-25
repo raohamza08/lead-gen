@@ -67,3 +67,71 @@ export class UpsertEmailAccountDto {
   @IsOptional() @IsBoolean()
   inboundSyncEnabled?: boolean;
 }
+
+/**
+ * PATCH /settings/email-accounts/:id accepts a partial update — editing a
+ * mailbox's IMAP settings/label/sync toggle from Email Hub Settings never
+ * re-sends `provider`/`address` (see EmailHubAccountsSection.saveAccount).
+ * UpsertEmailAccountDto's `provider`/`address` have no `@IsOptional()`
+ * because they ARE required on create; reusing that class directly on the
+ * PATCH endpoint made every such edit fail validation with "provider must be
+ * one of ..., address must be an email" even though nothing was wrong with
+ * either field — the request just correctly omitted them.
+ */
+export class UpdateEmailAccountDto {
+  @IsOptional() @IsEnum(EmailProvider)
+  provider?: EmailProvider;
+
+  @IsOptional() @IsEmail()
+  address?: string;
+
+  @IsOptional() @IsString() displayName?: string;
+
+  @IsOptional() @IsInt() @Min(1) @Max(500)
+  dailyLimit?: number;
+
+  @IsOptional() @IsInt() @Min(1) @Max(100)
+  hourlyLimit?: number;
+
+  @IsOptional() @IsBoolean()
+  warmupActive?: boolean;
+
+  @IsOptional() @IsEnum(EmailAccountStatus)
+  status?: EmailAccountStatus;
+
+  @IsOptional() @IsString()
+  oauthRefreshToken?: string;
+
+  @IsOptional() @IsString()
+  smtpHost?: string;
+
+  @IsOptional() @IsInt()
+  smtpPort?: number;
+
+  @IsOptional() @IsString()
+  smtpUsername?: string;
+
+  @IsOptional() @IsString()
+  smtpPassword?: string;
+
+  @IsOptional() @IsString()
+  imapHost?: string;
+
+  @IsOptional() @IsInt()
+  imapPort?: number;
+
+  @IsOptional() @IsIn(["SSL", "STARTTLS", "NONE"])
+  imapEncryption?: string;
+
+  @IsOptional() @IsString()
+  imapUsername?: string;
+
+  @IsOptional() @IsString()
+  imapPassword?: string;
+
+  @IsOptional() @IsString()
+  mailboxLabel?: string;
+
+  @IsOptional() @IsBoolean()
+  inboundSyncEnabled?: boolean;
+}

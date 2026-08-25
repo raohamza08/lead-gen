@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { EmailAccountsService } from "./email-accounts.service";
-import { UpsertEmailAccountDto } from "./dto/upsert-email-account.dto";
+import { UpdateEmailAccountDto, UpsertEmailAccountDto } from "./dto/upsert-email-account.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -55,7 +55,7 @@ export class EmailAccountsController {
 
   @Patch(":id")
   @Roles(Role.ADMIN)
-  update(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpsertEmailAccountDto) {
+  update(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateEmailAccountDto) {
     return this.service.update(user.orgId, id, dto);
   }
 
