@@ -1,6 +1,8 @@
 import { Controller, Get, UseGuards } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, PipelineStage } from "@leadgen/types";
 
@@ -22,7 +24,8 @@ const WAITING_STAGES = Object.keys(NEXT_STEP_FOR_WAITING_STAGE) as PipelineStage
  * they operate on a specific lead, not the sequence-wide view.
  */
 @Controller("sequences")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleAccessGuard)
+@RequiresModule("LEAD_GENERATION")
 export class SequencesController {
   constructor(private readonly prisma: PrismaService) {}
 

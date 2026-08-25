@@ -29,8 +29,10 @@ export class GmailProvider implements EmailProvider {
   async send(account: EmailAccount, email: OutboundEmail): Promise<{ providerMessageId: string }> {
     const gmail = this.getAuthenticatedClient(account);
     if (!gmail) {
-      this.logger.log(`[stub] would send via Gmail API: to=${email.toAddress} subject="${email.subject}"`);
-      return { providerMessageId: `stub-gmail-${Date.now()}` };
+      // Never fake a success here — see SmtpProvider's identical fix for why:
+      // a caller that gets a providerMessageId back has no way to know the
+      // message never actually left the server.
+      throw new Error(`${account.address} has no Gmail OAuth refresh token configured — cannot send`);
     }
 
     const raw = await this.buildRawMessage(email);

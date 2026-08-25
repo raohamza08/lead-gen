@@ -1,6 +1,7 @@
 import { Body, Controller, ForbiddenException, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
+import { UpdateUserAccessDto } from "./dto/update-user-access.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { Roles } from "../common/decorators/roles.decorator";
@@ -16,6 +17,12 @@ export class UsersController {
   @Roles(Role.ADMIN, Role.MANAGER)
   findAll(@CurrentUser() user: JwtClaims) {
     return this.usersService.findAllForOrg(user.orgId);
+  }
+
+  /** No @Roles() — every authenticated user, any role, reads their own module flags (e.g. for the sidebar). */
+  @Get("me")
+  me(@CurrentUser() user: JwtClaims) {
+    return this.usersService.getSelf(user.orgId, user.sub);
   }
 
   @Post()
@@ -46,5 +53,17 @@ export class UsersController {
       throw new ForbiddenException("You can't change your own role — ask another admin.");
     }
     return this.usersService.setRole(id, role);
+  }
+
+  @Get(":id/access")
+  @Roles(Role.ADMIN)
+  getAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.usersService.getAccess(user.orgId, id);
+  }
+
+  @Patch(":id/access")
+  @Roles(Role.ADMIN)
+  updateAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateUserAccessDto) {
+    return this.usersService.updateAccess(user.orgId, id, dto);
   }
 }

@@ -108,7 +108,11 @@ export class EmailProviderService {
    * send; this scaffold favors correctness/readability over that optimization.
    */
   private async pickAvailableAccount(orgId: string) {
-    const accounts = await this.prisma.emailAccount.findMany({ where: { orgId, status: "ACTIVE" } });
+    // sendingEnabled is a separate, explicit opt-in from status — a mailbox
+    // being ACTIVE (e.g. for Email Hub reading) never used to be enough to
+    // keep it out of real outreach rotation on its own. See EmailAccount.
+    // sendingEnabled's schema comment for the live incident that caused this.
+    const accounts = await this.prisma.emailAccount.findMany({ where: { orgId, status: "ACTIVE", sendingEnabled: true } });
     const since = new Date();
     since.setHours(0, 0, 0, 0);
 

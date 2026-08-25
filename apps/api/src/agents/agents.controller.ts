@@ -1,6 +1,8 @@
 import { Controller, Get, ServiceUnavailableException, UseGuards } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 
 /**
  * Proxies the AI workers' agent roster for the dashboard's "complete list of
@@ -15,7 +17,8 @@ export class AgentsController {
   constructor(private readonly config: ConfigService) {}
 
   @Get("fleet")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   async fleet() {
     const aiWorkersUrl = this.config.get<string>("AI_WORKERS_URL", "http://localhost:8000");
     try {

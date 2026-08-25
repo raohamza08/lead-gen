@@ -24,6 +24,12 @@ export class UpsertEmailAccountDto {
   @IsOptional() @IsEnum(EmailAccountStatus)
   status?: EmailAccountStatus;
 
+  /** Explicit opt-in for the outbound rotation — see EmailAccount.sendingEnabled's
+   *  schema comment. Defaults false on create; an admin must turn this on
+   *  once real send credentials are actually configured and verified. */
+  @IsOptional() @IsBoolean()
+  sendingEnabled?: boolean;
+
   @IsOptional() @IsString()
   oauthRefreshToken?: string;
 
@@ -98,6 +104,9 @@ export class UpdateEmailAccountDto {
 
   @IsOptional() @IsEnum(EmailAccountStatus)
   status?: EmailAccountStatus;
+
+  @IsOptional() @IsBoolean()
+  sendingEnabled?: boolean;
 
   @IsOptional() @IsString()
   oauthRefreshToken?: string;

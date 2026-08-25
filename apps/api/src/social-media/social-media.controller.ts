@@ -15,6 +15,8 @@ import {
 import { FileInterceptor } from "@nestjs/platform-express";
 import { SocialPlatform, SocialPostStatus } from "@prisma/client";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
 import { SocialMediaService } from "./social-media.service";
@@ -32,7 +34,8 @@ const ALLOWED_MIME_PREFIXES = ["image/", "video/"];
  * the per-module settings split the rest of the dashboard already uses.
  */
 @Controller("social-media")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleAccessGuard)
+@RequiresModule("SOCIAL_MEDIA")
 export class SocialMediaController {
   constructor(private readonly service: SocialMediaService) {}
 

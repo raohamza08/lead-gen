@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api, getCurrentUser } from "../lib/api-client";
+import { PersonAccessPanel } from "./person-access-panel";
 
 interface TeamMember {
   id: string;
@@ -32,6 +33,7 @@ export function TeamSection() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const currentUser = getCurrentUser();
   const isAdmin = currentUser?.role === "ADMIN";
@@ -138,7 +140,8 @@ export function TeamSection() {
             {members.map((m) => {
               const isSelf = m.id === currentUser?.sub;
               return (
-                <tr key={m.id} className="border-b border-[var(--line)] last:border-0">
+                <Fragment key={m.id}>
+                <tr className="border-b border-[var(--line)] last:border-0">
                   <td className="py-2 pr-3">
                     {m.name}
                     {isSelf ? <span className="text-ink/40"> (you)</span> : null}
@@ -174,18 +177,36 @@ export function TeamSection() {
                     </span>
                   </td>
                   <td className="py-2">
-                    {isAdmin && (
-                      <button
-                        disabled={busyId === m.id || isSelf}
-                        title={isSelf ? "You can't deactivate your own account." : undefined}
-                        onClick={() => toggleActive(m)}
-                        className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-                      >
-                        {m.active ? "Deactivate" : "Activate"}
-                      </button>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {isAdmin && (
+                        <button
+                          onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
+                          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+                        >
+                          {expandedId === m.id ? "Hide access" : "Access"}
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          disabled={busyId === m.id || isSelf}
+                          title={isSelf ? "You can't deactivate your own account." : undefined}
+                          onClick={() => toggleActive(m)}
+                          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                        >
+                          {m.active ? "Deactivate" : "Activate"}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
+                {expandedId === m.id && (
+                  <tr className="border-b border-[var(--line)] last:border-0">
+                    <td colSpan={5} className="py-2">
+                      <PersonAccessPanel userId={m.id} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               );
             })}
             {members.length === 0 && (

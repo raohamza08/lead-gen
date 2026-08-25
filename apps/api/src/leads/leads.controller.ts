@@ -15,7 +15,9 @@ import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { InternalAuthGuard } from "../common/guards/internal-auth.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 
@@ -40,7 +42,8 @@ export class LeadsController {
    * is rejected rather than creating a second record someone contacts twice.
    */
   @Post("manual")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   createManual(@CurrentUser() user: JwtClaims, @Body() dto: CreateManualLeadDto) {
     return this.leadsService.createManual(user.orgId, dto);
@@ -50,7 +53,8 @@ export class LeadsController {
    *  rows for the CSV-import mapping screen (Part: lead import). Read-only —
    *  doesn't touch the database, just parses. */
   @Post("import/preview")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   previewImport(@Body() dto: PreviewImportDto) {
     return this.leadsService.previewImport(dto.csv);
@@ -59,14 +63,16 @@ export class LeadsController {
   /** Bulk-creates leads from a CSV against a confirmed column mapping (Part:
    *  lead import). Same duplicate checks and role gate as a single manual add. */
   @Post("import")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   importLeads(@CurrentUser() user: JwtClaims, @Body() dto: ImportLeadsDto) {
     return this.leadsService.importLeads(user.orgId, dto.csv, dto.mapping);
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   findAll(@CurrentUser() user: JwtClaims, @Query() query: QueryLeadsDto) {
     return this.leadsService.findAll(user.orgId, query);
   }
@@ -74,7 +80,8 @@ export class LeadsController {
   // Must come before ":id" — otherwise Nest matches "export" as the :id param
   // and this route is never reached.
   @Get("export")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   async exportCsv(@CurrentUser() user: JwtClaims, @Res() res: Response) {
     const csv = await this.leadsService.exportCsv(user.orgId);
     res
@@ -86,7 +93,8 @@ export class LeadsController {
   }
 
   @Get(":id")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   findOne(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.leadsService.findOne(user.orgId, id);
   }
@@ -104,14 +112,16 @@ export class LeadsController {
   }
 
   @Patch(":id/review")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER)
   updateReview(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: ReviewNoteDto) {
     return this.leadsService.updateReviewNote(user.orgId, id, user.sub, dto);
   }
 
   @Patch(":id/contact")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   updateContact(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateLeadContactDto) {
     return this.leadsService.updateContact(user.orgId, id, dto);
@@ -124,7 +134,8 @@ export class LeadsController {
    * run that failed).
    */
   @Post(":id/enrich")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   enrich(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.leadsService.requestEnrichment(user.orgId, id);
@@ -143,7 +154,8 @@ export class LeadsController {
   }
 
   @Post(":id/advance-stage")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   advanceStage(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: AdvanceStageDto) {
     return this.leadsService.advanceStage(user.orgId, id, dto.stage);
@@ -151,7 +163,8 @@ export class LeadsController {
 
   /** Undo one step — see LeadsService.moveBack for why this doesn't re-run automation. */
   @Post(":id/move-back")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   moveBack(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.leadsService.moveBack(user.orgId, id);
@@ -159,14 +172,16 @@ export class LeadsController {
 
   /** Back to any earlier stage the caller picks — see LeadsService.rewindTo. */
   @Post(":id/rewind")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   rewind(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: AdvanceStageDto) {
     return this.leadsService.rewindTo(user.orgId, id, dto.stage);
   }
 
   @Post(":id/emails/:emailMessageId/resend")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP)
   resendEmail(
     @CurrentUser() user: JwtClaims,
@@ -177,7 +192,8 @@ export class LeadsController {
   }
 
   @Post(":id/approve-email")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP)
   approveEmail(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: ApproveEmailDto) {
     return this.leadsService.approveEmail(user.orgId, id, dto);
@@ -195,7 +211,8 @@ export class LeadsController {
    *  waiting on — recovers a lead stuck at a waiting stage (see
    *  SequencerService.onStageEntered) or retries a draft that failed. */
   @Post(":id/pitch-draft/generate")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   generatePitchDraft(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.leadsService.requestEmailDraft(user.orgId, id);
@@ -204,7 +221,8 @@ export class LeadsController {
   /** Triggers the LinkedInAgent for this lead — manual, not automatic on
    *  stage entry, since LinkedIn outreach itself stays human-sent. */
   @Post(":id/linkedin-draft/generate")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   generateLinkedinDraft(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.leadsService.requestLinkedinDraft(user.orgId, id);
@@ -221,7 +239,8 @@ export class LeadsController {
   // account), there is no "detach and keep" option — this removes the lead's
   // full history, including any real emails already sent to the prospect.
   @Delete(":id")
-  @UseGuards(JwtAuthGuard, RolesGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN)
   remove(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.leadsService.remove(user.orgId, id);

@@ -169,6 +169,13 @@ model User {
   passwordHash String  @map("password_hash")
   role      Role     @default(VIEWER)
   active    Boolean  @default(true)
+  /// Per-module on/off, checked by ModuleAccessGuard (ADMIN always bypasses
+  /// regardless of these). Default true so no existing user is retroactively
+  /// locked out by this migration — this is a way to narrow access below a
+  /// role's normal reach, not a second role system.
+  leadGenAccess     Boolean @default(true) @map("lead_gen_access")
+  emailHubAccess    Boolean @default(true) @map("email_hub_access")
+  socialMediaAccess Boolean @default(true) @map("social_media_access")
   createdAt DateTime @default(now()) @map("created_at")
 
   assignedLeads Lead[] @relation("AssignedUser")
@@ -625,6 +632,16 @@ model EmailAccount {
   hourlyLimit  Int      @default(5) @map("hourly_limit")
   warmupActive Boolean  @default(true) @map("warmup_active")
   status       EmailAccountStatus @default(ACTIVE)
+  /// Explicit opt-in for the outbound rotation (EmailProviderService.
+  /// pickAvailableAccount) — `status: ACTIVE` alone used to be enough to be
+  /// picked, which meant a mailbox added only for reading (or added before
+  /// its send credentials were entered) could get swept into sending real
+  /// campaign emails the moment it existed. Confirmed live: an unconfigured
+  /// mailbox got picked, silently "succeeded" (see the stub-send fix in
+  /// SmtpProvider/GmailProvider), and a lead's whole sequence was marked
+  /// SENT with nothing ever delivered. Defaults false — an admin must
+  /// explicitly turn this on per mailbox now.
+  sendingEnabled Boolean @default(false) @map("sending_enabled")
   createdAt    DateTime @default(now()) @map("created_at")
 
   // GMAIL: OAuth2 refresh token for this mailbox (gmail.send + gmail.readonly

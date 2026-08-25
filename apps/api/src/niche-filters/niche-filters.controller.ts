@@ -3,12 +3,15 @@ import { NicheFiltersService } from "./niche-filters.service";
 import { UpsertNicheFilterDto } from "./dto/upsert-niche-filter.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 
 @Controller("niche-filters")
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+@RequiresModule("LEAD_GENERATION")
 export class NicheFiltersController {
   constructor(private readonly service: NicheFiltersService) {}
 

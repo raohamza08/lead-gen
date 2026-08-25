@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { api } from "../lib/api-client";
 
 interface NavLink {
   href: string;
@@ -72,6 +73,13 @@ const NAV: NavItem[] = [
   { type: "link", href: "/settings", label: "Settings" },
 ];
 
+/** Maps a NAV group's label to the module flag from GET /users/me that gates it. */
+const MODULE_FLAG_BY_GROUP: Record<string, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess"> = {
+  "Lead Generation": "leadGenAccess",
+  "Email Hub": "emailHubAccess",
+  "Social Media": "socialMediaAccess",
+};
+
 function isActive(pathname: string | null, search: string, link: NavLink): boolean {
   const [linkPath] = link.href.split(/[?#]/);
   if (pathname !== linkPath) return false;
@@ -83,6 +91,29 @@ export function SidebarNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ?? "";
+
+  // null = still loading (or fetch failed) — default every module visible in
+  // that case so there's no flash-of-empty-sidebar; the backend's
+  // ModuleAccessGuard is what actually enforces this either way, this is UX
+  // discoverability only.
+  const [moduleAccess, setModuleAccess] = useState<Record<string, boolean> | null>(null);
+
+  useEffect(() => {
+    api
+      .getMe()
+      .then((me) => {
+        const m = me as { leadGenAccess: boolean; emailHubAccess: boolean; socialMediaAccess: boolean };
+        setModuleAccess({ leadGenAccess: m.leadGenAccess, emailHubAccess: m.emailHubAccess, socialMediaAccess: m.socialMediaAccess });
+      })
+      .catch(() => {});
+  }, []);
+
+  const visibleNav = NAV.filter((item) => {
+    if (item.type !== "group") return true;
+    const flag = MODULE_FLAG_BY_GROUP[item.label];
+    if (!flag || !moduleAccess) return true;
+    return moduleAccess[flag];
+  });
 
   // Auto-expand whichever group contains the current page, so a direct link
   // or refresh never lands on a page whose group looks collapsed/unselected.
@@ -98,7 +129,7 @@ export function SidebarNav() {
 
   return (
     <nav className="flex h-full w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3">
-      {NAV.map((item) => {
+      {visibleNav.map((item) => {
         if (item.type === "link") {
           const active = pathname === item.href;
           return (

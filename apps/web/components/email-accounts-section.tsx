@@ -10,6 +10,10 @@ interface MailboxHealth {
   address: string;
   displayName: string | null;
   status: "ACTIVE" | "PAUSED" | "SUSPENDED";
+  /** Explicit opt-in for the outbound rotation — separate from `status`.
+   *  A mailbox can be ACTIVE (e.g. for Email Hub reading) without ever
+   *  being used to send to a lead until this is turned on. */
+  sendingEnabled: boolean;
   dailyLimit: number;
   hourlyLimit: number;
   warmupActive: boolean;
@@ -150,6 +154,22 @@ export function EmailAccountsSection() {
     }
   }
 
+  /** The explicit "use this mailbox for real outreach" switch — off by
+   *  default for anything not already sending, so adding a mailbox never
+   *  silently pulls it into the rotation before it's actually ready. */
+  async function toggleSending(account: MailboxHealth) {
+    setBusyId(account.id);
+    setError(null);
+    try {
+      await api.updateEmailAccount(account.id, { sendingEnabled: !account.sendingEnabled });
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function sendTest(account: MailboxHealth) {
     setBusyId(account.id);
     setError(null);
@@ -241,7 +261,9 @@ export function EmailAccountsSection() {
         <div>
           <h2 className="text-sm font-semibold tracking-tight">Email accounts</h2>
           <p className="mt-0.5 text-xs text-ink/50">
-            Sending config for outreach. To read a mailbox&apos;s incoming email in the Email Hub, see{" "}
+            Sending config for outreach. A new mailbox never sends to a lead until you turn its{" "}
+            <strong>Sending</strong> switch on below — added-but-unconfigured mailboxes stay out of the
+            rotation. To read a mailbox&apos;s incoming email in the Email Hub, see{" "}
             <Link href="/settings/email-hub" className="text-accent hover:underline">
               Email Hub Settings
             </Link>
@@ -302,6 +324,7 @@ export function EmailAccountsSection() {
               <th className="py-2 pr-3">Shown as</th>
               <th className="py-2 pr-3">Provider</th>
               <th className="py-2 pr-3">Status</th>
+              <th className="py-2 pr-3">Sending</th>
               <th className="py-2 pr-3">Sent today</th>
               <th className="py-2 pr-3">Credentials</th>
               <th className="py-2" />
@@ -323,6 +346,22 @@ export function EmailAccountsSection() {
                   >
                     {a.status}
                   </span>
+                </td>
+                <td className="py-2 pr-3">
+                  <button
+                    disabled={busyId === a.id}
+                    onClick={() => toggleSending(a)}
+                    title={
+                      a.sendingEnabled
+                        ? "This mailbox is used for real outreach sends. Click to turn off."
+                        : "This mailbox will never be used to send to a lead until you turn this on."
+                    }
+                    className={`rounded px-2 py-0.5 text-xs transition-colors disabled:opacity-50 ${
+                      a.sendingEnabled ? "bg-good/20 text-good hover:bg-good/30" : "bg-ink/10 text-ink/50 hover:bg-ink/15"
+                    }`}
+                  >
+                    {a.sendingEnabled ? "On" : "Off"}
+                  </button>
                 </td>
                 <td className="py-2 pr-3">
                   <div className="flex items-center gap-2">
@@ -376,7 +415,7 @@ export function EmailAccountsSection() {
             ))}
             {accounts.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 text-center text-sm text-ink/50">
+                <td colSpan={8} className="py-6 text-center text-sm text-ink/50">
                   No mailboxes configured. Add one, then use &ldquo;Send test&rdquo; before running a campaign
                   — a mailbox that fails to send is the most common reason outreach silently stalls.
                 </td>

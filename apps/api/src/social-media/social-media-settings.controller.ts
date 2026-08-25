@@ -2,7 +2,9 @@ import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@n
 import { SocialPlatform } from "@prisma/client";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 import { SocialMediaService } from "./social-media.service";
@@ -10,7 +12,8 @@ import { CreateSocialAccountDto, GrantSocialAccountAccessDto, UpdateSocialAccoun
 
 /** `/settings/social-media` — account-level configuration, admin-managed, split out from the day-to-day `/social-media` API (same pattern as `/settings/email-accounts` vs `/email-hub`). */
 @Controller("settings/social-media")
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+@RequiresModule("SOCIAL_MEDIA")
 export class SocialMediaSettingsController {
   constructor(private readonly service: SocialMediaService) {}
 

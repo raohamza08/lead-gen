@@ -1,5 +1,7 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
 import { EmailHubService, ListMessagesQuery } from "./email-hub.service";
@@ -12,10 +14,12 @@ import { ComposeEmailDto, ReplyMessageDto } from "./dto/reply-message.dto";
  * EmailHubService's own account-access check (ADMIN sees everything; anyone
  * else only what EmailAccountAccess grants them) rather than a `@Roles()`
  * guard — the restriction here is per-resource (which mailboxes), not
- * per-role, so RolesGuard's org-wide role check doesn't fit.
+ * per-role, so RolesGuard's org-wide role check doesn't fit. ModuleAccessGuard
+ * is a coarser, separate layer on top: can this person see Email Hub at all.
  */
 @Controller("email-hub")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleAccessGuard)
+@RequiresModule("EMAIL_HUB")
 export class EmailHubController {
   constructor(private readonly emailHub: EmailHubService) {}
 

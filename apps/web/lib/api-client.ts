@@ -291,6 +291,10 @@ export const api = {
   activateUser: (id: string) => request(`/users/${id}/activate`, { method: "PATCH" }),
   deactivateUser: (id: string) => request(`/users/${id}/deactivate`, { method: "PATCH" }),
   changeUserRole: (id: string, role: string) => request(`/users/${id}/role/${role}`, { method: "PATCH" }),
+  getMe: () => request("/users/me"),
+  getUserAccess: (id: string) => request(`/users/${id}/access`),
+  updateUserAccess: (id: string, body: Record<string, unknown>) =>
+    request(`/users/${id}/access`, { method: "PATCH", body: JSON.stringify(body) }),
 
   // ---- Email Hub ----
   getEmailHubAccounts: () => request("/email-hub/accounts"),

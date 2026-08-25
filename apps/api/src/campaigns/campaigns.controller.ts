@@ -5,7 +5,9 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { CampaignsService } from "./campaigns.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 
@@ -26,7 +28,8 @@ export class UpsertCampaignDto {
 }
 
 @Controller("campaigns")
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+@RequiresModule("LEAD_GENERATION")
 export class CampaignsController {
   constructor(
     private readonly prisma: PrismaService,

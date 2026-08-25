@@ -2,6 +2,8 @@ import { Body, Controller, Get, Post, Query, UseGuards } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { InternalAuthGuard } from "../common/guards/internal-auth.guard";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
@@ -103,7 +105,8 @@ export class AgentRunsController {
    * volume, failure rate and latency over a trailing window.
    */
   @Get("health")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   async health(@CurrentUser() user: JwtClaims, @Query("hours") hours?: string) {
     const windowHours = Math.min(Math.max(Number(hours) || 24, 1), 24 * 30);
     const since = new Date(Date.now() - windowHours * 60 * 60 * 1000);
@@ -153,7 +156,8 @@ export class AgentRunsController {
 
   /** Recent agent activity, newest first — the Automation dashboard's live feed. */
   @Get("recent")
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
   recent(@CurrentUser() user: JwtClaims, @Query("limit") limit?: string) {
     return this.prisma.agentRun.findMany({
       where: { orgId: user.orgId },

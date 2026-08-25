@@ -2,12 +2,15 @@ import { Controller, DefaultValuePipe, Get, ParseIntPipe, Post, Query, UseGuards
 import { AnalyticsService } from "./analytics.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 
 @Controller("analytics")
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, ModuleAccessGuard)
+@RequiresModule("LEAD_GENERATION")
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
 
