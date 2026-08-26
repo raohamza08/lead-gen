@@ -4,41 +4,44 @@ import { AuthGuard } from "../../components/auth-guard";
 import { SignOutButton } from "../../components/sign-out-button";
 import { ThemeToggle } from "../../components/theme-toggle";
 import { NotificationsBell } from "../../components/notifications-bell";
+import { QueryProvider } from "../../components/query-provider";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
-    <AuthGuard>
-      <div className="flex h-screen flex-col">
-        <header className="shrink-0 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur">
-          <div className="flex items-center justify-between px-6 py-3">
-            <div className="flex items-center gap-2.5">
-              <span
-                aria-hidden
-                className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-xs font-bold text-white"
-              >
-                AI
-              </span>
-              <div>
-                <div className="text-sm font-semibold leading-tight tracking-tight">Sales OS</div>
-                <div className="text-[11px] leading-tight text-ink/45">Business Communication & Lead Management</div>
+    <QueryProvider>
+      <AuthGuard>
+        <div className="flex h-screen flex-col">
+          <header className="shrink-0 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur">
+            <div className="flex items-center justify-between px-6 py-3">
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden
+                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-xs font-bold text-white"
+                >
+                  AI
+                </span>
+                <div>
+                  <div className="text-sm font-semibold leading-tight tracking-tight">Sales OS</div>
+                  <div className="text-[11px] leading-tight text-ink/45">Business Communication & Lead Management</div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <NotificationsBell />
+                <ThemeToggle />
+                <SignOutButton />
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <NotificationsBell />
-              <ThemeToggle />
-              <SignOutButton />
-            </div>
+          </header>
+          <div className="flex min-h-0 flex-1">
+            <Suspense fallback={<div className="w-56 shrink-0 border-r border-[var(--line)]" />}>
+              <SidebarNav />
+            </Suspense>
+            <main className="min-w-0 flex-1 overflow-y-auto p-6">
+              <div className="mx-auto max-w-[1600px]">{children}</div>
+            </main>
           </div>
-        </header>
-        <div className="flex min-h-0 flex-1">
-          <Suspense fallback={<div className="w-56 shrink-0 border-r border-[var(--line)]" />}>
-            <SidebarNav />
-          </Suspense>
-          <main className="min-w-0 flex-1 overflow-y-auto p-6">
-            <div className="mx-auto max-w-[1600px]">{children}</div>
-          </main>
         </div>
-      </div>
-    </AuthGuard>
+      </AuthGuard>
+    </QueryProvider>
   );
 }

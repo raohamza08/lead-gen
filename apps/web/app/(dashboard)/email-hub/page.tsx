@@ -1,11 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { useRealtimeRefetch } from "../../../lib/realtime";
 import { ComposeModal } from "../../../components/email-hub/compose-modal";
 import { MessageDetailPanel } from "../../../components/email-hub/message-detail-panel";
+import { LoadingRow, Spinner } from "../../../components/spinner";
 
 interface Account {
   id: string;
@@ -64,7 +66,7 @@ function timeAgo(iso: string): string {
 
 export default function EmailHubPage() {
   return (
-    <Suspense fallback={<div className="text-sm text-ink/50">Loading…</div>}>
+    <Suspense fallback={<LoadingRow />}>
       <EmailHubPageContent />
     </Suspense>
   );
@@ -73,13 +75,7 @@ export default function EmailHubPage() {
 function EmailHubPageContent() {
   const searchParams = useSearchParams();
   const view = searchParams?.get("view") ?? null;
-
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const [accountId, setAccountId] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -89,47 +85,53 @@ function EmailHubPageContent() {
   const [showCompose, setShowCompose] = useState(false);
   const [showTagManager, setShowTagManager] = useState(false);
   const [newTagName, setNewTagName] = useState("");
-  const [bulkBusy, setBulkBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [confirmingLeadId, setConfirmingLeadId] = useState<string | null>(null);
 
   const status = statusForView(view);
 
-  function loadMessages() {
-    setLoading(true);
-    setError(null);
-    const params: Record<string, string> = { status };
-    if (accountId) params.accountId = accountId;
-    if (search.trim()) params.search = search.trim();
-    if (tagFilter) params.tagIds = tagFilter;
-    api
-      .getEmailMessages(params)
-      .then((res: any) => {
-        let rows: Message[] = res.messages;
-        // "Leads" and "Sent" aren't real status filters (see statusForView) —
-        // applied client-side against the already-fetched page. At V1 volume
-        // this is fine; if the inbox grows large enough for this to matter,
-        // it becomes a real query param on the API instead.
-        if (view === "leads") rows = rows.filter((m) => m.thread.leadId);
-        setMessages(rows);
-        setTotal(res.total);
-      })
-      .catch((err) => setError((err as Error).message))
-      .finally(() => setLoading(false));
+  // Cached: switching tabs and coming back shows this instantly from cache
+  // (staleTime in query-provider.tsx) while quietly refetching in the
+  // background — isFetching (not isLoading) reflects that background pass.
+  const messagesQuery = useQuery({
+    queryKey: ["email-messages", status, accountId, search, tagFilter],
+    queryFn: () => {
+      const params: Record<string, string> = { status };
+      if (accountId) params.accountId = accountId;
+      if (search.trim()) params.search = search.trim();
+      if (tagFilter) params.tagIds = tagFilter;
+      return api.getEmailMessages(params) as Promise<{ messages: Message[]; total: number }>;
+    },
+  });
+  const accountsQuery = useQuery({
+    queryKey: ["email-accounts"],
+    queryFn: () => api.getEmailHubAccounts() as Promise<Account[]>,
+  });
+  const tagsQuery = useQuery({
+    queryKey: ["email-tags"],
+    queryFn: () => api.getEmailTags() as Promise<Tag[]>,
+  });
+
+  const accounts = accountsQuery.data ?? [];
+  const tags = tagsQuery.data ?? [];
+  const total = messagesQuery.data?.total ?? 0;
+  // "Leads" isn't a real status filter (see statusForView) — applied
+  // client-side against the already-fetched, already-cached page.
+  const messages = useMemo(() => {
+    const rows = messagesQuery.data?.messages ?? [];
+    return view === "leads" ? rows.filter((m) => m.thread.leadId) : rows;
+  }, [messagesQuery.data, view]);
+
+  function invalidateMessages() {
+    queryClient.invalidateQueries({ queryKey: ["email-messages"] });
+  }
+  function invalidateAccounts() {
+    queryClient.invalidateQueries({ queryKey: ["email-accounts"] });
   }
 
-  function loadAccounts() {
-    api.getEmailHubAccounts().then((a) => setAccounts(a as Account[])).catch(() => {});
-  }
-  function loadTags() {
-    api.getEmailTags().then((t) => setTags(t as Tag[])).catch(() => {});
-  }
-
-  useEffect(loadAccounts, []);
-  useEffect(loadTags, []);
-  useEffect(loadMessages, [status, accountId, search, tagFilter, view]);
   useRealtimeRefetch(["emailHub.messageReceived", "emailHub.messagesUpdated"], () => {
-    loadMessages();
-    loadAccounts();
+    invalidateMessages();
+    invalidateAccounts();
   });
 
   const allSelected = messages.length > 0 && selected.size === messages.length;
@@ -145,52 +147,60 @@ function EmailHubPageContent() {
     });
   }
 
-  async function bulkAction(action: string, tagId?: string) {
-    if (selected.size === 0) return;
-    setBulkBusy(true);
-    try {
-      await api.bulkEmailAction({ messageIds: [...selected], action, tagId });
+  const bulkActionMutation = useMutation({
+    mutationFn: (input: { action: string; tagId?: string }) =>
+      api.bulkEmailAction({ messageIds: [...selected], action: input.action, tagId: input.tagId }),
+    onSuccess: () => {
       setSelected(new Set());
-      loadMessages();
-      loadAccounts();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBulkBusy(false);
-    }
+      invalidateMessages();
+      invalidateAccounts();
+    },
+    onError: (err) => setActionError((err as Error).message),
+  });
+  function bulkAction(action: string, tagId?: string) {
+    if (selected.size === 0) return;
+    bulkActionMutation.mutate({ action, tagId });
   }
 
-  async function confirmPossibleLead(threadId: string, e: React.MouseEvent) {
+  const confirmLeadMutation = useMutation({
+    mutationFn: (threadId: string) => api.addEmailThreadToLead(threadId),
+    onMutate: (threadId) => setConfirmingLeadId(threadId),
+    onSuccess: invalidateMessages,
+    onError: (err) => setActionError((err as Error).message),
+    onSettled: () => setConfirmingLeadId(null),
+  });
+  function confirmPossibleLead(threadId: string, e: React.MouseEvent) {
     e.stopPropagation();
-    setConfirmingLeadId(threadId);
-    try {
-      await api.addEmailThreadToLead(threadId);
-      loadMessages();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setConfirmingLeadId(null);
-    }
+    confirmLeadMutation.mutate(threadId);
   }
 
+  const markReadMutation = useMutation({
+    mutationFn: (messageId: string) => api.bulkEmailAction({ messageIds: [messageId], action: "READ" }),
+    onSuccess: invalidateMessages,
+  });
   function openMessage(m: Message) {
     setOpenThreadId(m.threadId);
-    if (!m.isRead) {
-      api.bulkEmailAction({ messageIds: [m.id], action: "READ" }).then(loadMessages).catch(() => {});
-    }
+    if (!m.isRead) markReadMutation.mutate(m.id);
   }
 
-  async function createTag(e: React.FormEvent) {
+  const createTagMutation = useMutation({
+    mutationFn: (name: string) => api.createEmailTag({ name }),
+    onSuccess: () => {
+      setNewTagName("");
+      queryClient.invalidateQueries({ queryKey: ["email-tags"] });
+    },
+    onError: (err) => setActionError((err as Error).message),
+  });
+  function createTag(e: React.FormEvent) {
     e.preventDefault();
     if (!newTagName.trim()) return;
-    try {
-      await api.createEmailTag({ name: newTagName.trim() });
-      setNewTagName("");
-      loadTags();
-    } catch (err) {
-      setError((err as Error).message);
-    }
+    createTagMutation.mutate(newTagName.trim());
   }
+
+  const deleteTagMutation = useMutation({
+    mutationFn: (tagId: string) => api.deleteEmailTag(tagId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["email-tags"] }),
+  });
 
   const viewTitle = useMemo(() => {
     if (view === "important") return "Important";
@@ -201,10 +211,18 @@ function EmailHubPageContent() {
     return "Unified Inbox";
   }, [view]);
 
+  const error = actionError ?? (messagesQuery.error as Error | null)?.message ?? null;
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">{viewTitle}</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold tracking-tight">{viewTitle}</h1>
+          {/* Background refetch indicator — only shows once real data is
+              already on screen, so a cached revisit never feels like a
+              fresh load even though it's quietly re-verifying. */}
+          {messagesQuery.isFetching && !messagesQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowTagManager((v) => !v)}
@@ -245,7 +263,7 @@ function EmailHubPageContent() {
               <span key={t.id} className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-white" style={{ backgroundColor: t.color }}>
                 {t.name}
                 <button
-                  onClick={() => api.deleteEmailTag(t.id).then(loadTags)}
+                  onClick={() => deleteTagMutation.mutate(t.id)}
                   className="text-white/80 hover:text-white"
                   aria-label={`Delete tag ${t.name}`}
                 >
@@ -281,7 +299,7 @@ function EmailHubPageContent() {
             {a.unreadCount > 0 && <span className="ml-1.5 opacity-80">({a.unreadCount})</span>}
           </button>
         ))}
-        {accounts.length === 0 && (
+        {accounts.length === 0 && !accountsQuery.isLoading && (
           <span className="text-xs text-ink/50">
             No inbox-connected accounts yet — add one in Settings &gt; Email Hub &gt; Accounts.
           </span>
@@ -314,14 +332,14 @@ function EmailHubPageContent() {
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--line)] bg-ink/5 px-3 py-2 text-xs">
           <span className="font-medium">{selected.size} selected</span>
-          <button disabled={bulkBusy} onClick={() => bulkAction("READ")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark read</button>
-          <button disabled={bulkBusy} onClick={() => bulkAction("UNREAD")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark unread</button>
-          <button disabled={bulkBusy} onClick={() => bulkAction("IMPORTANT")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark important</button>
-          <button disabled={bulkBusy} onClick={() => bulkAction("IGNORE")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Ignore</button>
-          <button disabled={bulkBusy} onClick={() => bulkAction("UNIGNORE")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Unignore</button>
+          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("READ")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark read</button>
+          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNREAD")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark unread</button>
+          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IMPORTANT")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark important</button>
+          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IGNORE")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Ignore</button>
+          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNIGNORE")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Unignore</button>
           {tags.length > 0 && (
             <select
-              disabled={bulkBusy}
+              disabled={bulkActionMutation.isPending}
               onChange={(e) => e.target.value && bulkAction("ADD_TAG", e.target.value)}
               defaultValue=""
               className="rounded border border-[var(--line)] bg-transparent px-2 py-1"
@@ -337,7 +355,7 @@ function EmailHubPageContent() {
             </select>
           )}
           <button
-            disabled={bulkBusy}
+            disabled={bulkActionMutation.isPending}
             onClick={() => window.confirm(`Delete ${selected.size} message(s)? This removes them from the Email Hub, not the real mailbox.`) && bulkAction("DELETE")}
             className="rounded border border-[rgb(var(--bad-rgb)/0.4)] px-2 py-1 text-bad hover:bg-[rgb(var(--bad-rgb)/0.06)]"
           >
@@ -347,91 +365,97 @@ function EmailHubPageContent() {
       )}
 
       {/* Message list */}
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[720px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-[var(--line)] text-left text-xs text-ink/55">
-              <th className="w-8 px-3 py-2">
-                <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-              </th>
-              <th className="px-3 py-2">Sender</th>
-              <th className="px-3 py-2">Subject</th>
-              <th className="px-3 py-2">Account</th>
-              <th className="px-3 py-2">Tags</th>
-              <th className="px-3 py-2 text-right">Received</th>
-            </tr>
-          </thead>
-          <tbody>
-            {messages.map((m) => (
-              <tr
-                key={m.id}
-                onClick={() => openMessage(m)}
-                className={`cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-ink/5 ${
-                  m.isRead ? "" : "font-medium"
-                }`}
-              >
-                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
-                  <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleOne(m.id)} />
-                </td>
-                <td className="px-3 py-2">
-                  <div>{m.fromName || m.fromEmail}</div>
-                  <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex items-center gap-1.5">
-                    {m.isImportant && <span className="text-gold">★</span>}
-                    {m.hasAttachments && <span title="Has attachments">📎</span>}
-                    <span className="line-clamp-1">{m.subject}</span>
-                  </div>
-                  <div className="line-clamp-1 text-xs font-normal text-ink/50">{m.bodyText.slice(0, 120)}</div>
-                </td>
-                <td className="px-3 py-2 text-xs font-normal text-ink/60">
-                  {m.account.mailboxLabel || m.account.address}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="flex flex-wrap gap-1">
-                    {m.thread.leadId && (
-                      <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">Lead</span>
-                    )}
-                    {!m.thread.leadId && m.suggestedCategory === "POSSIBLE_LEAD" && (
-                      <span
-                        className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold"
-                        title={m.aiSuggestedAction ?? undefined}
-                      >
-                        Possible lead
-                        <button
-                          onClick={(e) => confirmPossibleLead(m.thread.id, e)}
-                          disabled={confirmingLeadId === m.thread.id}
-                          className="rounded-full border border-gold/40 px-1.5 py-0 text-[10px] font-medium hover:bg-gold/10 disabled:opacity-50"
+      {messagesQuery.isLoading ? (
+        <div className="card">
+          <LoadingRow label="Loading messages…" />
+        </div>
+      ) : (
+        <div className="card overflow-x-auto">
+          <table className="w-full min-w-[720px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-[var(--line)] text-left text-xs text-ink/55">
+                <th className="w-8 px-3 py-2">
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+                </th>
+                <th className="px-3 py-2">Sender</th>
+                <th className="px-3 py-2">Subject</th>
+                <th className="px-3 py-2">Account</th>
+                <th className="px-3 py-2">Tags</th>
+                <th className="px-3 py-2 text-right">Received</th>
+              </tr>
+            </thead>
+            <tbody>
+              {messages.map((m) => (
+                <tr
+                  key={m.id}
+                  onClick={() => openMessage(m)}
+                  className={`cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-ink/5 ${
+                    m.isRead ? "" : "font-medium"
+                  }`}
+                >
+                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleOne(m.id)} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <div>{m.fromName || m.fromEmail}</div>
+                    <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-1.5">
+                      {m.isImportant && <span className="text-gold">★</span>}
+                      {m.hasAttachments && <span title="Has attachments">📎</span>}
+                      <span className="line-clamp-1">{m.subject}</span>
+                    </div>
+                    <div className="line-clamp-1 text-xs font-normal text-ink/50">{m.bodyText.slice(0, 120)}</div>
+                  </td>
+                  <td className="px-3 py-2 text-xs font-normal text-ink/60">
+                    {m.account.mailboxLabel || m.account.address}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {m.thread.leadId && (
+                        <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">Lead</span>
+                      )}
+                      {!m.thread.leadId && m.suggestedCategory === "POSSIBLE_LEAD" && (
+                        <span
+                          className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold"
+                          title={m.aiSuggestedAction ?? undefined}
                         >
-                          {confirmingLeadId === m.thread.id ? "Adding…" : "Add to Lead"}
-                        </button>
-                      </span>
-                    )}
-                    {m.tags.map(({ tag }) => (
-                      <span
-                        key={tag.id}
-                        className="rounded-full px-2 py-0.5 text-[11px] text-white"
-                        style={{ backgroundColor: tag.color }}
-                      >
-                        {tag.name}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-right text-xs font-normal text-ink/50">{timeAgo(m.receivedAt)}</td>
-              </tr>
-            ))}
-            {!loading && messages.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-10 text-center text-sm text-ink/50">
-                  {view === "leads" ? "No emails linked to leads yet." : "Nothing here."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                          Possible lead
+                          <button
+                            onClick={(e) => confirmPossibleLead(m.thread.id, e)}
+                            disabled={confirmingLeadId === m.thread.id}
+                            className="rounded-full border border-gold/40 px-1.5 py-0 text-[10px] font-medium hover:bg-gold/10 disabled:opacity-50"
+                          >
+                            {confirmingLeadId === m.thread.id ? "Adding…" : "Add to Lead"}
+                          </button>
+                        </span>
+                      )}
+                      {m.tags.map(({ tag }) => (
+                        <span
+                          key={tag.id}
+                          className="rounded-full px-2 py-0.5 text-[11px] text-white"
+                          style={{ backgroundColor: tag.color }}
+                        >
+                          {tag.name}
+                        </span>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-right text-xs font-normal text-ink/50">{timeAgo(m.receivedAt)}</td>
+                </tr>
+              ))}
+              {messages.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-ink/50">
+                    {view === "leads" ? "No emails linked to leads yet." : "Nothing here."}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
       <p className="text-xs text-ink/40">{total} total</p>
 
       {openThreadId && (
@@ -439,8 +463,8 @@ function EmailHubPageContent() {
           threadId={openThreadId}
           onClose={() => setOpenThreadId(null)}
           onChanged={() => {
-            loadMessages();
-            loadAccounts();
+            invalidateMessages();
+            invalidateAccounts();
           }}
         />
       )}
@@ -449,7 +473,7 @@ function EmailHubPageContent() {
           accounts={accounts}
           defaultAccountId={accountId || undefined}
           onClose={() => setShowCompose(false)}
-          onSent={loadMessages}
+          onSent={invalidateMessages}
         />
       )}
     </div>
