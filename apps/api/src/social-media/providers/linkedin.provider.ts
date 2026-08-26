@@ -51,7 +51,12 @@ export class LinkedInProvider implements SocialPlatformProvider {
       client_id: clientId,
       redirect_uri: redirectUri,
       state,
-      scope: ["w_member_social", "r_organization_social", "w_organization_social", "r_basicprofile"].join(" "),
+      // openid + profile are what /v2/userinfo below actually needs (Sign In
+      // with LinkedIn using OpenID Connect) -- r_basicprofile was the old
+      // REST-API scope for the now-unused /v2/me endpoint and doesn't grant
+      // access to /v2/userinfo at all, which silently produced an empty
+      // profile (no `sub`) and a confusing failure two layers downstream.
+      scope: ["openid", "profile", "w_member_social", "r_organization_social", "w_organization_social"].join(" "),
     });
     return `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
   }
@@ -82,7 +87,14 @@ export class LinkedInProvider implements SocialPlatformProvider {
     const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
-    const profile = (await profileRes.json()) as { sub: string; name?: string; picture?: string };
+    const profile = (await profileRes.json()) as { sub?: string; name?: string; picture?: string; message?: string };
+    // Fail here with LinkedIn's own message, not three layers down as a
+    // cryptic Prisma "missing username" error once `sub` turns out undefined.
+    if (!profile.sub) {
+      throw new Error(
+        `LinkedIn userinfo request did not return a profile (status ${profileRes.status}): ${profile.message ?? JSON.stringify(profile)}`,
+      );
+    }
 
     return [{
       externalAccountId: profile.sub,
