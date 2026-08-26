@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { DataTable, SectionCard, StatTile } from "../../../components/chart-kit";
 
@@ -153,54 +154,38 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function AutomationPage() {
   const [hours, setHours] = useState<number>(24);
-  const [health, setHealth] = useState<HealthReport | null>(null);
-  const [runs, setRuns] = useState<AgentRun[]>([]);
-  const [fleet, setFleet] = useState<FleetReport | null>(null);
-  const [fleetError, setFleetError] = useState<string | null>(null);
-  const [sendQueue, setSendQueue] = useState<SendQueue | null>(null);
-  const [sendQueueError, setSendQueueError] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    setRefreshing(true);
-    Promise.all([api.getAgentHealth(hours), api.getRecentAgentRuns(50)])
-      .then(([h, r]) => {
-        if (cancelled) return;
-        setHealth(h as HealthReport);
-        setRuns(r as AgentRun[]);
-        setError(null);
-      })
-      .catch((err) => !cancelled && setError((err as Error).message))
-      .finally(() => !cancelled && setRefreshing(false));
-    return () => { cancelled = true; };
-  }, [hours]);
+  const healthQuery = useQuery({
+    queryKey: ["automation-health", hours],
+    queryFn: async () => {
+      const [h, r] = await Promise.all([api.getAgentHealth(hours), api.getRecentAgentRuns(50)]);
+      return { health: h as HealthReport, runs: r as AgentRun[] };
+    },
+  });
 
   // Fetched once, not per window — the roster itself doesn't change with the
   // time window, only the run history does.
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getAgentFleet()
-      .then((f) => !cancelled && setFleet(f as FleetReport))
-      .catch((err) => !cancelled && setFleetError((err as Error).message));
-    return () => { cancelled = true; };
-  }, []);
+  const fleetQuery = useQuery({
+    queryKey: ["automation-fleet"],
+    queryFn: () => api.getAgentFleet() as Promise<FleetReport>,
+  });
 
   // Also independent of the health window — "what's about to send" is a
   // live queue state, not a historical stat over a chosen time range.
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getSendQueue()
-      .then((q) => !cancelled && setSendQueue(q as SendQueue))
-      .catch((err) => !cancelled && setSendQueueError((err as Error).message));
-    return () => { cancelled = true; };
-  }, []);
+  const sendQueueQuery = useQuery({
+    queryKey: ["automation-send-queue"],
+    queryFn: () => api.getSendQueue() as Promise<SendQueue>,
+  });
 
-  if (error) return <p className="text-bad">{error}</p>;
-  if (!health) return <p className="text-ink/60">Loading…</p>;
+  const fleet = fleetQuery.data ?? null;
+  const fleetError = fleetQuery.error ? (fleetQuery.error as Error).message : null;
+  const sendQueue = sendQueueQuery.data ?? null;
+  const sendQueueError = sendQueueQuery.error ? (sendQueueQuery.error as Error).message : null;
+  const refreshing = healthQuery.isFetching;
+
+  if (healthQuery.error) return <p className="text-bad">{(healthQuery.error as Error).message}</p>;
+  if (!healthQuery.data) return <p className="text-ink/60">Loading…</p>;
+  const { health, runs } = healthQuery.data;
 
   const failureRate = health.totalRuns
     ? Math.round((health.totalFailures / health.totalRuns) * 1000) / 10

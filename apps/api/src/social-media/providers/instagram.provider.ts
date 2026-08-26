@@ -251,6 +251,7 @@ export class InstagramProvider implements SocialPlatformProvider {
       const other = c.participants?.data?.find((p) => p.id !== account.externalAccountId);
       return {
         externalConversationId: c.id,
+        participantExternalId: other?.id ?? "",
         participantName: other?.username ?? "Unknown",
         lastMessageSnippet: c.snippet,
         lastMessageAt: new Date(c.updated_time),
@@ -281,23 +282,15 @@ export class InstagramProvider implements SocialPlatformProvider {
       .reverse();
   }
 
-  async sendMessage(account: SocialAccount, conversationId: string, text: string): Promise<void> {
+  async sendMessage(account: SocialAccount, participantId: string, text: string): Promise<void> {
     if (!account.accessTokenEnc || !account.externalAccountId) {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
-    const convRes = await fetch(
-      `https://graph.facebook.com/${this.graphVersion()}/${conversationId}?fields=participants&access_token=${accessToken}`,
-    );
-    if (!convRes.ok) throw new Error(`Instagram conversation lookup failed: ${convRes.status} ${await convRes.text()}`);
-    const conv = (await convRes.json()) as { participants?: { data: { id: string }[] } };
-    const recipientId = conv.participants?.data?.find((p) => p.id !== account.externalAccountId)?.id;
-    if (!recipientId) throw new Error("Could not determine the message recipient for this conversation.");
-
     const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ recipient: { id: recipientId }, message: { text }, access_token: accessToken }),
+      body: JSON.stringify({ recipient: { id: participantId }, message: { text }, access_token: accessToken }),
     });
     if (!res.ok) throw new Error(`Instagram send message failed: ${res.status} ${await res.text()}`);
   }

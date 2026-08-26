@@ -14,14 +14,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="shrink-0 border-b border-[var(--line)] bg-[var(--paper)]/90 backdrop-blur">
             <div className="flex items-center justify-between px-6 py-3">
               <div className="flex items-center gap-2.5">
-                <span
-                  aria-hidden
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent text-xs font-bold text-white"
-                >
-                  AI
-                </span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.png" alt="" aria-hidden className="h-7 w-7 object-contain" />
                 <div>
-                  <div className="text-sm font-semibold leading-tight tracking-tight">Sales OS</div>
+                  <div className="text-sm font-semibold leading-tight tracking-tight">Outly OS</div>
                   <div className="text-[11px] leading-tight text-ink/45">Business Communication & Lead Management</div>
                 </div>
               </div>

@@ -21,6 +21,7 @@ export class UpdateSocialAccountSettingsDto {
 
 export class GrantSocialAccountAccessDto {
   @IsString() userId!: string;
+  @IsOptional() @IsBoolean() canView?: boolean;
   @IsOptional() @IsBoolean() canPublish?: boolean;
   @IsOptional() @IsBoolean() canApprove?: boolean;
 }

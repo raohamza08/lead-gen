@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
+import { Spinner } from "../../../../components/spinner";
 
 interface Post {
   id: string;
@@ -10,6 +12,8 @@ interface Post {
   scheduledAt: string | null;
   versions: { account: { platform: string; username: string; displayName: string | null } }[];
 }
+
+const EMPTY_POSTS: Post[] = [];
 
 function toDateKey(iso: string): string {
   const d = new Date(iso);
@@ -23,21 +27,24 @@ export default function CalendarPage() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
-  const [posts, setPosts] = useState<Post[]>([]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    Promise.all([
-      api.getSocialPosts({ status: "SCHEDULED", pageSize: "200" }),
-      api.getSocialPosts({ status: "PUBLISHED", pageSize: "200" }),
-    ])
-      .then(([scheduled, published]) => {
-        const all = [...(scheduled as { posts: Post[] }).posts, ...(published as { posts: Post[] }).posts];
-        setPosts(all.filter((p) => p.scheduledAt));
-      })
-      .catch((err) => setError((err as Error).message));
-  }, [cursor]);
+  // Not keyed by `cursor` -- the underlying fetch (every scheduled/published
+  // post) doesn't depend on which month is showing, only the client-side
+  // grouping below does, so switching months never needs a refetch.
+  const postsQuery = useQuery({
+    queryKey: ["social-media-calendar-posts"],
+    queryFn: async () => {
+      const [scheduled, published] = await Promise.all([
+        api.getSocialPosts({ status: "SCHEDULED", pageSize: "200" }),
+        api.getSocialPosts({ status: "PUBLISHED", pageSize: "200" }),
+      ]);
+      const all = [...(scheduled as { posts: Post[] }).posts, ...(published as { posts: Post[] }).posts];
+      return all.filter((p) => p.scheduledAt);
+    },
+  });
+  const posts = postsQuery.data ?? EMPTY_POSTS;
+  const error = postsQuery.error ? (postsQuery.error as Error).message : null;
 
   const byDay = useMemo(() => {
     const map = new Map<string, Post[]>();
@@ -70,7 +77,10 @@ export default function CalendarPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
+            {postsQuery.isFetching && !postsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
+          </div>
           <p className="mt-0.5 text-xs text-ink/50">Scheduled and published posts, by day.</p>
         </div>
         <div className="flex items-center gap-2">

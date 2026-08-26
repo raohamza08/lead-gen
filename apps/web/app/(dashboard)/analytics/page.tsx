@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   Bar,
   BarChart,
@@ -94,81 +95,57 @@ function timeAgo(iso: string | null | undefined): string {
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState<number>(30);
-  const [email, setEmail] = useState<EmailFunnelReport | null>(null);
-  const [linkedin, setLinkedin] = useState<LinkedinFunnelReport | null>(null);
-  const [trends, setTrends] = useState<CohortTrendsReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
-  const [aiInsights, setAiInsights] = useState<AiInsights | null>(null);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
   const [emailTab, setEmailTab] = useState<"OPENED" | "REPLIED">("OPENED");
-  const [emailList, setEmailList] = useState<EmailListItem[] | null>(null);
-  const [emailListLoading, setEmailListLoading] = useState(false);
-  const [emailListError, setEmailListError] = useState<string | null>(null);
+  // Overrides the persisted latest-run query below once a manual run
+  // finishes -- a fresh run's ephemeral `notes` field must win over whatever
+  // was last persisted, without needing to invalidate/refetch that query.
+  const [manualInsights, setManualInsights] = useState<AiInsights | null>(null);
 
-  async function runAiInsights() {
-    setAiLoading(true);
-    setAiError(null);
-    try {
-      setAiInsights((await api.getAiInsights()) as AiInsights);
-    } catch (err) {
-      setAiError((err as Error).message);
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    let cancelled = false;
-    setRefreshing(true);
-    Promise.all([api.getEmailFunnel(), api.getLinkedinFunnel(), api.getCohortTrends(days)])
-      .then(([e, l, t]) => {
-        if (cancelled) return;
-        setEmail(e as EmailFunnelReport);
-        setLinkedin(l as LinkedinFunnelReport);
-        setTrends(t as CohortTrendsReport);
-        setError(null);
-      })
-      .catch((err) => !cancelled && setError((err as Error).message))
-      .finally(() => !cancelled && setRefreshing(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [days]);
+  // Cached per `days` window: switching between 7d/30d/90d and back shows
+  // each window instantly from cache while quietly re-verifying.
+  const funnelQuery = useQuery({
+    queryKey: ["analytics-funnel", days],
+    queryFn: async () => {
+      const [e, l, t] = await Promise.all([api.getEmailFunnel(), api.getLinkedinFunnel(), api.getCohortTrends(days)]);
+      return { email: e as EmailFunnelReport, linkedin: l as LinkedinFunnelReport, trends: t as CohortTrendsReport };
+    },
+  });
 
   // The last real analysis, persisted server-side — loads on mount instead
   // of only appearing after a manual "Run analysis" click, so navigating
-  // away and back doesn't lose it.
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .getLatestAiInsights()
-      .then((res) => !cancelled && res && setAiInsights(res as AiInsights))
-      .catch(() => {
-        /* no persisted run yet, or a fetch blip — the manual button still works */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // away and back doesn't lose it. No persisted run yet (or a fetch blip)
+  // just means aiInsights stays null — the manual button still works.
+  const latestInsightsQuery = useQuery({
+    queryKey: ["analytics-latest-insights"],
+    queryFn: () => api.getLatestAiInsights() as Promise<AiInsights | null>,
+    retry: false,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setEmailListLoading(true);
-    setEmailListError(null);
-    api
-      .getEmailList(emailTab)
-      .then((res) => !cancelled && setEmailList(res as EmailListItem[]))
-      .catch((err) => !cancelled && setEmailListError((err as Error).message))
-      .finally(() => !cancelled && setEmailListLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [emailTab]);
+  const emailListQuery = useQuery({
+    queryKey: ["analytics-email-list", emailTab],
+    queryFn: () => api.getEmailList(emailTab) as Promise<EmailListItem[]>,
+  });
 
-  if (error) return <p className="text-bad">{error}</p>;
-  if (!email || !linkedin || !trends) return <p className="text-ink/60">Loading…</p>;
+  const runInsightsMutation = useMutation({
+    mutationFn: () => api.getAiInsights() as Promise<AiInsights>,
+    onSuccess: setManualInsights,
+  });
+  function runAiInsights() {
+    runInsightsMutation.mutate();
+  }
+  const aiInsights = manualInsights ?? latestInsightsQuery.data ?? null;
+  const aiLoading = runInsightsMutation.isPending;
+  const aiError = runInsightsMutation.error ? (runInsightsMutation.error as Error).message : null;
+
+  const emailList = emailListQuery.data ?? null;
+  const emailListLoading = emailListQuery.isLoading;
+  const emailListError = emailListQuery.error ? (emailListQuery.error as Error).message : null;
+
+  const refreshing = funnelQuery.isFetching;
+
+  if (funnelQuery.error) return <p className="text-bad">{(funnelQuery.error as Error).message}</p>;
+  if (!funnelQuery.data) return <p className="text-ink/60">Loading…</p>;
+  const { email, linkedin, trends } = funnelQuery.data;
 
   const o = email.overall;
   // Sent -> Delivered -> Opened -> Clicked -> Replied is an ordered funnel, so

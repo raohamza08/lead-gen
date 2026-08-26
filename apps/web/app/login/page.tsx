@@ -43,14 +43,10 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-6">
       <div className="w-full max-w-sm">
         <div className="mb-7 flex items-center gap-3">
-          <span
-            aria-hidden
-            className="flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-sm font-bold text-white shadow-sm"
-          >
-            AI
-          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.png" alt="" aria-hidden className="h-11 w-11 object-contain" />
           <div>
-            <h1 className="text-lg font-semibold leading-tight tracking-tight">Sales OS</h1>
+            <h1 className="text-lg font-semibold leading-tight tracking-tight">Outly OS</h1>
             <p className="text-xs text-ink/50">Revenue intelligence platform</p>
           </div>
         </div>

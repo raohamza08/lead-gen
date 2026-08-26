@@ -124,7 +124,10 @@ export class SocialMediaService {
     });
     const lastErrorByAccount = new Map<string, string | null>();
     for (const f of failures) {
-      if (!lastErrorByAccount.has(f.accountId)) lastErrorByAccount.set(f.accountId, f.publishError);
+      // f.accountId is only ever null for a version whose account was since
+      // deleted -- excluded here by the `in: accounts.map(...)` filter above
+      // already, this guard is just to satisfy the column's nullable type.
+      if (f.accountId && !lastErrorByAccount.has(f.accountId)) lastErrorByAccount.set(f.accountId, f.publishError);
     }
 
     return accounts.map((a) => ({
@@ -168,6 +171,23 @@ export class SocialMediaService {
     return this.sanitizeAccount(updated);
   }
 
+  /**
+   * Permanent removal (Part: Settings > Social Accounts — distinct from
+   * disconnectAccount, which keeps the row and just drops the token). Post
+   * history is kept and loses its account link (SocialPostVersion.accountId
+   * is nullable, SetNull on delete) — same "record survives, link doesn't"
+   * contract as EmailAccountsService.remove. Conversations/messages/notes
+   * and access grants cascade-delete: they're operational data scoped to
+   * this specific connected account, not standalone business records.
+   */
+  async deleteAccount(user: JwtClaims, id: string) {
+    const existing = await this.prisma.socialAccount.findFirst({ where: { id, orgId: user.orgId } });
+    if (!existing) throw new NotFoundException("Social account not found");
+    await this.prisma.socialAccount.delete({ where: { id } });
+    await this.writeAudit(user.orgId, user.sub, "ACCOUNT_DELETED", { accountId: id, diff: { platform: existing.platform, username: existing.username } });
+    return { deleted: true };
+  }
+
   async listAccessForAccount(orgId: string, accountId: string) {
     const account = await this.prisma.socialAccount.findFirst({ where: { id: accountId, orgId } });
     if (!account) throw new NotFoundException("Social account not found");
@@ -186,8 +206,14 @@ export class SocialMediaService {
     if (!targetUser) throw new NotFoundException("User not found");
     return this.prisma.socialAccountAccess.upsert({
       where: { userId_accountId: { userId: dto.userId, accountId } },
-      create: { userId: dto.userId, accountId, canPublish: dto.canPublish ?? false, canApprove: dto.canApprove ?? false },
-      update: { canPublish: dto.canPublish, canApprove: dto.canApprove },
+      create: {
+        userId: dto.userId,
+        accountId,
+        canView: dto.canView ?? true,
+        canPublish: dto.canPublish ?? false,
+        canApprove: dto.canApprove ?? false,
+      },
+      update: { canView: dto.canView, canPublish: dto.canPublish, canApprove: dto.canApprove },
     });
   }
 
@@ -237,33 +263,10 @@ export class SocialMediaService {
     }
   }
 
-  async getConversations(user: JwtClaims, accountId: string) {
-    const account = await this.getOwnedAccount(user, accountId);
-    try {
-      return await this.registry.for(account.platform).listConversations(account);
-    } catch (err) {
-      this.asBadRequest(err);
-    }
-  }
-
-  async getMessages(user: JwtClaims, accountId: string, conversationId: string) {
-    const account = await this.getOwnedAccount(user, accountId);
-    try {
-      return await this.registry.for(account.platform).listMessages(account, conversationId);
-    } catch (err) {
-      this.asBadRequest(err);
-    }
-  }
-
-  async sendReply(user: JwtClaims, accountId: string, conversationId: string, text: string) {
-    const account = await this.getOwnedAccount(user, accountId, "publish");
-    try {
-      await this.registry.for(account.platform).sendMessage(account, conversationId, text);
-      return { sent: true };
-    } catch (err) {
-      this.asBadRequest(err);
-    }
-  }
+  // Conversations/messages/reply moved to SocialInboxService (Part: Unified
+  // Social Media DM Monitoring) -- the persisted inbox replaces this
+  // module's old live-fetch-only DM tab, which is why there's no
+  // getConversations/getMessages/sendReply here anymore.
 
   // ---------------------------------------------------------------------
   // OAuth connect flow
@@ -438,7 +441,7 @@ export class SocialMediaService {
   async getPost(user: JwtClaims, id: string) {
     const post = await this.prisma.socialPost.findFirst({ where: { id, orgId: user.orgId }, include: this.postInclude });
     if (!post) throw new NotFoundException("Post not found");
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId));
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null));
     return this.withMediaUrls(post);
   }
 
@@ -519,7 +522,7 @@ export class SocialMediaService {
     const post = await this.prisma.socialPost.findFirst({ where: { id, orgId: user.orgId }, include: { versions: true } });
     if (!post) throw new NotFoundException("Post not found");
     if (post.status !== "DRAFT") throw new BadRequestException("Only draft posts can be edited — unschedule or reject first");
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId));
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null));
 
     if (dto.versions) {
       const accountIds = dto.versions.map((v) => v.accountId);
@@ -553,9 +556,9 @@ export class SocialMediaService {
   async submitForReview(user: JwtClaims, id: string) {
     const post = await this.getPostOr404(user.orgId, id);
     if (post.status !== "DRAFT") throw new BadRequestException(`Cannot submit a post in status ${post.status}`);
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId));
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null));
 
-    const anyApprovalRequired = await this.anyAccountRequiresApproval(post.versions.map((v) => v.accountId));
+    const anyApprovalRequired = await this.anyAccountRequiresApproval(post.versions.map((v) => v.accountId).filter((id): id is string => id !== null));
     const nextStatus: SocialPostStatus = anyApprovalRequired ? "PENDING_REVIEW" : "APPROVED";
 
     const updated = await this.prisma.socialPost.update({ where: { id }, data: { status: nextStatus }, include: this.postInclude });
@@ -570,7 +573,7 @@ export class SocialMediaService {
   async approve(user: JwtClaims, id: string) {
     const post = await this.getPostOr404(user.orgId, id);
     if (post.status !== "PENDING_REVIEW") throw new BadRequestException(`Cannot approve a post in status ${post.status}`);
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId), "approve");
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null), "approve");
 
     const nextStatus: SocialPostStatus = post.scheduledAt ? "SCHEDULED" : "APPROVED";
     const updated = await this.prisma.socialPost.update({
@@ -586,7 +589,7 @@ export class SocialMediaService {
   async reject(user: JwtClaims, id: string, reason: string) {
     const post = await this.getPostOr404(user.orgId, id);
     if (post.status !== "PENDING_REVIEW") throw new BadRequestException(`Cannot reject a post in status ${post.status}`);
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId), "approve");
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null), "approve");
 
     const updated = await this.prisma.socialPost.update({
       where: { id },
@@ -602,7 +605,7 @@ export class SocialMediaService {
     const post = await this.getPostOr404(user.orgId, id);
     if (post.status !== "APPROVED") throw new BadRequestException(`Cannot schedule a post in status ${post.status}`);
     if (!post.scheduledAt && !scheduledAt) throw new BadRequestException("scheduledAt is required");
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId), "publish");
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null), "publish");
 
     const updated = await this.prisma.socialPost.update({
       where: { id },
@@ -617,7 +620,7 @@ export class SocialMediaService {
   async cancelSchedule(user: JwtClaims, id: string) {
     const post = await this.getPostOr404(user.orgId, id);
     if (post.status !== "SCHEDULED") throw new BadRequestException(`Cannot unschedule a post in status ${post.status}`);
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId), "publish");
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null), "publish");
 
     const updated = await this.prisma.socialPost.update({ where: { id }, data: { status: "APPROVED" }, include: this.postInclude });
     await this.writeAudit(user.orgId, user.sub, "POST_UNSCHEDULED", { postId: id });
@@ -628,7 +631,7 @@ export class SocialMediaService {
   async retryFailed(user: JwtClaims, id: string) {
     const post = await this.getPostOr404(user.orgId, id);
     if (post.status !== "FAILED") throw new BadRequestException(`Cannot retry a post in status ${post.status}`);
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId), "publish");
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null), "publish");
 
     const updated = await this.prisma.socialPost.update({ where: { id }, data: { status: "SCHEDULED", scheduledAt: new Date() }, include: this.postInclude });
     await this.writeAudit(user.orgId, user.sub, "POST_RETRY", { postId: id });
@@ -639,7 +642,7 @@ export class SocialMediaService {
   async deletePost(user: JwtClaims, id: string) {
     const post = await this.getPostOr404(user.orgId, id);
     if (!["DRAFT", "REJECTED"].includes(post.status)) throw new BadRequestException("Only draft or rejected posts can be deleted");
-    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId));
+    await this.assertAccountsAccess(user, post.versions.map((v) => v.accountId).filter((id): id is string => id !== null));
     await this.prisma.socialPost.delete({ where: { id } });
     await this.writeAudit(user.orgId, user.sub, "POST_DELETED", { postId: id });
     return { deleted: true };

@@ -328,14 +328,6 @@ export const api = {
   getSocialAccounts: () => request("/social-media/accounts"),
   getSocialStats: () => request("/social-media/stats"),
   getAccountFeed: (accountId: string) => request(`/social-media/accounts/${accountId}/feed`),
-  getAccountConversations: (accountId: string) => request(`/social-media/accounts/${accountId}/conversations`),
-  getConversationMessages: (accountId: string, conversationId: string) =>
-    request(`/social-media/accounts/${accountId}/conversations/${conversationId}/messages`),
-  sendConversationReply: (accountId: string, conversationId: string, text: string) =>
-    request(`/social-media/accounts/${accountId}/conversations/${conversationId}/reply`, {
-      method: "POST",
-      body: JSON.stringify({ text }),
-    }),
   getSocialPosts: (params: Record<string, string> = {}) =>
     request(`/social-media/posts?${new URLSearchParams(params).toString()}`),
   getSocialPost: (id: string) => request(`/social-media/posts/${id}`),
@@ -406,6 +398,7 @@ export const api = {
   updateSocialAccountSettings: (id: string, body: Record<string, unknown>) =>
     request(`/settings/social-media/accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   disconnectSocialAccount: (id: string) => request(`/settings/social-media/accounts/${id}/disconnect`, { method: "POST" }),
+  deleteSocialAccount: (id: string) => request(`/settings/social-media/accounts/${id}`, { method: "DELETE" }),
   connectSocialAccount: (platform: string) =>
     request<{ url: string }>(`/settings/social-media/accounts/${platform}/connect`, { method: "POST" }),
   getPendingSocialSelection: (pendingId: string) => request(`/settings/social-media/accounts/pending/${pendingId}`),
@@ -415,8 +408,24 @@ export const api = {
       body: JSON.stringify({ externalAccountId }),
     }),
   getSocialAccountAccess: (accountId: string) => request(`/settings/social-media/accounts/${accountId}/access`),
-  grantSocialAccountAccess: (accountId: string, body: { userId: string; canPublish?: boolean; canApprove?: boolean }) =>
+  grantSocialAccountAccess: (accountId: string, body: { userId: string; canView?: boolean; canPublish?: boolean; canApprove?: boolean }) =>
     request(`/settings/social-media/accounts/${accountId}/access`, { method: "POST", body: JSON.stringify(body) }),
   revokeSocialAccountAccess: (accountId: string, userId: string) =>
     request(`/settings/social-media/accounts/${accountId}/access/${userId}`, { method: "DELETE" }),
+
+  // ---- Social Inbox (Unified DM Monitoring) ----
+  getSocialInboxStats: () => request("/social-inbox/stats"),
+  getSocialInboxConversations: (params: Record<string, string> = {}) =>
+    request(`/social-inbox/conversations?${new URLSearchParams(params).toString()}`),
+  getSocialInboxConversation: (id: string) => request(`/social-inbox/conversations/${id}`),
+  updateSocialInboxConversation: (id: string, body: { status?: string; assignedToUserId?: string }) =>
+    request(`/social-inbox/conversations/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  replySocialInboxConversation: (id: string, text: string) =>
+    request(`/social-inbox/conversations/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  createSocialInboxNote: (id: string, note: string) =>
+    request(`/social-inbox/conversations/${id}/notes`, { method: "POST", body: JSON.stringify({ note }) }),
+  updateSocialInboxNote: (id: string, noteId: string, note: string) =>
+    request(`/social-inbox/conversations/${id}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ note }) }),
+  deleteSocialInboxNote: (id: string, noteId: string) =>
+    request(`/social-inbox/conversations/${id}/notes/${noteId}`, { method: "DELETE" }),
 };

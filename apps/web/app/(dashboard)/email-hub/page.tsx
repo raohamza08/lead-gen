@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
@@ -20,6 +20,17 @@ interface Tag {
   id: string;
   name: string;
   color: string;
+}
+
+interface Stats {
+  connectedAccounts: number;
+  unread: number;
+  important: number;
+  receivedToday: number;
+  receivedThisWeek: number;
+  leadsFromEmail: number;
+  ignored: number;
+  possibleLeads: number;
 }
 
 interface Message {
@@ -48,9 +59,10 @@ interface Message {
  *  (for Leads) a client-side filter on thread.leadId, keeping the API's
  *  filter surface small rather than growing a bespoke enum value per
  *  sidebar item. */
-function statusForView(view: string | null): "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" {
+function statusForView(view: string | null): "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" {
   if (view === "important") return "IMPORTANT";
   if (view === "ignored") return "IGNORED";
+  if (view === "leads") return "LEADS";
   return "ALL";
 }
 
@@ -80,6 +92,8 @@ function EmailHubPageContent() {
   const [accountId, setAccountId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<string>("");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openThreadId, setOpenThreadId] = useState<string | null>(null);
   const [showCompose, setShowCompose] = useState(false);
@@ -90,13 +104,17 @@ function EmailHubPageContent() {
 
   const status = statusForView(view);
 
+  // The sidebar's view links are plain navigation (query-string change, no
+  // state setter), so this is the one filter change resetPage can't cover.
+  useEffect(() => setPage(1), [view]);
+
   // Cached: switching tabs and coming back shows this instantly from cache
   // (staleTime in query-provider.tsx) while quietly refetching in the
   // background — isFetching (not isLoading) reflects that background pass.
   const messagesQuery = useQuery({
-    queryKey: ["email-messages", status, accountId, search, tagFilter],
+    queryKey: ["email-messages", status, accountId, search, tagFilter, page, pageSize],
     queryFn: () => {
-      const params: Record<string, string> = { status };
+      const params: Record<string, string> = { status, page: String(page), pageSize: String(pageSize) };
       if (accountId) params.accountId = accountId;
       if (search.trim()) params.search = search.trim();
       if (tagFilter) params.tagIds = tagFilter;
@@ -111,16 +129,25 @@ function EmailHubPageContent() {
     queryKey: ["email-tags"],
     queryFn: () => api.getEmailTags() as Promise<Tag[]>,
   });
+  const statsQuery = useQuery({
+    queryKey: ["email-stats"],
+    queryFn: () => api.getEmailHubStats() as Promise<Stats>,
+  });
+
+  // Any filter change invalidates the current page — staying on page 4 of a
+  // now-different result set would either show a stale slice or run past the
+  // end silently.
+  function resetPage<T>(setter: (v: T) => void) {
+    return (v: T) => {
+      setter(v);
+      setPage(1);
+    };
+  }
 
   const accounts = accountsQuery.data ?? [];
   const tags = tagsQuery.data ?? [];
   const total = messagesQuery.data?.total ?? 0;
-  // "Leads" isn't a real status filter (see statusForView) — applied
-  // client-side against the already-fetched, already-cached page.
-  const messages = useMemo(() => {
-    const rows = messagesQuery.data?.messages ?? [];
-    return view === "leads" ? rows.filter((m) => m.thread.leadId) : rows;
-  }, [messagesQuery.data, view]);
+  const messages = messagesQuery.data?.messages ?? [];
 
   function invalidateMessages() {
     queryClient.invalidateQueries({ queryKey: ["email-messages"] });
@@ -128,10 +155,14 @@ function EmailHubPageContent() {
   function invalidateAccounts() {
     queryClient.invalidateQueries({ queryKey: ["email-accounts"] });
   }
+  function invalidateStats() {
+    queryClient.invalidateQueries({ queryKey: ["email-stats"] });
+  }
 
   useRealtimeRefetch(["emailHub.messageReceived", "emailHub.messagesUpdated"], () => {
     invalidateMessages();
     invalidateAccounts();
+    invalidateStats();
   });
 
   const allSelected = messages.length > 0 && selected.size === messages.length;
@@ -154,6 +185,7 @@ function EmailHubPageContent() {
       setSelected(new Set());
       invalidateMessages();
       invalidateAccounts();
+      invalidateStats();
     },
     onError: (err) => setActionError((err as Error).message),
   });
@@ -165,7 +197,10 @@ function EmailHubPageContent() {
   const confirmLeadMutation = useMutation({
     mutationFn: (threadId: string) => api.addEmailThreadToLead(threadId),
     onMutate: (threadId) => setConfirmingLeadId(threadId),
-    onSuccess: invalidateMessages,
+    onSuccess: () => {
+      invalidateMessages();
+      invalidateStats();
+    },
     onError: (err) => setActionError((err as Error).message),
     onSettled: () => setConfirmingLeadId(null),
   });
@@ -176,7 +211,10 @@ function EmailHubPageContent() {
 
   const markReadMutation = useMutation({
     mutationFn: (messageId: string) => api.bulkEmailAction({ messageIds: [messageId], action: "READ" }),
-    onSuccess: invalidateMessages,
+    onSuccess: () => {
+      invalidateMessages();
+      invalidateStats();
+    },
   });
   function openMessage(m: Message) {
     setOpenThreadId(m.threadId);
@@ -239,6 +277,16 @@ function EmailHubPageContent() {
         </div>
       </div>
 
+      {statsQuery.data && (
+        <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-ink/55">
+          <span>{total} in this view</span>
+          <span>{statsQuery.data.unread} unread</span>
+          <span>{statsQuery.data.leadsFromEmail} leads</span>
+          <span>{statsQuery.data.possibleLeads} possible leads</span>
+          <span>{statsQuery.data.connectedAccounts} accounts</span>
+        </div>
+      )}
+
       {error && (
         <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
           {error}
@@ -280,7 +328,7 @@ function EmailHubPageContent() {
           (Part: Individual Account View / Unified Inbox toggle). */}
       <div className="flex flex-wrap gap-1.5">
         <button
-          onClick={() => setAccountId("")}
+          onClick={() => resetPage(setAccountId)("")}
           className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
             accountId === "" ? "bg-accent font-medium text-white" : "border border-[var(--line)] text-ink/65 hover:bg-ink/5"
           }`}
@@ -290,7 +338,7 @@ function EmailHubPageContent() {
         {accounts.map((a) => (
           <button
             key={a.id}
-            onClick={() => setAccountId(a.id)}
+            onClick={() => resetPage(setAccountId)(a.id)}
             className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
               accountId === a.id ? "bg-accent font-medium text-white" : "border border-[var(--line)] text-ink/65 hover:bg-ink/5"
             }`}
@@ -310,13 +358,13 @@ function EmailHubPageContent() {
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={(e) => resetPage(setSearch)(e.target.value)}
           placeholder="Search sender, subject, body…"
           className="min-w-[240px] flex-1 rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
         />
         <select
           value={tagFilter}
-          onChange={(e) => setTagFilter(e.target.value)}
+          onChange={(e) => resetPage(setTagFilter)(e.target.value)}
           className="rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
         >
           <option value="">All tags</option>
@@ -448,7 +496,7 @@ function EmailHubPageContent() {
               {messages.length === 0 && (
                 <tr>
                   <td colSpan={6} className="px-3 py-10 text-center text-sm text-ink/50">
-                    {view === "leads" ? "No emails linked to leads yet." : "Nothing here."}
+                    {view === "leads" ? "No leads yet — confirmed or AI-suggested ones show up here." : "Nothing here."}
                   </td>
                 </tr>
               )}
@@ -456,7 +504,43 @@ function EmailHubPageContent() {
           </table>
         </div>
       )}
-      <p className="text-xs text-ink/40">{total} total</p>
+
+      {/* Pagination — the API caps every response to one page even when a
+          filter matches thousands of emails, so this is required to ever see
+          past the first pageSize rows, not just a UX nicety. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink/50">
+        <span>
+          {total === 0 ? "0 of 0" : `${(page - 1) * pageSize + 1}–${Math.min(page * pageSize, total)} of ${total}`}
+        </span>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5">
+            Rows per page
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded border border-[var(--line)] bg-transparent px-1.5 py-1 text-xs"
+            >
+              {[25, 50, 100, 200].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-30">
+            ← Prev
+          </button>
+          <span>
+            Page {page} of {Math.max(1, Math.ceil(total / pageSize))}
+          </span>
+          <button disabled={page * pageSize >= total} onClick={() => setPage((p) => p + 1)} className="disabled:opacity-30">
+            Next →
+          </button>
+        </div>
+      </div>
 
       {openThreadId && (
         <MessageDetailPanel
@@ -465,6 +549,7 @@ function EmailHubPageContent() {
           onChanged={() => {
             invalidateMessages();
             invalidateAccounts();
+            invalidateStats();
           }}
         />
       )}

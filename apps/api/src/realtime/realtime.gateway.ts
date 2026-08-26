@@ -23,6 +23,8 @@ import { corsOriginValidator } from "../common/cors";
  *   email.sent           { leadId, emailMessageId }
  *   email.failed         { leadId, emailMessageId }
  *   notification.created { id, severity, message, leadId? }
+ *   socialInbox.messageReceived    { conversationId, socialAccountId }
+ *   socialInbox.conversationUpdated { conversationId } — status/assignment changed
  */
 @Injectable()
 @WebSocketGateway({

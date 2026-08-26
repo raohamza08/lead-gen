@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { useRealtimeEvent, useRealtimeRefetch } from "../../../lib/realtime";
 import { AGENT_LABELS } from "../../../lib/agent-labels";
 import { ALLOWED_TRANSITIONS, PIPELINE_STAGE_ORDER, PipelineStage, isValidRewind } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
+import { LoadingRow, Spinner } from "../../../components/spinner";
 
 interface AgentRunSummary {
   agent: string;
@@ -194,6 +196,7 @@ const LABELS: Record<string, string> = {
 };
 
 const COLUMNS = Object.values(PipelineStage);
+const EMPTY_LEADS: LeadRow[] = [];
 
 /** Whether a card may be dropped here, mirroring the API's state machine.
  *  Checked client-side purely to show the affordance — the API re-validates,
@@ -214,7 +217,7 @@ function scoreTone(score?: number | null) {
 }
 
 export default function PipelinePage() {
-  const [leads, setLeads] = useState<LeadRow[]>([]);
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState<LeadRow | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
@@ -225,14 +228,23 @@ export default function PipelinePage() {
   // below (agentRun.recorded's status/notes still come from that refetch).
   const [runningAgents, setRunningAgents] = useState<Record<string, RunningAgent & { at: number }>>({});
 
-  function load() {
-    api
-      .getLeads({ pageSize: "200" })
-      .then((res: any) => setLeads(res.items ?? res))
-      .catch((err) => setError((err as Error).message));
-  }
+  // Same query key as /leads — both pages call the identical endpoint with
+  // identical params, so they share one cache entry: switching between them
+  // shows the other's already-loaded data instantly.
+  const leadsQuery = useQuery({
+    queryKey: ["leads"],
+    queryFn: async () => {
+      const res: any = await api.getLeads({ pageSize: "200" });
+      return (res.items ?? res) as LeadRow[];
+    },
+  });
+  // Stable empty-array identity when data is undefined -- `?? []` would mint
+  // a new array every render and defeat the useMemo below it.
+  const leads = leadsQuery.data ?? EMPTY_LEADS;
 
-  useEffect(load, []);
+  function invalidateLeads() {
+    queryClient.invalidateQueries({ queryKey: ["leads"] });
+  }
 
   // No page in this app should ever need a manual reload to see current
   // state (Part: autonomous system) — this board previously fetched once on
@@ -240,7 +252,7 @@ export default function PipelinePage() {
   // moved stayed frozen in its old column until someone happened to refresh.
   useRealtimeRefetch(
     ["lead.created", "lead.stageChanged", "lead.updated", "agentRun.recorded", "agentDispatch.status"],
-    load,
+    invalidateLeads,
   );
 
   // Prunes entries older than 5 minutes — a safety net for the rare case an
@@ -296,9 +308,9 @@ export default function PipelinePage() {
     // Optimistic: the card moves immediately so dragging feels direct. Reverted
     // below if the API rejects it, which it can — the server re-validates the
     // transition and is the authority.
-    const previous = leads;
-    setLeads((rows) =>
-      rows.map((r) =>
+    const previous = queryClient.getQueryData<LeadRow[]>(["leads"]);
+    queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
+      (rows ?? []).map((r) =>
         r.id === lead.id
           ? { ...r, pipelineState: { stage, previousStage: from, enteredStageAt: new Date().toISOString() } }
           : r,
@@ -307,9 +319,9 @@ export default function PipelinePage() {
 
     try {
       await api.advanceStage(lead.id, stage);
-      load();
+      invalidateLeads();
     } catch (err) {
-      setLeads(previous);
+      queryClient.setQueryData(["leads"], previous);
       setError(`Could not move ${lead.companyName}: ${(err as Error).message}`);
     } finally {
       setBusy(null);
@@ -324,7 +336,7 @@ export default function PipelinePage() {
     setError(null);
     try {
       await api.rewindLead(lead.id, toStage);
-      load();
+      invalidateLeads();
     } catch (err) {
       setError(`Could not move ${lead.companyName} back: ${(err as Error).message}`);
     } finally {
@@ -351,7 +363,7 @@ export default function PipelinePage() {
     setError(null);
     try {
       await api.deleteLead(lead.id);
-      setLeads((rows) => rows.filter((r) => r.id !== lead.id));
+      queryClient.setQueryData<LeadRow[]>(["leads"], (rows) => (rows ?? []).filter((r) => r.id !== lead.id));
     } catch (err) {
       setError(`Could not delete ${lead.companyName}: ${(err as Error).message}`);
     } finally {
@@ -363,7 +375,10 @@ export default function PipelinePage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
+            {leadsQuery.isFetching && !leadsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
+          </div>
           <p className="mt-0.5 text-xs text-ink/55">
             Drag a card to move it. Only valid next stages accept a drop — the same rules the
             automation follows, so a manual move can&apos;t create a state the sequencer won&apos;t
@@ -373,12 +388,15 @@ export default function PipelinePage() {
         <span className="text-xs text-ink/50">{leads.length} leads</span>
       </div>
 
-      {error && (
+      {(error || leadsQuery.error) && (
         <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-          {error}
+          {error ?? (leadsQuery.error as Error).message}
         </div>
       )}
 
+      {leadsQuery.isLoading ? (
+        <LoadingRow label="Loading pipeline…" />
+      ) : (
       <div className="flex gap-3 overflow-x-auto pb-3">
         {COLUMNS.map((stage) => {
           const cards = byStage.get(stage) ?? [];
@@ -495,6 +513,7 @@ export default function PipelinePage() {
           );
         })}
       </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
+import { Spinner } from "../../../../components/spinner";
 
 interface Account {
   id: string;
@@ -36,8 +38,18 @@ interface AutomationRun {
  * silently do nothing.
  */
 export default function AutomationsPage() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [automations, setAutomations] = useState<Automation[]>([]);
+  const queryClient = useQueryClient();
+  // Same query key as /social-media/accounts -- shares the cache entry.
+  const accountsQuery = useQuery({
+    queryKey: ["social-media-accounts"],
+    queryFn: () => api.getSocialAccounts() as Promise<Account[]>,
+  });
+  const automationsQuery = useQuery({
+    queryKey: ["social-media-automations"],
+    queryFn: () => api.getSocialAutomations() as Promise<Automation[]>,
+  });
+  const accounts = accountsQuery.data ?? [];
+  const automations = automationsQuery.data ?? [];
   const [name, setName] = useState("");
   const [accountIds, setAccountIds] = useState<string[]>([]);
   const [brief, setBrief] = useState("");
@@ -47,13 +59,8 @@ export default function AutomationsPage() {
   const [saving, setSaving] = useState(false);
 
   function refresh() {
-    api.getSocialAutomations().then((r) => setAutomations(r as Automation[])).catch((err) => setError((err as Error).message));
+    queryClient.invalidateQueries({ queryKey: ["social-media-automations"] });
   }
-
-  useEffect(() => {
-    refresh();
-    api.getSocialAccounts().then((r) => setAccounts(r as Account[])).catch((err) => setError((err as Error).message));
-  }, []);
 
   function toggleAccount(id: string) {
     setAccountIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -96,7 +103,7 @@ export default function AutomationsPage() {
     if (!confirm("Delete this automation?")) return;
     try {
       await api.deleteSocialAutomation(id);
-      setAutomations((a) => a.filter((x) => x.id !== id));
+      queryClient.setQueryData<Automation[]>(["social-media-automations"], (a) => (a ?? []).filter((x) => x.id !== id));
     } catch (err) {
       setError((err as Error).message);
     }
@@ -127,15 +134,19 @@ export default function AutomationsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">Automations</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold tracking-tight">Automations</h1>
+          {(accountsQuery.isFetching || automationsQuery.isFetching) &&
+            !(accountsQuery.isLoading || automationsQuery.isLoading) && <Spinner className="h-3.5 w-3.5" />}
+        </div>
         <p className="mt-0.5 text-xs text-ink/50">
           Automatically draft a post (or notify someone) whenever a new lead is created.
         </p>
       </div>
 
-      {error && (
+      {(error || accountsQuery.error || automationsQuery.error) && (
         <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-          {error}
+          {error ?? ((accountsQuery.error ?? automationsQuery.error) as Error).message}
         </div>
       )}
 

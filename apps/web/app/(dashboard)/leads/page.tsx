@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadLeadsCsv } from "../../../lib/api-client";
 import { useRealtimeRefetch } from "../../../lib/realtime";
 import { PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
+import { LoadingRow, Spinner } from "../../../components/spinner";
 
 interface LeadRow extends Lead {
   score: LeadScore | null;
@@ -75,6 +77,8 @@ interface ImportResult {
   failed: { row: number; reason: string }[];
 }
 
+const EMPTY_LEADS: LeadRow[] = [];
+
 const EMPTY_LEAD = {
   companyName: "",
   website: "",
@@ -134,7 +138,7 @@ function StagePill({ stage }: { stage?: string | null }) {
 }
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<LeadRow[]>([]);
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -188,7 +192,7 @@ export default function LeadsPage() {
       setImportResult(result);
       setImportPreview(null);
       setImportCsv(null);
-      load();
+      invalidateLeads();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -208,18 +212,26 @@ export default function LeadsPage() {
     }
   }
 
-  function load() {
-    api
-      .getLeads({ pageSize: "200" })
-      .then((res: any) => setLeads(res.items ?? res))
-      .catch((err) => setError((err as Error).message));
-  }
+  // Cached: revisiting this tab shows the last-known list instantly while
+  // quietly re-verifying in the background (staleTime in query-provider.tsx).
+  const leadsQuery = useQuery({
+    queryKey: ["leads"],
+    queryFn: async () => {
+      const res: any = await api.getLeads({ pageSize: "200" });
+      return (res.items ?? res) as LeadRow[];
+    },
+  });
+  // Stable empty-array identity when data is undefined -- `?? []` would mint
+  // a new array every render and defeat the useMemo hooks below it.
+  const leads = leadsQuery.data ?? EMPTY_LEADS;
 
-  useEffect(load, []);
+  function invalidateLeads() {
+    queryClient.invalidateQueries({ queryKey: ["leads"] });
+  }
 
   // New leads land here live during a "Run now" extraction (or auto-discovery)
   // instead of only appearing after a manual refresh (Part: autonomous system).
-  useRealtimeRefetch(["lead.created"], load);
+  useRealtimeRefetch(["lead.created"], invalidateLeads);
 
   // Filtered in the browser because the whole page is already loaded; going
   // back to the server for each keystroke would be slower and no more correct
@@ -258,7 +270,7 @@ export default function LeadsPage() {
       setDraft(EMPTY_LEAD);
       setShowForm(false);
       setNotice(`Added ${draft.companyName}. It starts unverified — run enrichment to score it.`);
-      load();
+      invalidateLeads();
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -270,7 +282,10 @@ export default function LeadsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Leads</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">Leads</h1>
+            {leadsQuery.isFetching && !leadsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
+          </div>
           <p className="mt-0.5 text-xs text-ink/55">
             {filtered.length === leads.length
               ? `${leads.length} leads`
@@ -312,9 +327,9 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {error && (
+      {(error || leadsQuery.error) && (
         <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-          {error}
+          {error ?? (leadsQuery.error as Error).message}
         </div>
       )}
       {notice && (
@@ -572,6 +587,11 @@ export default function LeadsPage() {
         )}
       </div>
 
+      {leadsQuery.isLoading ? (
+        <div className="card">
+          <LoadingRow label="Loading leads…" />
+        </div>
+      ) : (
       <div className="card overflow-x-auto">
         <table className="w-full min-w-[900px] text-sm">
           <thead className="border-b border-[var(--line)] text-left text-[11px] uppercase tracking-wide text-ink/55">
@@ -638,6 +658,7 @@ export default function LeadsPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

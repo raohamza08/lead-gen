@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
+import { Spinner } from "../../../../components/spinner";
 
 const PLATFORMS = ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE"] as const;
 type Platform = (typeof PLATFORMS)[number];
@@ -53,7 +55,15 @@ function StatusBadge({ status }: { status: Account["status"] }) {
  * rather than pretending success.
  */
 export default function SocialAccountsPage() {
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const queryClient = useQueryClient();
+  const accountsQuery = useQuery({
+    queryKey: ["social-media-accounts"],
+    queryFn: () => api.getSocialAccounts() as Promise<Account[]>,
+  });
+  const accounts = accountsQuery.data ?? [];
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["social-media-accounts"] });
+  }
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -64,13 +74,6 @@ export default function SocialAccountsPage() {
   const [pendingPlatform, setPendingPlatform] = useState<Platform | null>(null);
   const [pendingCandidates, setPendingCandidates] = useState<PendingCandidate[] | null>(null);
   const [selectingId, setSelectingId] = useState<string | null>(null);
-
-  function refresh() {
-    api
-      .getSocialAccounts()
-      .then((res) => setAccounts(res as Account[]))
-      .catch((err) => setError((err as Error).message));
-  }
 
   function loadPendingSelection(id: string) {
     api
@@ -87,7 +90,6 @@ export default function SocialAccountsPage() {
   }
 
   useEffect(() => {
-    refresh();
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("social_connected");
     const connectError = params.get("social_connect_error");
@@ -167,7 +169,10 @@ export default function SocialAccountsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Accounts</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-lg font-semibold tracking-tight">Accounts</h1>
+            {accountsQuery.isFetching && !accountsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
+          </div>
           <p className="mt-0.5 text-xs text-ink/50">
             Connect one row per platform account. Per-account defaults and access grants live in{" "}
             <a href="/settings/social-media" className="text-accent hover:underline">
@@ -185,9 +190,9 @@ export default function SocialAccountsPage() {
         </button>
       </div>
 
-      {error && (
+      {(error || accountsQuery.error) && (
         <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-          {error}
+          {error ?? (accountsQuery.error as Error).message}
         </div>
       )}
       {notice && (

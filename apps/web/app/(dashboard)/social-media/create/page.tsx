@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
+import { Spinner } from "../../../../components/spinner";
 
 interface Account {
   id: string;
@@ -50,10 +52,32 @@ interface Version {
  */
 export default function CreatePostPage() {
   const router = useRouter();
-  const [accounts, setAccounts] = useState<Account[]>([]);
-  const [media, setMedia] = useState<MediaAsset[]>([]);
-  const [hashtagGroups, setHashtagGroups] = useState<HashtagGroup[]>([]);
-  const [templates, setTemplates] = useState<ContentTemplate[]>([]);
+  // Same query key as /social-media/accounts -- shares the cache entry.
+  const accountsQuery = useQuery({
+    queryKey: ["social-media-accounts"],
+    queryFn: () => api.getSocialAccounts() as Promise<Account[]>,
+  });
+  const mediaQuery = useQuery({
+    queryKey: ["social-media-library"],
+    queryFn: () => api.getSocialMedia() as Promise<MediaAsset[]>,
+  });
+  const hashtagGroupsQuery = useQuery({
+    queryKey: ["social-media-hashtag-groups"],
+    queryFn: () => api.getSocialHashtagGroups() as Promise<HashtagGroup[]>,
+  });
+  const templatesQuery = useQuery({
+    queryKey: ["social-media-templates"],
+    queryFn: () => api.getSocialTemplates() as Promise<ContentTemplate[]>,
+  });
+  const accounts = accountsQuery.data ?? [];
+  const media = mediaQuery.data ?? [];
+  const hashtagGroups = hashtagGroupsQuery.data ?? [];
+  const templates = templatesQuery.data ?? [];
+  const loadError = [accountsQuery.error, mediaQuery.error, hashtagGroupsQuery.error, templatesQuery.error].find(Boolean);
+  const isFetchingReference =
+    accountsQuery.isFetching || mediaQuery.isFetching || hashtagGroupsQuery.isFetching || templatesQuery.isFetching;
+  const isLoadingReference =
+    accountsQuery.isLoading || mediaQuery.isLoading || hashtagGroupsQuery.isLoading || templatesQuery.isLoading;
   const [selected, setSelected] = useState<string[]>([]);
   const [versions, setVersions] = useState<Record<string, Version>>({});
   const [mediaAssetIds, setMediaAssetIds] = useState<string[]>([]);
@@ -65,17 +89,6 @@ export default function CreatePostPage() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [saving, setSaving] = useState<"DRAFT" | "PENDING_REVIEW" | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    Promise.all([api.getSocialAccounts(), api.getSocialMedia(), api.getSocialHashtagGroups(), api.getSocialTemplates()])
-      .then(([a, m, h, t]) => {
-        setAccounts(a as Account[]);
-        setMedia(m as MediaAsset[]);
-        setHashtagGroups(h as HashtagGroup[]);
-        setTemplates(t as ContentTemplate[]);
-      })
-      .catch((err) => setError((err as Error).message));
-  }, []);
 
   function toggleAccount(account: Account) {
     setSelected((prev) => {
@@ -159,15 +172,18 @@ export default function CreatePostPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">Create Post</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold tracking-tight">Create Post</h1>
+          {isFetchingReference && !isLoadingReference && <Spinner className="h-3.5 w-3.5" />}
+        </div>
         <p className="mt-0.5 text-xs text-ink/50">
           Pick accounts, write or generate content per platform, attach media, and schedule.
         </p>
       </div>
 
-      {error && (
+      {(error || loadError) && (
         <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-          {error}
+          {error ?? (loadError as Error).message}
         </div>
       )}
 

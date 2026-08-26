@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
+import { LoadingRow, Spinner } from "../../../components/spinner";
 
 interface PendingApproval {
   id: string;
@@ -38,40 +40,53 @@ interface MailboxHealth {
 }
 
 export default function SequencesPage() {
-  const [approvals, setApprovals] = useState<PendingApproval[]>([]);
-  const [upcoming, setUpcoming] = useState<UpcomingSend[]>([]);
-  const [mailboxes, setMailboxes] = useState<MailboxHealth[]>([]);
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
 
-  function refresh() {
-    Promise.all([api.getPendingApprovals(), api.getUpcomingSends(), api.getEmailAccountsHealth()])
-      .then(([a, u, m]) => {
-        setApprovals(a as PendingApproval[]);
-        setUpcoming(u as UpcomingSend[]);
-        setMailboxes(m as MailboxHealth[]);
-      })
-      .catch((err) => setError((err as Error).message));
-  }
+  const approvalsQuery = useQuery({
+    queryKey: ["sequences-approvals"],
+    queryFn: () => api.getPendingApprovals() as Promise<PendingApproval[]>,
+  });
+  const upcomingQuery = useQuery({
+    queryKey: ["sequences-upcoming"],
+    queryFn: () => api.getUpcomingSends() as Promise<UpcomingSend[]>,
+  });
+  const mailboxesQuery = useQuery({
+    queryKey: ["sequences-mailboxes"],
+    queryFn: () => api.getEmailAccountsHealth() as Promise<MailboxHealth[]>,
+  });
 
-  useEffect(refresh, []);
+  const approvals = approvalsQuery.data ?? [];
+  const upcoming = upcomingQuery.data ?? [];
+  const mailboxes = mailboxesQuery.data ?? [];
+  const isLoading = approvalsQuery.isLoading || upcomingQuery.isLoading || mailboxesQuery.isLoading;
+  const isFetching = approvalsQuery.isFetching || upcomingQuery.isFetching || mailboxesQuery.isFetching;
 
-  async function act(leadId: string, emailMessageId: string, action: "APPROVE" | "REJECT") {
-    setBusyId(emailMessageId);
-    try {
-      await api.approveEmail(leadId, { emailMessageId, action });
-      refresh();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setBusyId(null);
-    }
-  }
+  const actMutation = useMutation({
+    mutationFn: ({ leadId, emailMessageId, action }: { leadId: string; emailMessageId: string; action: "APPROVE" | "REJECT" }) =>
+      api.approveEmail(leadId, { emailMessageId, action }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["sequences-approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["sequences-upcoming"] });
+    },
+    onError: (err) => setError((err as Error).message),
+  });
 
   return (
     <div className="flex flex-col gap-6">
-      {error && <p className="text-sm text-bad">{error}</p>}
+      <div className="flex items-center gap-2">
+        {isFetching && !isLoading && <Spinner className="h-3.5 w-3.5" />}
+      </div>
+      {(error || approvalsQuery.error || upcomingQuery.error || mailboxesQuery.error) && (
+        <p className="text-sm text-bad">
+          {error ?? ((approvalsQuery.error ?? upcomingQuery.error ?? mailboxesQuery.error) as Error).message}
+        </p>
+      )}
 
+      {isLoading ? (
+        <LoadingRow label="Loading sequences…" />
+      ) : (
+      <>
       <section className="rounded-lg border border-[var(--line)] p-5">
         <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-ink/60">
           Email #3 Approval Queue ({approvals.length})
@@ -100,15 +115,15 @@ export default function SequencesPage() {
                 </div>
                 <div className="flex shrink-0 gap-2">
                   <button
-                    disabled={busyId === a.id}
-                    onClick={() => act(a.lead.id, a.id, "APPROVE")}
+                    disabled={actMutation.isPending}
+                    onClick={() => actMutation.mutate({ leadId: a.lead.id, emailMessageId: a.id, action: "APPROVE" })}
                     className="rounded bg-good px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                   >
                     Approve
                   </button>
                   <button
-                    disabled={busyId === a.id}
-                    onClick={() => act(a.lead.id, a.id, "REJECT")}
+                    disabled={actMutation.isPending}
+                    onClick={() => actMutation.mutate({ leadId: a.lead.id, emailMessageId: a.id, action: "REJECT" })}
                     className="rounded bg-bad px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                   >
                     Reject
@@ -204,6 +219,8 @@ export default function SequencesPage() {
           </tbody>
         </table>
       </section>
+      </>
+      )}
     </div>
   );
 }

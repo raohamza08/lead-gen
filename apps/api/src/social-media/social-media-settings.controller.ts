@@ -55,6 +55,12 @@ export class SocialMediaSettingsController {
     return this.service.disconnectAccount(user, id);
   }
 
+  @Delete("accounts/:id")
+  @Roles(Role.ADMIN)
+  deleteAccount(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.deleteAccount(user, id);
+  }
+
   /** Returns the platform's real OAuth consent URL — the frontend redirects the browser to it. */
   @Post("accounts/:platform/connect")
   @Roles(Role.ADMIN)

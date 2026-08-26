@@ -10,6 +10,11 @@ interface Account {
   username: string;
   displayName: string | null;
   status: string;
+  externalAccountId: string | null;
+  tokenExpiresAt: string | null;
+  connectedAt: string | null;
+  lastSyncAt: string | null;
+  createdAt: string;
   defaultTimezone: string | null;
   defaultHashtags: string[];
   defaultCta: string | null;
@@ -27,9 +32,26 @@ interface TeamMember {
 interface Grant {
   userId: string;
   accountId: string;
+  canView: boolean;
   canPublish: boolean;
   canApprove: boolean;
   user: { id: string; name: string; email: string; role: string };
+}
+
+function formatDate(iso: string | null): string {
+  return iso ? new Date(iso).toLocaleDateString() : "—";
+}
+
+/** "valid" / "expiring soon" (< 7 days) / "expired" — a static OAuth token
+ *  with no expiry (tokenExpiresAt null but connected) reads as "valid"
+ *  since not every platform's token actually expires. */
+function tokenStatus(account: Account): { label: string; className: string } {
+  if (account.status !== "CONNECTED") return { label: "not connected", className: "text-ink/40" };
+  if (!account.tokenExpiresAt) return { label: "valid", className: "text-good" };
+  const msLeft = new Date(account.tokenExpiresAt).getTime() - Date.now();
+  if (msLeft <= 0) return { label: "expired", className: "text-bad" };
+  if (msLeft < 7 * 24 * 60 * 60 * 1000) return { label: "expiring soon", className: "text-gold" };
+  return { label: "valid", className: "text-good" };
 }
 
 /**
@@ -45,6 +67,7 @@ export default function SocialMediaSettingsPage() {
   const [draft, setDraft] = useState<Partial<Account>>({});
   const [grants, setGrants] = useState<Grant[]>([]);
   const [addUserId, setAddUserId] = useState("");
+  const [addCanView, setAddCanView] = useState(true);
   const [addCanPublish, setAddCanPublish] = useState(true);
   const [addCanApprove, setAddCanApprove] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,12 +126,32 @@ export default function SocialMediaSettingsPage() {
     }
   }
 
+  async function deleteAccount(account: Account) {
+    if (
+      !confirm(
+        `Permanently delete ${account.platform} — ${account.displayName || account.username}? This removes the account, its Social Inbox conversations, and access grants. Past posts are kept but lose their link to this account. This cannot be undone.`,
+      )
+    )
+      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteSocialAccount(account.id);
+      setExpandedId(null);
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function grant(accountId: string) {
     if (!addUserId) return;
     setBusy(true);
     setError(null);
     try {
-      await api.grantSocialAccountAccess(accountId, { userId: addUserId, canPublish: addCanPublish, canApprove: addCanApprove });
+      await api.grantSocialAccountAccess(accountId, { userId: addUserId, canView: addCanView, canPublish: addCanPublish, canApprove: addCanApprove });
       setAddUserId("");
       api.getSocialAccountAccess(accountId).then((g) => setGrants(g as Grant[]));
     } catch (err) {
@@ -173,6 +216,24 @@ export default function SocialMediaSettingsPage() {
             </button>
             {expandedId === a.id && (
               <div className="flex flex-col gap-4 border-t border-[var(--line)] p-4">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg border border-[var(--line)] bg-ink/5 p-3 text-xs sm:grid-cols-4">
+                  <div>
+                    <div className="text-ink/45">External ID</div>
+                    <div className="truncate">{a.externalAccountId || "—"}</div>
+                  </div>
+                  <div>
+                    <div className="text-ink/45">Token status</div>
+                    <div className={tokenStatus(a).className}>{tokenStatus(a).label}</div>
+                  </div>
+                  <div>
+                    <div className="text-ink/45">Last synced</div>
+                    <div>{formatDate(a.lastSyncAt)}</div>
+                  </div>
+                  <div>
+                    <div className="text-ink/45">Connected</div>
+                    <div>{formatDate(a.connectedAt)}</div>
+                  </div>
+                </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <label className="block">
                     <span className="mb-1 block text-xs text-ink/60">Default timezone</span>
@@ -225,6 +286,9 @@ export default function SocialMediaSettingsPage() {
                   <button disabled={busy} onClick={() => disconnect(a.id)} className="rounded-md border border-bad px-4 py-2 text-sm text-bad disabled:opacity-50">
                     Disconnect
                   </button>
+                  <button disabled={busy} onClick={() => deleteAccount(a)} className="rounded-md bg-bad px-4 py-2 text-sm text-white disabled:opacity-50">
+                    Delete
+                  </button>
                 </div>
 
                 <div className="border-t border-[var(--line)] pt-4">
@@ -235,6 +299,7 @@ export default function SocialMediaSettingsPage() {
                       <div key={g.userId} className="flex items-center justify-between rounded border border-[var(--line)] px-2.5 py-1.5 text-xs">
                         <span>
                           {g.user.name} <span className="text-ink/50">({g.user.email})</span>
+                          {g.canView && <span className="ml-2 text-accent">view inbox</span>}
                           {g.canPublish && <span className="ml-2 text-good">publish</span>}
                           {g.canApprove && <span className="ml-2 text-gold">approve</span>}
                         </span>
@@ -253,6 +318,10 @@ export default function SocialMediaSettingsPage() {
                         </option>
                       ))}
                     </select>
+                    <label className="flex items-center gap-1.5 text-xs text-ink/70">
+                      <input type="checkbox" checked={addCanView} onChange={(e) => setAddCanView(e.target.checked)} />
+                      Can view inbox
+                    </label>
                     <label className="flex items-center gap-1.5 text-xs text-ink/70">
                       <input type="checkbox" checked={addCanPublish} onChange={(e) => setAddCanPublish(e.target.checked)} />
                       Can publish

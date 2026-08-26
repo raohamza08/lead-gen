@@ -11,6 +11,7 @@ interface Notification {
   severity: "ERROR" | "WARNING";
   message: string;
   leadId: string | null;
+  conversationId: string | null;
   read: boolean;
   createdAt: string;
 }
@@ -114,10 +115,20 @@ export function NotificationsBell() {
                 </div>
                 <div className="mt-1 flex items-center justify-between text-[10px] text-ink/40">
                   <span>{timeAgo(n.createdAt)}</span>
-                  {n.leadId && (
+                  {n.conversationId ? (
+                    <Link href={`/social-inbox?conversationId=${n.conversationId}`} className="text-accent hover:underline">
+                      View conversation
+                    </Link>
+                  ) : n.leadId ? (
                     <Link href={`/leads/${n.leadId}`} className="text-accent hover:underline">
                       View lead
                     </Link>
+                  ) : (
+                    n.type === "POSSIBLE_LEAD_EMAIL" && (
+                      <Link href="/email-hub?view=leads" className="text-accent hover:underline">
+                        View in Email Hub
+                      </Link>
+                    )
                   )}
                 </div>
               </div>

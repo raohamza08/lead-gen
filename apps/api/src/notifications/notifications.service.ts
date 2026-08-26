@@ -7,6 +7,7 @@ export interface NotifyInput {
   severity?: "ERROR" | "WARNING";
   message: string;
   leadId?: string;
+  conversationId?: string;
 }
 
 /**
@@ -31,6 +32,7 @@ export class NotificationsService {
       data: {
         orgId,
         leadId: input.leadId,
+        conversationId: input.conversationId,
         type: input.type,
         severity: input.severity ?? "ERROR",
         message: input.message,

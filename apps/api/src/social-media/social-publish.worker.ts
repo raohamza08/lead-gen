@@ -89,6 +89,18 @@ export class SocialPublishWorker implements OnModuleInit, OnModuleDestroy {
         continue; // already published on a prior attempt — never re-publish
       }
 
+      if (!version.account) {
+        // The account was deleted since this post was scheduled -- there is
+        // nothing left to publish to, and that's a real failure, not a
+        // silent skip (Part: Failed Publishing).
+        await this.prisma.socialPostVersion.update({
+          where: { id: version.id },
+          data: { publishError: "The connected account was deleted.", lastAttemptAt: new Date() },
+        });
+        anyFailed = true;
+        continue;
+      }
+
       const provider = this.registry.for(version.account.platform);
       try {
         const result = await provider.publish(version.account, {

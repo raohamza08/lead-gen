@@ -11,7 +11,7 @@ import { ComposeEmailDto, ReplyMessageDto } from "./dto/reply-message.dto";
 
 export interface ListMessagesQuery {
   accountId?: string;
-  status?: "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL";
+  status?: "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS";
   tagIds?: string[];
   sender?: string;
   dateFrom?: string;
@@ -133,6 +133,14 @@ export class EmailHubService {
       ...(query.status === "IMPORTANT" ? { isImportant: true, isIgnored: false } : {}),
       ...(query.status === "IGNORED" ? { isIgnored: true } : {}),
       ...(query.status === undefined || query.status === "ALL" ? { isIgnored: false } : {}),
+      // Confirmed (thread already linked to a Lead) or AI-suggested
+      // (Part: Lead Room / Smart Email Classification) -- a real server-side
+      // filter rather than a client-side slice of the general inbox page, so
+      // it composes correctly with pagination instead of only ever showing
+      // whatever leads happen to land on whatever page is currently loaded.
+      ...(query.status === "LEADS"
+        ? { isIgnored: false, OR: [{ thread: { leadId: { not: null } } }, { suggestedCategory: "POSSIBLE_LEAD" }] }
+        : {}),
       ...(query.tagIds?.length ? { tags: { some: { tagId: { in: query.tagIds } } } } : {}),
       ...(query.sender ? { fromEmail: { contains: query.sender, mode: "insensitive" } } : {}),
       ...(query.hasAttachments !== undefined ? { hasAttachments: query.hasAttachments } : {}),

@@ -72,7 +72,7 @@ export class EmailAccountsService {
         toAddress,
         subject: `Test send from ${account.address}`,
         bodyHtml:
-          `<p>This is a test message from your Sales OS.</p>` +
+          `<p>This is a test message from your Outly OS.</p>` +
           `<p>Mailbox <strong>${account.address}</strong> (${account.provider}) can send.</p>` +
           `<p>Daily limit ${account.dailyLimit}, hourly limit ${account.hourlyLimit}.</p>`,
       });

@@ -187,6 +187,8 @@ model User {
   refreshTokens RefreshToken[]
   emailAccountAccess EmailAccountAccess[]
   socialAccountAccess SocialAccountAccess[]
+  assignedConversations SocialConversation[]
+  socialInternalNotes   SocialInternalNote[]
 
   @@map("users")
 }
@@ -1016,6 +1018,11 @@ model Notification {
   org       Organization @relation(fields: [orgId], references: [id])
   leadId    String?  @map("lead_id")
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  /// Set for Social Inbox notifications (new message, assignment) — parallel
+  /// to leadId above, same "optional FK per entity type this can be about"
+  /// shape rather than a polymorphic target.
+  conversationId String?  @map("conversation_id")
+  conversation   SocialConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   type      String
   severity  String   @default("ERROR") // ERROR | WARNING
   message   String
@@ -1101,8 +1108,9 @@ model SocialAccount {
   approvalRequired  Boolean  @default(true) @map("approval_required")
   createdAt         DateTime @default(now()) @map("created_at")
 
-  accessGrants SocialAccountAccess[]
-  postVersions SocialPostVersion[]
+  accessGrants  SocialAccountAccess[]
+  postVersions  SocialPostVersion[]
+  conversations SocialConversation[]
 
   /// One row per (platform, handle) per org — reconnecting the same
   /// account edits this row rather than creating a duplicate.
@@ -1117,12 +1125,109 @@ model SocialAccountAccess {
   user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   accountId  String  @map("account_id")
   account    SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  /// Gates whether this account's conversations show up in the user's
+  /// Social Inbox filter (Part: Unified Social Media DM Monitoring) —
+  /// deliberately separate from canPublish/canApprove below, which gate
+  /// the scheduling/calendar module instead. Defaults true on a new grant
+  /// row: creating a grant at all already implies "this person should see
+  /// this account," same reasoning canPublish/canApprove default false
+  /// (an explicit elevated capability) while this one defaults open.
+  canView    Boolean @default(true) @map("can_view")
   canPublish Boolean @default(false) @map("can_publish")
   canApprove Boolean @default(false) @map("can_approve")
   createdAt  DateTime @default(now()) @map("created_at")
 
   @@id([userId, accountId])
   @@map("social_account_access")
+}
+
+// ----------------------------------------------------------------------
+// Unified Social Media DM Monitoring (separate from the posting/calendar
+// models above): connect once, monitor every connected account's inbound
+// conversations from one place. Deliberately no lead/CRM linkage anywhere
+// in this section — that's an explicit later-phase decision, not this one.
+// ----------------------------------------------------------------------
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+/// One row per (account, external conversation) — populated by the Meta
+/// webhook receiver and, as a reconciliation fallback, SocialInboxSyncWorker.
+/// Never written to by anything in the Lead Generation module.
+model SocialConversation {
+  id                     String   @id @default(uuid())
+  socialAccountId        String   @map("social_account_id")
+  socialAccount          SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  externalConversationId String   @map("external_conversation_id")
+  contactExternalId      String?  @map("contact_external_id")
+  contactName            String?  @map("contact_name")
+  contactUsername        String?  @map("contact_username")
+  contactProfileImageUrl String?  @map("contact_profile_image_url")
+  lastMessage            String?  @map("last_message")
+  lastMessageAt          DateTime @map("last_message_at")
+  unreadCount            Int      @default(0) @map("unread_count")
+  status                 ConversationStatus @default(OPEN)
+  assignedToUserId       String?  @map("assigned_to_user_id")
+  assignedToUser         User?    @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  messages     SocialMessage[]
+  notes        SocialInternalNote[]
+  notifications Notification[]
+
+  /// Dedup key — a webhook retry or the reconciliation poll re-observing
+  /// the same platform conversation must resolve to this same row, not a
+  /// duplicate (same reasoning as InboundEmailThread's identity).
+  @@unique([socialAccountId, externalConversationId])
+  @@index([lastMessageAt(sort: Desc)])
+  @@index([status])
+  @@index([assignedToUserId])
+  @@index([unreadCount])
+  @@map("social_conversations")
+}
+
+model SocialMessage {
+  id                String   @id @default(uuid())
+  conversationId    String   @map("conversation_id")
+  conversation      SocialConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  externalMessageId String   @map("external_message_id")
+  /// true = we sent it (via the reply box), false = the contact sent it.
+  /// Same field the provider's ConversationMessage.fromUs already reports —
+  /// stored as-is rather than translated into a separate direction/
+  /// sender_type pair that would just say the same thing twice.
+  fromUs            Boolean  @map("from_us")
+  senderName        String?  @map("sender_name")
+  messageText       String?  @map("message_text")
+  mediaUrl          String?  @map("media_url")
+  sentAt            DateTime @map("sent_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  /// Dedup key — the same message re-delivered by a webhook retry or seen
+  /// again by the reconciliation poll must not insert twice.
+  @@unique([conversationId, externalMessageId])
+  @@map("social_messages")
+}
+
+/// Team-only annotations on a conversation — never sent to the platform,
+/// never rendered inside the message thread (Part: Internal Notes). Kept
+/// as its own table rather than a message with a flag so there's no way
+/// for a future bug to accidentally include one in an outbound payload.
+model SocialInternalNote {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  conversation   SocialConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id])
+  note           String
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([conversationId])
+  @@map("social_internal_notes")
 }
 
 /// The logical post — one row regardless of how many accounts/platforms
@@ -1165,8 +1270,13 @@ model SocialPostVersion {
   id             String   @id @default(uuid())
   postId         String   @map("post_id")
   post           SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  accountId      String   @map("account_id")
-  account        SocialAccount @relation(fields: [accountId], references: [id])
+  /// Nullable so deleting a SocialAccount (Part: Settings > Social Accounts
+  /// delete) doesn't get blocked by post history -- SetNull mirrors
+  /// EmailAccountsService.remove's "keep the record, drop the link" pattern.
+  /// The publish worker treats accountId === null as a permanent failure,
+  /// never as "nothing to do".
+  accountId      String?  @map("account_id")
+  account        SocialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   content        String
   hashtags       String[] @default([])
   /// Set once actually published through the provider — the platform's

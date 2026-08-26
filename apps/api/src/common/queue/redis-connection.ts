@@ -31,4 +31,9 @@ export const QUEUE_NAMES = {
   // Polls due SCHEDULED SocialPosts on a repeatable schedule (Part: Social
   // Media Management) — see social-publish.worker.ts.
   SOCIAL_PUBLISH: "social-publish",
+  // Reconciliation pass over every connected FB/IG account's conversations
+  // (Part: Unified Social Media DM Monitoring) — the webhook is the primary
+  // real-time path, this is the safety net for anything it missed. See
+  // social-inbox-sync.worker.ts.
+  SOCIAL_INBOX_SYNC: "social-inbox-sync",
 } as const;

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { DataTable, SectionCard, StatTile, formatCompact } from "../../../components/chart-kit";
+import { LoadingRow, Spinner } from "../../../components/spinner";
 
 /**
  * Campaign Center.
@@ -48,52 +50,61 @@ const EMPTY = {
 };
 
 export default function CampaignsPage() {
-  const [rows, setRows] = useState<CampaignPerformance[]>([]);
-  const [filters, setFilters] = useState<NicheFilterOption[]>([]);
-  // filterId per campaign, kept separate from `rows` because /campaigns/performance
-  // doesn't return it — only /campaigns does.
-  const [linkedFilter, setLinkedFilter] = useState<Record<string, string>>({});
+  const queryClient = useQueryClient();
   const [draft, setDraft] = useState(EMPTY);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [linking, setLinking] = useState<string | null>(null);
 
-  function refresh() {
-    Promise.all([api.getCampaignPerformance(), api.getCampaigns(), api.getNicheFilters()])
-      .then(([performance, campaigns, nicheFilters]) => {
-        setRows(performance as CampaignPerformance[]);
-        setFilters(nicheFilters as NicheFilterOption[]);
-        const linked: Record<string, string> = {};
-        for (const c of campaigns as { id: string; filterId: string | null }[]) {
-          linked[c.id] = c.filterId ?? "";
-        }
-        setLinkedFilter(linked);
-      })
-      .catch((err) => setError((err as Error).message));
+  const performanceQuery = useQuery({
+    queryKey: ["campaigns-performance"],
+    queryFn: () => api.getCampaignPerformance() as Promise<CampaignPerformance[]>,
+  });
+  const campaignsQuery = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: () => api.getCampaigns() as Promise<{ id: string; filterId: string | null }[]>,
+  });
+  const filtersQuery = useQuery({
+    queryKey: ["niche-filters"],
+    queryFn: () => api.getNicheFilters() as Promise<NicheFilterOption[]>,
+  });
+
+  const rows = performanceQuery.data ?? [];
+  const filters = filtersQuery.data ?? [];
+  // filterId per campaign, kept separate from `rows` because /campaigns/performance
+  // doesn't return it — only /campaigns does.
+  const linkedFilter = useMemo(() => {
+    const linked: Record<string, string> = {};
+    for (const c of campaignsQuery.data ?? []) linked[c.id] = c.filterId ?? "";
+    return linked;
+  }, [campaignsQuery.data]);
+
+  const isLoading = performanceQuery.isLoading || campaignsQuery.isLoading || filtersQuery.isLoading;
+  const isFetching = performanceQuery.isFetching || campaignsQuery.isFetching || filtersQuery.isFetching;
+
+  function invalidateAll() {
+    queryClient.invalidateQueries({ queryKey: ["campaigns-performance"] });
+    queryClient.invalidateQueries({ queryKey: ["campaigns"] });
   }
 
-  useEffect(refresh, []);
-
-  async function create(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      // Blank optional fields are stripped, so an empty box stores nothing
-      // rather than an empty string that later reads as "configured".
-      const payload = Object.fromEntries(Object.entries(draft).filter(([, v]) => v !== ""));
-      await api.createCampaign(payload);
+  const createMutation = useMutation({
+    mutationFn: (payload: Record<string, unknown>) => api.createCampaign(payload),
+    onSuccess: () => {
       setDraft(EMPTY);
       setShowForm(false);
-      refresh();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setSaving(false);
-    }
+      invalidateAll();
+    },
+    onError: (err) => setError((err as Error).message),
+  });
+  async function create(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    // Blank optional fields are stripped, so an empty box stores nothing
+    // rather than an empty string that later reads as "configured".
+    const payload = Object.fromEntries(Object.entries(draft).filter(([, v]) => v !== ""));
+    createMutation.mutate(payload);
   }
+  const saving = createMutation.isPending;
 
   /**
    * A campaign only accrues leads/performance once it's linked to the filter
@@ -101,20 +112,21 @@ export default function CampaignsPage() {
    * of whichever campaign points at its filter, so this link is what makes
    * campaign performance non-zero.
    */
-  async function linkFilter(campaignId: string, filterId: string) {
-    setLinking(campaignId);
+  const linkMutation = useMutation({
+    mutationFn: ({ campaignId, filterId }: { campaignId: string; filterId: string }) =>
+      api.updateCampaign(campaignId, { filterId: filterId || null }),
+    onSuccess: (_data, { filterId }) => {
+      setNotice(filterId ? "Filter linked. New leads it finds will attribute to this campaign." : "Filter unlinked.");
+      invalidateAll();
+    },
+    onError: (err) => setError((err as Error).message),
+  });
+  function linkFilter(campaignId: string, filterId: string) {
     setError(null);
     setNotice(null);
-    try {
-      await api.updateCampaign(campaignId, { filterId: filterId || null });
-      setNotice(filterId ? "Filter linked. New leads it finds will attribute to this campaign." : "Filter unlinked.");
-      refresh();
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setLinking(null);
-    }
+    linkMutation.mutate({ campaignId, filterId });
   }
+  const linking = linkMutation.isPending ? linkMutation.variables?.campaignId ?? null : null;
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -131,8 +143,17 @@ export default function CampaignsPage() {
   // whether the offer works.
   const best = [...rows].filter((r) => r.leads >= 5).sort((a, b) => b.meetingRate - a.meetingRate)[0];
 
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-6">
+        <LoadingRow label="Loading campaigns…" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-2">{isFetching && <Spinner className="h-3.5 w-3.5" />}</div>
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatTile label="Campaigns" value={rows.length} />
         <StatTile label="Leads" value={formatCompact(totals.leads)} />
@@ -165,7 +186,11 @@ export default function CampaignsPage() {
           </button>
         }
       >
-        {error && <p className="mb-3 text-sm text-bad">{error}</p>}
+        {(error || performanceQuery.error || campaignsQuery.error || filtersQuery.error) && (
+          <p className="mb-3 text-sm text-bad">
+            {error ?? ((performanceQuery.error ?? campaignsQuery.error ?? filtersQuery.error) as Error).message}
+          </p>
+        )}
         {notice && <p className="mb-3 text-sm text-good">{notice}</p>}
 
         {showForm && (

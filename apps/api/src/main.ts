@@ -5,7 +5,13 @@ import { AppModule } from "./app.module";
 import { allowedOrigins, corsOriginValidator } from "./common/cors";
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true stashes the exact request bytes on req.rawBody for every
+  // route (Nest's built-in mechanism, not a custom body-parser swap) while
+  // req.body still parses as JSON as before -- needed for the Meta webhook
+  // route's signature verification, which must hash the exact bytes Meta
+  // signed, not a re-serialized JSON.stringify(body) that can differ in key
+  // order/whitespace (see webhooks/signature.util.ts's own docblock on this).
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const allowed = allowedOrigins();
 
   app.enableCors({ origin: corsOriginValidator, credentials: true });

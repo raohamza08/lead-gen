@@ -85,7 +85,17 @@ export interface FeedItem {
 }
 
 export interface Conversation {
+  /// The platform's own thread id -- needed to call listMessages() on this
+  /// same conversation. NOT stable enough to use as a storage/dedup key on
+  /// its own (see participantExternalId below).
   externalConversationId: string;
+  /// The other party's platform user id (e.g. Meta's PSID). This, not
+  /// externalConversationId, is what a real-time webhook payload actually
+  /// carries (it has no concept of "thread id"), so it's the identity key
+  /// SocialInboxIngestService persists conversations under -- both
+  /// ingestion paths (webhook, reconciliation poll) must resolve to the
+  /// same conversation row for the same contact.
+  participantExternalId: string;
   participantName: string;
   participantAvatarUrl?: string;
   lastMessageSnippet?: string;
@@ -130,10 +140,16 @@ export interface SocialPlatformProvider {
 
   listConversations(account: SocialAccount): Promise<Conversation[]>;
 
+  /** `conversationId` here is the platform's own thread id
+   *  (Conversation.externalConversationId from listConversations above),
+   *  not the participant id -- fetching message history needs the real
+   *  thread, unlike sendMessage below. */
   listMessages(account: SocialAccount, conversationId: string): Promise<ConversationMessage[]>;
 
-  /** A human clicked send in the Messages tab — one direct, synchronous API
-   *  call, no queue, no draft, no AI (Part: Social Media Hub — explicitly
-   *  human-in-the-loop, never automatic). */
-  sendMessage(account: SocialAccount, conversationId: string, text: string): Promise<void>;
+  /** A human clicked send (Part: Social Media Hub / Unified DM Monitoring —
+   *  explicitly human-in-the-loop, never automatic, one direct synchronous
+   *  API call). `participantId` is the recipient's platform user id
+   *  (Conversation.participantExternalId) — this is what the Send API
+   *  actually addresses a reply to, not the thread id listMessages uses. */
+  sendMessage(account: SocialAccount, participantId: string, text: string): Promise<void>;
 }

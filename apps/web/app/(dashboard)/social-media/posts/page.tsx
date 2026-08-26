@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
+import { Spinner } from "../../../../components/spinner";
 
 const STATUSES = ["ALL", "DRAFT", "PENDING_REVIEW", "APPROVED", "SCHEDULED", "PUBLISHED", "FAILED", "REJECTED"] as const;
 type Status = (typeof STATUSES)[number];
@@ -46,18 +48,22 @@ export default function PostsPage() {
   const searchParams = useSearchParams();
   const initialStatus = (searchParams?.get("status") as Status) ?? "ALL";
   const [status, setStatus] = useState<Status>(STATUSES.includes(initialStatus) ? initialStatus : "ALL");
-  const [posts, setPosts] = useState<Post[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+
+  const postsQuery = useQuery({
+    queryKey: ["social-media-posts", status],
+    queryFn: async () => {
+      const res = await api.getSocialPosts(status === "ALL" ? {} : { status });
+      return (res as { posts: Post[] }).posts;
+    },
+  });
+  const posts = postsQuery.data ?? [];
 
   function refresh() {
-    api
-      .getSocialPosts(status === "ALL" ? {} : { status })
-      .then((res) => setPosts((res as { posts: Post[] }).posts))
-      .catch((err) => setError((err as Error).message));
+    queryClient.invalidateQueries({ queryKey: ["social-media-posts"] });
   }
-
-  useEffect(refresh, [status]);
 
   function selectStatus(s: Status) {
     setStatus(s);
@@ -80,7 +86,10 @@ export default function PostsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">Posts</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold tracking-tight">Posts</h1>
+          {postsQuery.isFetching && !postsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
+        </div>
         <p className="mt-0.5 text-xs text-ink/50">Every post, at whatever stage it&apos;s in.</p>
       </div>
 
@@ -97,9 +106,9 @@ export default function PostsPage() {
         ))}
       </div>
 
-      {error && (
+      {(error || postsQuery.error) && (
         <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-          {error}
+          {error ?? (postsQuery.error as Error).message}
         </div>
       )}
 

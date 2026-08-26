@@ -17,9 +17,14 @@ import { SocialMediaService } from "./social-media.service";
 import { SocialMediaController } from "./social-media.controller";
 import { SocialMediaSettingsController } from "./social-media-settings.controller";
 import { SocialOAuthCallbackController } from "./social-oauth-callback.controller";
+import { SocialInboxIngestService } from "./social-inbox-ingest.service";
+import { SocialInboxSyncQueue } from "./social-inbox-sync.queue";
+import { SocialInboxSyncWorker } from "./social-inbox-sync.worker";
+import { SocialInboxService } from "./social-inbox.service";
+import { SocialInboxController } from "./social-inbox.controller";
 
 @Module({
-  controllers: [SocialMediaController, SocialMediaSettingsController, SocialOAuthCallbackController, MediaFileController],
+  controllers: [SocialMediaController, SocialMediaSettingsController, SocialOAuthCallbackController, MediaFileController, SocialInboxController],
   providers: [
     InstagramProvider,
     FacebookProvider,
@@ -34,7 +39,11 @@ import { SocialOAuthCallbackController } from "./social-oauth-callback.controlle
     SocialPublishQueue,
     SocialPublishWorker,
     SocialMediaService,
+    SocialInboxIngestService,
+    SocialInboxSyncQueue,
+    SocialInboxSyncWorker,
+    SocialInboxService,
   ],
-  exports: [SocialMediaService],
+  exports: [SocialMediaService, SocialInboxIngestService, SocialProviderRegistryService],
 })
 export class SocialMediaModule {}

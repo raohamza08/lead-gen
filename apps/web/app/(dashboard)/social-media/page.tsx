@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { SectionCard, StatTile } from "../../../components/chart-kit";
+import { Spinner } from "../../../components/spinner";
 
 interface Stats {
   connectedAccounts: number;
@@ -21,28 +22,27 @@ interface Stats {
  * StatTiles.
  */
 export default function SocialMediaOverviewPage() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .getSocialStats()
-      .then((s) => setStats(s as Stats))
-      .catch((err) => setError((err as Error).message));
-  }, []);
+  const statsQuery = useQuery({
+    queryKey: ["social-media-stats"],
+    queryFn: () => api.getSocialStats() as Promise<Stats>,
+  });
+  const stats = statsQuery.data ?? null;
 
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-lg font-semibold tracking-tight">Social Media</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-lg font-semibold tracking-tight">Social Media</h1>
+          {statsQuery.isFetching && !statsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
+        </div>
         <p className="mt-0.5 text-xs text-ink/50">
           Connect accounts, draft and schedule posts across platforms, and automate what happens when a
           new lead comes in.
         </p>
       </div>
 
-      {error ? (
-        <p className="text-sm text-bad">{error}</p>
+      {statsQuery.error ? (
+        <p className="text-sm text-bad">{(statsQuery.error as Error).message}</p>
       ) : !stats ? (
         <p className="text-sm text-ink/50">Loading…</p>
       ) : (

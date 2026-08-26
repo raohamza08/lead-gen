@@ -14,8 +14,10 @@ interface NavLink {
   matchSearch?: string;
 }
 
+type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess";
+
 type NavItem =
-  | { type: "link"; href: string; label: string }
+  | { type: "link"; href: string; label: string; moduleFlag?: ModuleFlag }
   | { type: "group"; label: string; links: NavLink[] };
 
 /**
@@ -59,6 +61,7 @@ const NAV: NavItem[] = [
       { href: "/settings/email-hub", label: "Settings" },
     ],
   },
+  { type: "link", href: "/social-inbox", label: "Social Inbox", moduleFlag: "socialMediaAccess" },
   {
     type: "group",
     label: "Social Media",
@@ -77,7 +80,7 @@ const NAV: NavItem[] = [
 ];
 
 /** Maps a NAV group's label to the module flag from GET /users/me that gates it. */
-const MODULE_FLAG_BY_GROUP: Record<string, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess"> = {
+const MODULE_FLAG_BY_GROUP: Record<string, ModuleFlag> = {
   "Lead Room": "leadGenAccess",
   "Lead Generation": "leadGenAccess",
   "Email Hub": "emailHubAccess",
@@ -113,8 +116,7 @@ export function SidebarNav() {
   }, []);
 
   const visibleNav = NAV.filter((item) => {
-    if (item.type !== "group") return true;
-    const flag = MODULE_FLAG_BY_GROUP[item.label];
+    const flag = item.type === "group" ? MODULE_FLAG_BY_GROUP[item.label] : item.moduleFlag;
     if (!flag || !moduleAccess) return true;
     return moduleAccess[flag];
   });

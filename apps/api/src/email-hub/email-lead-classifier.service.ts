@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 interface ClassifyInput {
   fromName: string | null | undefined;
@@ -26,6 +27,7 @@ export class EmailLeadClassifierService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async classifyAndTag(orgId: string, messageId: string, email: ClassifyInput): Promise<void> {
@@ -54,6 +56,15 @@ export class EmailLeadClassifierService {
           suggestedCategory: "POSSIBLE_LEAD",
           aiSuggestedAction: result.reason || "Looks like a viable prospect — worth a look.",
         },
+      });
+
+      // A human needs to confirm this one (Part: Lead Room / Smart Email
+      // Classification) -- surfaced via the bell, not just a badge someone
+      // has to happen to scroll past in the inbox.
+      await this.notifications.notify(orgId, {
+        type: "POSSIBLE_LEAD_EMAIL",
+        severity: "WARNING",
+        message: `Possible lead from ${email.fromName || email.fromEmail}: "${email.subject}"`,
       });
     } catch (err) {
       this.logger.warn(`Lead classification failed for message ${messageId}: ${(err as Error).message}`);
