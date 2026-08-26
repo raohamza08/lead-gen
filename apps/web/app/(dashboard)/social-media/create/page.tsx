@@ -149,7 +149,7 @@ export default function CreatePostPage() {
         recurrenceRule: recurrenceOn && scheduledAt ? { frequency, endDate: endDate || undefined } : undefined,
         status,
       });
-      router.push(`/social-media/posts?status=${status}`);
+      router.push("/social-media/calendar");
     } catch (err) {
       setError((err as Error).message);
       setSaving(null);
