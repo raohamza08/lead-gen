@@ -272,8 +272,120 @@ export default function OverviewPage() {
         ))}
       </section>
 
+      <LeadRoomOverviewSection />
       <EmailOverviewSection />
+      <SocialMediaOverviewSection />
     </div>
+  );
+}
+
+interface SourceBreakdown {
+  total: number;
+  bySource: Record<string, number>;
+  scored: number;
+  awaitingResearch: number;
+}
+
+const SOURCE_DISPLAY: Record<string, string> = {
+  SURFACE_WEB: "Surface web",
+  LICENSED_DATABASE: "Licensed database",
+  MANUAL: "Manual",
+  EMAIL: "Email",
+  SOCIAL_MEDIA: "Social",
+};
+
+/** Lead Room card (Part: Lead Room) — Lead Room and Lead Generation read the
+ *  same `leads` table (no promotion gate), so this is just a different cut
+ *  of the same data the hero above already summarizes: where leads came
+ *  from and how many are still waiting on research. */
+function LeadRoomOverviewSection() {
+  const [breakdown, setBreakdown] = useState<SourceBreakdown | null>(null);
+
+  useEffect(() => {
+    api.getLeadSourceBreakdown().then((b) => setBreakdown(b as SourceBreakdown)).catch(() => {});
+  }, []);
+
+  if (!breakdown || breakdown.total === 0) return null;
+
+  const tiles: { label: string; value: number; href: string }[] = [
+    { label: "Total captured", value: breakdown.total, href: "/leads" },
+    { label: "Awaiting research", value: breakdown.awaitingResearch, href: "/leads" },
+    { label: "Scored", value: breakdown.scored, href: "/leads" },
+  ];
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-sm font-semibold tracking-tight">Lead Room</h2>
+      <p className="mb-4 mt-0.5 text-xs text-ink/50">
+        Every lead captured so far, from every source — the working pipeline in Lead Generation draws from here.
+      </p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {tiles.map((t) => (
+          <Link key={t.label} href={t.href} className="card card-interactive px-4 py-3.5">
+            <div className="text-[11px] uppercase tracking-wide text-ink/55">{t.label}</div>
+            <div className="mt-1 text-2xl font-semibold tracking-tight">{t.value}</div>
+          </Link>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
+        {Object.entries(breakdown.bySource)
+          .filter(([, count]) => count > 0)
+          .map(([source, count]) => (
+            <span key={source} className="rounded-full bg-ink/8 px-2.5 py-1 text-xs text-ink/60">
+              {SOURCE_DISPLAY[source] ?? source}: {count}
+            </span>
+          ))}
+      </div>
+    </section>
+  );
+}
+
+interface SocialStats {
+  connectedAccounts: number;
+  draft: number;
+  pendingReview: number;
+  scheduled: number;
+  published: number;
+  failed: number;
+}
+
+/** Social Media card — same shape as EmailOverviewSection below, so every
+ *  module the Dashboard covers reads the same way. */
+function SocialMediaOverviewSection() {
+  const [stats, setStats] = useState<SocialStats | null>(null);
+
+  useEffect(() => {
+    api.getSocialStats().then((s) => setStats(s as SocialStats)).catch(() => {});
+  }, []);
+
+  if (!stats || stats.connectedAccounts === 0) return null;
+
+  const tiles: { label: string; value: number; href: string; warn?: boolean }[] = [
+    { label: "Connected accounts", value: stats.connectedAccounts, href: "/social-media/accounts" },
+    { label: "Pending review", value: stats.pendingReview, href: "/social-media/posts", warn: stats.pendingReview > 0 },
+    { label: "Scheduled", value: stats.scheduled, href: "/social-media/calendar" },
+    { label: "Published", value: stats.published, href: "/social-media/posts" },
+    { label: "Drafts", value: stats.draft, href: "/social-media/posts" },
+    { label: "Failed", value: stats.failed, href: "/social-media/posts", warn: stats.failed > 0 },
+  ];
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-sm font-semibold tracking-tight">Social Media</h2>
+      <p className="mb-4 mt-0.5 text-xs text-ink/50">Across every connected account you have access to.</p>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        {tiles.map((t) => (
+          <Link
+            key={t.label}
+            href={t.href}
+            className={`card card-interactive px-4 py-3.5 ${t.warn ? "text-gold" : ""}`}
+          >
+            <div className="text-[11px] uppercase tracking-wide text-ink/55">{t.label}</div>
+            <div className="mt-1 text-2xl font-semibold tracking-tight">{t.value}</div>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
 

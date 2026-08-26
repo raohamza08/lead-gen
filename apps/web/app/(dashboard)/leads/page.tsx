@@ -104,6 +104,7 @@ const SOURCE_LABELS: Record<string, string> = {
   SURFACE_WEB: "Surface web",
   LICENSED_DATABASE: "Licensed database",
   MANUAL: "Manual entry",
+  EMAIL: "Email",
 };
 
 function SourceBadge({ source }: { source?: string | null }) {

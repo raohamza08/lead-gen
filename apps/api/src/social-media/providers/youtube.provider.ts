@@ -65,7 +65,7 @@ export class YouTubeProvider implements SocialPlatformProvider {
     });
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile> {
+  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
     const client = this.oauthClient(redirectUri);
     const { tokens } = await client.getToken(code);
     if (!tokens.access_token) throw new Error("YouTube token exchange returned no access_token");
@@ -76,7 +76,7 @@ export class YouTubeProvider implements SocialPlatformProvider {
     const channel = channelRes.data.items?.[0];
     if (!channel?.id) throw new Error("No YouTube channel found for this Google account.");
 
-    return {
+    return [{
       externalAccountId: channel.id,
       username: channel.snippet?.title ?? channel.id,
       profileImageUrl: channel.snippet?.thumbnails?.default?.url ?? undefined,
@@ -84,7 +84,7 @@ export class YouTubeProvider implements SocialPlatformProvider {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token ?? undefined,
       expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : undefined,
-    };
+    }];
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {

@@ -69,7 +69,7 @@ export class XProvider implements SocialPlatformProvider {
     return `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile> {
+  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
     const clientId = this.config.get<string>("X_OAUTH_CLIENT_ID");
     if (!clientId) throw new PlatformNotConfiguredError("X", "X_OAUTH_CLIENT_ID is not set");
     // NOTE: the real code_verifier for this exchange must be looked up by
@@ -97,7 +97,7 @@ export class XProvider implements SocialPlatformProvider {
     });
     const me = (await meRes.json()) as { data: { id: string; username: string; profile_image_url?: string } };
 
-    return {
+    return [{
       externalAccountId: me.data.id,
       username: `@${me.data.username}`,
       profileImageUrl: me.data.profile_image_url,
@@ -105,7 +105,7 @@ export class XProvider implements SocialPlatformProvider {
       accessToken,
       refreshToken,
       expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : undefined,
-    };
+    }];
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {

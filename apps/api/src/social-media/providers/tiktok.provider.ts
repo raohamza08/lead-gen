@@ -55,7 +55,7 @@ export class TikTokProvider implements SocialPlatformProvider {
     return `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile> {
+  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
     const clientKey = this.config.get<string>("TIKTOK_CLIENT_KEY");
     const clientSecret = this.config.get<string>("TIKTOK_CLIENT_SECRET");
     if (!clientKey || !clientSecret) throw new PlatformNotConfiguredError("TikTok", "TIKTOK_CLIENT_KEY/SECRET is not set");
@@ -80,7 +80,7 @@ export class TikTokProvider implements SocialPlatformProvider {
     });
     const profile = (await profileRes.json()) as { data?: { user?: { display_name?: string; avatar_url?: string } } };
 
-    return {
+    return [{
       externalAccountId: openId,
       username: profile.data?.user?.display_name ?? openId,
       profileImageUrl: profile.data?.user?.avatar_url,
@@ -88,7 +88,7 @@ export class TikTokProvider implements SocialPlatformProvider {
       accessToken,
       refreshToken,
       expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : undefined,
-    };
+    }];
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {

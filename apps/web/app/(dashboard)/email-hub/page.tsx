@@ -33,6 +33,8 @@ interface Message {
   isImportant: boolean;
   isIgnored: boolean;
   hasAttachments: boolean;
+  suggestedCategory: string | null;
+  aiSuggestedAction: string | null;
   account: { id: string; address: string; mailboxLabel: string | null };
   thread: { id: string; leadId: string | null };
   tags: { tag: Tag }[];
@@ -88,6 +90,7 @@ function EmailHubPageContent() {
   const [showTagManager, setShowTagManager] = useState(false);
   const [newTagName, setNewTagName] = useState("");
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [confirmingLeadId, setConfirmingLeadId] = useState<string | null>(null);
 
   const status = statusForView(view);
 
@@ -154,6 +157,19 @@ function EmailHubPageContent() {
       setError((err as Error).message);
     } finally {
       setBulkBusy(false);
+    }
+  }
+
+  async function confirmPossibleLead(threadId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setConfirmingLeadId(threadId);
+    try {
+      await api.addEmailThreadToLead(threadId);
+      loadMessages();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setConfirmingLeadId(null);
     }
   }
 
@@ -376,6 +392,21 @@ function EmailHubPageContent() {
                   <div className="flex flex-wrap gap-1">
                     {m.thread.leadId && (
                       <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">Lead</span>
+                    )}
+                    {!m.thread.leadId && m.suggestedCategory === "POSSIBLE_LEAD" && (
+                      <span
+                        className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold"
+                        title={m.aiSuggestedAction ?? undefined}
+                      >
+                        Possible lead
+                        <button
+                          onClick={(e) => confirmPossibleLead(m.thread.id, e)}
+                          disabled={confirmingLeadId === m.thread.id}
+                          className="rounded-full border border-gold/40 px-1.5 py-0 text-[10px] font-medium hover:bg-gold/10 disabled:opacity-50"
+                        >
+                          {confirmingLeadId === m.thread.id ? "Adding…" : "Add to Lead"}
+                        </button>
+                      </span>
                     )}
                     {m.tags.map(({ tag }) => (
                       <span

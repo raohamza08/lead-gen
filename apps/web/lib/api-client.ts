@@ -203,6 +203,7 @@ export const api = {
   getFunnel: () => request("/analytics/funnel"),
   getLeads: (params: Record<string, string> = {}) =>
     request(`/leads?${new URLSearchParams(params).toString()}`),
+  getLeadSourceBreakdown: () => request("/leads/source-breakdown"),
   getLead: (id: string) => request(`/leads/${id}`),
   updateReview: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/review`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -398,6 +399,12 @@ export const api = {
   disconnectSocialAccount: (id: string) => request(`/settings/social-media/accounts/${id}/disconnect`, { method: "POST" }),
   connectSocialAccount: (platform: string) =>
     request<{ url: string }>(`/settings/social-media/accounts/${platform}/connect`, { method: "POST" }),
+  getPendingSocialSelection: (pendingId: string) => request(`/settings/social-media/accounts/pending/${pendingId}`),
+  selectPendingSocialAccount: (pendingId: string, externalAccountId: string) =>
+    request(`/settings/social-media/accounts/pending/${pendingId}/select`, {
+      method: "POST",
+      body: JSON.stringify({ externalAccountId }),
+    }),
   getSocialAccountAccess: (accountId: string) => request(`/settings/social-media/accounts/${accountId}/access`),
   grantSocialAccountAccess: (accountId: string, body: { userId: string; canPublish?: boolean; canApprove?: boolean }) =>
     request(`/settings/social-media/accounts/${accountId}/access`, { method: "POST", body: JSON.stringify(body) }),

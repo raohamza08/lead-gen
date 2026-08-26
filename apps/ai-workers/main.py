@@ -16,7 +16,13 @@ from claude_agent.runner import request_cancel as request_extraction_cancel
 from claude_agent.runner import run_in_background as run_extraction_in_background
 from claude_agent.runner import run_manual_enrichment_in_background
 from gemini_agent.runner import run_email_draft
-from outreach_runner import run_case_study_review, run_linkedin_draft, run_optimisation, run_social_content
+from outreach_runner import (
+    run_case_study_review,
+    run_email_lead_classification,
+    run_linkedin_draft,
+    run_optimisation,
+    run_social_content,
+)
 from shared.prompts import default_prompt
 
 #: Every agent whose prompt is a plain, editable instructions block — the
@@ -44,6 +50,7 @@ PROMPTABLE_AGENTS: dict[str, str] = {
     "email_step_5": "Email 5 of 5 — Breakup.",
     "email_voice_rules": "Shared tone/style rules applied to every email in the sequence.",
     "case_study_review": "Reviews a submitted case study for real niche fit and email-ready wording, never inventing a number.",
+    "email_lead_classifier": "Judges whether an inbound email's sender looks like a viable prospect to pitch, for a human to confirm.",
     "social_content_generate": "Drafts a social media caption from a brief, platform-appropriate, never inventing a claim.",
     "social_content_repurpose": "Adapts an existing social post's content for a different platform, never blindly duplicating it.",
 }
@@ -107,6 +114,14 @@ class CaseStudyReviewRequest(BaseModel):
     title: str | None = None
     rawStory: str
     submittedIndustry: str
+
+
+class EmailLeadClassifyRequest(BaseModel):
+    orgId: str
+    fromName: str | None = None
+    fromEmail: str
+    subject: str
+    bodyText: str
 
 
 @app.get("/health")
@@ -190,6 +205,14 @@ async def review_case_study(req: CaseStudyReviewRequest):
     # Not backgrounded, same reasoning as optimisation above — Settings is
     # waiting on this to show the finalised case study.
     return await run_case_study_review(req.orgId, req.title, req.rawStory, req.submittedIndustry)
+
+
+@app.post("/email/classify-lead")
+async def classify_email_lead(req: EmailLeadClassifyRequest):
+    # Not backgrounded — the caller (EmailHubSyncWorker) is fire-and-forgetting
+    # this call itself and just needs the result to write onto the message;
+    # blocking here vs. there makes no difference to the sync tick.
+    return await run_email_lead_classification(req.orgId, req.fromName, req.fromEmail, req.subject, req.bodyText)
 
 
 @app.post("/social-content/generate")

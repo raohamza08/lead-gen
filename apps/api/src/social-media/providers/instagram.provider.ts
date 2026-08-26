@@ -73,7 +73,7 @@ export class InstagramProvider implements SocialPlatformProvider {
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile> {
+  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
     const clientId = this.clientId();
     const clientSecret = this.clientSecret();
     if (!clientId || !clientSecret) {
@@ -97,27 +97,29 @@ export class InstagramProvider implements SocialPlatformProvider {
     // The Instagram *business* account id is one hop away from the token:
     // list the Pages this token can manage, then read each Page's linked
     // Instagram Business Account. Real accounts can have zero or one linked
-    // IG account per Page — first match wins for V1's connect flow.
+    // IG account per Page — every Page with one comes back, not just the
+    // first (Part: multi-account OAuth picker), since a Business Manager
+    // admin can see several at once.
     const pagesRes = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/me/accounts?fields=id,name,instagram_business_account{id,username,profile_picture_url}&access_token=${accessToken}`,
     );
     const pages = (await pagesRes.json()) as {
       data: { instagram_business_account?: { id: string; username: string; profile_picture_url?: string } }[];
     };
-    const igAccount = pages.data?.find((p) => p.instagram_business_account)?.instagram_business_account;
-    if (!igAccount) {
+    const igAccounts = pages.data?.flatMap((p) => (p.instagram_business_account ? [p.instagram_business_account] : [])) ?? [];
+    if (igAccounts.length === 0) {
       throw new Error(
         "No Instagram Business/Creator account found linked to any Facebook Page this token can manage.",
       );
     }
 
-    return {
+    return igAccounts.map((igAccount) => ({
       externalAccountId: igAccount.id,
       username: `@${igAccount.username}`,
       profileImageUrl: igAccount.profile_picture_url,
       accountType: "business",
       accessToken,
-    };
+    }));
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {

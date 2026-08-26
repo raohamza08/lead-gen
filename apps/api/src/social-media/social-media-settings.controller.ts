@@ -28,6 +28,21 @@ export class SocialMediaSettingsController {
     return this.service.createAccountPlaceholder(user.orgId, dto);
   }
 
+  // Both "pending" routes must come before ":id"/":platform" below — same
+  // reasoning as leads.controller.ts's "export" — otherwise Nest matches
+  // "pending" as the :id/:platform param and these routes are never reached.
+  @Get("accounts/pending/:id")
+  @Roles(Role.ADMIN)
+  getPendingSelection(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.getPendingSelection(user, id);
+  }
+
+  @Post("accounts/pending/:id/select")
+  @Roles(Role.ADMIN)
+  selectPendingAccount(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body("externalAccountId") externalAccountId: string) {
+    return this.service.selectPendingAccount(user, id, externalAccountId);
+  }
+
   @Patch("accounts/:id")
   @Roles(Role.ADMIN)
   updateAccount(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateSocialAccountSettingsDto) {

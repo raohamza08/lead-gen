@@ -29,6 +29,14 @@ interface Account {
 
 const EMPTY_DRAFT = { platform: "INSTAGRAM" as Platform, username: "", displayName: "" };
 
+interface PendingCandidate {
+  externalAccountId: string;
+  username: string;
+  displayName: string | null;
+  profileImageUrl: string | null;
+  accountType: string | null;
+}
+
 function StatusBadge({ status }: { status: Account["status"] }) {
   const tone =
     status === "CONNECTED" ? "bg-good/15 text-good" : status === "EXPIRED" || status === "ERROR" ? "bg-bad/15 text-bad" : "bg-ink/8 text-ink/50";
@@ -51,6 +59,10 @@ export default function SocialAccountsPage() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [pendingPlatform, setPendingPlatform] = useState<Platform | null>(null);
+  const [pendingCandidates, setPendingCandidates] = useState<PendingCandidate[] | null>(null);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
 
   function refresh() {
     api
@@ -59,15 +71,49 @@ export default function SocialAccountsPage() {
       .catch((err) => setError((err as Error).message));
   }
 
+  function loadPendingSelection(id: string) {
+    api
+      .getPendingSocialSelection(id)
+      .then((res) => {
+        const r = res as { platform: Platform; accounts: PendingCandidate[] };
+        setPendingPlatform(r.platform);
+        setPendingCandidates(r.accounts);
+      })
+      .catch((err) => {
+        setError((err as Error).message);
+        setPendingId(null);
+      });
+  }
+
   useEffect(() => {
     refresh();
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("social_connected");
     const connectError = params.get("social_connect_error");
+    const pending = params.get("social_pending");
     if (connected) setNotice(`${connected} connected successfully.`);
     if (connectError) setError(connectError);
-    if (connected || connectError) window.history.replaceState({}, "", window.location.pathname);
+    if (pending) {
+      setPendingId(pending);
+      loadPendingSelection(pending);
+    }
+    if (connected || connectError || pending) window.history.replaceState({}, "", window.location.pathname);
   }, []);
+
+  async function selectPendingAccount(candidate: PendingCandidate) {
+    if (!pendingId) return;
+    setSelectingId(candidate.externalAccountId);
+    setError(null);
+    try {
+      await api.selectPendingSocialAccount(pendingId, candidate.externalAccountId);
+      setNotice(`${candidate.username} connected successfully.`);
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSelectingId(null);
+    }
+  }
 
   async function addAccount(e: React.FormEvent) {
     e.preventDefault();
@@ -147,6 +193,38 @@ export default function SocialAccountsPage() {
         <div className="rounded-lg border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-3 py-2 text-sm text-good">
           {notice}
         </div>
+      )}
+
+      {pendingId && pendingCandidates && pendingCandidates.length > 0 && (
+        <SectionCard title={`Choose which ${pendingPlatform ?? ""} account${pendingCandidates.length > 1 ? "s" : ""} to connect`}>
+          <p className="mb-3 text-xs text-ink/55">
+            This login can manage {pendingCandidates.length} account{pendingCandidates.length > 1 ? "s" : ""}. Connect as many
+            as you need, one at a time.
+          </p>
+          <div className="flex flex-col gap-2">
+            {pendingCandidates.map((c) => (
+              <div key={c.externalAccountId} className="flex items-center justify-between gap-3 rounded-lg border border-[var(--line)] px-3 py-2">
+                <div className="flex items-center gap-2">
+                  {c.profileImageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={c.profileImageUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  )}
+                  <div>
+                    <div className="text-sm font-medium">{c.displayName || c.username}</div>
+                    {c.displayName && <div className="text-xs text-ink/50">{c.username}</div>}
+                  </div>
+                </div>
+                <button
+                  disabled={selectingId === c.externalAccountId}
+                  onClick={() => selectPendingAccount(c)}
+                  className="rounded-md bg-accent px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                >
+                  {selectingId === c.externalAccountId ? "Connecting…" : "Connect"}
+                </button>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
       )}
 
       {showForm && (

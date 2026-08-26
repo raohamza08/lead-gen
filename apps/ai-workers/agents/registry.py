@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from .base import Agent
 from .case_study_agent import CaseStudyReviewAgent
+from .email_lead_agent import EmailLeadClassifierAgent
 from .intelligence_agents import (
     BuyerIntelligenceAgent,
     CompanyIntelligenceAgent,
@@ -46,6 +47,7 @@ AGENTS: dict[str, Agent] = {
         AgentReviewAgent(),
         CaseStudyReviewAgent(),
         SocialContentAgent(),
+        EmailLeadClassifierAgent(),
     )
 }
 # A second instance of the same agent under a distinct registry key, used only
@@ -122,6 +124,10 @@ PIPELINES: dict[str, tuple[str, ...]] = {
     # from a brief (Part: Social Media Management), triggered on demand from
     # the composer or an automation's CREATE_DRAFT action.
     "social_content": ("social_content",),
+    # One agent, its own pipeline: judges whether an inbound email's sender
+    # looks like a viable prospect (Part: Lead Room), triggered from the Email
+    # Hub sync worker on a thread's first message only.
+    "email_lead_classifier": ("email_lead_classifier",),
 }
 
 

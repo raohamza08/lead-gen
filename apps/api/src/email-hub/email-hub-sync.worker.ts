@@ -7,6 +7,7 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ImapReaderProvider } from "./readers/imap-reader.provider";
 import { FetchedMessage } from "./mailbox-reader.interface";
+import { EmailLeadClassifierService } from "./email-lead-classifier.service";
 
 /** Strips reply/forward prefixes and collapses whitespace so "Re: Re: Fwd:
  *  Website proposal" and "Website proposal" thread together when no
@@ -40,6 +41,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
     private readonly reader: ImapReaderProvider,
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
+    private readonly leadClassifier: EmailLeadClassifierService,
   ) {}
 
   onModuleInit() {
@@ -127,10 +129,11 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
    *  silently skipped via the unique constraint rather than erroring the
    *  whole tick over one already-seen message. */
   private async persistMessage(account: EmailAccount, message: FetchedMessage) {
-    const threadId = await this.findOrCreateThreadId(account, message);
+    const { threadId, isNewThread } = await this.findOrCreateThreadId(account, message);
 
+    let created: { id: string };
     try {
-      await this.prisma.inboundEmailMessage.create({
+      created = await this.prisma.inboundEmailMessage.create({
         data: {
           threadId,
           accountId: account.id,
@@ -149,6 +152,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
           hasAttachments: message.hasAttachments,
           attachments: message.attachments as unknown as Prisma.InputJsonValue,
         },
+        select: { id: true },
       });
     } catch (err) {
       // P2002 = unique constraint violation on [accountId, providerMessageId]
@@ -162,9 +166,30 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
       where: { id: threadId },
       data: { lastMessageAt: message.receivedAt },
     });
+
+    // Only a thread's first message gets classified (Part: Lead Room) — a
+    // reply in an already-seen thread doesn't need re-judging, and the
+    // thread's own leadId (once a human confirms) is the durable signal that
+    // this sender is already handled. Fire-and-forget: a classifier outage
+    // must never slow down or break mail sync.
+    if (isNewThread) {
+      this.leadClassifier
+        .classifyAndTag(account.orgId, created.id, {
+          fromName: message.fromName,
+          fromEmail: message.fromEmail,
+          subject: message.subject,
+          bodyText: message.bodyText,
+        })
+        .catch((err) =>
+          this.logger.warn(`Lead classification dispatch failed for message ${created.id}: ${(err as Error).message}`),
+        );
+    }
   }
 
-  private async findOrCreateThreadId(account: EmailAccount, message: FetchedMessage): Promise<string> {
+  private async findOrCreateThreadId(
+    account: EmailAccount,
+    message: FetchedMessage,
+  ): Promise<{ threadId: string; isNewThread: boolean }> {
     const parentIds = [message.inReplyTo, ...(message.references ?? [])].filter((id): id is string => !!id);
 
     if (parentIds.length > 0) {
@@ -172,7 +197,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
         where: { accountId: account.id, messageIdHeader: { in: parentIds } },
         select: { threadId: true },
       });
-      if (parent) return parent.threadId;
+      if (parent) return { threadId: parent.threadId, isNewThread: false };
     }
 
     const subject = normalizeSubject(message.subject);
@@ -180,7 +205,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
       where: { accountId: account.id, subject },
       orderBy: { lastMessageAt: "desc" },
     });
-    if (existingThread) return existingThread.id;
+    if (existingThread) return { threadId: existingThread.id, isNewThread: false };
 
     const created = await this.prisma.inboundEmailThread.create({
       data: {
@@ -191,6 +216,6 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
         lastMessageAt: message.receivedAt,
       },
     });
-    return created.id;
+    return { threadId: created.id, isNewThread: true };
   }
 }

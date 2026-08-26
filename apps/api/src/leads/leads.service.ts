@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
-import { PipelineStage } from "@leadgen/types";
+import { LeadSourceLayer, PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
 import { CreateManualLeadDto } from "./dto/create-manual-lead.dto";
@@ -201,6 +201,26 @@ export class LeadsService {
       }
       throw err;
     }
+  }
+
+  /** Lead Room dashboard card: total captured, split by where they came
+   *  from, and how many are still waiting on research vs. already scored.
+   *  "Scored" means a real score was produced (> 0) — a manual/email-sourced
+   *  lead's zeroed LeadScore row from createManual doesn't count as scored,
+   *  see insertManualLead's fitReason comment. */
+  async getSourceBreakdown(orgId: string) {
+    const [total, bySource, scored] = await Promise.all([
+      this.prisma.lead.count({ where: { orgId } }),
+      this.prisma.lead.groupBy({ by: ["sourceLayer"], where: { orgId }, _count: { _all: true } }),
+      this.prisma.lead.count({ where: { orgId, score: { leadScore: { gt: 0 } } } }),
+    ]);
+
+    return {
+      total,
+      bySource: Object.fromEntries(bySource.map((s) => [s.sourceLayer, s._count._all])),
+      scored,
+      awaitingResearch: total - scored,
+    };
   }
 
   async findAll(orgId: string, query: QueryLeadsDto) {
@@ -792,7 +812,15 @@ export class LeadsService {
    * unchecked addresses into the send queue, and a bounce damages the sending
    * reputation of every mailbox in the org.
    */
-  async createManual(orgId: string, dto: CreateManualLeadDto): Promise<CreateLeadResult> {
+  /** `sourceLayer` defaults to MANUAL (the "+Add lead" form never sends one) —
+   *  other backend services pass an override, e.g. EmailHubService.addToLead
+   *  passes EMAIL so a lead confirmed from an inbound message is
+   *  distinguishable from one someone typed in by hand. */
+  async createManual(
+    orgId: string,
+    dto: CreateManualLeadDto,
+    sourceLayer: LeadSourceLayer = LeadSourceLayer.MANUAL,
+  ): Promise<CreateLeadResult> {
     const websiteDomain = extractDomain(dto.website);
 
     const existing = await this.findExistingDuplicate(
@@ -806,7 +834,7 @@ export class LeadsService {
       );
     }
 
-    const lead = await this.insertManualLead(orgId, dto, websiteDomain);
+    const lead = await this.insertManualLead(orgId, dto, websiteDomain, sourceLayer);
 
     this.sync.onLeadCreated(lead.id).catch((err) =>
       this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
@@ -835,13 +863,14 @@ export class LeadsService {
     orgId: string,
     dto: Partial<CreateManualLeadDto> & { companyName: string },
     websiteDomain?: string,
+    sourceLayer: LeadSourceLayer = LeadSourceLayer.MANUAL,
   ): Promise<{ id: string }> {
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
         data: {
           orgId,
           companyName: dto.companyName,
-          sourceLayer: "MANUAL",
+          sourceLayer,
           companyNameKey: normaliseCompanyName(dto.companyName),
           linkedinSlug: normaliseLinkedin(dto.linkedinUrl),
           website: dto.website,

@@ -54,7 +54,7 @@ export class FacebookProvider implements SocialPlatformProvider {
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile> {
+  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
     const clientId = this.config.get<string>("META_OAUTH_CLIENT_ID");
     const clientSecret = this.config.get<string>("META_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
@@ -69,16 +69,18 @@ export class FacebookProvider implements SocialPlatformProvider {
       `https://graph.facebook.com/${this.graphVersion()}/me/accounts?fields=id,name,access_token,picture&access_token=${userToken}`,
     );
     const pages = (await pagesRes.json()) as { data: { id: string; name: string; access_token: string; picture?: { data: { url: string } } }[] };
-    const page = pages.data?.[0];
-    if (!page) throw new Error("No Facebook Page found that this account can manage.");
+    if (!pages.data?.length) throw new Error("No Facebook Page found that this account can manage.");
 
-    return {
+    // Every Page this login manages, not just the first — a Business
+    // Manager admin or an agency login can see several at once, and each
+    // one needs its own connect option (Part: multi-account OAuth picker).
+    return pages.data.map((page) => ({
       externalAccountId: page.id,
       username: page.name,
       profileImageUrl: page.picture?.data?.url,
       accountType: "page",
       accessToken: page.access_token, // Page access token, not the user token — this is what publish() needs
-    };
+    }));
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {

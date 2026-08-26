@@ -56,7 +56,7 @@ export class LinkedInProvider implements SocialPlatformProvider {
     return `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile> {
+  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
     const clientId = this.config.get<string>("LINKEDIN_OAUTH_CLIENT_ID");
     const clientSecret = this.config.get<string>("LINKEDIN_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
@@ -84,14 +84,14 @@ export class LinkedInProvider implements SocialPlatformProvider {
     });
     const profile = (await profileRes.json()) as { sub: string; name?: string; picture?: string };
 
-    return {
+    return [{
       externalAccountId: profile.sub,
       username: profile.name ?? profile.sub,
       profileImageUrl: profile.picture,
       accountType: "personal",
       accessToken,
       expiresAt: expiresIn ? new Date(Date.now() + expiresIn * 1000) : undefined,
-    };
+    }];
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {

@@ -64,6 +64,8 @@ enum LeadSourceLayer {
   SURFACE_WEB
   LICENSED_DATABASE
   MANUAL
+  EMAIL
+  SOCIAL_MEDIA
 }
 
 enum Priority {
@@ -842,6 +844,7 @@ model InboundEmailMessage {
   @@index([accountId, isRead])
   @@index([accountId, isIgnored])
   @@index([accountId, messageIdHeader])
+  @@index([accountId, suggestedCategory])
   @@map("inbound_email_messages")
 }
 

@@ -78,8 +78,12 @@ export interface SocialPlatformProvider {
   getOAuthUrl(state: string, redirectUri: string): string;
 
   /** Exchanges the callback `code` for tokens + the connected account's
-   *  own profile info, used to populate/refresh a SocialAccount row. */
-  exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile>;
+   *  own profile info, used to populate/refresh a SocialAccount row. Returns
+   *  every account the authorization actually resolved to — for most
+   *  platforms that's always one, but a Facebook/Instagram login can manage
+   *  several Pages at once, and every one of them must come back here rather
+   *  than silently picking one (Part: multi-account OAuth picker). */
+  exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]>;
 
   refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }>;
 

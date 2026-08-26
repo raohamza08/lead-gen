@@ -92,6 +92,14 @@ export class LeadsController {
       .send(csv);
   }
 
+  // Must come before ":id" for the same reason "export" does above.
+  @Get("source-breakdown")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  sourceBreakdown(@CurrentUser() user: JwtClaims) {
+    return this.leadsService.getSourceBreakdown(user.orgId);
+  }
+
   @Get(":id")
   @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
   @RequiresModule("LEAD_GENERATION")

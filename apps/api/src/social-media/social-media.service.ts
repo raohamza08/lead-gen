@@ -10,7 +10,9 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { NotificationsService } from "../notifications/notifications.service";
 import { SocialProviderRegistryService } from "./providers/social-provider-registry.service";
 import { XProvider } from "./providers/x.provider";
-import { OAuthStateStore } from "./oauth-state.store";
+import { OAuthStateStore, PendingOAuthConnection } from "./oauth-state.store";
+import { PendingAccountSelectionStore } from "./pending-account-selection.store";
+import { ConnectedAccountProfile } from "./providers/social-platform-provider.interface";
 import { MEDIA_STORAGE_SERVICE, MediaStorageService } from "./media/media-storage.interface";
 import { mediaPublicUrl } from "./media/media-url";
 import { CreateSocialAccountDto, GrantSocialAccountAccessDto, UpdateSocialAccountSettingsDto } from "./dto/social-account.dto";
@@ -53,6 +55,7 @@ export class SocialMediaService {
     private readonly notifications: NotificationsService,
     private readonly registry: SocialProviderRegistryService,
     private readonly oauthState: OAuthStateStore,
+    private readonly pendingSelection: PendingAccountSelectionStore,
     @Inject(MEDIA_STORAGE_SERVICE) private readonly storage: MediaStorageService,
   ) {}
 
@@ -207,6 +210,56 @@ export class SocialMediaService {
     }
   }
 
+  /** The upsert+audit+notify+emit block shared by every path that actually
+   *  connects one account — the auto path below (exactly one match) and
+   *  selectPendingAccount (an operator's manual pick from several matches). */
+  private async connectProfile(
+    pending: Pick<PendingOAuthConnection, "orgId" | "userId">,
+    platform: SocialPlatform,
+    profile: ConnectedAccountProfile,
+  ) {
+    const account = await this.prisma.socialAccount.upsert({
+      where: { orgId_platform_username: { orgId: pending.orgId, platform, username: profile.username } },
+      create: {
+        orgId: pending.orgId,
+        platform,
+        username: profile.username,
+        displayName: profile.displayName,
+        profileImageUrl: profile.profileImageUrl,
+        accountType: profile.accountType,
+        externalAccountId: profile.externalAccountId,
+        status: "CONNECTED",
+        accessTokenEnc: this.encryption.encrypt(profile.accessToken),
+        refreshTokenEnc: profile.refreshToken ? this.encryption.encrypt(profile.refreshToken) : undefined,
+        tokenExpiresAt: profile.expiresAt,
+        connectedByUserId: pending.userId,
+        connectedAt: new Date(),
+      },
+      update: {
+        displayName: profile.displayName,
+        profileImageUrl: profile.profileImageUrl,
+        accountType: profile.accountType,
+        externalAccountId: profile.externalAccountId,
+        status: "CONNECTED",
+        accessTokenEnc: this.encryption.encrypt(profile.accessToken),
+        refreshTokenEnc: profile.refreshToken ? this.encryption.encrypt(profile.refreshToken) : undefined,
+        tokenExpiresAt: profile.expiresAt,
+        connectedByUserId: pending.userId,
+        connectedAt: new Date(),
+      },
+    });
+
+    await this.writeAudit(pending.orgId, pending.userId, "ACCOUNT_CONNECTED", { accountId: account.id, diff: { platform, username: profile.username } });
+    await this.notifications.notify(pending.orgId, {
+      type: "SOCIAL_ACCOUNT_CONNECTED",
+      severity: "WARNING",
+      message: `${platform} account @${profile.username} connected successfully.`,
+    });
+    this.realtime.emitToOrg(pending.orgId, "socialMedia.accountConnected", { accountId: account.id, platform });
+
+    return account;
+  }
+
   /** Called from the public OAuth callback controller — returns a frontend URL to redirect the browser to, success or failure. */
   async handleOAuthCallback(platform: SocialPlatform, code: string | undefined, state: string | undefined): Promise<string> {
     const accountsUrl = `${dashboardUrl()}/social-media/accounts`;
@@ -219,51 +272,50 @@ export class SocialMediaService {
 
     try {
       const provider = this.registry.for(platform);
-      const profile = await provider.exchangeCodeForToken(code, this.callbackRedirectUri(platform));
+      const profiles = await provider.exchangeCodeForToken(code, this.callbackRedirectUri(platform));
 
-      const account = await this.prisma.socialAccount.upsert({
-        where: { orgId_platform_username: { orgId: pending.orgId, platform, username: profile.username } },
-        create: {
-          orgId: pending.orgId,
-          platform,
-          username: profile.username,
-          displayName: profile.displayName,
-          profileImageUrl: profile.profileImageUrl,
-          accountType: profile.accountType,
-          externalAccountId: profile.externalAccountId,
-          status: "CONNECTED",
-          accessTokenEnc: this.encryption.encrypt(profile.accessToken),
-          refreshTokenEnc: profile.refreshToken ? this.encryption.encrypt(profile.refreshToken) : undefined,
-          tokenExpiresAt: profile.expiresAt,
-          connectedByUserId: pending.userId,
-          connectedAt: new Date(),
-        },
-        update: {
-          displayName: profile.displayName,
-          profileImageUrl: profile.profileImageUrl,
-          accountType: profile.accountType,
-          externalAccountId: profile.externalAccountId,
-          status: "CONNECTED",
-          accessTokenEnc: this.encryption.encrypt(profile.accessToken),
-          refreshTokenEnc: profile.refreshToken ? this.encryption.encrypt(profile.refreshToken) : undefined,
-          tokenExpiresAt: profile.expiresAt,
-          connectedByUserId: pending.userId,
-          connectedAt: new Date(),
-        },
-      });
+      if (profiles.length === 0) {
+        return `${accountsUrl}?social_connect_error=${encodeURIComponent("No account was found to connect")}`;
+      }
 
-      await this.writeAudit(pending.orgId, pending.userId, "ACCOUNT_CONNECTED", { accountId: account.id, diff: { platform, username: profile.username } });
-      await this.notifications.notify(pending.orgId, {
-        type: "SOCIAL_ACCOUNT_CONNECTED",
-        severity: "WARNING",
-        message: `${platform} account @${profile.username} connected successfully.`,
-      });
-      this.realtime.emitToOrg(pending.orgId, "socialMedia.accountConnected", { accountId: account.id, platform });
+      // A Facebook/Instagram login can resolve to several Pages at once —
+      // when it does, don't guess which one the operator meant; hand the
+      // list to the picker instead (Part: multi-account OAuth picker).
+      if (profiles.length > 1) {
+        const pendingId = this.pendingSelection.create({ orgId: pending.orgId, userId: pending.userId, platform, profiles });
+        return `${accountsUrl}?social_pending=${pendingId}`;
+      }
 
+      await this.connectProfile(pending, platform, profiles[0]);
       return `${accountsUrl}?social_connected=${platform}`;
     } catch (err) {
       return `${accountsUrl}?social_connect_error=${encodeURIComponent((err as Error).message.slice(0, 300))}`;
     }
+  }
+
+  /** The picker's list — access tokens never leave the backend, the UI only
+   *  needs enough to render options and let the operator pick one. */
+  async getPendingSelection(user: JwtClaims, pendingId: string) {
+    const pending = this.pendingSelection.get(pendingId);
+    if (!pending || pending.orgId !== user.orgId) throw new NotFoundException("This selection has expired — please reconnect.");
+    return {
+      platform: pending.platform,
+      accounts: pending.profiles.map((p) => ({
+        externalAccountId: p.externalAccountId,
+        username: p.username,
+        displayName: p.displayName,
+        profileImageUrl: p.profileImageUrl,
+        accountType: p.accountType,
+      })),
+    };
+  }
+
+  async selectPendingAccount(user: JwtClaims, pendingId: string, externalAccountId: string) {
+    const pending = this.pendingSelection.get(pendingId);
+    if (!pending || pending.orgId !== user.orgId) throw new NotFoundException("This selection has expired — please reconnect.");
+    const profile = pending.profiles.find((p) => p.externalAccountId === externalAccountId);
+    if (!profile) throw new NotFoundException("That account was not part of this selection.");
+    return this.connectProfile({ orgId: pending.orgId, userId: pending.userId }, pending.platform, profile);
   }
 
   // ---------------------------------------------------------------------

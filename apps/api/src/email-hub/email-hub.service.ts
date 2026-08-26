@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import { JwtClaims, Role } from "@leadgen/types";
+import { JwtClaims, LeadSourceLayer, Role } from "@leadgen/types";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
@@ -322,12 +322,16 @@ export class EmailHubService {
     });
 
     if (!lead) {
-      const created = await this.leads.createManual(user.orgId, {
-        companyName: companyGuess,
-        contactName: firstMessage.fromName || undefined,
-        email: firstMessage.fromEmail,
-        notes: `Added from Email Hub — first message: "${thread.subject}"`,
-      });
+      const created = await this.leads.createManual(
+        user.orgId,
+        {
+          companyName: companyGuess,
+          contactName: firstMessage.fromName || undefined,
+          email: firstMessage.fromEmail,
+          notes: `Added from Email Hub — first message: "${thread.subject}"`,
+        },
+        LeadSourceLayer.EMAIL,
+      );
       if (created.status === "duplicate" || !created.leadId) {
         throw new BadRequestException("Could not create lead — a matching lead already exists");
       }
@@ -346,7 +350,7 @@ export class EmailHubService {
     };
     const since = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const [connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored] =
+    const [connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored, possibleLeads] =
       await Promise.all([
         this.prisma.emailAccount.count({
           where: { orgId: user.orgId, inboundSyncEnabled: true, ...(accountIds ? { id: { in: accountIds } } : {}) },
@@ -359,8 +363,13 @@ export class EmailHubService {
           where: { orgId: user.orgId, leadId: { not: null }, ...(accountIds ? { accountId: { in: accountIds } } : {}) },
         }),
         this.prisma.inboundEmailMessage.count({ where: { ...scope, isIgnored: true } }),
+        // Awaiting confirmation (Part: Lead Room) — flagged by the AI classifier
+        // but not yet turned into a lead via Add to Lead.
+        this.prisma.inboundEmailMessage.count({
+          where: { ...scope, suggestedCategory: "POSSIBLE_LEAD", thread: { leadId: null } },
+        }),
       ]);
 
-    return { connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored };
+    return { connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored, possibleLeads };
   }
 }

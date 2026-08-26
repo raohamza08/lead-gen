@@ -16,6 +16,8 @@ interface ThreadMessage {
   receivedAt: string;
   isImportant: boolean;
   hasAttachments: boolean;
+  suggestedCategory: string | null;
+  aiSuggestedAction: string | null;
   attachments: { filename: string; size: number }[];
   tags: { tag: { id: string; name: string; color: string } }[];
 }
@@ -131,13 +133,23 @@ export function MessageDetailPanel({
                 Lead: {thread.lead.companyName}
               </Link>
             ) : (
-              <button
-                onClick={addToLead}
-                disabled={addingToLead}
-                className="rounded-full border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 hover:bg-ink/5 disabled:opacity-50"
-              >
-                {addingToLead ? "Adding…" : "Add to Leads"}
-              </button>
+              <>
+                {thread.messages[0]?.suggestedCategory === "POSSIBLE_LEAD" && (
+                  <span
+                    className="rounded-full bg-gold/15 px-2.5 py-1 text-xs text-gold"
+                    title={thread.messages[0]?.aiSuggestedAction ?? undefined}
+                  >
+                    AI flagged this as a possible lead
+                  </span>
+                )}
+                <button
+                  onClick={addToLead}
+                  disabled={addingToLead}
+                  className="rounded-full border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 hover:bg-ink/5 disabled:opacity-50"
+                >
+                  {addingToLead ? "Adding…" : "Add to Leads"}
+                </button>
+              </>
             )}
           </div>
         )}

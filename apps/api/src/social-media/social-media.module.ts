@@ -10,6 +10,7 @@ import { LocalDiskMediaStorageService } from "./media/local-disk-media-storage.s
 import { MEDIA_STORAGE_SERVICE } from "./media/media-storage.interface";
 import { MediaFileController } from "./media/media-file.controller";
 import { OAuthStateStore } from "./oauth-state.store";
+import { PendingAccountSelectionStore } from "./pending-account-selection.store";
 import { SocialPublishQueue } from "./social-publish.queue";
 import { SocialPublishWorker } from "./social-publish.worker";
 import { SocialMediaService } from "./social-media.service";
@@ -29,6 +30,7 @@ import { SocialOAuthCallbackController } from "./social-oauth-callback.controlle
     SocialProviderRegistryService,
     { provide: MEDIA_STORAGE_SERVICE, useClass: LocalDiskMediaStorageService },
     OAuthStateStore,
+    PendingAccountSelectionStore,
     SocialPublishQueue,
     SocialPublishWorker,
     SocialMediaService,

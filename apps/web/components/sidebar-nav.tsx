@@ -31,9 +31,13 @@ const NAV: NavItem[] = [
   { type: "link", href: "/overview", label: "Dashboard" },
   {
     type: "group",
+    label: "Lead Room",
+    links: [{ href: "/leads", label: "Leads" }],
+  },
+  {
+    type: "group",
     label: "Lead Generation",
     links: [
-      { href: "/leads", label: "Leads" },
       { href: "/pipeline", label: "Pipeline" },
       { href: "/sequences", label: "Sequences" },
       { href: "/campaigns", label: "Campaigns" },
@@ -75,6 +79,7 @@ const NAV: NavItem[] = [
 
 /** Maps a NAV group's label to the module flag from GET /users/me that gates it. */
 const MODULE_FLAG_BY_GROUP: Record<string, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess"> = {
+  "Lead Room": "leadGenAccess",
   "Lead Generation": "leadGenAccess",
   "Email Hub": "emailHubAccess",
   "Social Media": "socialMediaAccess",

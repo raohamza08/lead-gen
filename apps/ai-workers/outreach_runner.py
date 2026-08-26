@@ -156,6 +156,50 @@ async def run_case_study_review(
     }
 
 
+async def run_email_lead_classification(
+    org_id: str, from_name: str | None, from_email: str, subject: str, body_text: str,
+) -> dict:
+    """Synchronous, same reasoning as run_case_study_review above: the caller
+    is EmailHubSyncWorker waiting on a single Claude CLI call before it can
+    write suggestedCategory onto the message it just persisted — a fire-and-
+    forget dispatch from the caller's side, not a background job on this
+    side."""
+    org_context = {"promptOverrides": await api_client.get_prompt_overrides(org_id)}
+    orchestrator = build("email_lead_classifier", seed_keys=("email_input", "org_context"))
+    ctx = AgentContext(
+        run_id=org_id,
+        org_id=org_id,
+        data={
+            "email_input": {
+                "fromName": from_name, "fromEmail": from_email,
+                "subject": subject, "bodyText": body_text,
+            },
+            "org_context": org_context,
+        },
+    )
+    result = await orchestrator.run(ctx)
+
+    await api_client.record_agent_runs(
+        org_id,
+        None,
+        [
+            {
+                "agent": r.agent, "status": r.status, "durationMs": r.duration_ms,
+                "attempts": r.attempts, "error": r.error, "notes": r.notes,
+            }
+            for r in result.records
+        ],
+    )
+
+    classification = ctx.get("email_lead_result") or {}
+    return {
+        "isCandidate": bool(classification.get("isCandidate", False)),
+        "reason": classification.get("reason") or "",
+        "completed": result.completed,
+        "stopReason": result.stop_reason,
+    }
+
+
 async def run_social_content(org_id: str, content_input: dict) -> dict:
     """Synchronous, same reasoning as run_case_study_review: the caller is
     either the composer (an operator waiting to see a draft appear) or an
