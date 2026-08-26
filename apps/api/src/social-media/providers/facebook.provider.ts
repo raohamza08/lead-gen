@@ -4,6 +4,9 @@ import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
   ConnectedAccountProfile,
+  Conversation,
+  ConversationMessage,
+  FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -25,11 +28,13 @@ export class FacebookProvider implements SocialPlatformProvider {
     nativeScheduling: true, // Facebook's own Page publishing API accepts a scheduled_publish_time
     analytics: true,
     comments: true,
-    dms: false,
+    dms: true,
     mediaTypes: ["image", "video", "link"],
     notes:
       "Publishes to a Facebook Page (not a personal profile — the Graph API does not support posting to personal " +
-      "timelines for third-party apps). Uses the same Meta Developer app as Instagram.",
+      "timelines for third-party apps). Uses the same Meta Developer app as Instagram. Feed and Messenger " +
+      "conversations need the account reconnected after this was added, since pages_messaging wasn't part of the " +
+      "original OAuth grant.",
   };
 
   constructor(
@@ -48,7 +53,7 @@ export class FacebookProvider implements SocialPlatformProvider {
       client_id: clientId,
       redirect_uri: redirectUri,
       state,
-      scope: ["pages_show_list", "pages_manage_posts", "pages_read_engagement"].join(","),
+      scope: ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "pages_messaging"].join(","),
       response_type: "code",
     });
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
@@ -108,5 +113,116 @@ export class FacebookProvider implements SocialPlatformProvider {
     if (!res.ok) throw new Error(`Facebook publish failed: ${res.status} ${await res.text()}`);
     const result = (await res.json()) as { id: string; post_id?: string };
     return { externalPostId: result.post_id ?? result.id };
+  }
+
+  async listFeed(account: SocialAccount): Promise<FeedItem[]> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/posts` +
+        `?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true)` +
+        `&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Facebook feed fetch failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data: {
+        id: string;
+        message?: string;
+        created_time: string;
+        permalink_url?: string;
+        full_picture?: string;
+        likes?: { summary?: { total_count?: number } };
+        comments?: { summary?: { total_count?: number } };
+      }[];
+    };
+    return (body.data ?? []).map((p) => ({
+      externalPostId: p.id,
+      content: p.message ?? "",
+      mediaUrl: p.full_picture,
+      permalink: p.permalink_url,
+      postedAt: new Date(p.created_time),
+      likeCount: p.likes?.summary?.total_count ?? 0,
+      commentCount: p.comments?.summary?.total_count ?? 0,
+    }));
+  }
+
+  async listConversations(account: SocialAccount): Promise<Conversation[]> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/conversations` +
+        `?fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Facebook conversations fetch failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data: {
+        id: string;
+        participants?: { data: { id: string; name?: string }[] };
+        updated_time: string;
+        snippet?: string;
+        unread_count?: number;
+      }[];
+    };
+    return (body.data ?? []).map((c) => {
+      const other = c.participants?.data?.find((p) => p.id !== account.externalAccountId);
+      return {
+        externalConversationId: c.id,
+        participantName: other?.name ?? "Unknown",
+        lastMessageSnippet: c.snippet,
+        lastMessageAt: new Date(c.updated_time),
+        unread: (c.unread_count ?? 0) > 0,
+      };
+    });
+  }
+
+  async listMessages(account: SocialAccount, conversationId: string): Promise<ConversationMessage[]> {
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${conversationId}/messages` +
+        `?fields=id,message,from,created_time&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Facebook messages fetch failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data: { id: string; message?: string; from?: { id: string; name?: string }; created_time: string }[];
+    };
+    // Graph API returns newest-first; reverse for a natural top-to-bottom thread.
+    return (body.data ?? [])
+      .map((m) => ({
+        externalMessageId: m.id,
+        fromUs: m.from?.id === account.externalAccountId,
+        senderName: m.from?.name ?? "Unknown",
+        text: m.message ?? "",
+        sentAt: new Date(m.created_time),
+      }))
+      .reverse();
+  }
+
+  async sendMessage(account: SocialAccount, conversationId: string, text: string): Promise<void> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    // The Send API needs the recipient's page-scoped user id, not the
+    // conversation id -- look it up from the conversation's participants
+    // (whichever one isn't this Page).
+    const convRes = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${conversationId}?fields=participants&access_token=${accessToken}`,
+    );
+    if (!convRes.ok) throw new Error(`Facebook conversation lookup failed: ${convRes.status} ${await convRes.text()}`);
+    const conv = (await convRes.json()) as { participants?: { data: { id: string }[] } };
+    const recipientId = conv.participants?.data?.find((p) => p.id !== account.externalAccountId)?.id;
+    if (!recipientId) throw new Error("Could not determine the message recipient for this conversation.");
+
+    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/me/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient: { id: recipientId }, message: { text }, access_token: accessToken }),
+    });
+    if (!res.ok) throw new Error(`Facebook send message failed: ${res.status} ${await res.text()}`);
   }
 }

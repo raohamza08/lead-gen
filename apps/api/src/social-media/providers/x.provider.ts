@@ -5,6 +5,9 @@ import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
   ConnectedAccountProfile,
+  Conversation,
+  ConversationMessage,
+  FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -140,5 +143,24 @@ export class XProvider implements SocialPlatformProvider {
     if (!res.ok) throw new Error(`X publish failed: ${res.status} ${await res.text()}`);
     const body = (await res.json()) as { data: { id: string } };
     return { externalPostId: body.data.id };
+  }
+
+  // Reading a timeline or DMs, and sending DMs, requires X's paid API tiers
+  // (Basic/Pro) -- a real cost decision for the org, not something to
+  // silently assume. Throw clearly rather than pretend it works on the free tier.
+  async listFeed(): Promise<FeedItem[]> {
+    throw new PlatformNotConfiguredError("X", "reading a feed requires a paid X API tier, not available on the free tier");
+  }
+
+  async listConversations(): Promise<Conversation[]> {
+    throw new PlatformNotConfiguredError("X", "direct messages require a paid X API tier, not available on the free tier");
+  }
+
+  async listMessages(): Promise<ConversationMessage[]> {
+    throw new PlatformNotConfiguredError("X", "direct messages require a paid X API tier, not available on the free tier");
+  }
+
+  async sendMessage(): Promise<void> {
+    throw new PlatformNotConfiguredError("X", "direct messages require a paid X API tier, not available on the free tier");
   }
 }

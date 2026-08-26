@@ -25,6 +25,7 @@ interface Account {
   status: "CONNECTED" | "EXPIRED" | "DISCONNECTED" | "ERROR";
   connected: boolean;
   capabilities: Capabilities;
+  lastPublishError: string | null;
 }
 
 const EMPTY_DRAFT = { platform: "INSTAGRAM" as Platform, username: "", displayName: "" };
@@ -289,6 +290,12 @@ export default function SocialAccountsPage() {
             <p className="mt-2 text-xs text-ink/55" title={a.capabilities.notes}>
               {a.capabilities.notes.length > 130 ? `${a.capabilities.notes.slice(0, 130)}…` : a.capabilities.notes}
             </p>
+
+            {a.lastPublishError && (
+              <p className="mt-2 rounded-md bg-bad/10 px-2 py-1 text-xs text-bad" title={a.lastPublishError}>
+                Last publish failed: {a.lastPublishError.length > 90 ? `${a.lastPublishError.slice(0, 90)}…` : a.lastPublishError}
+              </p>
+            )}
 
             <div className="mt-2 flex flex-wrap gap-1">
               {[

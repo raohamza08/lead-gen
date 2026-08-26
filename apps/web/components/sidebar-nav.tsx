@@ -65,6 +65,10 @@ const NAV: NavItem[] = [
     links: [
       { href: "/social-media", label: "Overview" },
       { href: "/social-media/accounts", label: "Accounts" },
+      { href: "/social-media/linkedin", label: "LinkedIn" },
+      { href: "/social-media/instagram", label: "Instagram" },
+      { href: "/social-media/facebook", label: "Facebook" },
+      { href: "/social-media/x", label: "X" },
       { href: "/social-media/create", label: "Create Post" },
       { href: "/social-media/posts", label: "Posts" },
       { href: "/social-media/calendar", label: "Calendar" },

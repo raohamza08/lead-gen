@@ -4,6 +4,9 @@ import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
   ConnectedAccountProfile,
+  Conversation,
+  ConversationMessage,
+  FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -33,13 +36,14 @@ export class InstagramProvider implements SocialPlatformProvider {
     nativeScheduling: false,
     analytics: true,
     comments: true,
-    dms: false, // Instagram Messaging API is a separate, more restricted permission — not implemented in V1
+    dms: true,
     mediaTypes: ["image", "video", "carousel", "reel"],
     notes:
       "Requires a Business/Creator Instagram account linked to a Facebook Page, connected through a Meta Developer app. " +
       "Accounts added as testers on that app work with no formal review; publishing to accounts outside the app's " +
       "tester/admin list requires Meta App Review for the instagram_content_publish permission. Stories are not " +
-      "supported by this integration. DMs/comment replies are not implemented in V1.",
+      "supported by this integration. Feed and DMs need the account reconnected after this was added, since " +
+      "instagram_manage_messages wasn't part of the original OAuth grant.",
   };
 
   constructor(
@@ -62,7 +66,13 @@ export class InstagramProvider implements SocialPlatformProvider {
   getOAuthUrl(state: string, redirectUri: string): string {
     const clientId = this.clientId();
     if (!clientId) throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID is not set");
-    const scopes = ["instagram_basic", "instagram_content_publish", "pages_show_list", "pages_read_engagement"];
+    const scopes = [
+      "instagram_basic",
+      "instagram_content_publish",
+      "instagram_manage_messages",
+      "pages_show_list",
+      "pages_read_engagement",
+    ];
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -184,5 +194,111 @@ export class InstagramProvider implements SocialPlatformProvider {
     }
     const { id: mediaId } = (await publishRes.json()) as { id: string };
     return { externalPostId: mediaId };
+  }
+
+  async listFeed(account: SocialAccount): Promise<FeedItem[]> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/media` +
+        `?fields=id,caption,timestamp,permalink,media_url,like_count,comments_count&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Instagram feed fetch failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data: {
+        id: string;
+        caption?: string;
+        timestamp: string;
+        permalink?: string;
+        media_url?: string;
+        like_count?: number;
+        comments_count?: number;
+      }[];
+    };
+    return (body.data ?? []).map((p) => ({
+      externalPostId: p.id,
+      content: p.caption ?? "",
+      mediaUrl: p.media_url,
+      permalink: p.permalink,
+      postedAt: new Date(p.timestamp),
+      likeCount: p.like_count ?? 0,
+      commentCount: p.comments_count ?? 0,
+    }));
+  }
+
+  async listConversations(account: SocialAccount): Promise<Conversation[]> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/conversations` +
+        `?platform=instagram&fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Instagram conversations fetch failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data: {
+        id: string;
+        participants?: { data: { id: string; username?: string }[] };
+        updated_time: string;
+        snippet?: string;
+        unread_count?: number;
+      }[];
+    };
+    return (body.data ?? []).map((c) => {
+      const other = c.participants?.data?.find((p) => p.id !== account.externalAccountId);
+      return {
+        externalConversationId: c.id,
+        participantName: other?.username ?? "Unknown",
+        lastMessageSnippet: c.snippet,
+        lastMessageAt: new Date(c.updated_time),
+        unread: (c.unread_count ?? 0) > 0,
+      };
+    });
+  }
+
+  async listMessages(account: SocialAccount, conversationId: string): Promise<ConversationMessage[]> {
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${conversationId}/messages` +
+        `?fields=id,message,from,created_time&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Instagram messages fetch failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data: { id: string; message?: string; from?: { id: string; username?: string }; created_time: string }[];
+    };
+    return (body.data ?? [])
+      .map((m) => ({
+        externalMessageId: m.id,
+        fromUs: m.from?.id === account.externalAccountId,
+        senderName: m.from?.username ?? "Unknown",
+        text: m.message ?? "",
+        sentAt: new Date(m.created_time),
+      }))
+      .reverse();
+  }
+
+  async sendMessage(account: SocialAccount, conversationId: string, text: string): Promise<void> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const convRes = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${conversationId}?fields=participants&access_token=${accessToken}`,
+    );
+    if (!convRes.ok) throw new Error(`Instagram conversation lookup failed: ${convRes.status} ${await convRes.text()}`);
+    const conv = (await convRes.json()) as { participants?: { data: { id: string }[] } };
+    const recipientId = conv.participants?.data?.find((p) => p.id !== account.externalAccountId)?.id;
+    if (!recipientId) throw new Error("Could not determine the message recipient for this conversation.");
+
+    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient: { id: recipientId }, message: { text }, access_token: accessToken }),
+    });
+    if (!res.ok) throw new Error(`Instagram send message failed: ${res.status} ${await res.text()}`);
   }
 }

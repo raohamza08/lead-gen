@@ -112,9 +112,25 @@ export class SocialMediaService {
       orderBy: { createdAt: "asc" },
     });
     const capabilities = this.registry.capabilityRegistry();
+
+    // Most recent publish failure per account, if any (Part: Social Media
+    // Hub -- accounts overview surfaces issues, not just connected status).
+    // One query across every account, first-match-per-account taken in JS,
+    // rather than N+1 per-account lookups.
+    const failures = await this.prisma.socialPostVersion.findMany({
+      where: { accountId: { in: accounts.map((a) => a.id) }, publishError: { not: null } },
+      orderBy: { lastAttemptAt: "desc" },
+      select: { accountId: true, publishError: true },
+    });
+    const lastErrorByAccount = new Map<string, string | null>();
+    for (const f of failures) {
+      if (!lastErrorByAccount.has(f.accountId)) lastErrorByAccount.set(f.accountId, f.publishError);
+    }
+
     return accounts.map((a) => ({
       ...this.sanitizeAccount(a),
       capabilities: capabilities[a.platform],
+      lastPublishError: lastErrorByAccount.get(a.id) ?? null,
     }));
   }
 
@@ -180,6 +196,73 @@ export class SocialMediaService {
     if (!account) throw new NotFoundException("Social account not found");
     const res = await this.prisma.socialAccountAccess.deleteMany({ where: { accountId, userId } });
     return { revoked: res.count };
+  }
+
+  // ---------------------------------------------------------------------
+  // Feed & messages (Part: Social Media Hub) — no automation, no AI:
+  // getConversations/getMessages are read-only, sendReply is one direct API
+  // call triggered by a human clicking send in the UI, same shape as
+  // EmailHubService.replyToEmail.
+  // ---------------------------------------------------------------------
+
+  private async getOwnedAccount(user: JwtClaims, accountId: string, require: "publish" | "approve" | null = null) {
+    const account = await this.prisma.socialAccount.findFirst({ where: { id: accountId, orgId: user.orgId } });
+    if (!account) throw new NotFoundException("Social account not found");
+    await this.assertAccountAccess(user, accountId, require);
+    return account;
+  }
+
+  /** Providers throw plain PlatformNotConfiguredError/Error (not an
+   *  HttpException) for expected, operator-actionable states like "this
+   *  platform has no messaging API" — same reasoning as initiateConnect's
+   *  catch block, re-thrown as BadRequestException so the real message
+   *  reaches the UI instead of AllExceptionsFilter's generic 500. */
+  private asBadRequest(err: unknown): never {
+    throw new BadRequestException((err as Error).message);
+  }
+
+  async getFeed(user: JwtClaims, accountId: string) {
+    const account = await this.getOwnedAccount(user, accountId);
+    const provider = this.registry.for(account.platform);
+    try {
+      const items = await provider.listFeed(account);
+      const ownVersions = await this.prisma.socialPostVersion.findMany({
+        where: { accountId, externalPostId: { not: null } },
+        select: { externalPostId: true },
+      });
+      const ownPostIds = new Set(ownVersions.map((v) => v.externalPostId));
+      return items.map((item) => ({ ...item, isOwnPost: ownPostIds.has(item.externalPostId) }));
+    } catch (err) {
+      this.asBadRequest(err);
+    }
+  }
+
+  async getConversations(user: JwtClaims, accountId: string) {
+    const account = await this.getOwnedAccount(user, accountId);
+    try {
+      return await this.registry.for(account.platform).listConversations(account);
+    } catch (err) {
+      this.asBadRequest(err);
+    }
+  }
+
+  async getMessages(user: JwtClaims, accountId: string, conversationId: string) {
+    const account = await this.getOwnedAccount(user, accountId);
+    try {
+      return await this.registry.for(account.platform).listMessages(account, conversationId);
+    } catch (err) {
+      this.asBadRequest(err);
+    }
+  }
+
+  async sendReply(user: JwtClaims, accountId: string, conversationId: string, text: string) {
+    const account = await this.getOwnedAccount(user, accountId, "publish");
+    try {
+      await this.registry.for(account.platform).sendMessage(account, conversationId, text);
+      return { sent: true };
+    } catch (err) {
+      this.asBadRequest(err);
+    }
   }
 
   // ---------------------------------------------------------------------

@@ -6,6 +6,9 @@ import { Readable } from "stream";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
   ConnectedAccountProfile,
+  Conversation,
+  ConversationMessage,
+  FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -124,5 +127,21 @@ export class YouTubeProvider implements SocialPlatformProvider {
     });
     if (!res.data.id) throw new Error("YouTube upload did not return a video id");
     return { externalPostId: res.data.id };
+  }
+
+  async listFeed(): Promise<FeedItem[]> {
+    throw new PlatformNotConfiguredError("YouTube", "feed reading is not implemented");
+  }
+
+  async listConversations(): Promise<Conversation[]> {
+    throw new PlatformNotConfiguredError("YouTube", "YouTube has no direct-message concept for channels");
+  }
+
+  async listMessages(): Promise<ConversationMessage[]> {
+    throw new PlatformNotConfiguredError("YouTube", "YouTube has no direct-message concept for channels");
+  }
+
+  async sendMessage(): Promise<void> {
+    throw new PlatformNotConfiguredError("YouTube", "YouTube has no direct-message concept for channels");
   }
 }

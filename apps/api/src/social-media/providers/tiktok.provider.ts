@@ -4,6 +4,9 @@ import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
   ConnectedAccountProfile,
+  Conversation,
+  ConversationMessage,
+  FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -130,5 +133,21 @@ export class TikTokProvider implements SocialPlatformProvider {
     if (!res.ok) throw new Error(`TikTok publish failed: ${res.status} ${await res.text()}`);
     const body = (await res.json()) as { data: { publish_id: string } };
     return { externalPostId: body.data.publish_id };
+  }
+
+  async listFeed(): Promise<FeedItem[]> {
+    throw new PlatformNotConfiguredError("TikTok", "feed reading is not implemented");
+  }
+
+  async listConversations(): Promise<Conversation[]> {
+    throw new PlatformNotConfiguredError("TikTok", "messaging is not available through TikTok's public API");
+  }
+
+  async listMessages(): Promise<ConversationMessage[]> {
+    throw new PlatformNotConfiguredError("TikTok", "messaging is not available through TikTok's public API");
+  }
+
+  async sendMessage(): Promise<void> {
+    throw new PlatformNotConfiguredError("TikTok", "messaging is not available through TikTok's public API");
   }
 }

@@ -69,6 +69,38 @@ export interface PublishResult {
   externalPostId: string;
 }
 
+/** One item in an account's own feed (Part: Social Media Hub — feed tab).
+ *  `isOwnPost` is set by the caller (SocialMediaService), matched against
+ *  our own SocialPostVersion.externalPostId — the provider itself has no
+ *  concept of "ours", it just reports what the platform returns. */
+export interface FeedItem {
+  externalPostId: string;
+  content: string;
+  mediaUrl?: string;
+  permalink?: string;
+  postedAt: Date;
+  likeCount: number;
+  commentCount: number;
+  isOwnPost?: boolean;
+}
+
+export interface Conversation {
+  externalConversationId: string;
+  participantName: string;
+  participantAvatarUrl?: string;
+  lastMessageSnippet?: string;
+  lastMessageAt: Date;
+  unread: boolean;
+}
+
+export interface ConversationMessage {
+  externalMessageId: string;
+  fromUs: boolean;
+  senderName: string;
+  text: string;
+  sentAt: Date;
+}
+
 export interface SocialPlatformProvider {
   readonly platform: string;
   readonly capabilities: SocialPlatformCapabilities;
@@ -88,4 +120,20 @@ export interface SocialPlatformProvider {
   refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }>;
 
   publish(account: SocialAccount, input: PublishInput): Promise<PublishResult>;
+
+  /** Recent posts on this account with current engagement counts (Part:
+   *  Social Media Hub). Throws PlatformNotConfiguredError with a real
+   *  explanation on platforms with no read API for this — never returns a
+   *  fake empty list, same "do not create a fake implementation" rule as
+   *  every other method here. */
+  listFeed(account: SocialAccount): Promise<FeedItem[]>;
+
+  listConversations(account: SocialAccount): Promise<Conversation[]>;
+
+  listMessages(account: SocialAccount, conversationId: string): Promise<ConversationMessage[]>;
+
+  /** A human clicked send in the Messages tab — one direct, synchronous API
+   *  call, no queue, no draft, no AI (Part: Social Media Hub — explicitly
+   *  human-in-the-loop, never automatic). */
+  sendMessage(account: SocialAccount, conversationId: string, text: string): Promise<void>;
 }

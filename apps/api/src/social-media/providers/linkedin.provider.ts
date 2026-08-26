@@ -4,6 +4,9 @@ import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
   ConnectedAccountProfile,
+  Conversation,
+  ConversationMessage,
+  FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -156,5 +159,25 @@ export class LinkedInProvider implements SocialPlatformProvider {
     if (!res.ok) throw new Error(`LinkedIn publish failed: ${res.status} ${await res.text()}`);
     const postId = res.headers.get("x-restli-id") ?? (await res.json().catch(() => ({})))?.id;
     return { externalPostId: postId ?? "unknown" };
+  }
+
+  // LinkedIn has no public third-party API for reading a feed or for
+  // reading/sending messages -- unlike Meta, there is no compliant path
+  // here at all, not just a permissions gate. Same reasoning this codebase
+  // already applies to LinkedIn outreach elsewhere (kept human-driven).
+  async listFeed(): Promise<FeedItem[]> {
+    throw new PlatformNotConfiguredError("LinkedIn", "reading a feed is not available through LinkedIn's public API");
+  }
+
+  async listConversations(): Promise<Conversation[]> {
+    throw new PlatformNotConfiguredError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
+  }
+
+  async listMessages(): Promise<ConversationMessage[]> {
+    throw new PlatformNotConfiguredError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
+  }
+
+  async sendMessage(): Promise<void> {
+    throw new PlatformNotConfiguredError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
   }
 }

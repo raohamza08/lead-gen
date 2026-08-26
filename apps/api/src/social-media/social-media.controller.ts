@@ -54,6 +54,33 @@ export class SocialMediaController {
     return this.service.getStats(user);
   }
 
+  // ---- Feed & messages (Part: Social Media Hub — read-only feed, human-sent replies) ----
+
+  @Get("accounts/:id/feed")
+  getFeed(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.getFeed(user, id);
+  }
+
+  @Get("accounts/:id/conversations")
+  getConversations(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.getConversations(user, id);
+  }
+
+  @Get("accounts/:id/conversations/:conversationId/messages")
+  getMessages(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Param("conversationId") conversationId: string) {
+    return this.service.getMessages(user, id, conversationId);
+  }
+
+  @Post("accounts/:id/conversations/:conversationId/reply")
+  sendReply(
+    @CurrentUser() user: JwtClaims,
+    @Param("id") id: string,
+    @Param("conversationId") conversationId: string,
+    @Body("text") text: string,
+  ) {
+    return this.service.sendReply(user, id, conversationId, text);
+  }
+
   // ---- Posts ----
 
   @Get("posts")

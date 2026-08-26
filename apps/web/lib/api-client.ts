@@ -327,6 +327,15 @@ export const api = {
   getSocialCapabilities: () => request("/social-media/capabilities"),
   getSocialAccounts: () => request("/social-media/accounts"),
   getSocialStats: () => request("/social-media/stats"),
+  getAccountFeed: (accountId: string) => request(`/social-media/accounts/${accountId}/feed`),
+  getAccountConversations: (accountId: string) => request(`/social-media/accounts/${accountId}/conversations`),
+  getConversationMessages: (accountId: string, conversationId: string) =>
+    request(`/social-media/accounts/${accountId}/conversations/${conversationId}/messages`),
+  sendConversationReply: (accountId: string, conversationId: string, text: string) =>
+    request(`/social-media/accounts/${accountId}/conversations/${conversationId}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
   getSocialPosts: (params: Record<string, string> = {}) =>
     request(`/social-media/posts?${new URLSearchParams(params).toString()}`),
   getSocialPost: (id: string) => request(`/social-media/posts/${id}`),
