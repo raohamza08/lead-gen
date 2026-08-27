@@ -63,6 +63,21 @@ export class InstagramProvider implements SocialPlatformProvider {
     return this.config.get<string>("META_OAUTH_CLIENT_SECRET");
   }
 
+  /** Diagnostic only -- logs what scopes/target_ids Meta actually granted
+   *  this token, since Meta's error #3 ("Application does not have the
+   *  capability to make this API call") gives no detail on which specific
+   *  permission it's rejecting. */
+  private async logTokenScopes(token: string): Promise<void> {
+    const clientId = this.clientId();
+    const clientSecret = this.clientSecret();
+    if (!clientId || !clientSecret) return;
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/debug_token?input_token=${token}&access_token=${clientId}|${clientSecret}`,
+    );
+    const body = await res.text();
+    this.logger.log(`debug_token for this account's stored token: ${body}`);
+  }
+
   getOAuthUrl(state: string, redirectUri: string): string {
     const clientId = this.clientId();
     if (!clientId) throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID is not set");
@@ -239,6 +254,7 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    await this.logTokenScopes(accessToken);
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/conversations` +
         `?platform=instagram&fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
