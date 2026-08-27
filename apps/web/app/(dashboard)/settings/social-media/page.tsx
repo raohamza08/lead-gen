@@ -140,6 +140,20 @@ export default function SocialMediaSettingsPage() {
     }
   }
 
+  async function syncNow(accountId: string) {
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.syncSocialInboxAccountNow(accountId);
+      setNotice("Synced — existing conversation history should now be visible in the Social Inbox.");
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteAccount(account: Account) {
     if (
       !confirm(
@@ -305,6 +319,16 @@ export default function SocialMediaSettingsPage() {
                       title="Subscribes this account's Page/IG business account to real-time message webhooks. Automatic on future connects -- only needed here for accounts connected before this existed, or to retry after a failure."
                     >
                       Subscribe webhook
+                    </button>
+                  )}
+                  {a.status === "CONNECTED" && (a.platform === "FACEBOOK" || a.platform === "INSTAGRAM") && (
+                    <button
+                      disabled={busy}
+                      onClick={() => syncNow(a.id)}
+                      className="rounded-md border border-[var(--line)] px-4 py-2 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                      title="Pulls existing conversation history now instead of waiting for the next scheduled 10-minute sync."
+                    >
+                      Sync now
                     </button>
                   )}
                   <button disabled={busy} onClick={() => disconnect(a.id)} className="rounded-md border border-bad px-4 py-2 text-sm text-bad disabled:opacity-50">

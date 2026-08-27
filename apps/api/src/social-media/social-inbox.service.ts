@@ -5,6 +5,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { SocialProviderRegistryService } from "./providers/social-provider-registry.service";
 import { SocialInboxIngestService } from "./social-inbox-ingest.service";
+import { SocialInboxSyncWorker } from "./social-inbox-sync.worker";
 import { UpdateConversationDto, ReplyDto, CreateNoteDto, UpdateNoteDto } from "./dto/social-inbox.dto";
 
 export interface ListConversationsQuery {
@@ -32,7 +33,23 @@ export class SocialInboxService {
     private readonly realtime: RealtimeGateway,
     private readonly registry: SocialProviderRegistryService,
     private readonly ingest: SocialInboxIngestService,
+    private readonly syncWorker: SocialInboxSyncWorker,
   ) {}
+
+  /** On-demand reconciliation pass for one account (Part: Unified Social
+   *  Media DM Monitoring) — same logic the 10-minute scheduled tick runs,
+   *  just callable right after a connect instead of waiting for the next
+   *  tick. */
+  async syncAccountNow(user: JwtClaims, accountId: string) {
+    const account = await this.prisma.socialAccount.findFirst({ where: { id: accountId, orgId: user.orgId } });
+    if (!account) throw new NotFoundException("Social account not found");
+    try {
+      await this.syncWorker.syncAccount(account);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+    return { synced: true };
+  }
 
   // ---------------------------------------------------------------------
   // Access control — same shape as SocialMediaService's, but scoped by

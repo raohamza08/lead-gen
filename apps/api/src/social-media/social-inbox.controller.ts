@@ -26,6 +26,11 @@ export class SocialInboxController {
     return this.service.getStats(user);
   }
 
+  @Post("accounts/:accountId/sync")
+  syncNow(@CurrentUser() user: JwtClaims, @Param("accountId") accountId: string) {
+    return this.service.syncAccountNow(user, accountId);
+  }
+
   @Get("conversations")
   listConversations(
     @CurrentUser() user: JwtClaims,

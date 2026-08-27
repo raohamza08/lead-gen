@@ -59,7 +59,9 @@ export class SocialInboxSyncWorker implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private async syncAccount(account: SocialAccount) {
+  /** Public so a manual "Sync now" trigger (SocialInboxService) can reuse
+   *  the exact same logic as the scheduled tick, rather than duplicating it. */
+  async syncAccount(account: SocialAccount) {
     const provider = this.registry.for(account.platform);
     const conversations = await provider.listConversations(account);
 

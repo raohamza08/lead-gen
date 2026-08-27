@@ -5,6 +5,7 @@ import { LinkedInProvider } from "./providers/linkedin.provider";
 import { XProvider } from "./providers/x.provider";
 import { TikTokProvider } from "./providers/tiktok.provider";
 import { YouTubeProvider } from "./providers/youtube.provider";
+import { WhatsAppProvider } from "./providers/whatsapp.provider";
 import { SocialProviderRegistryService } from "./providers/social-provider-registry.service";
 import { LocalDiskMediaStorageService } from "./media/local-disk-media-storage.service";
 import { MEDIA_STORAGE_SERVICE } from "./media/media-storage.interface";
@@ -32,6 +33,7 @@ import { SocialInboxController } from "./social-inbox.controller";
     XProvider,
     TikTokProvider,
     YouTubeProvider,
+    WhatsAppProvider,
     SocialProviderRegistryService,
     { provide: MEDIA_STORAGE_SERVICE, useClass: LocalDiskMediaStorageService },
     OAuthStateStore,

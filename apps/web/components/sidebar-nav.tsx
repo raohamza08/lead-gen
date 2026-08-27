@@ -70,6 +70,7 @@ const NAV: NavItem[] = [
       { href: "/social-media/linkedin", label: "LinkedIn" },
       { href: "/social-media/instagram", label: "Instagram" },
       { href: "/social-media/facebook", label: "Facebook" },
+      { href: "/social-media/whatsapp", label: "WhatsApp" },
       { href: "/social-media/x", label: "X" },
       { href: "/social-media/calendar", label: "Calendar" },
       { href: "/social-media/automations", label: "Automations" },

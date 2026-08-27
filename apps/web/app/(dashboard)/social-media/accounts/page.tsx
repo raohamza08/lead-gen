@@ -6,7 +6,7 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
 import { Spinner } from "../../../../components/spinner";
 
-const PLATFORMS = ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE"] as const;
+const PLATFORMS = ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE", "WHATSAPP"] as const;
 type Platform = (typeof PLATFORMS)[number];
 
 interface Capabilities {

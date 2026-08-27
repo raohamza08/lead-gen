@@ -7,6 +7,7 @@ import { LinkedInProvider } from "./linkedin.provider";
 import { XProvider } from "./x.provider";
 import { TikTokProvider } from "./tiktok.provider";
 import { YouTubeProvider } from "./youtube.provider";
+import { WhatsAppProvider } from "./whatsapp.provider";
 
 /**
  * Resolves a SocialPlatform enum value to its provider instance — the single
@@ -27,6 +28,7 @@ export class SocialProviderRegistryService {
     x: XProvider,
     tiktok: TikTokProvider,
     youtube: YouTubeProvider,
+    whatsapp: WhatsAppProvider,
   ) {
     this.providers = {
       INSTAGRAM: instagram,
@@ -35,6 +37,7 @@ export class SocialProviderRegistryService {
       X: x,
       TIKTOK: tiktok,
       YOUTUBE: youtube,
+      WHATSAPP: whatsapp,
     };
   }
 
