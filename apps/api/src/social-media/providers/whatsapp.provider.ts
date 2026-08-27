@@ -84,41 +84,65 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
   }
 
-  /** Every WABA this token's Business Manager owns, each with its phone
-   *  numbers -- `GET /me/businesses` has no direct "list my WhatsApp
-   *  numbers" shortcut, so this is the real, documented three-hop chain. */
+  /** WABAs shared with this app via Business Manager's partner/shared-asset
+   *  mechanism (common for an agency-managed WhatsApp number) never show up
+   *  under `/me/businesses` -- that only lists businesses the person is a
+   *  direct member of. The token's own granted `granular_scopes` on
+   *  `whatsapp_business_management` name the WABA id(s) directly regardless
+   *  of membership visibility, read via debug_token with an app-level
+   *  token (app_id|app_secret), a standard documented technique -- this is
+   *  the primary, reliable source; the businesses-hierarchy walk below is
+   *  kept as a secondary pass for the plain-ownership case debug_token
+   *  wouldn't need but also doesn't hurt to also check. */
+  private async listWabaIdsFromTokenScopes(userToken: string, clientId: string, clientSecret: string): Promise<string[]> {
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/debug_token?input_token=${userToken}&access_token=${clientId}|${clientSecret}`,
+    );
+    if (!res.ok) return [];
+    const body = (await res.json()) as {
+      data?: { granular_scopes?: { scope: string; target_ids?: string[] }[] };
+    };
+    const scope = body.data?.granular_scopes?.find((s) => s.scope === "whatsapp_business_management");
+    return scope?.target_ids ?? [];
+  }
+
   private async listOwnedPhoneNumbers(
     userToken: string,
   ): Promise<{ wabaId: string; phoneNumberId: string; displayPhoneNumber: string; verifiedName: string }[]> {
+    const clientId = this.clientId();
+    const clientSecret = this.clientSecret();
+    const wabaIds = new Set<string>();
+
+    if (clientId && clientSecret) {
+      for (const id of await this.listWabaIdsFromTokenScopes(userToken, clientId, clientSecret)) wabaIds.add(id);
+    }
+
     const businessesRes = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/me/businesses?access_token=${userToken}`,
     );
-    if (!businessesRes.ok) throw new Error(`WhatsApp businesses lookup failed: ${businessesRes.status} ${await businessesRes.text()}`);
-    const businesses = (await businessesRes.json()) as { data: { id: string }[] };
+    if (businessesRes.ok) {
+      const businesses = (await businessesRes.json()) as { data: { id: string }[] };
+      for (const business of businesses.data ?? []) {
+        const wabaRes = await fetch(
+          `https://graph.facebook.com/${this.graphVersion()}/${business.id}/owned_whatsapp_business_accounts?access_token=${userToken}`,
+        );
+        if (!wabaRes.ok) continue; // this business may just not have WhatsApp set up -- not an error
+        const wabas = (await wabaRes.json()) as { data: { id: string }[] };
+        for (const waba of wabas.data ?? []) wabaIds.add(waba.id);
+      }
+    }
 
     const results: { wabaId: string; phoneNumberId: string; displayPhoneNumber: string; verifiedName: string }[] = [];
-    for (const business of businesses.data ?? []) {
-      const wabaRes = await fetch(
-        `https://graph.facebook.com/${this.graphVersion()}/${business.id}/owned_whatsapp_business_accounts?access_token=${userToken}`,
+    for (const wabaId of wabaIds) {
+      const phonesRes = await fetch(
+        `https://graph.facebook.com/${this.graphVersion()}/${wabaId}/phone_numbers?access_token=${userToken}`,
       );
-      if (!wabaRes.ok) continue; // this business may just not have WhatsApp set up -- not an error
-      const wabas = (await wabaRes.json()) as { data: { id: string }[] };
-      for (const waba of wabas.data ?? []) {
-        const phonesRes = await fetch(
-          `https://graph.facebook.com/${this.graphVersion()}/${waba.id}/phone_numbers?access_token=${userToken}`,
-        );
-        if (!phonesRes.ok) continue;
-        const phones = (await phonesRes.json()) as {
-          data: { id: string; display_phone_number: string; verified_name: string }[];
-        };
-        for (const phone of phones.data ?? []) {
-          results.push({
-            wabaId: waba.id,
-            phoneNumberId: phone.id,
-            displayPhoneNumber: phone.display_phone_number,
-            verifiedName: phone.verified_name,
-          });
-        }
+      if (!phonesRes.ok) continue;
+      const phones = (await phonesRes.json()) as {
+        data: { id: string; display_phone_number: string; verified_name: string }[];
+      };
+      for (const phone of phones.data ?? []) {
+        results.push({ wabaId, phoneNumberId: phone.id, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name });
       }
     }
     return results;
