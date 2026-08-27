@@ -61,6 +61,12 @@ export class SocialMediaSettingsController {
     return this.service.deleteAccount(user, id);
   }
 
+  @Post("accounts/:id/subscribe-webhook")
+  @Roles(Role.ADMIN)
+  subscribeWebhook(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.subscribeAccountWebhook(user, id);
+  }
+
   /** Returns the platform's real OAuth consent URL — the frontend redirects the browser to it. */
   @Post("accounts/:platform/connect")
   @Roles(Role.ADMIN)

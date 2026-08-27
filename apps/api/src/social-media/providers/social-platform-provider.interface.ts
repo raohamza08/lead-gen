@@ -152,4 +152,12 @@ export interface SocialPlatformProvider {
    *  (Conversation.participantExternalId) — this is what the Send API
    *  actually addresses a reply to, not the thread id listMessages uses. */
   sendMessage(account: SocialAccount, participantId: string, text: string): Promise<void>;
+
+  /** One-time, called right after a successful connect (Part: Unified Social
+   *  Media DM Monitoring) — tells the platform to start pushing this
+   *  account's messages to our webhook. Optional: only Meta platforms
+   *  (Facebook/Instagram) support a real messaging webhook at all; every
+   *  other provider simply omits this rather than implementing a no-op, so
+   *  its absence is visible in the type rather than a silent empty method. */
+  subscribeWebhook?(account: SocialAccount): Promise<void>;
 }

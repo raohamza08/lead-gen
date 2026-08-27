@@ -399,6 +399,7 @@ export const api = {
     request(`/settings/social-media/accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   disconnectSocialAccount: (id: string) => request(`/settings/social-media/accounts/${id}/disconnect`, { method: "POST" }),
   deleteSocialAccount: (id: string) => request(`/settings/social-media/accounts/${id}`, { method: "DELETE" }),
+  subscribeSocialAccountWebhook: (id: string) => request(`/settings/social-media/accounts/${id}/subscribe-webhook`, { method: "POST" }),
   connectSocialAccount: (platform: string) =>
     request<{ url: string }>(`/settings/social-media/accounts/${platform}/connect`, { method: "POST" }),
   getPendingSocialSelection: (pendingId: string) => request(`/settings/social-media/accounts/pending/${pendingId}`),

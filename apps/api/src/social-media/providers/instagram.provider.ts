@@ -66,12 +66,16 @@ export class InstagramProvider implements SocialPlatformProvider {
   getOAuthUrl(state: string, redirectUri: string): string {
     const clientId = this.clientId();
     if (!clientId) throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID is not set");
+    // pages_read_engagement dropped -- confirmed invalid/unapproved for this
+    // app the same way it was for Facebook (2026-08-27); Meta rejects the
+    // whole OAuth request if any one requested scope isn't available.
+    // pages_manage_metadata added -- needed by subscribeWebhook below.
     const scopes = [
       "instagram_basic",
       "instagram_content_publish",
       "instagram_manage_messages",
       "pages_show_list",
-      "pages_read_engagement",
+      "pages_manage_metadata",
     ];
     const params = new URLSearchParams({
       client_id: clientId,
@@ -293,5 +297,17 @@ export class InstagramProvider implements SocialPlatformProvider {
       body: JSON.stringify({ recipient: { id: participantId }, message: { text }, access_token: accessToken }),
     });
     if (!res.ok) throw new Error(`Instagram send message failed: ${res.status} ${await res.text()}`);
+  }
+
+  async subscribeWebhook(account: SocialAccount): Promise<void> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/subscribed_apps?subscribed_fields=messages&access_token=${accessToken}`,
+      { method: "POST" },
+    );
+    if (!res.ok) throw new Error(`Instagram webhook subscription failed: ${res.status} ${await res.text()}`);
   }
 }

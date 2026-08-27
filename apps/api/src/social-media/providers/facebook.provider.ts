@@ -220,4 +220,16 @@ export class FacebookProvider implements SocialPlatformProvider {
     });
     if (!res.ok) throw new Error(`Facebook send message failed: ${res.status} ${await res.text()}`);
   }
+
+  async subscribeWebhook(account: SocialAccount): Promise<void> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/subscribed_apps?subscribed_fields=messages&access_token=${accessToken}`,
+      { method: "POST" },
+    );
+    if (!res.ok) throw new Error(`Facebook webhook subscription failed: ${res.status} ${await res.text()}`);
+  }
 }

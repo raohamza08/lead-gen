@@ -155,6 +155,21 @@ export class SocialMediaService {
     return this.sanitizeAccount(updated);
   }
 
+  /** Manual retry (Part: Unified Social Media DM Monitoring) — for an
+   *  account connected before subscribeWebhook existed, or one whose
+   *  subscription needs redoing after a token refresh. Same call
+   *  connectProfile makes automatically on a fresh connect. */
+  async subscribeAccountWebhook(user: JwtClaims, id: string) {
+    const account = await this.prisma.socialAccount.findFirst({ where: { id, orgId: user.orgId } });
+    if (!account) throw new NotFoundException("Social account not found");
+    try {
+      await this.registry.for(account.platform).subscribeWebhook?.(account);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+    return { subscribed: true };
+  }
+
   async disconnectAccount(user: JwtClaims, id: string) {
     const existing = await this.prisma.socialAccount.findFirst({ where: { id, orgId: user.orgId } });
     if (!existing) throw new NotFoundException("Social account not found");
@@ -342,6 +357,16 @@ export class SocialMediaService {
       message: `${platform} account @${profile.username} connected successfully.`,
     });
     this.realtime.emitToOrg(pending.orgId, "socialMedia.accountConnected", { accountId: account.id, platform });
+
+    // Best-effort: a subscription failure shouldn't fail the connect itself
+    // (the account is still usable, just relying on the reconciliation poll
+    // worker until this succeeds) -- Part: Unified Social Media DM
+    // Monitoring's webhook-primary/poll-fallback design.
+    try {
+      await this.registry.for(platform).subscribeWebhook?.(account);
+    } catch (err) {
+      this.logger.warn(`Webhook subscription failed for ${platform} account ${account.id}: ${(err as Error).message}`);
+    }
 
     return account;
   }
