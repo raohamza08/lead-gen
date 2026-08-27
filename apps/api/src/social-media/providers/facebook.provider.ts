@@ -53,7 +53,12 @@ export class FacebookProvider implements SocialPlatformProvider {
       client_id: clientId,
       redirect_uri: redirectUri,
       state,
-      scope: ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "pages_messaging"].join(","),
+      // pages_manage_posts/pages_read_engagement dropped -- not approved for
+      // this app (Meta returns "Invalid Scopes" and rejects the whole OAuth
+      // request if even one requested scope isn't available, confirmed
+      // 2026-08-27). pages_manage_metadata is what /subscribed_apps (webhook
+      // subscription) actually needs and is available, so requested instead.
+      scope: ["pages_show_list", "pages_messaging", "pages_manage_metadata"].join(","),
       response_type: "code",
     });
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
