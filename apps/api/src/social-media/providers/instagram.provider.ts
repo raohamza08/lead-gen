@@ -66,9 +66,15 @@ export class InstagramProvider implements SocialPlatformProvider {
   getOAuthUrl(state: string, redirectUri: string): string {
     const clientId = this.clientId();
     if (!clientId) throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID is not set");
-    // pages_read_engagement dropped -- confirmed invalid/unapproved for this
-    // app the same way it was for Facebook (2026-08-27); Meta rejects the
-    // whole OAuth request if any one requested scope isn't available.
+    // pages_read_engagement was dropped earlier (2026-08-27) believing it was
+    // unapproved -- it wasn't; the app's own "API setup with Facebook login"
+    // page (Use Cases -> Instagram API) lists pages_read_engagement AND
+    // business_management as required scopes for "Send messages on
+    // Instagram", both already added to the app ("Ready for testing"). Their
+    // absence here -- not the token type -- is why listConversations/
+    // subscribeWebhook threw Meta's error #3 ("Application does not have the
+    // capability to make this API call") even with instagram_manage_messages
+    // granted: that permission alone isn't sufficient without this pair.
     // pages_manage_metadata added -- needed by subscribeWebhook below.
     const scopes = [
       "instagram_basic",
@@ -76,6 +82,8 @@ export class InstagramProvider implements SocialPlatformProvider {
       "instagram_manage_messages",
       "pages_show_list",
       "pages_manage_metadata",
+      "pages_read_engagement",
+      "business_management",
     ];
     const params = new URLSearchParams({
       client_id: clientId,
