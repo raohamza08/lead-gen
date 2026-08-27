@@ -63,19 +63,30 @@ export class InstagramProvider implements SocialPlatformProvider {
     return this.config.get<string>("META_OAUTH_CLIENT_SECRET");
   }
 
-  /** Diagnostic only -- logs what scopes/target_ids Meta actually granted
-   *  this token, since Meta's error #3 ("Application does not have the
-   *  capability to make this API call") gives no detail on which specific
-   *  permission it's rejecting. */
-  private async logTokenScopes(token: string): Promise<void> {
+  /** The Instagram Messaging endpoints (conversations/subscribed_apps/
+   *  messages) live on the *Facebook Page* node, not the IG business account
+   *  node, even though publish()/listFeed() use the IG business account id
+   *  successfully -- confirmed by inspecting a real token via debug_token:
+   *  a Page-type token's own `profile_id` (the Page it's scoped to) differs
+   *  from the stored `externalAccountId` (the IG business account id), and
+   *  every messaging scope was already present and valid on the token, yet
+   *  Meta still returned error #3 on the IG-id node. Deriving the Page id
+   *  from debug_token rather than storing it avoids a schema migration --
+   *  it's one extra call, not on a hot path (feed/DM sync run every few
+   *  minutes at most). */
+  private async resolvePageId(token: string): Promise<string> {
     const clientId = this.clientId();
     const clientSecret = this.clientSecret();
-    if (!clientId || !clientSecret) return;
+    if (!clientId || !clientSecret) throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID/SECRET is not set");
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/debug_token?input_token=${token}&access_token=${clientId}|${clientSecret}`,
     );
-    const body = await res.text();
-    this.logger.log(`debug_token for this account's stored token: ${body}`);
+    if (!res.ok) throw new Error(`Instagram debug_token lookup failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as { data?: { type?: string; profile_id?: string } };
+    if (body.data?.type !== "PAGE" || !body.data.profile_id) {
+      throw new Error(`Instagram token is not a Page token (debug_token: ${JSON.stringify(body.data)})`);
+    }
+    return body.data.profile_id;
   }
 
   getOAuthUrl(state: string, redirectUri: string): string {
@@ -254,9 +265,9 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
-    await this.logTokenScopes(accessToken);
+    const pageId = await this.resolvePageId(accessToken);
     const res = await fetch(
-      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/conversations` +
+      `https://graph.facebook.com/${this.graphVersion()}/${pageId}/conversations` +
         `?platform=instagram&fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
     );
     if (!res.ok) throw new Error(`Instagram conversations fetch failed: ${res.status} ${await res.text()}`);
@@ -309,7 +320,8 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
-    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/messages`, {
+    const pageId = await this.resolvePageId(accessToken);
+    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${pageId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ recipient: { id: participantId }, message: { text }, access_token: accessToken }),
@@ -322,8 +334,9 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const pageId = await this.resolvePageId(accessToken);
     const res = await fetch(
-      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/subscribed_apps?subscribed_fields=messages&access_token=${accessToken}`,
+      `https://graph.facebook.com/${this.graphVersion()}/${pageId}/subscribed_apps?subscribed_fields=messages&access_token=${accessToken}`,
       { method: "POST" },
     );
     if (!res.ok) throw new Error(`Instagram webhook subscription failed: ${res.status} ${await res.text()}`);
