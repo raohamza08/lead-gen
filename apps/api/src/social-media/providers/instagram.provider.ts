@@ -271,9 +271,7 @@ export class InstagramProvider implements SocialPlatformProvider {
         `?platform=instagram&fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
     );
     if (!res.ok) throw new Error(`Instagram conversations fetch failed: ${res.status} ${await res.text()}`);
-    const rawText = await res.text();
-    this.logger.log(`listConversations raw response for page ${pageId} (IG ${account.externalAccountId}): ${rawText}`);
-    const body = JSON.parse(rawText) as {
+    const body = (await res.json()) as {
       data: {
         id: string;
         participants?: { data: { id: string; username?: string }[] };
