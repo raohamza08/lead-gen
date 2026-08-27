@@ -162,6 +162,28 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     return results;
   }
 
+  /** Activates a phone number for Cloud API messaging -- required once per
+   *  number when it was added via WhatsApp Manager's UI rather than Meta's
+   *  Embedded Signup flow (which calls this automatically). Without it the
+   *  number can be a valid, subscribed WABA member and still never receive
+   *  webhook events. Best-effort: an already-registered number returns an
+   *  error here that's safe to ignore, and this has no stored-state
+   *  precondition worth failing the caller over. */
+  private async registerPhoneNumber(phoneNumberId: string, accessToken: string): Promise<void> {
+    const pin = String(Math.floor(100000 + Math.random() * 900000));
+    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${phoneNumberId}/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ messaging_product: "whatsapp", pin }),
+    });
+    const body = await res.text();
+    if (!res.ok) {
+      this.logger.warn(`Phone number registration for ${phoneNumberId} did not succeed (may already be registered): ${res.status} ${body}`);
+      return;
+    }
+    this.logger.log(`Phone number ${phoneNumberId} registered for Cloud API messaging: ${body}`);
+  }
+
   async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
     const clientId = this.clientId();
     const clientSecret = this.clientSecret();
@@ -189,6 +211,18 @@ export class WhatsAppProvider implements SocialPlatformProvider {
         `https://graph.facebook.com/${this.graphVersion()}/${n.wabaId}/subscribed_apps?access_token=${userToken}`,
         { method: "POST" },
       ).catch(() => undefined); // best-effort, same as subscribeWebhook below
+    }
+
+    // A number added through WhatsApp Manager's UI (as opposed to Meta's
+    // Embedded Signup flow) is only *listed* under the WABA -- it isn't yet
+    // registered for Cloud API messaging until this call succeeds. Without
+    // it the number sits in an "Unverified" state indefinitely: webhook
+    // subscriptions succeed, tokens are valid, but no inbound message ever
+    // triggers a webhook because the number was never actually activated
+    // for API use. Best-effort per number since a number that's already
+    // registered returns an error here, which is fine to ignore.
+    for (const n of numbers) {
+      await this.registerPhoneNumber(n.phoneNumberId, userToken);
     }
 
     return numbers.map((n) => ({
@@ -275,6 +309,7 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     const numbers = await this.listOwnedPhoneNumbers(accessToken);
     const match = numbers.find((n) => n.phoneNumberId === account.externalAccountId);
     if (!match) throw new Error("Could not find this phone number's WhatsApp Business Account to subscribe.");
+    await this.registerPhoneNumber(account.externalAccountId, accessToken);
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${match.wabaId}/subscribed_apps?access_token=${accessToken}`,
       { method: "POST" },
