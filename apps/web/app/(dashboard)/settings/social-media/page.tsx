@@ -311,12 +311,12 @@ export default function SocialMediaSettingsPage() {
                   <button disabled={busy} onClick={() => saveDefaults(a.id)} className="rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-50">
                     Save
                   </button>
-                  {a.status === "CONNECTED" && (a.platform === "FACEBOOK" || a.platform === "INSTAGRAM") && (
+                  {a.status === "CONNECTED" && (a.platform === "FACEBOOK" || a.platform === "INSTAGRAM" || a.platform === "WHATSAPP") && (
                     <button
                       disabled={busy}
                       onClick={() => subscribeWebhook(a.id)}
                       className="rounded-md border border-[var(--line)] px-4 py-2 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-                      title="Subscribes this account's Page/IG business account to real-time message webhooks. Automatic on future connects -- only needed here for accounts connected before this existed, or to retry after a failure."
+                      title="Subscribes this account's Page/IG business account/WABA to real-time message webhooks. Automatic on future connects -- only needed here for accounts connected before this existed, or to retry after a failure."
                     >
                       Subscribe webhook
                     </button>
