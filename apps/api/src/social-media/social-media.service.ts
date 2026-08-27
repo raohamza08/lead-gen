@@ -400,6 +400,7 @@ export class SocialMediaService {
       await this.connectProfile(pending, platform, profiles[0]);
       return `${accountsUrl}?social_connected=${platform}`;
     } catch (err) {
+      this.logger.warn(`OAuth callback failed for ${platform}: ${(err as Error).message}`);
       return `${accountsUrl}?social_connect_error=${encodeURIComponent((err as Error).message.slice(0, 300))}`;
     }
   }

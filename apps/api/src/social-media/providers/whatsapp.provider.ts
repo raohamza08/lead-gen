@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
@@ -38,6 +38,8 @@ import {
 @Injectable()
 export class WhatsAppProvider implements SocialPlatformProvider {
   readonly platform = "WHATSAPP";
+
+  private readonly logger = new Logger(WhatsAppProvider.name);
 
   readonly capabilities: SocialPlatformCapabilities = {
     publish: false,
@@ -98,10 +100,16 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/debug_token?input_token=${userToken}&access_token=${clientId}|${clientSecret}`,
     );
-    if (!res.ok) return [];
+    if (!res.ok) {
+      this.logger.warn(`debug_token call failed: ${res.status} ${await res.text()}`);
+      return [];
+    }
     const body = (await res.json()) as {
-      data?: { granular_scopes?: { scope: string; target_ids?: string[] }[] };
+      data?: { scopes?: string[]; granular_scopes?: { scope: string; target_ids?: string[] }[] };
     };
+    this.logger.log(
+      `debug_token scopes=${JSON.stringify(body.data?.scopes)} granular_scopes=${JSON.stringify(body.data?.granular_scopes)}`,
+    );
     const scope = body.data?.granular_scopes?.find((s) => s.scope === "whatsapp_business_management");
     return scope?.target_ids ?? [];
   }
@@ -122,6 +130,7 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     );
     if (businessesRes.ok) {
       const businesses = (await businessesRes.json()) as { data: { id: string }[] };
+      this.logger.log(`/me/businesses returned ${businesses.data?.length ?? 0} business(es): ${JSON.stringify(businesses.data)}`);
       for (const business of businesses.data ?? []) {
         const wabaRes = await fetch(
           `https://graph.facebook.com/${this.graphVersion()}/${business.id}/owned_whatsapp_business_accounts?access_token=${userToken}`,
@@ -132,12 +141,16 @@ export class WhatsAppProvider implements SocialPlatformProvider {
       }
     }
 
+    this.logger.log(`Resolved WABA id(s) before phone lookup: ${JSON.stringify([...wabaIds])}`);
     const results: { wabaId: string; phoneNumberId: string; displayPhoneNumber: string; verifiedName: string }[] = [];
     for (const wabaId of wabaIds) {
       const phonesRes = await fetch(
         `https://graph.facebook.com/${this.graphVersion()}/${wabaId}/phone_numbers?access_token=${userToken}`,
       );
-      if (!phonesRes.ok) continue;
+      if (!phonesRes.ok) {
+        this.logger.warn(`phone_numbers lookup failed for WABA ${wabaId}: ${phonesRes.status} ${await phonesRes.text()}`);
+        continue;
+      }
       const phones = (await phonesRes.json()) as {
         data: { id: string; display_phone_number: string; verified_name: string }[];
       };
@@ -145,6 +158,7 @@ export class WhatsAppProvider implements SocialPlatformProvider {
         results.push({ wabaId, phoneNumberId: phone.id, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name });
       }
     }
+    this.logger.log(`listOwnedPhoneNumbers found ${results.length} phone number(s)`);
     return results;
   }
 
