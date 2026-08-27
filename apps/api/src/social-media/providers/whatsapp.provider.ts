@@ -279,6 +279,18 @@ export class WhatsAppProvider implements SocialPlatformProvider {
       `https://graph.facebook.com/${this.graphVersion()}/${match.wabaId}/subscribed_apps?access_token=${accessToken}`,
       { method: "POST" },
     );
-    if (!res.ok) throw new Error(`WhatsApp webhook subscription failed: ${res.status} ${await res.text()}`);
+    const body = await res.text();
+    if (!res.ok) throw new Error(`WhatsApp webhook subscription failed: ${res.status} ${body}`);
+    this.logger.log(`subscribed_apps POST response for WABA ${match.wabaId}: ${body}`);
+
+    // Verify it actually took effect -- a 200 here doesn't guarantee Meta's
+    // side registered it for a partner/shared-asset WABA, confirmed by
+    // reading the subscription list back rather than trusting the POST's
+    // own success response.
+    const verifyRes = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${match.wabaId}/subscribed_apps?access_token=${accessToken}`,
+    );
+    const verifyBody = await verifyRes.text();
+    this.logger.log(`subscribed_apps GET (verification) for WABA ${match.wabaId}: ${verifyRes.status} ${verifyBody}`);
   }
 }
