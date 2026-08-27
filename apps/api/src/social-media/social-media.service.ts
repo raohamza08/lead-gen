@@ -383,7 +383,7 @@ export class SocialMediaService {
 
     try {
       const provider = this.registry.for(platform);
-      const profiles = await provider.exchangeCodeForToken(code, this.callbackRedirectUri(platform));
+      const profiles = await provider.exchangeCodeForToken(code, this.callbackRedirectUri(platform), pending.pkceVerifier);
 
       if (profiles.length === 0) {
         return `${accountsUrl}?social_connect_error=${encodeURIComponent("No account was found to connect")}`;

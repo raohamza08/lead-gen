@@ -106,7 +106,7 @@ export class InstagramProvider implements SocialPlatformProvider {
     if (!tokenRes.ok) {
       throw new Error(`Instagram token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`);
     }
-    const { access_token: accessToken } = (await tokenRes.json()) as { access_token: string };
+    const { access_token: userAccessToken } = (await tokenRes.json()) as { access_token: string };
 
     // The Instagram *business* account id is one hop away from the token:
     // list the Pages this token can manage, then read each Page's linked
@@ -115,49 +115,43 @@ export class InstagramProvider implements SocialPlatformProvider {
     // first (Part: multi-account OAuth picker), since a Business Manager
     // admin can see several at once.
     const pagesRes = await fetch(
-      `https://graph.facebook.com/${this.graphVersion()}/me/accounts?fields=id,name,instagram_business_account{id,username,profile_picture_url}&access_token=${accessToken}`,
+      `https://graph.facebook.com/${this.graphVersion()}/me/accounts?fields=id,name,access_token,instagram_business_account{id,username,profile_picture_url}&access_token=${userAccessToken}`,
     );
     const pages = (await pagesRes.json()) as {
-      data: { instagram_business_account?: { id: string; username: string; profile_picture_url?: string } }[];
+      data: { access_token: string; instagram_business_account?: { id: string; username: string; profile_picture_url?: string } }[];
     };
-    const igAccounts = pages.data?.flatMap((p) => (p.instagram_business_account ? [p.instagram_business_account] : [])) ?? [];
+    const igAccounts = pages.data?.flatMap((p) =>
+      p.instagram_business_account ? [{ ...p.instagram_business_account, pageAccessToken: p.access_token }] : [],
+    ) ?? [];
     if (igAccounts.length === 0) {
       throw new Error(
         "No Instagram Business/Creator account found linked to any Facebook Page this token can manage.",
       );
     }
 
+    // Store the *Page* access token (same as facebook.provider.ts), not the
+    // coarse user token -- the Instagram Messaging endpoints (conversations/
+    // messages) are permission-scoped to the Page, and calling them with a
+    // plain user token returns Meta's error #3 ("Application does not have
+    // the capability to make this API call") even though publish()/listFeed()
+    // (which don't need messaging permissions) work fine with either token,
+    // which is why this went unnoticed until DM sync was added.
     return igAccounts.map((igAccount) => ({
       externalAccountId: igAccount.id,
       username: `@${igAccount.username}`,
       profileImageUrl: igAccount.profile_picture_url,
       accountType: "business",
-      accessToken,
+      accessToken: igAccount.pageAccessToken,
     }));
   }
 
   async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {
-    // Meta long-lived Page/user tokens are refreshed by exchanging the
-    // current token for a new long-lived one, not via a refresh_token grant.
-    const clientId = this.clientId();
-    const clientSecret = this.clientSecret();
-    if (!clientId || !clientSecret || !account.accessTokenEnc) {
-      throw new PlatformNotConfiguredError("Instagram", "no stored access token to refresh");
-    }
-    const current = this.encryption.decrypt(account.accessTokenEnc);
-    const params = new URLSearchParams({
-      grant_type: "fb_exchange_token",
-      client_id: clientId,
-      client_secret: clientSecret,
-      fb_exchange_token: current,
-    });
-    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/oauth/access_token?${params}`);
-    if (!res.ok) throw new Error(`Instagram token refresh failed: ${res.status}`);
-    const body = (await res.json()) as { access_token: string; expires_in?: number };
-    return {
-      accessToken: body.access_token,
-      expiresAt: body.expires_in ? new Date(Date.now() + body.expires_in * 1000) : undefined,
-    };
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("Instagram", "no stored access token");
+    // Page tokens derived from a long-lived user token don't expire under
+    // normal use; nothing to actively refresh here (same as facebook.provider.ts
+    // -- accessTokenEnc stores a Page token now, not a user token, so
+    // fb_exchange_token isn't the right operation for it).
+    return { accessToken: this.encryption.decrypt(account.accessTokenEnc) };
   }
 
   async publish(account: SocialAccount, input: PublishInput): Promise<PublishResult> {

@@ -72,12 +72,10 @@ export class XProvider implements SocialPlatformProvider {
     return `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
+  async exchangeCodeForToken(code: string, redirectUri: string, codeVerifier?: string): Promise<ConnectedAccountProfile[]> {
     const clientId = this.config.get<string>("X_OAUTH_CLIENT_ID");
     if (!clientId) throw new PlatformNotConfiguredError("X", "X_OAUTH_CLIENT_ID is not set");
-    // NOTE: the real code_verifier for this exchange must be looked up by
-    // the caller (see getOAuthUrl's PKCE note) and passed through; omitted
-    // here since this method signature is shared across every provider.
+    if (!codeVerifier) throw new Error("Missing PKCE code_verifier for X token exchange");
     const tokenRes = await fetch("https://api.twitter.com/2/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -86,6 +84,7 @@ export class XProvider implements SocialPlatformProvider {
         code,
         redirect_uri: redirectUri,
         client_id: clientId,
+        code_verifier: codeVerifier,
       }),
     });
     if (!tokenRes.ok) throw new Error(`X token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`);

@@ -124,8 +124,13 @@ export interface SocialPlatformProvider {
    *  every account the authorization actually resolved to — for most
    *  platforms that's always one, but a Facebook/Instagram login can manage
    *  several Pages at once, and every one of them must come back here rather
-   *  than silently picking one (Part: multi-account OAuth picker). */
-  exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]>;
+   *  than silently picking one (Part: multi-account OAuth picker).
+   *
+   *  `codeVerifier` is only meaningful for providers whose getOAuthUrl sent a
+   *  PKCE `code_challenge` (X, today) — the caller looks it up from the same
+   *  OAuthStateStore entry `state` round-tripped through, and every other
+   *  provider just ignores it. */
+  exchangeCodeForToken(code: string, redirectUri: string, codeVerifier?: string): Promise<ConnectedAccountProfile[]>;
 
   refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }>;
 
