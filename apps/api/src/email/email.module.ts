@@ -17,6 +17,6 @@ import { OrganizationModule } from "../organization/organization.module";
     EmailAccountsService,
     TransactionalEmailService,
   ],
-  exports: [EmailProviderService, GmailProvider, TransactionalEmailService],
+  exports: [EmailProviderService, GmailProvider, TransactionalEmailService, EmailAccountsService],
 })
 export class EmailModule {}

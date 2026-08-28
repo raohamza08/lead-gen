@@ -236,7 +236,7 @@ export const api = {
   cancelNicheFilterRun: (filterId: string, runId: string) =>
     request(`/niche-filters/${filterId}/runs/${runId}/cancel`, { method: "POST" }),
   getPendingApprovals: () => request("/sequences/pending-approvals"),
-  getUpcomingSends: () => request("/sequences/upcoming"),
+  resendAllFailedSequenceEmails: () => request("/sequences/resend-all-failed", { method: "POST" }),
   getSendQueue: () => request("/sequences/send-queue"),
   getEmailAccounts: () => request("/settings/email-accounts"),
   getEmailAccountsHealth: () => request("/settings/email-accounts/health"),

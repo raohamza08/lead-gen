@@ -53,15 +53,6 @@ interface FleetReport {
   pipelines: Record<string, string[]>;
 }
 
-interface QueuedEmail {
-  id: string;
-  subject: string;
-  sequenceStep: number;
-  createdAt: string;
-  lead: { id: string; companyName: string };
-  account: { address: string } | null;
-}
-
 interface WaitingLead {
   leadId: string;
   lead: { id: string; companyName: string };
@@ -70,7 +61,6 @@ interface WaitingLead {
 }
 
 interface SendQueue {
-  queued: QueuedEmail[];
   waiting: WaitingLead[];
 }
 
@@ -235,7 +225,7 @@ export default function AutomationPage() {
 
         <SectionCard
           title="Send queue"
-          subtitle="Everything between drafted and sent, in the order it will actually happen — queued emails go out within moments; scheduled ones are counting down a real wait timer."
+          subtitle="Leads counting down a real wait timer before their next sequence email drafts and sends — emails no longer sit queued between drafted and sent, they send the moment they're approved."
         >
           {sendQueueError ? (
             <p className="py-8 text-center text-sm text-bad">{sendQueueError}</p>
@@ -243,37 +233,6 @@ export default function AutomationPage() {
             <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
           ) : (
             <div className="flex flex-col gap-5">
-              <div>
-                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">
-                  Queued — sending next, in this order ({sendQueue.queued.length})
-                </h3>
-                {sendQueue.queued.length === 0 ? (
-                  <p className="py-4 text-center text-sm text-ink/50">Nothing queued right now.</p>
-                ) : (
-                  <DataTable<QueuedEmail>
-                    rows={sendQueue.queued}
-                    rowKey={(q) => q.id}
-                    columns={[
-                      {
-                        key: "order",
-                        header: "#",
-                        numeric: true,
-                        render: (q) => sendQueue.queued.indexOf(q) + 1,
-                      },
-                      { key: "company", header: "Company", render: (q) => q.lead.companyName },
-                      {
-                        key: "step",
-                        header: "Email",
-                        render: (q) => `#${q.sequenceStep} — ${STEP_LABEL[q.sequenceStep] ?? ""}`,
-                      },
-                      { key: "subject", header: "Subject", render: (q) => q.subject },
-                      { key: "mailbox", header: "Mailbox", render: (q) => q.account?.address ?? "—" },
-                      { key: "queued", header: "Queued", render: (q) => timeAgo(q.createdAt) },
-                    ]}
-                  />
-                )}
-              </div>
-
               <div>
                 <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">
                   Scheduled — waiting on the sequence timer ({sendQueue.waiting.length})

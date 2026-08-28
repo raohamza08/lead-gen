@@ -1,10 +1,11 @@
-import { Controller, Get, UseGuards } from "@nestjs/common";
+import { Controller, Get, Post, UseGuards } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, PipelineStage } from "@leadgen/types";
+import { EmailAccountsService } from "../email/email-accounts.service";
 
 /** Which step a lead waiting between sequence emails is waiting *for* — the
  *  controller-side twin of SequencerService's private NEXT_EMAIL_STEP map,
@@ -18,76 +19,66 @@ const NEXT_STEP_FOR_WAITING_STAGE: Partial<Record<PipelineStage, number>> = {
 const WAITING_STAGES = Object.keys(NEXT_STEP_FOR_WAITING_STAGE) as PipelineStage[];
 
 /**
- * Read endpoints backing the Sequences dashboard tab (Part F1): the Email #3
- * approval queue and the upcoming-send calendar. Mutations (approve/edit/
- * reject) already exist on `POST /leads/:id/approve-email` — kept there since
- * they operate on a specific lead, not the sequence-wide view.
+ * Read endpoints backing the Sequences dashboard tab (Part F1): the
+ * Approvals & Failed Sends queue and the upcoming-send calendar. Mutations
+ * (approve/edit/reject/resend one) already exist on `POST /leads/:id/
+ * approve-email` and `POST /leads/:id/resend-email` — kept there since they
+ * operate on a specific lead, not the sequence-wide view. The bulk resend
+ * below is the one queue-wide mutation, so it lives here instead.
  */
 @Controller("sequences")
 @UseGuards(JwtAuthGuard, ModuleAccessGuard)
 @RequiresModule("LEAD_GENERATION")
 export class SequencesController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly emailAccounts: EmailAccountsService,
+  ) {}
 
+  /**
+   * Everything a human needs to act on: drafts genuinely awaiting approval
+   * (PENDING_APPROVAL) alongside emails that failed to send (FAILED) — one
+   * queue, since both are "something needs to happen before this reaches the
+   * prospect." Distinguished by `status` in the response; the frontend
+   * renders Approve/Reject for one and Resend for the other.
+   */
   @Get("pending-approvals")
   pendingApprovals(@CurrentUser() user: JwtClaims) {
     return this.prisma.emailMessage.findMany({
-      where: { status: "PENDING_APPROVAL", lead: { orgId: user.orgId } },
+      where: { status: { in: ["PENDING_APPROVAL", "FAILED"] }, lead: { orgId: user.orgId } },
       include: { lead: { select: { id: true, companyName: true, contactName: true, email: true } } },
       orderBy: { id: "desc" },
     });
   }
 
-  @Get("upcoming")
-  upcoming(@CurrentUser() user: JwtClaims) {
-    return this.prisma.emailMessage.findMany({
-      where: { status: "QUEUED", lead: { orgId: user.orgId } },
-      include: { lead: { select: { id: true, companyName: true } }, account: { select: { address: true } } },
-      // `scheduledAt` is never written anywhere in this codebase (the send
-      // queue has no delay — a QUEUED email is picked up within moments), so
-      // ordering by it sorted nothing. `createdAt` is the field that actually
-      // reflects queue order (BullMQ processes "email-send" FIFO).
-      orderBy: { createdAt: "asc" },
-      take: 100,
-    });
+  /** One click to retry every FAILED email in the queue above — see
+   *  EmailAccountsService.resendAllFailed for the send behavior. */
+  @Post("resend-all-failed")
+  resendAllFailed(@CurrentUser() user: JwtClaims) {
+    return this.emailAccounts.resendAllFailed(user.orgId);
   }
 
   /**
-   * Everything between "drafted" and "sent," in the order it will actually
-   * happen — for the Automation page's "when does this go out" question.
-   * Two genuinely different kinds of row, kept separate rather than forced
-   * into one fake timestamp column:
-   *  - `queued`: already drafted, sitting in the email-send queue with no
-   *    delay — sends within moments, in the order queued (see `upcoming`
-   *    above for why `createdAt`, not `scheduledAt`).
-   *  - `waiting`: not drafted yet, counting down a real BullMQ delayed-job
-   *    timer (`PipelineState.nextActionAt`, set precisely in
-   *    SequencerService.scheduleWait) before the next step's draft is
-   *    triggered — this is the only row type with a genuine future clock
-   *    time.
+   * Leads counting down the real wait timer before their next sequence
+   * step's draft is triggered (`PipelineState.nextActionAt`, set precisely
+   * in SequencerService.scheduleWait) — for the Automation page's "when
+   * does this go out" question. Emails no longer sit in a queue between
+   * drafted and sent (Part E5, revised — sends happen synchronously), so
+   * this is the only row type with a genuine future clock time left to show.
    */
   @Get("send-queue")
   async sendQueue(@CurrentUser() user: JwtClaims) {
-    const [queued, waitingStates] = await Promise.all([
-      this.prisma.emailMessage.findMany({
-        where: { status: "QUEUED", lead: { orgId: user.orgId } },
-        include: { lead: { select: { id: true, companyName: true } }, account: { select: { address: true } } },
-        orderBy: { createdAt: "asc" },
-        take: 100,
-      }),
-      this.prisma.pipelineState.findMany({
-        where: {
-          stage: { in: WAITING_STAGES },
-          lead: { orgId: user.orgId },
-        },
-        include: { lead: { select: { id: true, companyName: true } } },
-        orderBy: { nextActionAt: "asc" },
-        take: 100,
-      }),
-    ]);
+    const waitingStates = await this.prisma.pipelineState.findMany({
+      where: {
+        stage: { in: WAITING_STAGES },
+        lead: { orgId: user.orgId },
+      },
+      include: { lead: { select: { id: true, companyName: true } } },
+      orderBy: { nextActionAt: "asc" },
+      take: 100,
+    });
 
     return {
-      queued,
       waiting: waitingStates.map((s) => ({
         leadId: s.leadId,
         lead: s.lead,
