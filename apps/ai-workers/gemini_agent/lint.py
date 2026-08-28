@@ -76,7 +76,8 @@ def lint_draft(step: int, subject: str, body_html: str, org_names: list[str]) ->
 
     if step < 3:
         for name in org_names:
-            if name and name.lower() in body_text.lower():
-                issues.append(f"names the company ('{name}') before Email 3 — it may only appear in the signature")
+            stripped = name.strip() if name else ""
+            if stripped and stripped.lower() in body_text.lower():
+                issues.append(f"names the company ('{stripped}') before Email 3 — it may only appear in the signature")
 
     return issues

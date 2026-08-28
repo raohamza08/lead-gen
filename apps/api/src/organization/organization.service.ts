@@ -40,15 +40,24 @@ export class OrganizationService {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
     const settings = (org.settings as Record<string, unknown>) ?? {};
     return {
-      emailOrgName: (settings.emailOrgName as string) || org.name,
-      emailSenderName: (settings.emailSenderName as string) || "The Team",
-      postalAddress: (settings.postalAddress as string) || "",
+      emailOrgName: (settings.emailOrgName as string)?.trim() || org.name,
+      emailSenderName: (settings.emailSenderName as string)?.trim() || "The Team",
+      postalAddress: (settings.postalAddress as string)?.trim() || "",
     };
   }
 
   async updateBranding(orgId: string, dto: UpdateOrgBrandingDto): Promise<OrgBranding> {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
-    const settings = { ...(org.settings as Record<string, unknown>), ...dto };
+    // Trimmed before storing — a whitespace-only value (e.g. a field cleared
+    // by backspacing through a placeholder) previously saved as a lone space,
+    // which is truthy and so bypassed every `|| fallback` above it. Confirmed
+    // live: a stray " " in emailOrgName matched as a substring of every
+    // drafted email body, permanently failing the pre-Email-3 "don't name the
+    // company yet" lint check and blocking every send.
+    const trimmedDto = Object.fromEntries(
+      Object.entries(dto).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value]),
+    );
+    const settings = { ...(org.settings as Record<string, unknown>), ...trimmedDto };
     await this.prisma.organization.update({
       where: { id: orgId },
       data: { settings: settings as Prisma.InputJsonValue },
