@@ -6,6 +6,7 @@ import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connectio
 import { SyncService } from "../sync/sync.service";
 import { OrganizationService } from "../organization/organization.service";
 import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
+import { EmailProviderService } from "../email/email-provider.service";
 
 //: 3 business days between every step of the 5-email sequence (Part: 5-email
 //: sequence, 2026-08-12). Weekends are skipped in the COUNT itself, not just
@@ -60,7 +61,6 @@ function businessDaysDelayMs(days: number): number {
 export class SequencerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SequencerService.name);
   private readonly waitQueue: Queue;
-  private readonly emailQueue: Queue;
   private waitWorker?: Worker;
 
   constructor(
@@ -68,16 +68,10 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     private readonly sync: SyncService,
     private readonly organization: OrganizationService,
     private readonly agentDispatch: AgentDispatchQueue,
+    private readonly emailProvider: EmailProviderService,
   ) {
     const connection = getRedisConnection();
     this.waitQueue = new Queue(QUEUE_NAMES.WAIT_TIMERS, { connection });
-    this.emailQueue = new Queue(QUEUE_NAMES.EMAIL_SEND, {
-      connection,
-      // Retry policy per Part E5 — transient failures (e.g. provider 5xx) get
-      // exponential backoff; ComplianceGateError is thrown as a non-retryable
-      // permanent failure by the worker itself (Part E7).
-      defaultJobOptions: { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
-    });
   }
 
   onModuleInit() {
@@ -294,27 +288,26 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.pipelineState.update({ where: { leadId }, data: { waitJobId: null } });
   }
 
+  /** Sends an approved draft immediately (Part E5, revised) — no queue: the
+   *  caller gets the real outcome (SENT or FAILED, with reason) in this same
+   *  call, not "queued" with the actual result arriving later somewhere else. */
   async enqueueApprovedSend(emailMessageId: string) {
-    await this.emailQueue.add("send", { emailMessageId });
+    return this.emailProvider.sendMessageNow(emailMessageId);
   }
 
   /**
-   * Manual retry for a message that failed permanently (ComplianceGateError,
-   * e.g. no mailbox was configured or active yet) — those never get retried
-   * automatically since a permanent failure is by definition not transient.
-   * Only FAILED is eligible: resending an already-SENT message would email
-   * the same prospect twice. Caller (LeadsService) verifies the message
-   * belongs to the org/lead before calling this.
+   * Manual retry for a message that failed to send. Only FAILED is eligible:
+   * resending an already-SENT message would email the same prospect twice.
+   * Caller (LeadsService) verifies the message belongs to the org/lead before
+   * calling this. One direct attempt, same as enqueueApprovedSend — no queue,
+   * no automatic re-retry; if it fails again the row shows FAILED with the
+   * new reason immediately, and the operator decides whether to try again.
    */
   async resendFailedMessage(emailMessageId: string) {
     const message = await this.prisma.emailMessage.findUniqueOrThrow({ where: { id: emailMessageId } });
     if (message.status !== "FAILED") {
       throw new BadRequestException(`Only a failed email can be resent (this one is ${message.status})`);
     }
-    await this.prisma.emailMessage.update({
-      where: { id: emailMessageId },
-      data: { status: "QUEUED", failureReason: null },
-    });
-    await this.emailQueue.add("send", { emailMessageId });
+    return this.emailProvider.sendMessageNow(emailMessageId);
   }
 }

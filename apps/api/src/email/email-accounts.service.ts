@@ -1,12 +1,11 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { EmailAccount, Prisma } from "@prisma/client";
-import { Queue } from "bullmq";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { EncryptionService } from "../common/crypto/encryption.service";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { UpsertEmailAccountDto } from "./dto/upsert-email-account.dto";
 import { GmailProvider } from "./providers/gmail.provider";
 import { SmtpProvider } from "./providers/smtp.provider";
+import { EmailProviderService } from "./email-provider.service";
 
 /** Never send raw credentials back to the dashboard — just whether one is set. */
 function sanitize(account: EmailAccount) {
@@ -28,13 +27,12 @@ function sanitize(account: EmailAccount) {
  */
 @Injectable()
 export class EmailAccountsService {
-  private readonly emailQueue = new Queue(QUEUE_NAMES.EMAIL_SEND, { connection: getRedisConnection() });
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly gmail: GmailProvider,
     private readonly smtp: SmtpProvider,
     private readonly encryption: EncryptionService,
+    private readonly emailProvider: EmailProviderService,
   ) {}
 
   /** Maps the DTO's plaintext `imapPassword` onto the encrypted
@@ -158,69 +156,31 @@ export class EmailAccountsService {
   }
 
   /**
-   * Finds emails stuck showing QUEUED whose send job has actually already
-   * died in the queue (every retry exhausted) and marks them FAILED so they
-   * become visible and resendable, instead of sitting invisibly "queued"
-   * forever.
-   *
-   * This is a safety net, not the primary fix — EmailSendWorker.onFailed
-   * marks a message FAILED itself the moment its job's retries exhaust, so a
-   * message sent through the normal flow never needs this. It exists for
-   * whatever that path doesn't (or didn't, before it was added) catch: a
-   * worker that crashed between the last retry and writing the status, a
-   * Redis hiccup, digging up chunk older cases from a bug — anything that
-   * leaves BullMQ and the database disagreeing about whether a send is dead.
-   * Org-scoped even though the queue itself is shared across every org,
-   * since an admin here should only ever be able to affect their own leads.
-   */
-  async reconcileStuck(orgId: string) {
-    const failedJobs = await this.emailQueue.getJobs(["failed"]);
-    const deadIds = [
-      ...new Set(
-        failedJobs
-          .map((job) => (job.data as { emailMessageId?: string }).emailMessageId)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    ];
-    if (deadIds.length === 0) {
-      return { checked: 0, fixed: 0 };
-    }
-
-    const result = await this.prisma.emailMessage.updateMany({
-      where: { id: { in: deadIds }, status: "QUEUED", lead: { orgId } },
-      data: { status: "FAILED" },
-    });
-    return { checked: deadIds.length, fixed: result.count };
-  }
-
-  /**
-   * Re-queues every FAILED email for another attempt in one action — the bulk
-   * counterpart to LeadsService.resendEmail, which does the same thing but
-   * one message at a time from a lead's page. Exists for exactly the case
-   * that follows fixing a mailbox: a bad password (or hit compliance gate)
-   * can fail a whole backlog at once, and a fix on the account doesn't retry
-   * any of them by itself — BullMQ never revisits a job once it's dead, and
-   * without this each one would need its own click.
+   * Retries every FAILED email for the org right now, one direct send attempt
+   * each — the bulk counterpart to LeadsService.resendEmail, which does the
+   * same thing but one message at a time from a lead's page. Exists for
+   * exactly the case that follows fixing a mailbox: a bad password (or hit
+   * compliance gate) can fail a whole backlog at once, and a fix on the
+   * account doesn't retry any of them by itself.
    *
    * FAILED is the only eligible status for the same reason resendFailedMessage
    * restricts to it: resending an already-SENT message would email the same
-   * prospect twice.
+   * prospect twice. Runs sequentially, not in parallel — these count against
+   * the same per-mailbox daily/hourly limits EmailProviderService enforces
+   * per send, so racing them would just have most of the batch lose that
+   * race and fail on a limit that had room a moment earlier.
    */
   async resendAllFailed(orgId: string) {
     const failed = await this.prisma.emailMessage.findMany({
       where: { status: "FAILED", lead: { orgId } },
       select: { id: true },
     });
-    if (failed.length === 0) {
-      return { resent: 0 };
+    let sent = 0;
+    for (const message of failed) {
+      const result = await this.emailProvider.sendMessageNow(message.id);
+      if (result.status === "SENT") sent++;
     }
-
-    await this.prisma.emailMessage.updateMany({
-      where: { id: { in: failed.map((m) => m.id) } },
-      data: { status: "QUEUED" },
-    });
-    await Promise.all(failed.map((m) => this.emailQueue.add("send", { emailMessageId: m.id })));
-    return { resent: failed.length };
+    return { attempted: failed.length, sent };
   }
 
   /** Mailbox health for the Sequences dashboard (Part F1) — sends today vs. daily limit. */

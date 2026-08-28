@@ -5,6 +5,8 @@ import { SmtpProvider } from "./providers/smtp.provider";
 import { EmailProvider } from "./email-provider.interface";
 import { OrganizationService } from "../organization/organization.service";
 import { apiPublicUrl } from "../common/api-url";
+import { RealtimeGateway } from "../realtime/realtime.gateway";
+import { NotificationsService } from "../notifications/notifications.service";
 
 export class ComplianceGateError extends Error {}
 
@@ -23,7 +25,71 @@ export class EmailProviderService {
     private readonly gmail: GmailProvider,
     private readonly smtp: SmtpProvider,
     private readonly organization: OrganizationService,
+    private readonly realtime: RealtimeGateway,
+    private readonly notifications: NotificationsService,
   ) {}
+
+  /**
+   * Sends a persisted, already-approved EmailMessage right now, synchronously
+   * — no queue, no background retry. The user explicitly wants send outcome
+   * known immediately: previously a send was a BullMQ job that could sit
+   * showing "queued" through up to 3 retries with exponential backoff before
+   * anyone knew it had failed, and a manual resend re-entered the same opaque
+   * queue with no visibility into when (or whether) it would actually fire.
+   * One direct attempt, one definite outcome, written to the row and pushed
+   * over the realtime socket before this returns.
+   */
+  async sendMessageNow(emailMessageId: string): Promise<{ status: "SENT" | "FAILED"; failureReason?: string }> {
+    const message = await this.prisma.emailMessage.findUniqueOrThrow({ where: { id: emailMessageId } });
+
+    try {
+      const { accountId, providerMessageId } = await this.sendForLead(message.leadId, message.subject, message.bodyHtml, message.id);
+
+      await this.prisma.emailMessage.update({
+        where: { id: emailMessageId },
+        data: { status: "SENT", sentAt: new Date(), accountId },
+      });
+      await this.prisma.emailEvent.create({
+        data: { messageId: emailMessageId, eventType: "SENT", meta: { providerMessageId } },
+      });
+      const lead = await this.prisma.lead.update({
+        where: { id: message.leadId },
+        data: { lastActivityAt: new Date() },
+        select: { orgId: true },
+      });
+      this.realtime.emitToOrg(lead.orgId, "email.sent", { leadId: message.leadId, emailMessageId });
+      return { status: "SENT" };
+    } catch (err) {
+      const failureReason = (err as Error).message;
+      if (err instanceof ComplianceGateError) {
+        this.logger.warn(`Compliance gate blocked send for message ${emailMessageId}: ${failureReason}`);
+      } else {
+        this.logger.error(`Send failed for message ${emailMessageId}: ${failureReason}`);
+      }
+
+      await this.prisma.emailMessage.update({
+        where: { id: emailMessageId },
+        data: { status: "FAILED", failureReason },
+      });
+      const lead = await this.prisma.lead.findUnique({ where: { id: message.leadId }, select: { orgId: true } });
+      if (lead) {
+        this.realtime.emitToOrg(lead.orgId, "email.failed", { leadId: message.leadId, emailMessageId });
+        // ComplianceGateError is an expected, self-explanatory state visible
+        // right on the message row (no mailbox configured, recipient
+        // suppressed, etc.) -- a provider-side failure (SMTP/API error) is
+        // the one worth interrupting someone for.
+        if (!(err instanceof ComplianceGateError)) {
+          await this.notifications.notify(lead.orgId, {
+            type: "EMAIL_SEND_FAILED",
+            severity: "ERROR",
+            message: `Email send failed: ${failureReason}`,
+            leadId: message.leadId,
+          });
+        }
+      }
+      return { status: "FAILED", failureReason };
+    }
+  }
 
   /**
    * `messageId` is optional only because a handful of call sites (the test

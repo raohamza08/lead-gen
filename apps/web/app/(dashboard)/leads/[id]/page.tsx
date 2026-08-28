@@ -227,8 +227,12 @@ export default function LeadDetailPage() {
     setError(null);
     setNotice(null);
     try {
-      await api.resendEmail(params.id, emailMessageId);
-      setNotice("Email re-queued for sending.");
+      const result = (await api.resendEmail(params.id, emailMessageId)) as { status: "SENT" | "FAILED"; failureReason?: string };
+      if (result.status === "SENT") {
+        setNotice("Email sent.");
+      } else {
+        setError(`Send failed: ${result.failureReason ?? "unknown error"}`);
+      }
       load();
     } catch (err) {
       setError((err as Error).message);

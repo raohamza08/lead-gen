@@ -84,7 +84,6 @@ export function EmailHubAccountsSection() {
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [reconciling, setReconciling] = useState(false);
   const [resending, setResending] = useState(false);
 
   function refresh() {
@@ -233,37 +232,19 @@ export function EmailHubAccountsSection() {
     }
   }
 
-  /** Finds emails stuck showing "queued" whose send actually already died
-   *  (e.g. after a mailbox's credentials went bad) and flips them to Failed
-   *  so they show up accurately and Resend becomes available. */
-  async function reconcileStuck() {
-    setReconciling(true);
-    setError(null);
-    setNotice(null);
-    try {
-      const result = (await api.reconcileStuckEmails()) as { checked: number; fixed: number };
-      setNotice(
-        result.fixed > 0
-          ? `Found ${result.fixed} email(s) stuck as "queued" that had actually failed — marked them Failed so they can be resent from the lead's page.`
-          : "No stuck emails found — everything queued is either sent or genuinely still in flight.",
-      );
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setReconciling(false);
-    }
-  }
-
-  /** Bulk follow-up to fixing a mailbox — none of the emails a bad password
-   *  (or other now-resolved problem) failed retry on their own once BullMQ
-   *  gives up on a job. */
+  /** Bulk follow-up to fixing a mailbox — retries every currently-Failed
+   *  email with one direct send attempt each, right now (no queue). */
   async function resendAllFailed() {
     setResending(true);
     setError(null);
     setNotice(null);
     try {
-      const result = (await api.resendAllFailedEmails()) as { resent: number };
-      setNotice(result.resent > 0 ? `Re-queued ${result.resent} failed email(s) for another send attempt.` : "No failed emails to resend.");
+      const result = (await api.resendAllFailedEmails()) as { attempted: number; sent: number };
+      if (result.attempted === 0) {
+        setNotice("No failed emails to resend.");
+      } else {
+        setNotice(`Resent ${result.sent} of ${result.attempted} failed email(s). Any that failed again still show Failed with their reason.`);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -299,18 +280,9 @@ export function EmailHubAccountsSection() {
         <div className="flex items-center gap-2">
           <button
             type="button"
-            disabled={reconciling}
-            onClick={reconcileStuck}
-            title="Checks for emails still shown as “queued” whose send already failed for good (e.g. bad mailbox credentials), and marks them Failed so they can be resent."
-            className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-          >
-            {reconciling ? "Checking…" : "Check for stuck emails"}
-          </button>
-          <button
-            type="button"
             disabled={resending}
             onClick={resendAllFailed}
-            title="Re-queues every email currently showing Failed for another send attempt — use this after fixing whatever made them fail (e.g. a mailbox password)."
+            title="Immediately retries every email currently showing Failed, one direct send attempt each — use this after fixing whatever made them fail (e.g. a mailbox password)."
             className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
           >
             {resending ? "Resending…" : "Resend all failed"}

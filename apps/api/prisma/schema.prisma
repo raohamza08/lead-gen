@@ -718,17 +718,16 @@ model EmailMessage {
   status        EmailMessageStatus @default(DRAFT)
   scheduledAt   DateTime? @map("scheduled_at")
   sentAt        DateTime? @map("sent_at")
-  /// When this row was drafted — the only reliable proxy for "which queued
-  /// email sends first" (the email-send BullMQ queue has no delay and
-  /// processes FIFO, so draft order is send order). `scheduledAt` above and
-  /// EmailEventType.QUEUED both look like they'd answer this but neither is
-  /// ever written anywhere in the codebase.
+  /// When this row was drafted. `scheduledAt` above and EmailEventType.QUEUED
+  /// both look like they'd answer "send order" but neither is ever written
+  /// anywhere in the codebase.
   createdAt     DateTime @default(now()) @map("created_at")
-  /// Why this send permanently failed (ComplianceGateError message, e.g. "Lead
-  /// has no verified email address") or why every retry was exhausted — set by
-  /// EmailSendWorker at the moment of failure. Without this, a FAILED row gave
-  /// no way to tell "recipient unsubscribed" from "no email on file" from a
-  /// transient SMTP error apart from reading server logs by hand.
+  /// Why this send failed (ComplianceGateError message, e.g. "Lead has no
+  /// verified email address", or a provider-side error) — set by
+  /// EmailProviderService.sendMessageNow at the moment of failure. Without
+  /// this, a FAILED row gave no way to tell "recipient unsubscribed" from "no
+  /// email on file" from a transient SMTP error apart from reading server
+  /// logs by hand.
   failureReason String? @map("failure_reason")
 
   events        EmailEvent[]

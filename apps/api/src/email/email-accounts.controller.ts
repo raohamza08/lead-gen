@@ -44,22 +44,9 @@ export class EmailAccountsController {
   }
 
   /**
-   * Safety-net cleanup for emails stuck showing QUEUED after their send job
-   * already died in the queue (e.g. a mailbox's credentials went bad and
-   * every retry failed) — replaces manually patching the database. See
-   * EmailAccountsService.reconcileStuck for why this exists alongside the
-   * worker's own automatic handling.
-   */
-  @Post("reconcile-stuck")
-  @Roles(Role.ADMIN)
-  reconcileStuck(@CurrentUser() user: JwtClaims) {
-    return this.service.reconcileStuck(user.orgId);
-  }
-
-  /**
-   * Re-queues every FAILED email in one click — the follow-up to fixing a
-   * mailbox (e.g. a bad password): none of the backlog it caused retries on
-   * its own once BullMQ has given up on it. See EmailAccountsService.resendAllFailed.
+   * Retries every FAILED email in one click, right now — the follow-up to
+   * fixing a mailbox (e.g. a bad password): none of the backlog it caused
+   * retries on its own. See EmailAccountsService.resendAllFailed.
    */
   @Post("resend-all-failed")
   @Roles(Role.ADMIN)

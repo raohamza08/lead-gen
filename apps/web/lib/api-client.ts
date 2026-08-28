@@ -245,7 +245,6 @@ export const api = {
   updateEmailAccount: (id: string, body: Record<string, unknown>) =>
     request(`/settings/email-accounts/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   testEmailAccount: (id: string) => request(`/settings/email-accounts/${id}/test`, { method: "POST" }),
-  reconcileStuckEmails: () => request("/settings/email-accounts/reconcile-stuck", { method: "POST" }),
   resendAllFailedEmails: () => request("/settings/email-accounts/resend-all-failed", { method: "POST" }),
   getSendingMailboxes: () => request("/settings/email-accounts/sending-options"),
   getAgentPrompts: () => request("/settings/organization/agent-prompts"),

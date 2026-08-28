@@ -95,8 +95,8 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
 
   /** Auth failures are permanent for this account until a human fixes the
    *  credentials — same "don't retry-storm a dead connection" reasoning as
-   *  ComplianceGateError in email-send.worker.ts, just IMAP's own signal for
-   *  it. imapflow's AuthenticationFailure class is declared in its type
+   *  ComplianceGateError in email-provider.service.ts, just IMAP's own
+   *  signal for it. imapflow's AuthenticationFailure class is declared in its type
    *  definitions but not actually exported from the package's runtime
    *  module (only `ImapFlow` is — confirmed by reading lib/imap-flow.js's
    *  module.exports directly, not assumed from the .d.ts), so `instanceof`

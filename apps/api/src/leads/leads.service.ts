@@ -625,13 +625,15 @@ export class LeadsService {
   }
 
   /** Retries an email that failed to send — e.g. it failed because no mailbox
-   *  was configured yet, and one has since been added. */
+   *  was configured yet, and one has since been added. Sends synchronously
+   *  and returns the real outcome, not a blind "resent: true" — the whole
+   *  point of dropping the queue was knowing immediately whether a retry
+   *  actually worked. */
   async resendEmail(orgId: string, leadId: string, emailMessageId: string) {
     await this.assertOwnership(orgId, leadId);
     const message = await this.prisma.emailMessage.findFirst({ where: { id: emailMessageId, leadId } });
     if (!message) throw new NotFoundException("Email message not found");
-    await this.sequencer.resendFailedMessage(emailMessageId);
-    return { resent: true };
+    return this.sequencer.resendFailedMessage(emailMessageId);
   }
 
   async approveEmail(orgId: string, leadId: string, dto: ApproveEmailDto) {
@@ -657,8 +659,12 @@ export class LeadsService {
       data: { subject: finalSubject, bodyHtml: finalBody, generatedBy, status: "QUEUED" },
     });
 
+    // Sends synchronously (Part E5, revised — no queue), so `approved` above
+    // is already stale by the time this resolves; re-read the row rather
+    // than return a response that still says "queued" after the real
+    // outcome (SENT or FAILED) is already sitting in the database.
     await this.sequencer.enqueueApprovedSend(approved.id);
-    return approved;
+    return this.prisma.emailMessage.findUniqueOrThrow({ where: { id: approved.id } });
   }
 
   /** Which pipeline stage each step of the 5-email sequence lands the lead
@@ -721,7 +727,11 @@ export class LeadsService {
     }
 
     if (status === "QUEUED") {
+      // Sends synchronously now -- re-read afterward so the caller (the
+      // ai-workers agent) sees the real SENT/FAILED outcome, not the
+      // pre-send snapshot from the create() above.
       await this.sequencer.enqueueApprovedSend(message.id);
+      return this.prisma.emailMessage.findUniqueOrThrow({ where: { id: message.id } });
     }
 
     return message;

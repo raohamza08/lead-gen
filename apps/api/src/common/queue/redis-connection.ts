@@ -14,7 +14,6 @@ export function getRedisConnection(): IORedis {
 
 export const QUEUE_NAMES = {
   WAIT_TIMERS: "wait-timers",
-  EMAIL_SEND: "email-send",
   SHEETS_SYNC: "sheets-sync",
   CLICKUP_SYNC: "clickup-sync",
   // Every call out to the Python AI workers that used to be a raw fetch with

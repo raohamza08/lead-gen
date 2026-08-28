@@ -26,8 +26,8 @@ export class SmtpProvider implements EmailProvider {
       // back has no way to know the message never actually left the server.
       // Confirmed live: this exact silent stub is what let an unconfigured
       // mailbox record a lead's whole sequence as SENT when nothing was ever
-      // delivered. Throwing lets EmailSendWorker mark the message FAILED
-      // with this real reason instead.
+      // delivered. Throwing lets EmailProviderService.sendMessageNow mark the
+      // message FAILED with this real reason instead.
       throw new Error(`${account.address} has no SMTP username/password configured — cannot send`);
     }
 
