@@ -2,6 +2,7 @@ import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { CacheService } from "../common/cache/cache.service";
 import { CampaignsService } from "../campaigns/campaigns.service";
 import {
   AiInsightsSnapshot,
@@ -39,9 +40,20 @@ export class AnalyticsService {
     private readonly prisma: PrismaService,
     private readonly campaigns: CampaignsService,
     private readonly config: ConfigService,
+    private readonly cache: CacheService,
   ) {}
 
+  /** The first thing every user sees after login — cached for a short
+   *  window (see CacheService's docblock for why: DB round trips here cost
+   *  ~200-400ms each, and this method already fires 12 of them in
+   *  parallel). 20s trades a small staleness window for cutting that to
+   *  ~0ms on every repeat load within it, across every client, not just
+   *  one browser tab the way React Query's staleTime already does. */
   async getSummary(orgId: string): Promise<AnalyticsSummary> {
+    return this.cache.getOrSet(`analytics:summary:${orgId}`, 20, () => this.computeSummary(orgId));
+  }
+
+  private async computeSummary(orgId: string): Promise<AnalyticsSummary> {
     const now = new Date();
     const startOfToday = new Date(now); startOfToday.setHours(0, 0, 0, 0);
     const startOfWeek = new Date(now); startOfWeek.setDate(now.getDate() - 7);

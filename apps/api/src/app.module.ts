@@ -5,6 +5,7 @@ import { APP_FILTER, APP_INTERCEPTOR, APP_PIPE } from "@nestjs/core";
 import { ValidationPipe } from "@nestjs/common";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { CryptoModule } from "./common/crypto/crypto.module";
+import { CacheModule } from "./common/cache/cache.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { AgentDispatchModule } from "./common/queue/agent-dispatch.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
@@ -38,6 +39,7 @@ import { SocialMediaModule } from "./social-media/social-media.module";
     ScheduleModule.forRoot(),
     PrismaModule,
     CryptoModule,
+    CacheModule,
     RealtimeModule,
     AgentDispatchModule,
     AuthModule,

@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import { JwtClaims, LeadSourceLayer, Role } from "@leadgen/types";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { CacheService } from "../common/cache/cache.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { TransactionalEmailService } from "../email/transactional-email.service";
 import { LeadsService } from "../leads/leads.service";
@@ -35,10 +36,33 @@ const DEFAULT_PAGE_SIZE = 50;
 export class EmailHubService {
   constructor(
     private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
     private readonly realtime: RealtimeGateway,
     private readonly transactionalEmail: TransactionalEmailService,
     private readonly leads: LeadsService,
   ) {}
+
+  /** listAccounts/getStats are keyed per access scope, not just orgId — a
+   *  non-admin only sees the accounts they're granted, and caching an
+   *  admin's unrestricted result under the same key would leak it to a
+   *  restricted user (or vice versa, show them a stale unrestricted view). */
+  private scopeKey(orgId: string, accountIds: string[] | null): string {
+    return `${orgId}:${accountIds ? [...accountIds].sort().join(",") : "all"}`;
+  }
+
+  /** Best-effort invalidation after a mutation — clears exactly the
+   *  requesting user's own scope immediately (so their own action feels
+   *  instant), while any other user's differently-scoped cache entry still
+   *  expires naturally via the short TTL below. Wiring true multi-scope
+   *  invalidation isn't worth the complexity for a stopgap cache. */
+  private async invalidateStatsFor(user: JwtClaims) {
+    const accountIds = await this.accessibleAccountIds(user);
+    const key = this.scopeKey(user.orgId, accountIds);
+    await Promise.all([
+      this.cache.invalidate(`email-hub:accounts:${key}`),
+      this.cache.invalidate(`email-hub:stats:${key}`),
+    ]);
+  }
 
   /** Null means "no restriction" (ADMIN) — every other role is scoped to
    *  exactly the accounts EmailAccountAccess grants them. Absence of a grant
@@ -63,11 +87,21 @@ export class EmailHubService {
     }
   }
 
+  /** Sidebar account list + unread badges — read on every Email Hub page
+   *  load. Cached briefly (see CacheService's docblock); bulkAction and
+   *  addToLead invalidate this user's own scope immediately so marking
+   *  something read doesn't leave a stale badge for the rest of the TTL. */
   async listAccounts(user: JwtClaims) {
     const accountIds = await this.accessibleAccountIds(user);
+    return this.cache.getOrSet(`email-hub:accounts:${this.scopeKey(user.orgId, accountIds)}`, 15, () =>
+      this.fetchAccounts(user.orgId, accountIds),
+    );
+  }
+
+  private async fetchAccounts(orgId: string, accountIds: string[] | null) {
     const accounts = await this.prisma.emailAccount.findMany({
       where: {
-        orgId: user.orgId,
+        orgId,
         inboundSyncEnabled: true,
         ...(accountIds ? { id: { in: accountIds } } : {}),
       },
@@ -263,6 +297,7 @@ export class EmailHubService {
     }
 
     this.realtime.emitToOrg(user.orgId, "emailHub.messagesUpdated", { messageIds: ids, action: dto.action });
+    await this.invalidateStatsFor(user);
     return { updated: ids.length };
   }
 
@@ -374,17 +409,27 @@ export class EmailHubService {
     }
 
     await this.prisma.inboundEmailThread.update({ where: { id: thread.id }, data: { leadId: lead.id } });
+    await this.invalidateStatsFor(user);
     return lead;
   }
 
+  /** The Email Hub's stat tiles — 8 queries fired in parallel on every page
+   *  load. Cached the same way as listAccounts (see its docblock for the
+   *  invalidation reasoning). */
   async getStats(user: JwtClaims) {
     const accountIds = await this.accessibleAccountIds(user);
+    return this.cache.getOrSet(`email-hub:stats:${this.scopeKey(user.orgId, accountIds)}`, 15, () =>
+      this.computeStats(user.orgId, accountIds),
+    );
+  }
+
+  private async computeStats(orgId: string, accountIds: string[] | null) {
     // folder: "INBOX" -- every tile here (unread/important/received/ignored/
     // possible-leads) is an inbox-triage stat; without this a synced Sent
     // message (always isRead: false, see listAccounts's own note above)
     // would double-count into "unread" and inflate every other tile too.
     const scope: Prisma.InboundEmailMessageWhereInput = {
-      account: { orgId: user.orgId },
+      account: { orgId },
       folder: "INBOX",
       ...(accountIds ? { accountId: { in: accountIds } } : {}),
     };
@@ -393,14 +438,14 @@ export class EmailHubService {
     const [connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored, possibleLeads] =
       await Promise.all([
         this.prisma.emailAccount.count({
-          where: { orgId: user.orgId, inboundSyncEnabled: true, ...(accountIds ? { id: { in: accountIds } } : {}) },
+          where: { orgId, inboundSyncEnabled: true, ...(accountIds ? { id: { in: accountIds } } : {}) },
         }),
         this.prisma.inboundEmailMessage.count({ where: { ...scope, isRead: false, isIgnored: false } }),
         this.prisma.inboundEmailMessage.count({ where: { ...scope, isImportant: true, isIgnored: false } }),
         this.prisma.inboundEmailMessage.count({ where: { ...scope, receivedAt: { gte: since(1) } } }),
         this.prisma.inboundEmailMessage.count({ where: { ...scope, receivedAt: { gte: since(7) } } }),
         this.prisma.inboundEmailThread.count({
-          where: { orgId: user.orgId, leadId: { not: null }, ...(accountIds ? { accountId: { in: accountIds } } : {}) },
+          where: { orgId, leadId: { not: null }, ...(accountIds ? { accountId: { in: accountIds } } : {}) },
         }),
         this.prisma.inboundEmailMessage.count({ where: { ...scope, isIgnored: true } }),
         // Awaiting confirmation (Part: Lead Room) — flagged by the AI classifier

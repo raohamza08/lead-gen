@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, ServiceUnavailableException } from "@nes
 import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { CacheService } from "../common/cache/cache.service";
 import { UpdateOrgBrandingDto } from "./dto/update-org-branding.dto";
 
 export interface OrgBranding {
@@ -34,9 +35,21 @@ export class OrganizationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly cache: CacheService,
   ) {}
 
+  /** Called on every single outbound send (see email-provider.service.ts,
+   *  transactional-email.service.ts, sequencer.service.ts) to resolve
+   *  {{org.name}}/{{sender.name}} — a DB round trip on every email for data
+   *  that changes maybe a few times a year. Cached with a longer TTL than
+   *  the read-heavy dashboard queries since staleness here just means a
+   *  branding edit takes a few minutes to appear in new sends, not a
+   *  correctness issue, and updateBranding invalidates immediately anyway. */
   async getBranding(orgId: string): Promise<OrgBranding> {
+    return this.cache.getOrSet(`org:branding:${orgId}`, 300, () => this.fetchBranding(orgId));
+  }
+
+  private async fetchBranding(orgId: string): Promise<OrgBranding> {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
     const settings = (org.settings as Record<string, unknown>) ?? {};
     return {
@@ -62,6 +75,7 @@ export class OrganizationService {
       where: { id: orgId },
       data: { settings: settings as Prisma.InputJsonValue },
     });
+    await this.cache.invalidate(`org:branding:${orgId}`);
     return this.getBranding(orgId);
   }
 
