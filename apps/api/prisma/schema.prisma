@@ -687,6 +687,12 @@ model EmailAccount {
   /// IMAP UID of the last message the sync worker has already processed for
   /// this account's INBOX — the poll cursor. Null means "never synced yet."
   lastImapUid        Int?     @map("last_imap_uid")
+  /// Same cursor, scoped to the account's Sent folder — a separate field
+  /// because IMAP UIDs are only unique per-mailbox, so INBOX and Sent need
+  /// independent cursors even though they're polled in the same tick. Null
+  /// also covers "no Sent-equivalent folder found on this provider," not
+  /// just "never synced" — see ImapReaderProvider.findSentMailbox.
+  lastImapUidSent    Int?     @map("last_imap_uid_sent")
   /// Internal display name for this mailbox in the Email Hub UI — distinct
   /// from `displayName` above, which is the outbound From name a *recipient*
   /// sees. Falls back to `address` when unset.

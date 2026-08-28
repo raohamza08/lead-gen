@@ -63,4 +63,13 @@ export class NotificationsService {
     });
     return { updated: result.count };
   }
+
+  /** A real delete, not a bulk "mark read" — the bell's "Clear all" empties
+   *  the panel entirely rather than leaving a wall of dimmed-but-present
+   *  rows behind, which is what a user asking to "clear" a notification
+   *  list actually means. */
+  async clearAll(orgId: string) {
+    const result = await this.prisma.notification.deleteMany({ where: { orgId } });
+    return { deleted: result.count };
+  }
 }

@@ -39,6 +39,8 @@ interface Message {
   accountId: string;
   fromName: string | null;
   fromEmail: string;
+  toEmails: string[];
+  folder: string;
   subject: string;
   bodyText: string;
   receivedAt: string;
@@ -54,15 +56,16 @@ interface Message {
 }
 
 /** Maps the sidebar's `?view=` sub-items onto the API's status filter — the
- *  "Leads"/"Follow-ups"/"Sent" views the spec asks for aren't first-class
- *  message states in the schema, so they're expressed here as a status +
- *  (for Leads) a client-side filter on thread.leadId, keeping the API's
- *  filter surface small rather than growing a bespoke enum value per
- *  sidebar item. */
-function statusForView(view: string | null): "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" {
+ *  "Leads"/"Follow-ups" views aren't first-class message states in the
+ *  schema, so they're expressed here as a status + (for Leads) a
+ *  client-side filter on thread.leadId. "Sent" *is* first-class (folder:
+ *  "SENT" on the row, synced from the mailbox's real Sent folder — see
+ *  ImapReaderProvider.findSentMailbox), so it maps directly. */
+function statusForView(view: string | null): "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" | "SENT" {
   if (view === "important") return "IMPORTANT";
   if (view === "ignored") return "IGNORED";
   if (view === "leads") return "LEADS";
+  if (view === "sent") return "SENT";
   return "ALL";
 }
 
@@ -425,7 +428,7 @@ function EmailHubPageContent() {
                 <th className="w-8 px-3 py-2">
                   <input type="checkbox" checked={allSelected} onChange={toggleAll} />
                 </th>
-                <th className="px-3 py-2">Sender</th>
+                <th className="px-3 py-2">{status === "SENT" ? "To" : "Sender"}</th>
                 <th className="px-3 py-2">Subject</th>
                 <th className="px-3 py-2">Account</th>
                 <th className="px-3 py-2">Tags</th>
@@ -445,8 +448,14 @@ function EmailHubPageContent() {
                     <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleOne(m.id)} />
                   </td>
                   <td className="px-3 py-2">
-                    <div>{m.fromName || m.fromEmail}</div>
-                    <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
+                    {m.folder === "SENT" ? (
+                      <div>{m.toEmails.join(", ") || "(no recipient)"}</div>
+                    ) : (
+                      <>
+                        <div>{m.fromName || m.fromEmail}</div>
+                        <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
+                      </>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1.5">

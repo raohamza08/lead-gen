@@ -1,12 +1,21 @@
 "use client";
 
 import { useState } from "react";
-import { api } from "../../lib/api-client";
+import { api, OutboundAttachmentInput } from "../../lib/api-client";
+import { AttachmentPicker } from "./attachment-picker";
+import { RichHtmlEditor } from "./rich-html-editor";
 
 interface Account {
   id: string;
   address: string;
   mailboxLabel: string | null;
+}
+
+function parseAddressList(input: string): string[] {
+  return input
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
 }
 
 /**
@@ -29,8 +38,14 @@ export function ComposeModal({
 }) {
   const [accountId, setAccountId] = useState(defaultAccountId ?? accounts[0]?.id ?? "");
   const [to, setTo] = useState("");
+  const [cc, setCc] = useState("");
+  const [bcc, setBcc] = useState("");
+  const [showCc, setShowCc] = useState(false);
+  const [showBcc, setShowBcc] = useState(false);
   const [subject, setSubject] = useState("");
   const [bodyHtml, setBodyHtml] = useState("");
+  const [attachments, setAttachments] = useState<OutboundAttachmentInput[]>([]);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,9 +56,12 @@ export function ComposeModal({
     try {
       await api.composeEmail({
         accountId,
-        to: to.split(",").map((s) => s.trim()).filter(Boolean),
+        to: parseAddressList(to),
+        cc: parseAddressList(cc),
+        bcc: parseAddressList(bcc),
         subject,
         bodyHtml,
+        attachments,
       });
       onSent();
       onClose();
@@ -84,7 +102,21 @@ export function ComposeModal({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs text-ink/60">To (comma-separated)</span>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs text-ink/60">To (comma-separated)</span>
+              <div className="flex items-center gap-2 text-[11px]">
+                {!showCc && (
+                  <button type="button" onClick={() => setShowCc(true)} className="text-ink/40 hover:text-accent">
+                    Cc
+                  </button>
+                )}
+                {!showBcc && (
+                  <button type="button" onClick={() => setShowBcc(true)} className="text-ink/40 hover:text-accent">
+                    Bcc
+                  </button>
+                )}
+              </div>
+            </div>
             <input
               value={to}
               onChange={(e) => setTo(e.target.value)}
@@ -92,6 +124,26 @@ export function ComposeModal({
               className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
             />
           </label>
+          {showCc && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Cc</span>
+              <input
+                value={cc}
+                onChange={(e) => setCc(e.target.value)}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              />
+            </label>
+          )}
+          {showBcc && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Bcc</span>
+              <input
+                value={bcc}
+                onChange={(e) => setBcc(e.target.value)}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              />
+            </label>
+          )}
           <label className="block">
             <span className="mb-1 block text-xs text-ink/60">Subject</span>
             <input
@@ -101,16 +153,14 @@ export function ComposeModal({
               className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
             />
           </label>
-          <label className="block">
+          <div className="block">
             <span className="mb-1 block text-xs text-ink/60">Message</span>
-            <textarea
-              value={bodyHtml}
-              onChange={(e) => setBodyHtml(e.target.value)}
-              required
-              rows={8}
-              className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-            />
-          </label>
+            <RichHtmlEditor onChange={setBodyHtml} placeholder="Write your message…" />
+          </div>
+          <div className="block">
+            <AttachmentPicker attachments={attachments} onChange={setAttachments} onError={setAttachmentError} />
+            {attachmentError && <p className="mt-1 text-xs text-bad">{attachmentError}</p>}
+          </div>
           <div className="flex justify-end gap-2">
             <button
               type="button"
@@ -121,7 +171,7 @@ export function ComposeModal({
             </button>
             <button
               type="submit"
-              disabled={sending || !accountId}
+              disabled={sending || !accountId || !bodyHtml.replace(/<[^>]+>/g, "").trim() || !!attachmentError}
               className="rounded-md bg-accent px-4 py-1.5 text-xs text-white disabled:opacity-50"
             >
               {sending ? "Sending…" : "Send"}

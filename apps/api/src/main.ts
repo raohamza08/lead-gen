@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import { NestExpressApplication } from "@nestjs/platform-express";
 import { IoAdapter } from "@nestjs/platform-socket.io";
 import { AppModule } from "./app.module";
 import { allowedOrigins, corsOriginValidator } from "./common/cors";
@@ -11,7 +12,16 @@ async function bootstrap() {
   // route's signature verification, which must hash the exact bytes Meta
   // signed, not a re-serialized JSON.stringify(body) that can differ in key
   // order/whitespace (see webhooks/signature.util.ts's own docblock on this).
-  const app = await NestFactory.create(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+
+  // Default Express JSON limit (100kb) is well under a single email
+  // attachment's base64 size (~33% larger than the raw file) — raised via
+  // Nest's own useBodyParser (not a second app.use(json(...))) so the
+  // rawBody-capturing verify callback set up above stays wired through.
+  // Email Hub compose/reply attachments are capped at 15MB raw combined,
+  // see EmailHubService.assertAttachmentsWithinLimit.
+  app.useBodyParser("json", { limit: "21mb" });
+
   const allowed = allowedOrigins();
 
   app.enableCors({ origin: corsOriginValidator, credentials: true });

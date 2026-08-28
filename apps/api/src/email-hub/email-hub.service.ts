@@ -11,7 +11,7 @@ import { ComposeEmailDto, ReplyMessageDto } from "./dto/reply-message.dto";
 
 export interface ListMessagesQuery {
   accountId?: string;
-  status?: "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS";
+  status?: "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" | "SENT";
   tagIds?: string[];
   sender?: string;
   dateFrom?: string;
@@ -77,7 +77,11 @@ export class EmailHubService {
 
     const unreadCounts = await this.prisma.inboundEmailMessage.groupBy({
       by: ["accountId"],
-      where: { accountId: { in: accounts.map((a) => a.id) }, isRead: false, isIgnored: false },
+      // folder: "INBOX" -- a synced Sent message always starts isRead: false
+      // (read state is tracked in-app, not from the mailbox's real \Seen
+      // flag; see ImapReaderProvider.fetchNew, which never requests IMAP
+      // flags), so without this every Sent message would inflate the badge.
+      where: { accountId: { in: accounts.map((a) => a.id) }, folder: "INBOX", isRead: false, isIgnored: false },
       _count: true,
     });
     const unreadByAccount = new Map(unreadCounts.map((c) => [c.accountId, c._count]));
@@ -129,6 +133,10 @@ export class EmailHubService {
       account: { orgId: user.orgId },
       ...(accountIds ? { accountId: { in: accountIds } } : {}),
       ...(query.accountId ? { accountId: query.accountId } : {}),
+      // Every non-SENT view is implicitly scoped to the INBOX folder — Sent
+      // items only ever surface in the SENT view below, never mixed into
+      // the general inbox pages now that Sent-folder syncing exists.
+      ...(query.status !== "SENT" ? { folder: "INBOX" } : { folder: "SENT" }),
       ...(query.status === "UNREAD" ? { isRead: false, isIgnored: false } : {}),
       ...(query.status === "IMPORTANT" ? { isImportant: true, isIgnored: false } : {}),
       ...(query.status === "IGNORED" ? { isIgnored: true } : {}),
@@ -265,26 +273,29 @@ export class EmailHubService {
     });
     if (!original) throw new NotFoundException("Message not found");
     await this.assertAccountAccess(user, original.accountId, true);
+    this.assertAttachmentsWithinLimit(dto.attachments);
 
     const to = original.fromEmail;
-    const cc = dto.replyAll ? original.ccEmails.filter((e) => e !== original.account.address) : [];
+    // Reply-all's auto-CC (everyone else on the original) and any CC the
+    // user typed into the composer are both real recipients — merged and
+    // de-duped rather than one silently overriding the other.
+    const autoCc = dto.replyAll ? original.ccEmails.filter((e) => e !== original.account.address) : [];
+    const cc = Array.from(new Set([...autoCc, ...(dto.cc ?? [])]));
     const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
 
     const result = await this.transactionalEmail.sendFromAccount(original.account, {
       toAddress: to,
+      cc: cc.length > 0 ? cc : undefined,
+      bcc: dto.bcc,
       subject,
       bodyHtml: dto.bodyHtml,
       headers: original.messageIdHeader
         ? { "In-Reply-To": original.messageIdHeader, References: original.messageIdHeader }
         : undefined,
+      attachments: dto.attachments,
     });
 
-    // cc isn't part of OutboundEmail today (single-recipient sends only,
-    // matching the existing outreach send path) — logged, not silently
-    // dropped, so "Reply All" not actually CC'ing anyone is visible rather
-    // than a silent gap. A real fix belongs in OutboundEmail/the providers,
-    // out of scope for this pass.
-    return { sent: true, providerMessageId: result.providerMessageId, ccNotSent: cc };
+    return { sent: true, providerMessageId: result.providerMessageId };
   }
 
   async compose(user: JwtClaims, dto: ComposeEmailDto) {
@@ -293,13 +304,29 @@ export class EmailHubService {
     });
     if (!account) throw new NotFoundException("Account not found");
     await this.assertAccountAccess(user, account.id, true);
+    this.assertAttachmentsWithinLimit(dto.attachments);
 
     const result = await this.transactionalEmail.sendFromAccount(account, {
-      toAddress: dto.to[0],
+      toAddress: dto.to.join(", "),
+      cc: dto.cc,
+      bcc: dto.bcc,
       subject: dto.subject,
       bodyHtml: dto.bodyHtml,
+      attachments: dto.attachments,
     });
     return { sent: true, providerMessageId: result.providerMessageId };
+  }
+
+  /** Attachments travel as base64 in the JSON body (never persisted — see
+   *  OutboundAttachment's docblock), so this is the only backstop against an
+   *  oversized payload; matches the body-parser limit raised in main.ts. */
+  private assertAttachmentsWithinLimit(attachments?: { contentBase64: string }[]) {
+    if (!attachments?.length) return;
+    const totalBytes = attachments.reduce((sum, a) => sum + Buffer.byteLength(a.contentBase64, "base64"), 0);
+    const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
+    if (totalBytes > MAX_TOTAL_BYTES) {
+      throw new BadRequestException("Attachments exceed the 15 MB total limit");
+    }
   }
 
   /**
@@ -352,8 +379,13 @@ export class EmailHubService {
 
   async getStats(user: JwtClaims) {
     const accountIds = await this.accessibleAccountIds(user);
+    // folder: "INBOX" -- every tile here (unread/important/received/ignored/
+    // possible-leads) is an inbox-triage stat; without this a synced Sent
+    // message (always isRead: false, see listAccounts's own note above)
+    // would double-count into "unread" and inflate every other tile too.
     const scope: Prisma.InboundEmailMessageWhereInput = {
       account: { orgId: user.orgId },
+      folder: "INBOX",
       ...(accountIds ? { accountId: { in: accountIds } } : {}),
     };
     const since = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);

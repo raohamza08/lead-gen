@@ -51,9 +51,16 @@ export class SmtpProvider implements EmailProvider {
     const info = await transport.sendMail({
       from: formatFrom(email.fromAddress, email.fromName),
       to: email.toAddress,
+      cc: email.cc,
+      bcc: email.bcc,
       subject: email.subject,
       html: email.bodyHtml,
       headers: email.headers,
+      attachments: email.attachments?.map((a) => ({
+        filename: a.filename,
+        content: Buffer.from(a.contentBase64, "base64"),
+        contentType: a.contentType,
+      })),
     });
 
     return { providerMessageId: info.messageId };

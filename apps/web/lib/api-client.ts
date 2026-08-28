@@ -9,6 +9,12 @@ export interface AuthTokens {
   expiresIn?: number;
 }
 
+export interface OutboundAttachmentInput {
+  filename: string;
+  contentType?: string;
+  contentBase64: string;
+}
+
 /** Exported for realtime.ts — the socket handshake authenticates with the
  *  same access token every REST call already uses. */
 export function getAccessToken(): string | null {
@@ -275,6 +281,7 @@ export const api = {
   getNotifications: (limit = 50) => request(`/notifications?limit=${limit}`),
   markNotificationRead: (id: string) => request(`/notifications/${id}/read`, { method: "PATCH" }),
   markAllNotificationsRead: () => request("/notifications/read-all", { method: "PATCH" }),
+  clearAllNotifications: () => request("/notifications", { method: "DELETE" }),
   getAutomationSettings: () => request("/settings/organization/automation"),
   updateAutomationSettings: (body: Record<string, unknown>) =>
     request("/settings/organization/automation", { method: "PATCH", body: JSON.stringify(body) }),
@@ -310,10 +317,25 @@ export const api = {
     request(`/email-hub/messages?${new URLSearchParams(params).toString()}`),
   bulkEmailAction: (body: { messageIds: string[]; action: string; tagId?: string }) =>
     request("/email-hub/messages/bulk", { method: "POST", body: JSON.stringify(body) }),
-  replyToEmail: (messageId: string, body: { bodyHtml: string; replyAll?: boolean }) =>
-    request(`/email-hub/messages/${messageId}/reply`, { method: "POST", body: JSON.stringify(body) }),
-  composeEmail: (body: { accountId: string; to: string[]; cc?: string[]; bcc?: string[]; subject: string; bodyHtml: string }) =>
-    request("/email-hub/compose", { method: "POST", body: JSON.stringify(body) }),
+  replyToEmail: (
+    messageId: string,
+    body: {
+      bodyHtml: string;
+      replyAll?: boolean;
+      cc?: string[];
+      bcc?: string[];
+      attachments?: OutboundAttachmentInput[];
+    },
+  ) => request(`/email-hub/messages/${messageId}/reply`, { method: "POST", body: JSON.stringify(body) }),
+  composeEmail: (body: {
+    accountId: string;
+    to: string[];
+    cc?: string[];
+    bcc?: string[];
+    subject: string;
+    bodyHtml: string;
+    attachments?: OutboundAttachmentInput[];
+  }) => request("/email-hub/compose", { method: "POST", body: JSON.stringify(body) }),
   getEmailThread: (id: string) => request(`/email-hub/threads/${id}`),
   addEmailThreadToLead: (id: string) => request(`/email-hub/threads/${id}/add-to-lead`, { method: "POST" }),
   getEmailAccountAccess: (accountId: string) => request(`/settings/email-accounts/${accountId}/access`),

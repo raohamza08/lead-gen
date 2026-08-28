@@ -50,8 +50,13 @@ export interface SyncResult {
 }
 
 export interface MailboxReader {
-  /** `sinceCursor` is `EmailAccount.lastImapUid` (or the reader's own cursor
-   *  field, if a future provider uses a different one) — null on the very
-   *  first sync for this account. */
-  sync(account: EmailAccount, sinceCursor: string | null): Promise<SyncResult>;
+  /** `cursors.inbox`/`cursors.sent` are `EmailAccount.lastImapUid`/
+   *  `lastImapUidSent` — each null on that folder's very first sync (or,
+   *  for `sent`, permanently null if the provider has no discoverable Sent
+   *  folder). Returned per-folder for the same reason: IMAP UIDs are only
+   *  unique within one mailbox, so INBOX and Sent can't share a cursor. */
+  sync(
+    account: EmailAccount,
+    cursors: { inbox: string | null; sent: string | null },
+  ): Promise<{ inbox: SyncResult; sent: SyncResult }>;
 }

@@ -69,6 +69,11 @@ export function NotificationsBell() {
     await api.markNotificationRead(id).catch(() => undefined);
   }
 
+  async function clearAll() {
+    setNotifications([]);
+    await api.clearAllNotifications().catch(() => undefined);
+  }
+
   return (
     <div ref={ref} className="relative">
       <button
@@ -87,11 +92,18 @@ export function NotificationsBell() {
         <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-[var(--line)] bg-[var(--paper)] shadow-lg">
           <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-ink/50">Notifications</span>
-            {unread > 0 && (
-              <button onClick={markAllRead} className="text-[11px] text-accent hover:underline">
-                Mark all read
-              </button>
-            )}
+            <div className="flex items-center gap-2.5">
+              {unread > 0 && (
+                <button onClick={markAllRead} className="text-[11px] text-accent hover:underline">
+                  Mark all read
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button onClick={clearAll} className="text-[11px] text-ink/50 hover:text-bad hover:underline">
+                  Clear all
+                </button>
+              )}
+            </div>
           </div>
           <div className="max-h-96 overflow-y-auto">
             {notifications.length === 0 && (

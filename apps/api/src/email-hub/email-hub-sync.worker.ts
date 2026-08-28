@@ -72,23 +72,30 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
   }
 
   private async syncAccount(account: EmailAccount) {
-    const result = await this.reader.sync(account, account.lastImapUid ? String(account.lastImapUid) : null);
+    const { inbox, sent } = await this.reader.sync(account, {
+      inbox: account.lastImapUid ? String(account.lastImapUid) : null,
+      sent: account.lastImapUidSent ? String(account.lastImapUidSent) : null,
+    });
 
-    for (const message of result.messages) {
+    // Sent messages persist through the same path as inbound ones —
+    // findOrCreateThreadId's Message-ID/References chain links a sent reply
+    // back into the thread it replied to automatically, no separate
+    // "outbound thread" concept needed.
+    for (const message of [...inbox.messages, ...sent.messages]) {
       await this.persistMessage(account, message);
     }
 
-    if (result.newCursor !== null) {
-      await this.prisma.emailAccount.update({
-        where: { id: account.id },
-        data: { lastImapUid: Number(result.newCursor) },
-      });
+    const cursorUpdate: Prisma.EmailAccountUpdateInput = {};
+    if (inbox.newCursor !== null) cursorUpdate.lastImapUid = Number(inbox.newCursor);
+    if (sent.newCursor !== null) cursorUpdate.lastImapUidSent = Number(sent.newCursor);
+    if (Object.keys(cursorUpdate).length > 0) {
+      await this.prisma.emailAccount.update({ where: { id: account.id }, data: cursorUpdate });
     }
 
-    if (result.messages.length > 0) {
+    if (inbox.messages.length > 0) {
       this.realtime.emitToOrg(account.orgId, "emailHub.messageReceived", {
         accountId: account.id,
-        count: result.messages.length,
+        count: inbox.messages.length,
       });
     }
   }
@@ -171,8 +178,11 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
     // reply in an already-seen thread doesn't need re-judging, and the
     // thread's own leadId (once a human confirms) is the durable signal that
     // this sender is already handled. Fire-and-forget: a classifier outage
-    // must never slow down or break mail sync.
-    if (isNewThread) {
+    // must never slow down or break mail sync. Sent messages never trigger
+    // this — a thread that starts with something *we* sent (a cold email
+    // whose reply hasn't landed yet) has no inbound sender to judge, and
+    // classifying our own outgoing copy as a "possible lead" would be nonsense.
+    if (isNewThread && message.folder !== "SENT") {
       this.leadClassifier
         .classifyAndTag(account.orgId, created.id, {
           fromName: message.fromName,
