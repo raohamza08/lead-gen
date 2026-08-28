@@ -195,6 +195,30 @@ export async function downloadLeadsCsv(): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Same bypass-`request()` reasoning as downloadLeadsCsv above, but opens the
+ * blob in a new tab instead of forcing a save — the browser's native PDF/
+ * image viewer handles "view", and its own download button (or a save
+ * prompt for a type it can't render) handles "download," so one click
+ * covers both without the caller needing to choose in advance.
+ */
+export async function viewEmailAttachment(messageId: string, index: number): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE_URL}/email-hub/messages/${messageId}/attachments/${index}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Couldn't load attachment (${res.status})`);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  // Long enough for the new tab to actually load the resource before the
+  // object URL is freed — revoking immediately would race the tab's fetch.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export const api = {
   login: (email: string, password: string) =>
     request<AuthTokens>("/auth/login", {

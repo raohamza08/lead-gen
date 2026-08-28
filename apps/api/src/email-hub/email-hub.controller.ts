@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { Response } from "express";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
@@ -88,6 +89,26 @@ export class EmailHubController {
   @Get("threads/:id")
   getThread(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.emailHub.getThread(user, id);
+  }
+
+  /** Streams the raw file, not JSON — unlike media-file.controller.ts's
+   *  equivalent, this stays behind JwtAuthGuard/assertAccountAccess since a
+   *  mailbox attachment is private, not publishable media. "inline" (not
+   *  "attachment") lets the browser render a PDF/image in a new tab
+   *  directly; the frontend's own click handler decides view vs. save. */
+  @Get("messages/:id/attachments/:index")
+  async getAttachment(
+    @CurrentUser() user: JwtClaims,
+    @Param("id") id: string,
+    @Param("index", ParseIntPipe) index: number,
+    @Res() res: Response,
+  ) {
+    const attachment = await this.emailHub.getAttachment(user, id, index);
+    res.set({
+      "Content-Type": attachment.contentType,
+      "Content-Disposition": `inline; filename="${encodeURIComponent(attachment.filename)}"`,
+    });
+    res.send(attachment.content);
   }
 
   @Post("threads/:id/add-to-lead")

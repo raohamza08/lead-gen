@@ -41,6 +41,12 @@ export interface FetchedMessage {
   references?: string[];
 }
 
+export interface FetchedAttachmentContent {
+  filename: string;
+  contentType: string;
+  content: Buffer;
+}
+
 export interface SyncResult {
   messages: FetchedMessage[];
   /** Cursor to persist on EmailAccount for the next poll — provider-opaque
@@ -59,4 +65,17 @@ export interface MailboxReader {
     account: EmailAccount,
     cursors: { inbox: string | null; sent: string | null },
   ): Promise<{ inbox: SyncResult; sent: SyncResult }>;
+
+  /** On-demand attachment fetch (Part: Email Detail View attachments) —
+   *  bytes are never persisted (see FetchedAttachment's own docblock), so
+   *  viewing/downloading one re-fetches the source message from the
+   *  mailbox and extracts the attachment fresh. Returns null if the
+   *  message or the attachment at that index is gone (e.g. deleted
+   *  server-side since it was synced). */
+  fetchAttachment(
+    account: EmailAccount,
+    folder: string,
+    providerMessageId: string,
+    attachmentIndex: number,
+  ): Promise<FetchedAttachmentContent | null>;
 }

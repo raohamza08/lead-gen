@@ -3,7 +3,7 @@ import { EmailAccount } from "@prisma/client";
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { EncryptionService } from "../../common/crypto/encryption.service";
-import { FetchedMessage, MailboxReader, SyncResult } from "../mailbox-reader.interface";
+import { FetchedAttachmentContent, FetchedMessage, MailboxReader, SyncResult } from "../mailbox-reader.interface";
 
 /** Common non-Gmail Sent-folder names, tried in order when a server doesn't
  *  advertise the IMAP SPECIAL-USE (RFC 6154) \Sent flag — most servers that
@@ -40,10 +40,11 @@ export class ImapReaderProvider implements MailboxReader {
 
   constructor(private readonly encryption: EncryptionService) {}
 
-  async sync(
-    account: EmailAccount,
-    cursors: { inbox: string | null; sent: string | null },
-  ): Promise<{ inbox: SyncResult; sent: SyncResult }> {
+  /** Shared connection setup — used by both sync() and fetchAttachment(),
+   *  which each need their own independent IMAP session (a single shared
+   *  connection across a poll tick and an on-demand attachment fetch would
+   *  serialize unrelated requests behind whichever happened to hold it). */
+  private createClient(account: EmailAccount): ImapFlow {
     if (!account.imapHost || !account.imapUsername || !account.imapPasswordEnc) {
       throw new Error(`Account ${account.address} has no IMAP credentials configured`);
     }
@@ -74,6 +75,14 @@ export class ImapReaderProvider implements MailboxReader {
       this.logger.warn(`IMAP socket error for ${account.address} (non-fatal): ${(err as Error).message}`);
     });
 
+    return client;
+  }
+
+  async sync(
+    account: EmailAccount,
+    cursors: { inbox: string | null; sent: string | null },
+  ): Promise<{ inbox: SyncResult; sent: SyncResult }> {
+    const client = this.createClient(account);
     await client.connect();
     try {
       const inbox = await this.syncMailbox(client, "INBOX", cursors.inbox, "INBOX");
@@ -87,6 +96,44 @@ export class ImapReaderProvider implements MailboxReader {
       }
 
       return { inbox, sent };
+    } finally {
+      await client.logout().catch(() => client.close());
+    }
+  }
+
+  async fetchAttachment(
+    account: EmailAccount,
+    folder: string,
+    providerMessageId: string,
+    attachmentIndex: number,
+  ): Promise<FetchedAttachmentContent | null> {
+    const client = this.createClient(account);
+    await client.connect();
+    try {
+      // "SENT" is a label this app assigns (see ImapReaderProvider.sync),
+      // not a literal mailbox path — resolve it back to whatever the
+      // server actually calls it. "INBOX" is always literal.
+      const mailboxPath = folder === "SENT" ? await this.findSentMailbox(client) : "INBOX";
+      if (!mailboxPath) return null;
+
+      const lock = await client.getMailboxLock(mailboxPath);
+      try {
+        const uid = Number(providerMessageId);
+        const raw = await client.fetchOne(uid, { source: true }, { uid: true });
+        if (!raw || !raw.source) return null;
+
+        const parsed = await simpleParser(raw.source);
+        const attachment = parsed.attachments[attachmentIndex];
+        if (!attachment) return null;
+
+        return {
+          filename: attachment.filename ?? "attachment",
+          contentType: attachment.contentType || "application/octet-stream",
+          content: attachment.content,
+        };
+      } finally {
+        lock.release();
+      }
     } finally {
       await client.logout().catch(() => client.close());
     }

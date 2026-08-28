@@ -151,6 +151,7 @@ model Organization {
   aiInsightSnapshot AiInsightSnapshot?
   inboundEmailThreads InboundEmailThread[]
   emailTags    EmailTag[]
+  ignoredSenders IgnoredSender[]
   socialAccounts   SocialAccount[]
   socialPosts      SocialPost[]
   mediaAssets      MediaAsset[]
@@ -869,6 +870,23 @@ model EmailTag {
 
   @@unique([orgId, name])
   @@map("email_tags")
+}
+
+/// A muted sender (Part: Ignore/Noise Management, extended) -- created when
+/// a user Ignores a message and chooses to mute the whole sender rather than
+/// just that one email. EmailHubSyncWorker checks this on every newly
+/// synced message so future mail from the address lands pre-ignored, not
+/// just past mail. Org-scoped, not account-scoped: a promotional sender
+/// spamming one connected mailbox is spamming the org, not just one inbox.
+model IgnoredSender {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  fromEmail String   @map("from_email")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([orgId, fromEmail])
+  @@map("ignored_senders")
 }
 
 model InboundEmailMessageTag {

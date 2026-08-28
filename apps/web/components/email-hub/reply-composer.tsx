@@ -45,12 +45,12 @@ export function ReplyComposer({
   const isEmpty = bodyHtml.replace(/<[^>]+>/g, "").trim().length === 0;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-[var(--line)] bg-ink/[0.015] shadow-sm">
-      <div className="flex flex-col gap-1.5 border-b border-[var(--line)] px-3.5 py-2.5 text-xs">
-        <div className="flex items-center gap-2">
-          <span className="w-8 shrink-0 text-ink/40">To</span>
+    <div className="overflow-hidden rounded-2xl border border-[var(--line)] bg-ink/[0.015] shadow-[var(--shadow-sm)]">
+      <div className="flex flex-col gap-2 border-b border-[var(--line)] px-5 py-3.5 text-sm">
+        <div className="flex items-center gap-3">
+          <span className="w-9 shrink-0 text-ink/40">To</span>
           <span className="truncate text-ink/80">{toAddress}</span>
-          <div className="ml-auto flex items-center gap-2 text-[11px]">
+          <div className="ml-auto flex items-center gap-3 text-sm">
             {!showCc && (
               <button onClick={() => setShowCc(true)} className="text-ink/40 hover:text-accent">
                 Cc
@@ -64,8 +64,8 @@ export function ReplyComposer({
           </div>
         </div>
         {showCc && (
-          <div className="flex items-center gap-2">
-            <span className="w-8 shrink-0 text-ink/40">Cc</span>
+          <div className="flex items-center gap-3">
+            <span className="w-9 shrink-0 text-ink/40">Cc</span>
             <input
               value={cc}
               onChange={(e) => setCc(e.target.value)}
@@ -75,8 +75,8 @@ export function ReplyComposer({
           </div>
         )}
         {showBcc && (
-          <div className="flex items-center gap-2">
-            <span className="w-8 shrink-0 text-ink/40">Bcc</span>
+          <div className="flex items-center gap-3">
+            <span className="w-9 shrink-0 text-ink/40">Bcc</span>
             <input
               value={bcc}
               onChange={(e) => setBcc(e.target.value)}
@@ -87,26 +87,26 @@ export function ReplyComposer({
         )}
       </div>
 
-      <div className="p-3">
+      <div className="p-4">
         <RichHtmlEditor placeholder={`Reply to ${toAddress}…`} onChange={setBodyHtml} autoFocus />
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-[var(--line)] bg-ink/[0.02] px-3 py-2.5">
+      <div className="flex flex-col gap-3 border-t border-[var(--line)] bg-ink/[0.02] px-5 py-4">
         <AttachmentPicker attachments={attachments} onChange={setAttachments} onError={setAttachmentError} />
-        {attachmentError && <p className="text-xs text-bad">{attachmentError}</p>}
-        <div className="flex items-center gap-2">
+        {attachmentError && <p className="text-sm text-bad">{attachmentError}</p>}
+        <div className="flex items-center gap-2.5">
           <button
             onClick={() =>
               onSend({ bodyHtml, cc: parseAddressList(cc), bcc: parseAddressList(bcc), attachments })
             }
             disabled={sending || isEmpty || !!attachmentError}
-            className="rounded-md bg-accent px-4 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-white shadow-[var(--shadow-sm)] transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {sending ? "Sending…" : "Send"}
           </button>
           <button
             onClick={onCancel}
-            className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 hover:bg-ink/5"
+            className="rounded-full border border-[var(--line)] px-4 py-2 text-sm text-ink/70 hover:bg-ink/5"
           >
             Discard
           </button>

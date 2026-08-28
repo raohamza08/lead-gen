@@ -83,7 +83,7 @@ export function RichHtmlEditor({
             title={c.label}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => exec(c.command)}
-            className={`flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs text-ink/70 hover:bg-ink/10 ${c.className ?? ""}`}
+            className={`flex h-8 min-w-8 items-center justify-center rounded px-2 text-sm text-ink/70 hover:bg-ink/10 ${c.className ?? ""}`}
           >
             {c.icon}
           </button>
@@ -94,7 +94,7 @@ export function RichHtmlEditor({
           title="Add link"
           onMouseDown={(e) => e.preventDefault()}
           onClick={openLinkInput}
-          className="flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs text-ink/70 hover:bg-ink/10"
+          className="flex h-8 min-w-8 items-center justify-center rounded px-2 text-sm text-ink/70 hover:bg-ink/10"
         >
           🔗
         </button>
@@ -103,7 +103,7 @@ export function RichHtmlEditor({
           title="Clear formatting"
           onMouseDown={(e) => e.preventDefault()}
           onClick={() => exec("removeFormat")}
-          className="flex h-7 min-w-7 items-center justify-center rounded px-1.5 text-xs text-ink/70 hover:bg-ink/10"
+          className="flex h-8 min-w-8 items-center justify-center rounded px-2 text-sm text-ink/70 hover:bg-ink/10"
         >
           ✕
         </button>

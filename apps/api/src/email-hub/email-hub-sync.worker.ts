@@ -81,8 +81,20 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
     // findOrCreateThreadId's Message-ID/References chain links a sent reply
     // back into the thread it replied to automatically, no separate
     // "outbound thread" concept needed.
-    for (const message of [...inbox.messages, ...sent.messages]) {
-      await this.persistMessage(account, message);
+    const allMessages = [...inbox.messages, ...sent.messages];
+    if (allMessages.length > 0) {
+      // Fetched once per account per tick, not once per message — this DB
+      // sits in a different region from the app server (~200-400ms per
+      // round trip, see CacheService's docblock), so a per-message lookup
+      // in a loop would be needlessly expensive at any real message volume.
+      const ignoredSenders = new Set(
+        (await this.prisma.ignoredSender.findMany({ where: { orgId: account.orgId }, select: { fromEmail: true } })).map(
+          (s) => s.fromEmail,
+        ),
+      );
+      for (const message of allMessages) {
+        await this.persistMessage(account, message, ignoredSenders.has(message.fromEmail));
+      }
     }
 
     const cursorUpdate: Prisma.EmailAccountUpdateInput = {};
@@ -134,8 +146,11 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
    *  In-Reply-To chain, falling back to normalized subject), then inserts
    *  the message — a duplicate providerMessageId for this account is
    *  silently skipped via the unique constraint rather than erroring the
-   *  whole tick over one already-seen message. */
-  private async persistMessage(account: EmailAccount, message: FetchedMessage) {
+   *  whole tick over one already-seen message. `preIgnored` comes from the
+   *  org's IgnoredSender set (Part: Ignore/Noise Management, extended) — a
+   *  muted sender's mail lands already filed into Ignored, not one poll
+   *  cycle behind the mute. */
+  private async persistMessage(account: EmailAccount, message: FetchedMessage, preIgnored: boolean) {
     const { threadId, isNewThread } = await this.findOrCreateThreadId(account, message);
 
     let created: { id: string };
@@ -158,6 +173,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
           folder: message.folder,
           hasAttachments: message.hasAttachments,
           attachments: message.attachments as unknown as Prisma.InputJsonValue,
+          isIgnored: preIgnored,
         },
         select: { id: true },
       });
@@ -181,8 +197,11 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
     // must never slow down or break mail sync. Sent messages never trigger
     // this — a thread that starts with something *we* sent (a cold email
     // whose reply hasn't landed yet) has no inbound sender to judge, and
-    // classifying our own outgoing copy as a "possible lead" would be nonsense.
-    if (isNewThread && message.folder !== "SENT") {
+    // classifying our own outgoing copy as a "possible lead" would be
+    // nonsense. A pre-ignored (muted) sender is skipped too — there's no
+    // reason to spend an AI call judging mail the user already told the
+    // system to stop paying attention to.
+    if (isNewThread && message.folder !== "SENT" && !preIgnored) {
       this.leadClassifier
         .classifyAndTag(account.orgId, created.id, {
           fromName: message.fromName,

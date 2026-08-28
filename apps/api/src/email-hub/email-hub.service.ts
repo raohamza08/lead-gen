@@ -9,6 +9,7 @@ import { LeadsService } from "../leads/leads.service";
 import { BulkAction, BulkActionDto } from "./dto/bulk-action.dto";
 import { CreateTagDto, UpdateTagDto } from "./dto/create-tag.dto";
 import { ComposeEmailDto, ReplyMessageDto } from "./dto/reply-message.dto";
+import { ImapReaderProvider } from "./readers/imap-reader.provider";
 
 export interface ListMessagesQuery {
   accountId?: string;
@@ -40,6 +41,7 @@ export class EmailHubService {
     private readonly realtime: RealtimeGateway,
     private readonly transactionalEmail: TransactionalEmailService,
     private readonly leads: LeadsService,
+    private readonly imapReader: ImapReaderProvider,
   ) {}
 
   /** listAccounts/getStats are keyed per access scope, not just orgId — a
@@ -223,6 +225,30 @@ export class EmailHubService {
     return { messages, total, page, pageSize };
   }
 
+  /** On-demand attachment view/download (Part: Email Detail View) — bytes
+   *  were never persisted at sync time (InboundEmailMessage.attachments is
+   *  metadata only), so opening one re-fetches the source message from the
+   *  mailbox and pulls the attachment out fresh. Slower than a DB read, but
+   *  correct: no separate blob-storage subsystem to keep in sync, and the
+   *  attachment is always exactly what's actually in the mailbox right now. */
+  async getAttachment(user: JwtClaims, messageId: string, attachmentIndex: number) {
+    const message = await this.prisma.inboundEmailMessage.findFirst({
+      where: { id: messageId, account: { orgId: user.orgId } },
+      include: { account: true },
+    });
+    if (!message) throw new NotFoundException("Message not found");
+    await this.assertAccountAccess(user, message.accountId);
+
+    const attachment = await this.imapReader.fetchAttachment(
+      message.account,
+      message.folder,
+      message.providerMessageId,
+      attachmentIndex,
+    );
+    if (!attachment) throw new NotFoundException("Attachment not found");
+    return attachment;
+  }
+
   async getThread(user: JwtClaims, threadId: string) {
     const thread = await this.prisma.inboundEmailThread.findFirst({
       where: { id: threadId, orgId: user.orgId },
@@ -243,7 +269,7 @@ export class EmailHubService {
   async bulkAction(user: JwtClaims, dto: BulkActionDto) {
     const messages = await this.prisma.inboundEmailMessage.findMany({
       where: { id: { in: dto.messageIds }, account: { orgId: user.orgId } },
-      select: { id: true, accountId: true },
+      select: { id: true, accountId: true, fromEmail: true },
     });
     const accountIds = await this.accessibleAccountIds(user);
     const allowed = messages.filter((m) => !accountIds || accountIds.includes(m.accountId));
@@ -263,14 +289,45 @@ export class EmailHubService {
       case BulkAction.UNIMPORTANT:
         await this.prisma.inboundEmailMessage.updateMany({ where: { id: { in: ids } }, data: { isImportant: false } });
         break;
-      case BulkAction.IGNORE:
+      case BulkAction.IGNORE: {
         // Filter view only — never touches the real mailbox (Part:
         // Ignore/Noise Management). No IMAP call happens here at all.
         await this.prisma.inboundEmailMessage.updateMany({ where: { id: { in: ids } }, data: { isIgnored: true } });
+        // Muting the sender, not just this one message (Part: Ignore/Noise
+        // Management, extended) — every other message already in the org
+        // from the same address gets swept into Ignored too, and
+        // EmailHubSyncWorker pre-ignores anything that arrives from them
+        // afterward. Scoped to the org, not the account: a promotional
+        // sender emailing one connected mailbox is noise for the whole
+        // team, not just that inbox.
+        const senders = Array.from(new Set(allowed.map((m) => m.fromEmail)));
+        if (senders.length > 0) {
+          await this.prisma.ignoredSender.createMany({
+            data: senders.map((fromEmail) => ({ orgId: user.orgId, fromEmail })),
+            skipDuplicates: true,
+          });
+          await this.prisma.inboundEmailMessage.updateMany({
+            where: { account: { orgId: user.orgId }, fromEmail: { in: senders } },
+            data: { isIgnored: true },
+          });
+        }
         break;
-      case BulkAction.UNIGNORE:
+      }
+      case BulkAction.UNIGNORE: {
         await this.prisma.inboundEmailMessage.updateMany({ where: { id: { in: ids } }, data: { isIgnored: false } });
+        // Symmetric with IGNORE above: un-ignoring un-mutes the sender
+        // entirely, so their next email doesn't just land back in Ignored
+        // via the sync worker's pre-ignore check a moment later.
+        const senders = Array.from(new Set(allowed.map((m) => m.fromEmail)));
+        if (senders.length > 0) {
+          await this.prisma.ignoredSender.deleteMany({ where: { orgId: user.orgId, fromEmail: { in: senders } } });
+          await this.prisma.inboundEmailMessage.updateMany({
+            where: { account: { orgId: user.orgId }, fromEmail: { in: senders } },
+            data: { isIgnored: false },
+          });
+        }
         break;
+      }
       case BulkAction.DELETE:
         // Removes the InboundEmailMessage row (our copy) only — the spec is
         // explicit that this must never touch the real mailbox unless
