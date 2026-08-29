@@ -133,13 +133,19 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
    * that no longer gates outreach from starting, it just stops being
    * required before it can.
    *
-   * Stops one stage short of READY_FOR_OUTREACH if the lead's email never
-   * verified: auto-discovered leads can't reach this method without a
-   * verified email (verification runs before they're ever persisted), but a
-   * manually-entered lead can, and auto-sending to an address nothing has
-   * confirmed risks the sending domain's reputation on a bounce — the same
-   * bar every other lead already had to clear before outreach, just applied
-   * here instead of at insert time.
+   * Never takes even the first step if the lead's email hasn't verified yet:
+   * auto-discovered leads can't reach this method without one (verification
+   * runs before they're ever persisted), but a manually-entered/imported
+   * lead can — and until it does, VERIFIED/RESEARCH_COMPLETED/UNDER_REVIEW
+   * are all still genuinely unearned, not just READY_FOR_OUTREACH. Confirmed
+   * live: promoting a batch of not-yet-enriched Lead Room leads walked them
+   * straight to "Under Review" instantly, with verifiedEmail still false and
+   * no research or score on the row — the old code only checked this right
+   * before the *last* hop, so every earlier stage got relabeled for free
+   * with nothing behind it. Once verification genuinely completes (and with
+   * it, research + scoring, since they're the same enrichment call), the
+   * whole chain still walks in one shot exactly as before — this only
+   * blocks the premature, no-work-behind-it version of that jump.
    */
   async autoAdvanceToOutreach(leadId: string): Promise<void> {
     const lead = await this.prisma.lead.findUnique({
@@ -147,18 +153,12 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
       select: { verifiedEmail: true },
     });
     if (!lead) return;
+    if (!lead.verifiedEmail) return;
 
     let state = await this.prisma.pipelineState.findUnique({ where: { leadId } });
     while (state && SequencerService.PRE_OUTREACH_CHAIN.includes(state.stage as PipelineStage)) {
       const next = ALLOWED_TRANSITIONS[state.stage as PipelineStage]?.[0];
       if (!next) break;
-
-      if (next === PipelineStage.READY_FOR_OUTREACH && !lead.verifiedEmail) {
-        this.logger.log(
-          `Lead ${leadId} held at ${state.stage}: email not verified, not auto-advancing to outreach`,
-        );
-        break;
-      }
 
       state = await this.prisma.pipelineState.update({
         where: { leadId },
