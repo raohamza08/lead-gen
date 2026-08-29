@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseEnumPipe, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { Response } from "express";
 import { LeadsService } from "./leads.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
@@ -19,7 +19,7 @@ import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { JwtClaims, Role } from "@leadgen/types";
+import { JwtClaims, PipelineStage, Role } from "@leadgen/types";
 
 @Controller("leads")
 export class LeadsController {
@@ -241,6 +241,18 @@ export class LeadsController {
   @UseGuards(InternalAuthGuard)
   receiveLinkedinDraft(@Param("id") id: string, @Body("messages") messages: unknown) {
     return this.leadsService.receiveLinkedinDraft(id, messages);
+  }
+
+  // ADMIN only, same reasoning as remove() below — bulk version for the
+  // Pipeline board's "clear this stage" action. Declared ahead of the
+  // single-lead :id route for readability; the two never actually collide
+  // since "by-stage/:stage" is a two-segment path and ":id" only matches one.
+  @Delete("by-stage/:stage")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN)
+  removeByStage(@CurrentUser() user: JwtClaims, @Param("stage", new ParseEnumPipe(PipelineStage)) stage: PipelineStage) {
+    return this.leadsService.removeByStage(user.orgId, stage);
   }
 
   // ADMIN only: unlike other deletes in this app (niche filter, email

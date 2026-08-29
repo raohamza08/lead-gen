@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../lib/api-client";
+import { api, getCurrentUser } from "../../../lib/api-client";
 import { useRealtimeEvent, useRealtimeRefetch } from "../../../lib/realtime";
 import { AGENT_LABELS } from "../../../lib/agent-labels";
 import { ALLOWED_TRANSITIONS, PIPELINE_STAGE_ORDER, PipelineStage, isValidRewind } from "@leadgen/types";
@@ -218,10 +218,13 @@ function scoreTone(score?: number | null) {
 
 export default function PipelinePage() {
   const queryClient = useQueryClient();
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState<LeadRow | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [deleteStage, setDeleteStage] = useState("");
+  const [deletingStage, setDeletingStage] = useState(false);
   // Live "which agent is working on which lead right now" — keyed by leadId,
   // separate from `leads` because it must update the instant an
   // agentRun.started event lands, not on the 400ms-debounced full refetch
@@ -371,6 +374,37 @@ export default function PipelinePage() {
     }
   }
 
+  /** Admin-only bulk clear for one entire column — same no-undo, full-
+   *  history-wipe semantics as deleteLead above, just scoped to every lead
+   *  currently in the picked stage instead of one. The confirm dialog
+   *  states the exact count so this can't be clicked past by accident. */
+  async function deleteAllInStage() {
+    if (!deleteStage) return;
+    const count = (byStage.get(deleteStage) ?? []).length;
+    if (count === 0) return;
+    if (
+      !window.confirm(
+        `Permanently delete all ${count} lead${count === 1 ? "" : "s"} in "${LABELS[deleteStage] ?? deleteStage}"?\n\n` +
+          "This removes their full history — scores, review notes, and any emails already sent — and cannot be undone.",
+      )
+    )
+      return;
+
+    setDeletingStage(true);
+    setError(null);
+    try {
+      await api.deleteLeadsByStage(deleteStage);
+      queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
+        (rows ?? []).filter((r) => (r.pipelineState?.stage ?? "NEW_LEAD") !== deleteStage),
+      );
+      setDeleteStage("");
+    } catch (err) {
+      setError(`Could not delete leads in "${LABELS[deleteStage] ?? deleteStage}": ${(err as Error).message}`);
+    } finally {
+      setDeletingStage(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -385,7 +419,38 @@ export default function PipelinePage() {
             understand.
           </p>
         </div>
-        <span className="text-xs text-ink/50">{leads.length} leads</span>
+        <div className="flex items-center gap-3">
+          {isAdmin && (
+            <div className="flex items-center gap-1.5">
+              <select
+                value={deleteStage}
+                onChange={(e) => setDeleteStage(e.target.value)}
+                disabled={deletingStage}
+                title="Admin: delete every lead currently in this stage"
+                className="rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs text-ink/70 disabled:opacity-50"
+              >
+                <option value="">Delete stage…</option>
+                {COLUMNS.map((stage) => {
+                  const count = (byStage.get(stage) ?? []).length;
+                  return (
+                    <option key={stage} value={stage} disabled={count === 0}>
+                      {LABELS[stage] ?? stage} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+              <button
+                type="button"
+                disabled={!deleteStage || deletingStage}
+                onClick={deleteAllInStage}
+                className="rounded border border-[rgb(var(--bad-rgb)/0.4)] px-2 py-1 text-xs font-medium text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)] disabled:opacity-40"
+              >
+                {deletingStage ? "Deleting…" : "Delete all"}
+              </button>
+            </div>
+          )}
+          <span className="text-xs text-ink/50">{leads.length} leads</span>
+        </div>
       </div>
 
       {(error || leadsQuery.error) && (

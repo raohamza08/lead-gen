@@ -325,6 +325,25 @@ export class LeadsService {
     return { deleted: true };
   }
 
+  /** Bulk version of `remove` for the Pipeline board's admin "clear a
+   *  stage" action — every lead currently sitting in one column, gone at
+   *  once. Same no-detach-and-keep, full-cascade semantics as a single
+   *  delete; the only difference is scope. Still cancels each lead's own
+   *  wait-timer job individually (not a bulk queue op) since BullMQ jobs
+   *  are addressed by their own id, not queryable by leadId. */
+  async removeByStage(orgId: string, stage: PipelineStage) {
+    const leads = await this.prisma.lead.findMany({
+      where: { orgId, pipelineState: { stage } },
+      select: { id: true },
+    });
+    for (const lead of leads) {
+      await this.sequencer.cancelWaitTimer(lead.id);
+    }
+    if (leads.length === 0) return { deleted: 0 };
+    const result = await this.prisma.lead.deleteMany({ where: { id: { in: leads.map((l) => l.id) } } });
+    return { deleted: result.count };
+  }
+
   /** All leads for the org as CSV, for the "download all leads" export on /leads. */
   async exportCsv(orgId: string): Promise<string> {
     const leads = await this.prisma.lead.findMany({

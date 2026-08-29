@@ -255,6 +255,8 @@ export const api = {
   importLeads: (csv: string, mapping: Record<string, string | null>) =>
     request("/leads/import", { method: "POST", body: JSON.stringify({ csv, mapping }) }),
   deleteLead: (id: string) => request(`/leads/${id}`, { method: "DELETE" }),
+  deleteLeadsByStage: (stage: string) =>
+    request<{ deleted: number }>(`/leads/by-stage/${stage}`, { method: "DELETE" }),
   getNicheFilters: () => request("/niche-filters"),
   getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
   deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),
