@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { DataTable, SectionCard, StatTile } from "../../../components/chart-kit";
@@ -85,14 +85,23 @@ function timeAgo(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
-function timeUntil(iso: string): string {
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return "any moment now";
-  const mins = Math.round(ms / 60000);
-  if (mins < 60) return `in ${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `in ${hours}h`;
-  return `in ${Math.round(hours / 24)}d`;
+/** Live countdown, not a static "in 45m" snapshot — `now` is a ticking
+ *  value from the parent (one shared interval, not one per row) so every
+ *  row in the Send queue counts down together instead of only updating on
+ *  the next 60s-staleTime refetch. Coarse (days/hours) for anything far
+ *  out, drops to minutes+seconds once under an hour so the last stretch
+ *  before a send actually feels live. */
+function formatCountdown(targetIso: string, now: number): string {
+  const ms = new Date(targetIso).getTime() - now;
+  if (ms <= 0) return "Any moment now";
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m ${seconds}s`;
 }
 
 /** Pipelines actually invoked at runtime: `lead_acquisition` per candidate,
@@ -144,6 +153,14 @@ function StatusBadge({ status }: { status: string }) {
 
 export default function AutomationPage() {
   const [hours, setHours] = useState<number>(24);
+
+  // Drives the Send queue's live countdowns — one shared ticking clock
+  // rather than a setInterval per row.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   const healthQuery = useQuery({
     queryKey: ["automation-health", hours],
@@ -254,9 +271,22 @@ export default function AutomationPage() {
                         key: "due",
                         header: "Drafts & sends",
                         render: (w) =>
-                          w.nextActionAt
-                            ? `${timeUntil(w.nextActionAt)} (${new Date(w.nextActionAt).toLocaleString()})`
-                            : "—",
+                          w.nextActionAt ? (
+                            <span>
+                              <span
+                                className={`tabular font-medium ${
+                                  new Date(w.nextActionAt).getTime() - now <= 0 ? "text-accent" : ""
+                                }`}
+                              >
+                                {formatCountdown(w.nextActionAt, now)}
+                              </span>
+                              <span className="ml-1.5 text-ink/40">
+                                ({new Date(w.nextActionAt).toLocaleString()})
+                              </span>
+                            </span>
+                          ) : (
+                            "—"
+                          ),
                       },
                     ]}
                   />
