@@ -109,6 +109,7 @@ const SOURCE_LABELS: Record<string, string> = {
   LICENSED_DATABASE: "Licensed database",
   MANUAL: "Manual entry",
   EMAIL: "Email",
+  SOCIAL_MEDIA: "Social media",
 };
 
 function SourceBadge({ source }: { source?: string | null }) {
@@ -121,7 +122,16 @@ function SourceBadge({ source }: { source?: string | null }) {
 }
 
 function StagePill({ stage }: { stage?: string | null }) {
-  if (!stage) return <span className="text-ink/40">—</span>;
+  // No PipelineState row at all means this lead hasn't been promoted out of
+  // Lead Room yet (Part: Lead Room / Move to Pipeline) — distinct from any
+  // real stage, so it gets its own badge rather than reading as "unknown".
+  if (!stage) {
+    return (
+      <span className="whitespace-nowrap rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold">
+        Lead Room
+      </span>
+    );
+  }
   const won = stage === PipelineStage.WON || stage === PipelineStage.CLIENT_ONBOARDING;
   const lost = stage === PipelineStage.LOST;
   return (
@@ -153,6 +163,13 @@ export default function LeadsPage() {
   const [draft, setDraft] = useState(EMPTY_LEAD);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+
+  // Move to Pipeline (Part: Lead Room) — source + count are chosen
+  // independently of the table's own Source filter above, since promoting
+  // is a distinct action from browsing.
+  const [promoteSource, setPromoteSource] = useState("");
+  const [promoteLimit, setPromoteLimit] = useState("");
+  const [promoting, setPromoting] = useState(false);
 
   // CSV import: file -> preview+mapping screen -> confirm -> result summary.
   const [importCsv, setImportCsv] = useState<string | null>(null);
@@ -231,7 +248,10 @@ export default function LeadsPage() {
 
   // New leads land here live during a "Run now" extraction (or auto-discovery)
   // instead of only appearing after a manual refresh (Part: autonomous system).
-  useRealtimeRefetch(["lead.created"], invalidateLeads);
+  // lead.stageChanged also covers another tab/user promoting a batch to the
+  // Pipeline — this page's own promoteToPipeline already invalidates
+  // directly for the actor, this is for everyone else watching.
+  useRealtimeRefetch(["lead.created", "lead.stageChanged"], invalidateLeads);
 
   // Filtered in the browser because the whole page is already loaded; going
   // back to the server for each keystroke would be slower and no more correct
@@ -256,6 +276,34 @@ export default function LeadsPage() {
     () => [...new Set(leads.map((l) => l.country).filter(Boolean))].sort() as string[],
     [leads],
   );
+
+  // Leads with no PipelineState row are sitting in Lead Room, un-promoted.
+  const unpromotedLeads = useMemo(() => leads.filter((l) => !l.pipelineState), [leads]);
+  const promoteMatchCount = useMemo(
+    () => unpromotedLeads.filter((l) => !promoteSource || l.sourceLayer === promoteSource).length,
+    [unpromotedLeads, promoteSource],
+  );
+  const promoteLimitNum = promoteLimit.trim() ? Number(promoteLimit) : null;
+  const promoteCount = promoteLimitNum && promoteLimitNum < promoteMatchCount ? promoteLimitNum : promoteMatchCount;
+
+  async function promoteToPipeline() {
+    setPromoting(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const result = (await api.promoteLeadsToPipeline({
+        sourceLayer: promoteSource || undefined,
+        limit: promoteLimitNum ?? undefined,
+      })) as { promoted: number };
+      setNotice(`Moved ${result.promoted} lead${result.promoted === 1 ? "" : "s"} to the Pipeline.`);
+      setPromoteLimit("");
+      invalidateLeads();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setPromoting(false);
+    }
+  }
 
   async function addLead(e: React.FormEvent) {
     e.preventDefault();
@@ -523,6 +571,47 @@ export default function LeadsPage() {
           </button>
         </form>
       )}
+
+      <div className="card flex flex-wrap items-end gap-3 border-[rgb(var(--accent-rgb)/0.25)] bg-[rgb(var(--accent-rgb)/0.03)] p-4">
+        <div className="min-w-[160px]">
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Move to Pipeline</span>
+          <p className="text-xs text-ink/50">
+            {unpromotedLeads.length} lead{unpromotedLeads.length === 1 ? "" : "s"} waiting in Lead Room.
+          </p>
+        </div>
+        <label>
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Source</span>
+          <select
+            value={promoteSource}
+            onChange={(e) => setPromoteSource(e.target.value)}
+            className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none"
+          >
+            <option value="">All sources</option>
+            {Object.entries(SOURCE_LABELS).map(([value, label]) => (
+              <option key={value} value={value}>{label}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">How many</span>
+          <input
+            type="number"
+            min={1}
+            value={promoteLimit}
+            onChange={(e) => setPromoteLimit(e.target.value)}
+            placeholder={`All (${promoteMatchCount})`}
+            className="w-28 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={promoteToPipeline}
+          disabled={promoting || promoteCount === 0 || (promoteLimitNum !== null && promoteLimitNum <= 0)}
+          className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {promoting ? "Moving…" : `Move ${promoteCount} to Pipeline`}
+        </button>
+      </div>
 
       <div className="card flex flex-wrap items-end gap-3 p-3">
         <label className="min-w-[200px] flex-1">

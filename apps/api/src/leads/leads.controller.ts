@@ -12,6 +12,7 @@ import { ApproveEmailDto } from "./dto/approve-email.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { CreateEmailDraftDto } from "./dto/create-email-draft.dto";
 import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
+import { PromoteToPipelineDto } from "./dto/promote-to-pipeline.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { InternalAuthGuard } from "../common/guards/internal-auth.guard";
@@ -47,6 +48,15 @@ export class LeadsController {
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   createManual(@CurrentUser() user: JwtClaims, @Body() dto: CreateManualLeadDto) {
     return this.leadsService.createManual(user.orgId, dto);
+  }
+
+  /** Lead Room's "Move to Pipeline" action — see LeadsService.promoteToPipeline. */
+  @Post("promote-to-pipeline")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
+  promoteToPipeline(@CurrentUser() user: JwtClaims, @Body() dto: PromoteToPipelineDto) {
+    return this.leadsService.promoteToPipeline(user.orgId, dto);
   }
 
   /** Headers, a suggested column mapping, and a preview of the first few

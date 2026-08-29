@@ -344,6 +344,57 @@ export class LeadsService {
     return { deleted: result.count };
   }
 
+  /**
+   * Lead Room's "Move to Pipeline" action — the human-add paths
+   * (createManual/importLeads/EmailHub addToLead, all via insertManualLead)
+   * no longer create a PipelineState at creation time, so a lead sits here
+   * with `pipelineState: null` until this runs. Oldest-first (createdAt
+   * asc) so a partial batch (a `limit` less than the total candidates)
+   * clears the longest-waiting leads first, not an arbitrary subset.
+   * `sourceLayer` optionally scopes it to one channel (e.g. just the
+   * EMAIL-sourced backlog); omitted means every un-promoted lead. `leadId`
+   * promotes exactly one specific lead (the lead detail page's own
+   * "Promote to Pipeline" action) — mutually sensible with sourceLayer/limit
+   * but normally used alone.
+   */
+  async promoteToPipeline(orgId: string, options: { sourceLayer?: LeadSourceLayer; limit?: number; leadId?: string }) {
+    const { sourceLayer, limit, leadId } = options;
+    const candidates = await this.prisma.lead.findMany({
+      where: {
+        orgId,
+        pipelineState: null,
+        ...(leadId ? { id: leadId } : {}),
+        ...(sourceLayer ? { sourceLayer } : {}),
+      },
+      orderBy: { createdAt: "asc" },
+      ...(limit ? { take: limit } : {}),
+      select: { id: true },
+    });
+    if (candidates.length === 0) return { promoted: 0 };
+
+    await this.prisma.pipelineState.createMany({
+      data: candidates.map((l) => ({ leadId: l.id, stage: PipelineStage.NEW_LEAD })),
+    });
+
+    for (const { id } of candidates) {
+      // Same two calls advanceStage/createManual's enrichment-completion
+      // path already make on every other stage-entry — live Pipeline board
+      // update (ClickUp sync's own choke point for the realtime emit) plus
+      // picking up wherever auto-advance already got to: a lead that
+      // finished enrichment while sitting in Lead Room jumps straight to
+      // READY_FOR_OUTREACH the moment it's promoted, exactly as if
+      // enrichment had just completed on an already-pipelined lead.
+      this.sync.onStageChanged(id, PipelineStage.NEW_LEAD).catch((err) =>
+        this.logger.warn(`ClickUp sync failed for lead ${id}: ${(err as Error).message}`),
+      );
+      this.sequencer.autoAdvanceToOutreach(id).catch((err) =>
+        this.logger.warn(`Auto-advance failed for lead ${id}: ${(err as Error).message}`),
+      );
+    }
+
+    return { promoted: candidates.length };
+  }
+
   /** All leads for the org as CSV, for the "download all leads" export on /leads. */
   async exportCsv(orgId: string): Promise<string> {
     const leads = await this.prisma.lead.findMany({
@@ -527,7 +578,16 @@ export class LeadsService {
    */
   async advanceStage(orgId: string, id: string, toStage: PipelineStage) {
     const lead = await this.assertOwnership(orgId, id);
-    const current = await this.prisma.pipelineState.findUniqueOrThrow({ where: { leadId: id } });
+    const current = await this.prisma.pipelineState.findUnique({ where: { leadId: id } });
+    // A Lead Room lead (human-added, not yet promoted — see
+    // promoteToPipeline) has no PipelineState row at all. Without this
+    // check findUniqueOrThrow's P2025 would surface as an opaque "record
+    // not found" instead of telling the user what to actually do.
+    if (!current) {
+      throw new BadRequestException(
+        "This lead hasn't been moved to the Pipeline yet — promote it from Lead Room first.",
+      );
+    }
 
     if (!isValidTransition(current.stage as PipelineStage, toStage)) {
       throw new BadRequestException(`Cannot move lead from ${current.stage} to ${toStage}`);
@@ -936,10 +996,15 @@ export class LeadsService {
         },
       });
 
-      await tx.pipelineState.create({
-        data: { leadId: created.id, stage: PipelineStage.NEW_LEAD },
-      });
-
+      // No PipelineState created here (unlike createVerified's agent path) —
+      // a human-added lead (manual entry, CSV import, Email Hub "Add to
+      // Lead") now sits in Lead Room until explicitly promoted via
+      // promoteToPipeline below. autoAdvanceToOutreach elsewhere (fired
+      // when enrichment results land) no-ops harmlessly on a lead with no
+      // PipelineState, so enrichment/scoring still runs immediately and is
+      // visible in Lead Room — only entering the actual pipeline waits for
+      // promotion. AI-discovered leads (createVerified) are unaffected by
+      // this change and keep auto-advancing exactly as before.
       return created;
     });
   }

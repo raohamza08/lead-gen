@@ -257,6 +257,8 @@ export const api = {
   deleteLead: (id: string) => request(`/leads/${id}`, { method: "DELETE" }),
   deleteLeadsByStage: (stage: string) =>
     request<{ deleted: number }>(`/leads/by-stage/${stage}`, { method: "DELETE" }),
+  promoteLeadsToPipeline: (body: { sourceLayer?: string; limit?: number; leadId?: string }) =>
+    request<{ promoted: number }>("/leads/promote-to-pipeline", { method: "POST", body: JSON.stringify(body) }),
   getNicheFilters: () => request("/niche-filters"),
   getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
   deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),

@@ -158,6 +158,22 @@ export default function LeadDetailPage() {
     }
   }
 
+  /** For a Lead Room lead (no PipelineState yet) — promotes just this one,
+   *  via the same endpoint the Lead Room bulk action uses, scoped to this
+   *  lead's own id so it can't accidentally sweep in others. */
+  async function promoteThisLead() {
+    setMoving(true);
+    setError(null);
+    try {
+      await api.promoteLeadsToPipeline({ leadId: params.id });
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setMoving(false);
+    }
+  }
+
   async function advance(stage: string) {
     setMoving(true);
     setError(null);
@@ -244,6 +260,11 @@ export default function LeadDetailPage() {
   if (error && !lead) return <p className="text-bad">{error}</p>;
   if (!lead) return <div className="card h-64 animate-pulse" />;
 
+  // No PipelineState row means this lead hasn't been promoted out of Lead
+  // Room yet (Part: Lead Room / Move to Pipeline) — the stage-transition
+  // controls below don't apply until it has one, so they're replaced with
+  // a single "Promote to Pipeline" action instead.
+  const isPromoted = !!lead.pipelineState;
   const stage: PipelineStage = lead.pipelineState?.stage ?? PipelineStage.NEW_LEAD;
   // Read from the shared state machine rather than a hardcoded map. The old map
   // still pointed NEW_LEAD at UNDER_REVIEW, which stopped being a legal
@@ -267,46 +288,61 @@ export default function LeadDetailPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {backOptions.length > 0 && (
-            <select
-              key={stage}
-              defaultValue=""
-              disabled={moving}
-              onChange={(e) => {
-                if (e.target.value) rewind(e.target.value);
-              }}
-              title="Move this lead back to an earlier stage — a correction, not a transition, so it skips the forward automation."
-              className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-            >
-              <option value="" disabled>← Back to…</option>
-              {backOptions.map((s) => (
-                <option key={s} value={s}>{stageLabel(s)}</option>
+          {isPromoted ? (
+            <>
+              {backOptions.length > 0 && (
+                <select
+                  key={stage}
+                  defaultValue=""
+                  disabled={moving}
+                  onChange={(e) => {
+                    if (e.target.value) rewind(e.target.value);
+                  }}
+                  title="Move this lead back to an earlier stage — a correction, not a transition, so it skips the forward automation."
+                  className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                >
+                  <option value="" disabled>← Back to…</option>
+                  {backOptions.map((s) => (
+                    <option key={s} value={s}>{stageLabel(s)}</option>
+                  ))}
+                </select>
+              )}
+              <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-medium">{stageLabel(stage)}</span>
+              {nextStages.map((next) => (
+                <button
+                  key={next}
+                  onClick={() => advance(next)}
+                  disabled={moving}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-90 disabled:opacity-50 ${
+                    next === PipelineStage.LOST
+                      ? "border border-[var(--line)] text-bad"
+                      : "bg-accent text-white"
+                  }`}
+                >
+                  → {stageLabel(next)}
+                </button>
               ))}
-            </select>
-          )}
-          <span className="rounded-full bg-ink/8 px-3 py-1 text-xs font-medium">{stageLabel(stage)}</span>
-          {nextStages.map((next) => (
-            <button
-              key={next}
-              onClick={() => advance(next)}
-              disabled={moving}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-opacity hover:opacity-90 disabled:opacity-50 ${
-                next === PipelineStage.LOST
-                  ? "border border-[var(--line)] text-bad"
-                  : "bg-accent text-white"
-              }`}
-            >
-              → {stageLabel(next)}
-            </button>
-          ))}
-          {stage !== PipelineStage.LOST && !nextStages.includes(PipelineStage.LOST) && (
-            <button
-              onClick={() => advance(PipelineStage.LOST)}
-              disabled={moving}
-              className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-bad disabled:opacity-50"
-            >
-              Mark lost
-            </button>
+              {stage !== PipelineStage.LOST && !nextStages.includes(PipelineStage.LOST) && (
+                <button
+                  onClick={() => advance(PipelineStage.LOST)}
+                  disabled={moving}
+                  className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-bad disabled:opacity-50"
+                >
+                  Mark lost
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              <span className="rounded-full bg-gold/15 px-3 py-1 text-xs font-medium text-gold">Lead Room</span>
+              <button
+                onClick={promoteThisLead}
+                disabled={moving}
+                className="rounded-lg bg-accent px-3.5 py-1.5 text-xs font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+              >
+                {moving ? "Moving…" : "Promote to Pipeline"}
+              </button>
+            </>
           )}
         </div>
       </div>

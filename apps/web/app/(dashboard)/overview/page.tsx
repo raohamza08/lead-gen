@@ -294,10 +294,12 @@ const SOURCE_DISPLAY: Record<string, string> = {
   SOCIAL_MEDIA: "Social",
 };
 
-/** Lead Room card (Part: Lead Room) — Lead Room and Lead Generation read the
- *  same `leads` table (no promotion gate), so this is just a different cut
- *  of the same data the hero above already summarizes: where leads came
- *  from and how many are still waiting on research. */
+/** Lead Room card (Part: Lead Room) — these tiles (captured/awaiting
+ *  research/scored) are lead-level facts, not pipeline-stage-derived, so
+ *  they're unaffected by whether a lead has been promoted to the Pipeline
+ *  yet (see LeadsService.promoteToPipeline) — this is every captured lead
+ *  regardless of promotion status, same data the hero above already
+ *  summarizes from a different angle. */
 function LeadRoomOverviewSection() {
   const [breakdown, setBreakdown] = useState<SourceBreakdown | null>(null);
 
@@ -317,7 +319,8 @@ function LeadRoomOverviewSection() {
     <section className="card p-5">
       <h2 className="text-sm font-semibold tracking-tight">Lead Room</h2>
       <p className="mb-4 mt-0.5 text-xs text-ink/50">
-        Every lead captured so far, from every source — the working pipeline in Lead Generation draws from here.
+        Every lead captured so far, from every source. Human-added leads (manual, email, social) wait
+        here until you promote them to the Pipeline; AI-discovered leads advance automatically.
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {tiles.map((t) => (

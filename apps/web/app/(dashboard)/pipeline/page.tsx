@@ -291,15 +291,21 @@ export default function PipelinePage() {
     });
   });
 
+  // Leads with no pipelineState haven't been promoted out of Lead Room yet
+  // (Part: Lead Room / Move to Pipeline) — this board only ever shows what's
+  // actually in the pipeline, not the full org-wide lead list the /leads
+  // endpoint returns.
+  const promotedLeads = useMemo(() => leads.filter((l) => l.pipelineState), [leads]);
+
   const byStage = useMemo(() => {
     const grouped = new Map<string, LeadRow[]>();
-    for (const lead of leads) {
-      const stage = lead.pipelineState?.stage ?? "NEW_LEAD";
+    for (const lead of promotedLeads) {
+      const stage = lead.pipelineState!.stage;
       if (!grouped.has(stage)) grouped.set(stage, []);
       grouped.get(stage)!.push(lead);
     }
     return grouped;
-  }, [leads]);
+  }, [promotedLeads]);
 
   async function moveTo(lead: LeadRow, stage: string) {
     const from = lead.pipelineState?.stage ?? null;
@@ -449,7 +455,7 @@ export default function PipelinePage() {
               </button>
             </div>
           )}
-          <span className="text-xs text-ink/50">{leads.length} leads</span>
+          <span className="text-xs text-ink/50">{promotedLeads.length} leads</span>
         </div>
       </div>
 
