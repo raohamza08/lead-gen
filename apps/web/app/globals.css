@@ -37,6 +37,16 @@
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --series-4: #eda100;
+
+  /* Tells the browser which palette to use for anything it renders itself
+     rather than from our CSS -- native <select> dropdown popups, scrollbars,
+     checkboxes/radios, date/time pickers. Without this the app's own colors
+     can be fully dark while every native control still renders with its
+     light-mode UA stylesheet (white dropdown popup, black text) regardless
+     of the custom properties above; confirmed as the cause of dropdowns
+     looking wrong in dark mode. Kept in sync with the same three rules that
+     drive every other theme value in this file. */
+  color-scheme: light;
 }
 
 /* The :not() guard lets an explicit light stamp beat OS-dark; the
@@ -58,10 +68,17 @@
     --series-2: #d95926;
     --series-3: #199e70;
     --series-4: #c98500;
+
+    color-scheme: dark;
   }
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --paper-rgb: 20 23 28;
   --ink-rgb: 232 233 234;
   --accent-rgb: 79 189 182;
