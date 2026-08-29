@@ -256,8 +256,16 @@ export default function PipelinePage() {
   const leadsQuery = useQuery({
     queryKey: ["leads"],
     queryFn: async () => {
-      const res: any = await api.getLeads({ pageSize: "200" });
-      return (res.items ?? res) as LeadRow[];
+      const pageSize = 200;
+      const first: any = await api.getLeads({ page: "1", pageSize: String(pageSize) });
+      const items: LeadRow[] = first.items ?? first;
+      const total: number = first.total ?? items.length;
+      const pageCount = Math.ceil(total / pageSize);
+      for (let page = 2; page <= pageCount; page++) {
+        const res: any = await api.getLeads({ page: String(page), pageSize: String(pageSize) });
+        items.push(...((res.items ?? res) as LeadRow[]));
+      }
+      return items;
     },
   });
   // Stable empty-array identity when data is undefined -- `?? []` would mint
