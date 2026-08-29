@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadLeadsCsv, getCurrentUser } from "../../../lib/api-client";
-import { useRealtimeRefetch } from "../../../lib/realtime";
+import { useRealtimeEvent, useRealtimeRefetch } from "../../../lib/realtime";
 import { PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 import { LoadingRow, Spinner } from "../../../components/spinner";
@@ -158,6 +158,7 @@ export default function LeadsPage() {
   // "Move to Pipeline" (source + count).
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
 
   // Filters. The backend already supports these query params; this exposes them.
   const [search, setSearch] = useState("");
@@ -184,6 +185,20 @@ export default function LeadsPage() {
   const [importMapping, setImportMapping] = useState<Record<string, string | null>>({});
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  // Real progress, not a fake animated bar — importLeads emits a real
+  // "lead.created" event per row as it's actually inserted server-side
+  // (SyncService.onLeadCreated), so counting those live gives an accurate
+  // in-flight percentage instead of just a spinner until the whole batch
+  // (which can be hundreds of rows) finishes.
+  // Not guarded on `importing`: the hook only resubscribes when the event
+  // name changes (see useRealtimeEvent), so a closure over `importing` here
+  // would go stale after the first render. Harmless either way — this only
+  // gets read while importing is true, and is reset to 0 at the start of
+  // every import.
+  const [importCreated, setImportCreated] = useState(0);
+  useRealtimeEvent<{ leadId: string }>("lead.created", () => {
+    setImportCreated((n) => n + 1);
+  });
 
   async function handleImportFileSelected(file: File) {
     setError(null);
@@ -210,6 +225,7 @@ export default function LeadsPage() {
   async function confirmImport() {
     if (!importCsv) return;
     setImporting(true);
+    setImportCreated(0);
     setError(null);
     try {
       const result = (await api.importLeads(importCsv, importMapping)) as ImportResult;
@@ -330,13 +346,18 @@ export default function LeadsPage() {
   }
 
   /** Admin-only — same no-detach-and-keep, full-history-wipe semantics as
-   *  every other lead delete in this app. */
+   *  every other lead delete in this app. Deletes one at a time (not the
+   *  single bulk-delete call) specifically so progress is real, not a fake
+   *  animated bar — each lead removed from the table and the percentage
+   *  bumped only once its own delete has actually completed. One failure
+   *  doesn't stop the rest; failures are counted and reported at the end. */
   async function deleteSelected() {
-    const count = selected.size;
-    if (count === 0) return;
+    const ids = [...selected];
+    const total = ids.length;
+    if (total === 0) return;
     if (
       !window.confirm(
-        `Permanently delete ${count} selected lead${count === 1 ? "" : "s"}?\n\n` +
+        `Permanently delete ${total} selected lead${total === 1 ? "" : "s"}?\n\n` +
           "This removes their full history — scores, review notes, and any emails already sent — and cannot be undone.",
       )
     )
@@ -345,17 +366,34 @@ export default function LeadsPage() {
     setDeletingSelected(true);
     setError(null);
     setNotice(null);
-    try {
-      const ids = [...selected];
-      const result = (await api.bulkDeleteLeads(ids)) as { deleted: number };
-      setNotice(`Deleted ${result.deleted} lead${result.deleted === 1 ? "" : "s"}.`);
-      setSelected(new Set());
-      queryClient.setQueryData<LeadRow[]>(["leads"], (rows) => (rows ?? []).filter((r) => !ids.includes(r.id)));
-    } catch (err) {
-      setError((err as Error).message);
-    } finally {
-      setDeletingSelected(false);
+    setDeleteProgress({ done: 0, total });
+
+    let succeeded = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await api.deleteLead(id);
+        succeeded += 1;
+        queryClient.setQueryData<LeadRow[]>(["leads"], (rows) => (rows ?? []).filter((r) => r.id !== id));
+        setSelected((s) => {
+          const next = new Set(s);
+          next.delete(id);
+          return next;
+        });
+      } catch {
+        failed += 1;
+      }
+      setDeleteProgress((p) => (p ? { done: p.done + 1, total: p.total } : p));
     }
+
+    setNotice(
+      failed === 0
+        ? `Deleted ${succeeded} lead${succeeded === 1 ? "" : "s"}.`
+        : `Deleted ${succeeded} of ${total} — ${failed} failed.`,
+    );
+    if (failed > 0) setError(`${failed} lead${failed === 1 ? "" : "s"} could not be deleted.`);
+    setDeletingSelected(false);
+    setDeleteProgress(null);
   }
 
   async function addLead(e: React.FormEvent) {
@@ -401,7 +439,9 @@ export default function LeadsPage() {
               disabled={deletingSelected}
               className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] px-3.5 py-2 text-sm font-medium text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)] disabled:opacity-50"
             >
-              {deletingSelected ? "Deleting…" : `Delete selected (${selected.size})`}
+              {deleteProgress
+                ? `Deleting… ${Math.round((deleteProgress.done / deleteProgress.total) * 100)}% (${deleteProgress.done}/${deleteProgress.total})`
+                : `Delete selected (${selected.size})`}
             </button>
           )}
           <button
@@ -566,7 +606,9 @@ export default function LeadsPage() {
                   : "Map a column to Company name to enable import"
               }
             >
-              {importing ? "Importing…" : `Import ${importPreview.totalRows} lead${importPreview.totalRows === 1 ? "" : "s"}`}
+              {importing
+                ? `Importing… ${Math.min(100, Math.round((importCreated / importPreview.totalRows) * 100))}% (${importCreated}/${importPreview.totalRows})`
+                : `Import ${importPreview.totalRows} lead${importPreview.totalRows === 1 ? "" : "s"}`}
             </button>
             <button
               type="button"
