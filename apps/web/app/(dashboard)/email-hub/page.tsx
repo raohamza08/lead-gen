@@ -95,6 +95,10 @@ function EmailHubPageContent() {
   const [accountId, setAccountId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<string>("");
+  // Which muted-sender sub-tab is selected under the Ignored view — "" means
+  // every ignored message, unfiltered (Part: Ignore/Noise Management,
+  // per-sender grouping).
+  const [senderFilter, setSenderFilter] = useState<string>("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -109,18 +113,25 @@ function EmailHubPageContent() {
 
   // The sidebar's view links are plain navigation (query-string change, no
   // state setter), so this is the one filter change resetPage can't cover.
-  useEffect(() => setPage(1), [view]);
+  // senderFilter only makes sense within the Ignored view it belongs to —
+  // leaving it set while switching to another view would silently narrow
+  // that view's results with no visible control to explain why.
+  useEffect(() => {
+    setPage(1);
+    setSenderFilter("");
+  }, [view]);
 
   // Cached: switching tabs and coming back shows this instantly from cache
   // (staleTime in query-provider.tsx) while quietly refetching in the
   // background — isFetching (not isLoading) reflects that background pass.
   const messagesQuery = useQuery({
-    queryKey: ["email-messages", status, accountId, search, tagFilter, page, pageSize],
+    queryKey: ["email-messages", status, accountId, search, tagFilter, senderFilter, page, pageSize],
     queryFn: () => {
       const params: Record<string, string> = { status, page: String(page), pageSize: String(pageSize) };
       if (accountId) params.accountId = accountId;
       if (search.trim()) params.search = search.trim();
       if (tagFilter) params.tagIds = tagFilter;
+      if (senderFilter) params.sender = senderFilter;
       return api.getEmailMessages(params) as Promise<{ messages: Message[]; total: number }>;
     },
   });
@@ -131,6 +142,12 @@ function EmailHubPageContent() {
   const tagsQuery = useQuery({
     queryKey: ["email-tags"],
     queryFn: () => api.getEmailTags() as Promise<Tag[]>,
+  });
+  // Only meaningful (and only fetched) within the Ignored view.
+  const ignoredSendersQuery = useQuery({
+    queryKey: ["ignored-senders"],
+    queryFn: () => api.getIgnoredSenders() as Promise<{ fromEmail: string; count: number }[]>,
+    enabled: status === "IGNORED",
   });
   const statsQuery = useQuery({
     queryKey: ["email-stats"],
@@ -149,6 +166,7 @@ function EmailHubPageContent() {
 
   const accounts = accountsQuery.data ?? [];
   const tags = tagsQuery.data ?? [];
+  const ignoredSenders = ignoredSendersQuery.data ?? [];
   const total = messagesQuery.data?.total ?? 0;
   const messages = messagesQuery.data?.messages ?? [];
 
@@ -161,11 +179,15 @@ function EmailHubPageContent() {
   function invalidateStats() {
     queryClient.invalidateQueries({ queryKey: ["email-stats"] });
   }
+  function invalidateIgnoredSenders() {
+    queryClient.invalidateQueries({ queryKey: ["ignored-senders"] });
+  }
 
   useRealtimeRefetch(["emailHub.messageReceived", "emailHub.messagesUpdated"], () => {
     invalidateMessages();
     invalidateAccounts();
     invalidateStats();
+    invalidateIgnoredSenders();
   });
 
   const allSelected = messages.length > 0 && selected.size === messages.length;
@@ -189,6 +211,7 @@ function EmailHubPageContent() {
       invalidateMessages();
       invalidateAccounts();
       invalidateStats();
+      invalidateIgnoredSenders();
     },
     onError: (err) => setActionError((err as Error).message),
   });
@@ -287,6 +310,31 @@ function EmailHubPageContent() {
           <span>{statsQuery.data.leadsFromEmail} leads</span>
           <span>{statsQuery.data.possibleLeads} possible leads</span>
           <span>{statsQuery.data.connectedAccounts} accounts</span>
+        </div>
+      )}
+
+      {status === "IGNORED" && ignoredSenders.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 border-b border-[var(--line)] pb-3">
+          <button
+            onClick={() => setSenderFilter("")}
+            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              senderFilter === "" ? "bg-accent text-white" : "bg-ink/8 text-ink/60 hover:bg-ink/12"
+            }`}
+          >
+            All ignored
+          </button>
+          {ignoredSenders.map((s) => (
+            <button
+              key={s.fromEmail}
+              onClick={() => setSenderFilter(s.fromEmail)}
+              title={s.fromEmail}
+              className={`max-w-[220px] truncate rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                senderFilter === s.fromEmail ? "bg-accent text-white" : "bg-ink/8 text-ink/60 hover:bg-ink/12"
+              }`}
+            >
+              {s.fromEmail} ({s.count})
+            </button>
+          ))}
         </div>
       )}
 

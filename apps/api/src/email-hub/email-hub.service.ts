@@ -66,6 +66,32 @@ export class EmailHubService {
     ]);
   }
 
+  /** Powers the Ignored view's per-sender sub-tabs (Part: Ignore/Noise
+   *  Management, extended) — every muted sender (bulkAction's IGNORE path)
+   *  alongside how many of their messages are actually sitting in Ignored
+   *  right now, so the UI can group them instead of one flat list. */
+  async listIgnoredSenders(user: JwtClaims) {
+    const senders = await this.prisma.ignoredSender.findMany({
+      where: { orgId: user.orgId },
+      orderBy: { fromEmail: "asc" },
+    });
+    if (senders.length === 0) return [];
+
+    const counts = await this.prisma.inboundEmailMessage.groupBy({
+      by: ["fromEmail"],
+      where: {
+        account: { orgId: user.orgId },
+        folder: "INBOX",
+        isIgnored: true,
+        fromEmail: { in: senders.map((s) => s.fromEmail) },
+      },
+      _count: true,
+    });
+    const countByEmail = new Map(counts.map((c) => [c.fromEmail, c._count]));
+
+    return senders.map((s) => ({ fromEmail: s.fromEmail, count: countByEmail.get(s.fromEmail) ?? 0 }));
+  }
+
   /** Null means "no restriction" (ADMIN) — every other role is scoped to
    *  exactly the accounts EmailAccountAccess grants them. Absence of a grant
    *  row means no access, not read-only access (Part: User Access &

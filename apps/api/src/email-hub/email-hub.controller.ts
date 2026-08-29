@@ -39,6 +39,13 @@ export class EmailHubController {
     return this.emailHub.listTags(user.orgId);
   }
 
+  /** Sub-tabs under the Ignored view — one per muted sender, see
+   *  EmailHubService.listIgnoredSenders. */
+  @Get("ignored-senders")
+  listIgnoredSenders(@CurrentUser() user: JwtClaims) {
+    return this.emailHub.listIgnoredSenders(user);
+  }
+
   @Post("tags")
   createTag(@CurrentUser() user: JwtClaims, @Body() dto: CreateTagDto) {
     return this.emailHub.createTag(user.orgId, dto);

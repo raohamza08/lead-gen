@@ -225,6 +225,26 @@ export default function PipelinePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [deleteStage, setDeleteStage] = useState("");
   const [deletingStage, setDeletingStage] = useState(false);
+  // How many cards are rendered per column, independent of how many exist —
+  // a column used to render its whole list at once, so the page grew taller
+  // as leads piled up in one stage. Fixed-height scrollable columns now
+  // reveal more in batches as the user scrolls near the bottom of that one
+  // column, not the whole page.
+  const BATCH_SIZE = 15;
+  const [visibleCounts, setVisibleCounts] = useState<Record<string, number>>({});
+  function visibleCountFor(stage: string) {
+    return visibleCounts[stage] ?? BATCH_SIZE;
+  }
+  function handleColumnScroll(stage: string, e: React.UIEvent<HTMLDivElement>) {
+    const el = e.currentTarget;
+    if (el.scrollTop + el.clientHeight < el.scrollHeight - 100) return;
+    setVisibleCounts((prev) => {
+      const current = prev[stage] ?? BATCH_SIZE;
+      const total = byStage.get(stage)?.length ?? 0;
+      if (current >= total) return prev;
+      return { ...prev, [stage]: current + BATCH_SIZE };
+    });
+  }
   // Live "which agent is working on which lead right now" — keyed by leadId,
   // separate from `leads` because it must update the instant an
   // agentRun.started event lands, not on the 400ms-debounced full refetch
@@ -471,6 +491,7 @@ export default function PipelinePage() {
       <div className="flex gap-3 overflow-x-auto pb-3">
         {COLUMNS.map((stage) => {
           const cards = byStage.get(stage) ?? [];
+          const visibleCards = cards.slice(0, visibleCountFor(stage));
           const from = dragging?.pipelineState?.stage ?? null;
           const droppable = dragging ? canDrop(from, stage) : false;
           const blocked = Boolean(dragging) && !droppable && from !== stage;
@@ -507,8 +528,11 @@ export default function PipelinePage() {
                 </span>
               </header>
 
-              <div className="flex min-h-[80px] flex-col gap-2 p-2">
-                {cards.map((lead) => (
+              <div
+                onScroll={(e) => handleColumnScroll(stage, e)}
+                className="flex h-[65vh] flex-col gap-2 overflow-y-auto p-2"
+              >
+                {visibleCards.map((lead) => (
                   <article
                     key={lead.id}
                     draggable
@@ -577,6 +601,11 @@ export default function PipelinePage() {
                 {cards.length === 0 && (
                   <p className="px-1 py-4 text-center text-[11px] text-ink/35">
                     {droppable ? "Drop here" : "Empty"}
+                  </p>
+                )}
+                {visibleCards.length < cards.length && (
+                  <p className="px-1 py-2 text-center text-[11px] text-ink/35">
+                    Scroll for {cards.length - visibleCards.length} more…
                   </p>
                 )}
               </div>

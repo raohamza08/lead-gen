@@ -336,6 +336,8 @@ export const api = {
   getEmailHubAccounts: () => request("/email-hub/accounts"),
   getEmailHubStats: () => request("/email-hub/stats"),
   getEmailTags: () => request("/email-hub/tags"),
+  getIgnoredSenders: () =>
+    request<{ fromEmail: string; count: number }[]>("/email-hub/ignored-senders"),
   createEmailTag: (body: { name: string; color?: string }) =>
     request("/email-hub/tags", { method: "POST", body: JSON.stringify(body) }),
   updateEmailTag: (id: string, body: { name?: string; color?: string }) =>
