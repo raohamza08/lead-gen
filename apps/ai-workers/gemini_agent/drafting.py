@@ -132,11 +132,15 @@ def append_signature(body_html: str) -> str:
     The " · " separator is NOT hardcoded here — {{org.postal_address}}'s
     substitution supplies its own trailing separator only when there's a
     real address to show, so an org that hasn't set one gets a clean
-    "Unsubscribe" line instead of a dangling "· Unsubscribe"."""
+    "Unsubscribe" line instead of a dangling "· Unsubscribe". The link
+    itself is styled to match the surrounding gray fine print (no default
+    blue/underline) so it reads as ordinary small print, not a marketing
+    footer CTA — still a real, functioning unsubscribe link, just visually
+    subdued rather than prominent."""
     signature = (
         '<p>{{sender.name}}<br>{{org.name}}</p>'
-        '<p style="font-size:12px;color:#888">{{org.postal_address}}'
-        '<a href="{{unsubscribe_link}}">Unsubscribe</a></p>'
+        '<p style="font-size:11px;color:#999">{{org.postal_address}}'
+        '<a href="{{unsubscribe_link}}" style="color:#999;text-decoration:none">Unsubscribe</a></p>'
     )
     return f"{body_html}\n{signature}"
 
