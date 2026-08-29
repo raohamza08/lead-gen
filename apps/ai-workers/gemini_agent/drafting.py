@@ -128,10 +128,14 @@ Respond with ONLY JSON, no prose or code fences:
 def append_signature(body_html: str) -> str:
     """The only place {org.name} can appear for Email 1/2, per the "company
     only in the signature" rule — resolved at send time by
-    email-provider.service.ts, same as {{sender.name}}/{{unsubscribe_link}}."""
+    email-provider.service.ts, same as {{sender.name}}/{{unsubscribe_link}}.
+    The " · " separator is NOT hardcoded here — {{org.postal_address}}'s
+    substitution supplies its own trailing separator only when there's a
+    real address to show, so an org that hasn't set one gets a clean
+    "Unsubscribe" line instead of a dangling "· Unsubscribe"."""
     signature = (
         '<p>{{sender.name}}<br>{{org.name}}</p>'
-        '<p style="font-size:12px;color:#888">{{org.postal_address}} · '
+        '<p style="font-size:12px;color:#888">{{org.postal_address}}'
         '<a href="{{unsubscribe_link}}">Unsubscribe</a></p>'
     )
     return f"{body_html}\n{signature}"

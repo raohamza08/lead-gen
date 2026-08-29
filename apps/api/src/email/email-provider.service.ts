@@ -130,13 +130,15 @@ export class EmailProviderService {
     const apiRoot = apiPublicUrl();
     let renderedBody = bodyHtml
       .replace(/\{\{unsubscribe_link\}\}/g, `${apiRoot}/unsubscribe?lead=${lead.id}`)
-      // `|| fallback`, not `?? fallback`: an org that has never set one gets
-      // an empty string back from getBranding, not null/undefined — `??`
-      // only catches those two, so it let an empty address through as an
-      // empty string and every sent email quietly read "· Unsubscribe" with
-      // nothing before the bullet. Confirmed live in this org's own sent
-      // mail before this fix.
-      .replace(/\{\{org\.postal_address\}\}/g, branding.postalAddress || "[postal address required by CAN-SPAM — set one in Settings]")
+      // An unset address renders as empty, never as placeholder/warning
+      // text — a literal "[set one in Settings]"-style string was sent to
+      // real prospects before this fix, which is far worse than a blank
+      // signature line. Missing the address is a compliance gap for the
+      // org to fix in Settings, not something to expose to the recipient.
+      // The " · " separator before "Unsubscribe" (see append_signature in
+      // drafting.py) is supplied here, not hardcoded in the template, so an
+      // empty address doesn't leave a dangling "· Unsubscribe" behind.
+      .replace(/\{\{org\.postal_address\}\}/g, branding.postalAddress ? `${branding.postalAddress} · ` : "")
       .replace(/\{\{org\.name\}\}/g, branding.emailOrgName)
       .replace(/\{\{sender\.name\}\}/g, branding.emailSenderName);
 
