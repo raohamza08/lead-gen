@@ -149,9 +149,15 @@ export class EmailProviderService {
     const result = await provider.send(account, {
       fromAddress: account.address,
       // A per-mailbox display name (Settings > Email accounts) wins over the
-      // org-wide sender name — an org with several mailboxes may want each to
-      // show a different name in the recipient's inbox.
-      fromName: account.displayName || branding.emailSenderName,
+      // org-wide company name — an org with several mailboxes may want each
+      // to show a different name in the recipient's inbox. Falls back to
+      // the company name (org.name), not the sender name — the inbox
+      // "From" line and the signature's sender-name line are deliberately
+      // two different names now (e.g. "EurosHub" in the inbox, "Team" in
+      // the signature's first line, "EurosHub" again in the signature's
+      // company line) rather than the sender name doing double duty as
+      // both the inbox identity and the signature's opening line.
+      fromName: account.displayName || branding.emailOrgName,
       toAddress: lead.email,
       subject,
       bodyHtml: renderedBody,

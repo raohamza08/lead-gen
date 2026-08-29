@@ -11,9 +11,10 @@ interface Branding {
 
 /**
  * What outreach emails actually say for {{org.name}} and {{sender.name}} —
- * and what shows in the recipient's inbox as the From name. Before this
- * existed those placeholders went out to real prospects unresolved, literally
- * as "{{org.name}}", because nothing ever substituted them.
+ * and, via emailOrgName, what shows in the recipient's inbox as the From
+ * name (see EmailProviderService.sendForLead). Before this existed those
+ * placeholders went out to real prospects unresolved, literally as
+ * "{{org.name}}", because nothing ever substituted them.
  */
 export function OrgBrandingSection() {
   const [branding, setBranding] = useState<Branding | null>(null);
@@ -56,7 +57,8 @@ export function OrgBrandingSection() {
       <h2 className="mb-1 text-sm font-semibold tracking-tight">Email branding</h2>
       <p className="mb-4 text-xs text-ink/50">
         Fills in <code>{"{{org.name}}"}</code> and <code>{"{{sender.name}}"}</code> in every outreach
-        email, and sets the display name recipients see next to the mailbox address.
+        email. Company name is also what recipients see as the From display name in their inbox
+        (unless a specific mailbox has its own name set in Settings &gt; Email accounts).
       </p>
 
       {error && (
@@ -72,7 +74,7 @@ export function OrgBrandingSection() {
 
       <form onSubmit={save} className="grid gap-3 sm:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-xs text-ink/60">Company name shown in emails</span>
+          <span className="mb-1 block text-xs text-ink/60">Company name (inbox From name + signature)</span>
           <input
             value={draft.emailOrgName}
             onChange={(e) => setDraft((d) => ({ ...d, emailOrgName: e.target.value }))}
@@ -81,11 +83,11 @@ export function OrgBrandingSection() {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-ink/60">Sender name (signature + From display name)</span>
+          <span className="mb-1 block text-xs text-ink/60">Sender name (first line of the signature only)</span>
           <input
             value={draft.emailSenderName}
             onChange={(e) => setDraft((d) => ({ ...d, emailSenderName: e.target.value }))}
-            placeholder="e.g. The EurosHub Team, or a person's name"
+            placeholder="e.g. Team, or a person's name"
             className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
           />
         </label>
@@ -101,8 +103,8 @@ export function OrgBrandingSection() {
           />
           {!draft.postalAddress && (
             <span className="mt-1 block text-[11px] text-gold">
-              Not set — every outreach email&apos;s footer currently shows a placeholder instead of a
-              real address.
+              Not set — the footer&apos;s address line will be left blank on outreach emails until
+              you add one here.
             </span>
           )}
         </label>
