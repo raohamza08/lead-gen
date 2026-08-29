@@ -13,6 +13,7 @@ import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { CreateEmailDraftDto } from "./dto/create-email-draft.dto";
 import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { PromoteToPipelineDto } from "./dto/promote-to-pipeline.dto";
+import { BulkDeleteLeadsDto } from "./dto/bulk-delete-leads.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { InternalAuthGuard } from "../common/guards/internal-auth.guard";
@@ -263,6 +264,19 @@ export class LeadsController {
   @Roles(Role.ADMIN)
   removeByStage(@CurrentUser() user: JwtClaims, @Param("stage", new ParseEnumPipe(PipelineStage)) stage: PipelineStage) {
     return this.leadsService.removeByStage(user.orgId, stage);
+  }
+
+  // ADMIN only, same reasoning as remove() below — Lead Room's "delete
+  // selected" action for a user-picked set of ids. POST (not DELETE) since
+  // the id list travels as a body, matching promote-to-pipeline's own
+  // bulk-action convention rather than a DELETE-with-body, which some
+  // clients/proxies handle inconsistently.
+  @Post("bulk-delete")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN)
+  removeByIds(@CurrentUser() user: JwtClaims, @Body() dto: BulkDeleteLeadsDto) {
+    return this.leadsService.removeByIds(user.orgId, dto.leadIds);
   }
 
   // ADMIN only: unlike other deletes in this app (niche filter, email

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api, downloadLeadsCsv } from "../../../lib/api-client";
+import { api, downloadLeadsCsv, getCurrentUser } from "../../../lib/api-client";
 import { useRealtimeRefetch } from "../../../lib/realtime";
 import { PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
@@ -149,8 +149,15 @@ function StagePill({ stage }: { stage?: string | null }) {
 
 export default function LeadsPage() {
   const queryClient = useQueryClient();
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Admin-only bulk delete — a user-picked set of rows, not a filter-based
+  // batch like Pipeline's "Delete stage" (removeByStage) or Lead Room's own
+  // "Move to Pipeline" (source + count).
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deletingSelected, setDeletingSelected] = useState(false);
 
   // Filters. The backend already supports these query params; this exposes them.
   const [search, setSearch] = useState("");
@@ -305,6 +312,52 @@ export default function LeadsPage() {
     }
   }
 
+  function toggleOne(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllVisible() {
+    setSelected((s) => {
+      const allVisibleSelected = filtered.length > 0 && filtered.every((l) => s.has(l.id));
+      if (allVisibleSelected) return new Set();
+      return new Set(filtered.map((l) => l.id));
+    });
+  }
+
+  /** Admin-only — same no-detach-and-keep, full-history-wipe semantics as
+   *  every other lead delete in this app. */
+  async function deleteSelected() {
+    const count = selected.size;
+    if (count === 0) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${count} selected lead${count === 1 ? "" : "s"}?\n\n` +
+          "This removes their full history — scores, review notes, and any emails already sent — and cannot be undone.",
+      )
+    )
+      return;
+
+    setDeletingSelected(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const ids = [...selected];
+      const result = (await api.bulkDeleteLeads(ids)) as { deleted: number };
+      setNotice(`Deleted ${result.deleted} lead${result.deleted === 1 ? "" : "s"}.`);
+      setSelected(new Set());
+      queryClient.setQueryData<LeadRow[]>(["leads"], (rows) => (rows ?? []).filter((r) => !ids.includes(r.id)));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setDeletingSelected(false);
+    }
+  }
+
   async function addLead(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
@@ -341,6 +394,16 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {isAdmin && selected.size > 0 && (
+            <button
+              type="button"
+              onClick={deleteSelected}
+              disabled={deletingSelected}
+              className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] px-3.5 py-2 text-sm font-medium text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)] disabled:opacity-50"
+            >
+              {deletingSelected ? "Deleting…" : `Delete selected (${selected.size})`}
+            </button>
+          )}
           <button
             type="button"
             onClick={exportCsv}
@@ -685,6 +748,16 @@ export default function LeadsPage() {
         <table className="w-full min-w-[900px] text-sm">
           <thead className="border-b border-[var(--line)] text-left text-[11px] uppercase tracking-wide text-ink/55">
             <tr>
+              {isAdmin && (
+                <th className="w-8 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={filtered.length > 0 && filtered.every((l) => selected.has(l.id))}
+                    onChange={toggleAllVisible}
+                    aria-label="Select all visible leads"
+                  />
+                </th>
+              )}
               <th className="px-4 py-3">Company</th>
               <th className="px-4 py-3">Source</th>
               <th className="px-4 py-3">Industry</th>
@@ -699,6 +772,16 @@ export default function LeadsPage() {
           <tbody>
             {filtered.map((lead) => (
               <tr key={lead.id} className="border-b border-[var(--line)] transition-colors last:border-0 hover:bg-ink/5">
+                {isAdmin && (
+                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selected.has(lead.id)}
+                      onChange={() => toggleOne(lead.id)}
+                      aria-label={`Select ${lead.companyName}`}
+                    />
+                  </td>
+                )}
                 <td className="px-4 py-3">
                   <Link href={`/leads/${lead.id}`} className="font-medium text-accent hover:underline">
                     {lead.companyName}
@@ -737,7 +820,7 @@ export default function LeadsPage() {
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-10 text-center text-ink/50">
+                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-10 text-center text-ink/50">
                   {leads.length === 0
                     ? "No leads yet — configure a niche filter in Settings, or add one manually above."
                     : "No leads match these filters."}

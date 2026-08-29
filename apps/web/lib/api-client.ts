@@ -259,6 +259,8 @@ export const api = {
     request<{ deleted: number }>(`/leads/by-stage/${stage}`, { method: "DELETE" }),
   promoteLeadsToPipeline: (body: { sourceLayer?: string; limit?: number; leadId?: string }) =>
     request<{ promoted: number }>("/leads/promote-to-pipeline", { method: "POST", body: JSON.stringify(body) }),
+  bulkDeleteLeads: (leadIds: string[]) =>
+    request<{ deleted: number }>("/leads/bulk-delete", { method: "POST", body: JSON.stringify({ leadIds }) }),
   getNicheFilters: () => request("/niche-filters"),
   getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
   deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),

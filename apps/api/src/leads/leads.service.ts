@@ -344,6 +344,24 @@ export class LeadsService {
     return { deleted: result.count };
   }
 
+  /** Bulk version of `remove` for Lead Room's admin "delete selected"
+   *  action — an explicit, user-picked set of ids rather than everything
+   *  matching a filter. Re-scoped to `orgId` here (not just trusted from
+   *  the request) so a crafted id list from another org can't be used to
+   *  delete leads outside the caller's own org. */
+  async removeByIds(orgId: string, leadIds: string[]) {
+    const leads = await this.prisma.lead.findMany({
+      where: { orgId, id: { in: leadIds } },
+      select: { id: true },
+    });
+    for (const lead of leads) {
+      await this.sequencer.cancelWaitTimer(lead.id);
+    }
+    if (leads.length === 0) return { deleted: 0 };
+    const result = await this.prisma.lead.deleteMany({ where: { id: { in: leads.map((l) => l.id) } } });
+    return { deleted: result.count };
+  }
+
   /**
    * Lead Room's "Move to Pipeline" action — the human-add paths
    * (createManual/importLeads/EmailHub addToLead, all via insertManualLead)
