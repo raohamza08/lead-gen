@@ -134,6 +134,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* `color-scheme` (set above) is not enough by itself: confirmed live on
+   Chrome/Windows that a <select>'s dropdown *popup* still rendered with a
+   white background and dark text in dark mode even though color-scheme:dark
+   was correctly computed on <html> — the popup only follows color-scheme
+   when no explicit color is set on the option elements, and this is
+   unreliable across browsers/OSes. Setting real colors here is what
+   actually works everywhere, not just a UA-fallback that some renderers
+   honor for the popup and others don't. */
+select, option {
+  background-color: var(--paper);
+  color: var(--ink);
+}
+
 /* The standard card. Used everywhere so surfaces stay consistent. */
 .card {
   background: var(--surface);
