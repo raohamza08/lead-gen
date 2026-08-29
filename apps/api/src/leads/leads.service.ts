@@ -25,6 +25,7 @@ import { ImportEnrichmentQueue } from "../common/queue/import-enrichment.queue";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { SocialMediaService } from "../social-media/social-media.service";
 import { mapRowToDto, parseCsvHeaders, parseCsvRows, suggestMapping } from "./lead-import-mapping";
+import { EmailVerificationService } from "./email-verification.service";
 
 export interface CreateLeadResult {
   status: "created" | "duplicate";
@@ -43,6 +44,7 @@ export class LeadsService {
     private readonly importEnrichment: ImportEnrichmentQueue,
     private readonly realtime: RealtimeGateway,
     private readonly socialMedia: SocialMediaService,
+    private readonly emailVerification: EmailVerificationService,
   ) {}
 
   /**
@@ -162,7 +164,7 @@ export class LeadsService {
         });
 
         await tx.pipelineState.create({
-          data: { leadId: created.id, stage: dto.initialStage ?? PipelineStage.NEW_LEAD },
+          data: { leadId: created.id, stage: PipelineStage.READY_FOR_OUTREACH },
         });
 
         return created;
@@ -185,13 +187,12 @@ export class LeadsService {
         this.logger.warn(`Social automation dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
       );
 
-      // A lead reaching here has already passed verification (and usually
-      // research too — see initialStage above), so there is nothing left for
-      // a human to gate: walk it straight through to READY_FOR_OUTREACH
-      // (Part: autonomous system) rather than leaving it for someone to
-      // click through NEW_LEAD/VERIFIED/RESEARCH_COMPLETED/UNDER_REVIEW.
-      this.sequencer.autoAdvanceToOutreach(lead.id).catch((err) =>
-        this.logger.warn(`Auto-advance failed for lead ${lead.id}: ${(err as Error).message}`),
+      // A lead reaching here has already passed verification, so its email
+      // is verified and outreach can start immediately — same call
+      // updateContact/verifyEmail use to kick it off when a human or the
+      // bulk verify action verifies one later instead.
+      this.sequencer.maybeEnterOutreach(lead.id).catch((err) =>
+        this.logger.warn(`Outreach entry failed for lead ${lead.id}: ${(err as Error).message}`),
       );
 
       return { status: "created", leadId: lead.id };
@@ -392,22 +393,20 @@ export class LeadsService {
     if (candidates.length === 0) return { promoted: 0 };
 
     await this.prisma.pipelineState.createMany({
-      data: candidates.map((l) => ({ leadId: l.id, stage: PipelineStage.NEW_LEAD })),
+      data: candidates.map((l) => ({ leadId: l.id, stage: PipelineStage.READY_FOR_OUTREACH })),
     });
 
     for (const { id } of candidates) {
-      // Same two calls advanceStage/createManual's enrichment-completion
-      // path already make on every other stage-entry — live Pipeline board
-      // update (ClickUp sync's own choke point for the realtime emit) plus
-      // picking up wherever auto-advance already got to: a lead that
-      // finished enrichment while sitting in Lead Room jumps straight to
-      // READY_FOR_OUTREACH the moment it's promoted, exactly as if
-      // enrichment had just completed on an already-pipelined lead.
-      this.sync.onStageChanged(id, PipelineStage.NEW_LEAD).catch((err) =>
+      // Live Pipeline board update (ClickUp sync's own choke point for the
+      // realtime emit), plus kicking off outreach immediately for any
+      // promoted lead whose email happens to already be verified — most
+      // Lead Room leads aren't yet, and stay parked in Ready until the
+      // "Verify emails" action runs.
+      this.sync.onStageChanged(id, PipelineStage.READY_FOR_OUTREACH).catch((err) =>
         this.logger.warn(`ClickUp sync failed for lead ${id}: ${(err as Error).message}`),
       );
-      this.sequencer.autoAdvanceToOutreach(id).catch((err) =>
-        this.logger.warn(`Auto-advance failed for lead ${id}: ${(err as Error).message}`),
+      this.sequencer.maybeEnterOutreach(id).catch((err) =>
+        this.logger.warn(`Outreach entry failed for lead ${id}: ${(err as Error).message}`),
       );
     }
 
@@ -479,9 +478,9 @@ export class LeadsService {
   /**
    * Fixes a lead's contact details after creation — most importantly, adding
    * an email to a hand-entered lead that was created without one and got
-   * stuck unable to reach outreach (advanceStage rejects that transition
-   * without a verified email; see the gate there). The only self-service way
-   * to recover a lead in that state, short of editing the database directly.
+   * stuck unable to reach outreach (nothing dispatches Email 1 without a
+   * verified email; see maybeEnterOutreach). The only self-service way to
+   * recover a lead in that state, short of editing the database directly.
    */
   async updateContact(orgId: string, id: string, dto: UpdateLeadContactDto) {
     await this.assertOwnership(orgId, id);
@@ -496,7 +495,42 @@ export class LeadsService {
       },
     });
     this.realtime.emitToOrg(orgId, "lead.updated", { leadId: id });
+    if (dto.verifiedEmail) {
+      this.sequencer.maybeEnterOutreach(id).catch((err) =>
+        this.logger.warn(`Outreach entry failed for lead ${id}: ${(err as Error).message}`),
+      );
+    }
     return lead;
+  }
+
+  /**
+   * Re-checks one lead's email (NeverBounce, or the syntactic DEMO MODE
+   * fallback if no key is configured — see EmailVerificationService) and
+   * records the result. This is the real gate on outreach now that every
+   * lead lands at READY_FOR_OUTREACH on creation: a lead that turns out
+   * valid here starts drafting Email 1 immediately, no separate stage move
+   * needed. The Pipeline board's "Verify emails" bulk action for the Ready
+   * column is just this, looped client-side over every unverified card it
+   * already has loaded — same live-progress pattern as Lead Room's bulk
+   * delete, not a separate batch endpoint.
+   */
+  async verifyEmail(orgId: string, id: string) {
+    const lead = await this.assertOwnership(orgId, id);
+    if (!lead.email) {
+      return { leadId: id, verifiedEmail: false, reason: "no email address on this lead" };
+    }
+
+    const result = await this.emailVerification.verify(lead.email);
+    await this.prisma.lead.update({ where: { id }, data: { verifiedEmail: result.valid } });
+    this.realtime.emitToOrg(orgId, "lead.updated", { leadId: id });
+
+    if (result.valid) {
+      this.sequencer.maybeEnterOutreach(id).catch((err) =>
+        this.logger.warn(`Outreach entry failed for lead ${id}: ${(err as Error).message}`),
+      );
+    }
+
+    return { leadId: id, verifiedEmail: result.valid, reason: result.reason };
   }
 
   /**
@@ -557,12 +591,11 @@ export class LeadsService {
 
     this.realtime.emitToOrg(orgId, "lead.updated", { leadId: id });
 
-    // A manually-entered lead sits at NEW_LEAD with nothing verified or
-    // scored until this runs — once it has, there's no reason to make a
-    // human click through NEW_LEAD -> VERIFIED -> RESEARCH_COMPLETED ->
-    // UNDER_REVIEW by hand (Part: autonomous system). No-ops harmlessly if
-    // the lead has already moved past that range (e.g. a later re-run).
-    await this.sequencer.autoAdvanceToOutreach(id);
+    // If this enrichment run set verifiedEmail true (the lead_verification
+    // agent's own finding, not just a human edit), outreach can start right
+    // away instead of waiting for a separate "Verify emails" click. No-ops
+    // harmlessly otherwise, or if the lead has already moved past Ready.
+    await this.sequencer.maybeEnterOutreach(id);
 
     return { updated: true };
   }
@@ -610,18 +643,6 @@ export class LeadsService {
 
     if (!isValidTransition(current.stage as PipelineStage, toStage)) {
       throw new BadRequestException(`Cannot move lead from ${current.stage} to ${toStage}`);
-    }
-
-    // Same gate autoAdvanceToOutreach already enforces for the automatic path
-    // — a manual drag into READY_FOR_OUTREACH bypassed it entirely, letting a
-    // lead with no verified email reach the send queue, where every attempt
-    // then fails permanently at EmailProviderService's compliance gate (no
-    // way to recover except editing the lead's email and trying again). Catch
-    // it here instead, with a message that says what to actually do.
-    if (toStage === PipelineStage.READY_FOR_OUTREACH && !lead.verifiedEmail) {
-      throw new BadRequestException(
-        "This lead has no verified email address — add and verify one before starting outreach, or every send will fail.",
-      );
     }
 
     const updated = await this.prisma.pipelineState.update({
@@ -915,10 +936,14 @@ export class LeadsService {
    * the agents already found is rejected rather than creating a second record
    * two people then contact independently.
    *
-   * Starts at NEW_LEAD, not VERIFIED: nothing has checked the website, LinkedIn
-   * or email yet. Marking it verified because a human typed it would put
-   * unchecked addresses into the send queue, and a bounce damages the sending
-   * reputation of every mailbox in the org.
+   * Created with verifiedEmail still false: nothing has checked the website,
+   * LinkedIn or email yet, and marking it verified because a human typed it
+   * would put an unchecked address into the send queue the moment this lead
+   * is promoted — a bounce damages the sending reputation of every mailbox
+   * in the org. It reaches READY_FOR_OUTREACH like every lead once promoted,
+   * but maybeEnterOutreach still won't draft Email 1 until something — the
+   * "Verify emails" bulk action, a re-run enrichment, or a human checking
+   * the box on the lead page — actually verifies it.
    */
   /** `sourceLayer` defaults to MANUAL (the "+Add lead" form never sends one) —
    *  other backend services pass an override, e.g. EmailHubService.addToLead
@@ -1018,12 +1043,12 @@ export class LeadsService {
       // No PipelineState created here (unlike createVerified's agent path) —
       // a human-added lead (manual entry, CSV import, Email Hub "Add to
       // Lead") now sits in Lead Room until explicitly promoted via
-      // promoteToPipeline below. autoAdvanceToOutreach elsewhere (fired
-      // when enrichment results land) no-ops harmlessly on a lead with no
+      // promoteToPipeline below. maybeEnterOutreach elsewhere (fired when
+      // enrichment results land) no-ops harmlessly on a lead with no
       // PipelineState, so enrichment/scoring still runs immediately and is
       // visible in Lead Room — only entering the actual pipeline waits for
       // promotion. AI-discovered leads (createVerified) are unaffected by
-      // this change and keep auto-advancing exactly as before.
+      // this change and land straight at READY_FOR_OUTREACH as usual.
       return created;
     });
   }

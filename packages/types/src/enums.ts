@@ -14,17 +14,17 @@ export enum Role {
  * WON is deliberately NOT terminal: client onboarding follows a closed deal,
  * and modelling onboarding outside the pipeline would lose the handover that
  * decides whether the customer is retained.
+ *
+ * READY_FOR_OUTREACH is the entry stage — every lead lands here the moment
+ * it's created or promoted from Lead Room. There used to be four checkpoints
+ * ahead of it (NEW_LEAD/VERIFIED/RESEARCH_COMPLETED/UNDER_REVIEW), but no
+ * agent or automation was ever gated on any of them: the AI research pipeline
+ * runs off lead creation regardless of stage, and the only real gate —
+ * `verifiedEmail` — now applies right here, via the "Verify emails" action on
+ * this column. Removed 2026-08-29 rather than kept as dead checkpoints a lead
+ * had to be walked through with nothing behind the move.
  */
 export enum PipelineStage {
-  NEW_LEAD = "NEW_LEAD",
-  /** Website, LinkedIn and email checked. Distinct from NEW_LEAD so the
-   *  "leads verified" metric measures something real rather than an insert. */
-  VERIFIED = "VERIFIED",
-  /** Research agent finished enriching. Separated from review because research
-   *  is automated and review is not — merging them hides which one is the
-   *  bottleneck when leads pile up. */
-  RESEARCH_COMPLETED = "RESEARCH_COMPLETED",
-  UNDER_REVIEW = "UNDER_REVIEW",
   READY_FOR_OUTREACH = "READY_FOR_OUTREACH",
   /** Problem Trigger — one felt industry pain point. EurosHub is never named
    *  in this email except the signature (Part: 5-email sequence, 2026-08-12). */

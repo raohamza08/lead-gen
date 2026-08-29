@@ -227,7 +227,7 @@ class SchedulerAgent(Agent):
 
     async def execute(self, ctx: AgentContext) -> AgentResult:
         lead = ctx.get("lead")
-        stage = (lead.get("pipelineState") or {}).get("stage") or "NEW_LEAD"
+        stage = (lead.get("pipelineState") or {}).get("stage") or "READY_FOR_OUTREACH"
 
         # A reply ends the sequence. Continuing to follow up after someone has
         # answered is the fastest way to lose a warm lead.

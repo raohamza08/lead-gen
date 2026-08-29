@@ -103,7 +103,7 @@ export default function OverviewPage() {
   const KPIS = [
     { label: "Verified", value: summary.verifiedLeads, href: "/leads" },
     { label: "In pipeline", value: inPipeline, href: "/pipeline" },
-    { label: "Pending review", value: summary.pendingReviews, href: "/leads", warn: summary.pendingReviews > 0 },
+    { label: "Awaiting verification", value: summary.awaitingVerification, href: "/pipeline", warn: summary.awaitingVerification > 0 },
     { label: "Meetings", value: summary.meetingsBooked, good: summary.meetingsBooked > 0 },
     { label: "Won", value: summary.wonDeals, good: summary.wonDeals > 0 },
     { label: "Avg lead score", value: summary.avgLeadScore },

@@ -265,11 +265,10 @@ export default function LeadDetailPage() {
   // controls below don't apply until it has one, so they're replaced with
   // a single "Promote to Pipeline" action instead.
   const isPromoted = !!lead.pipelineState;
-  const stage: PipelineStage = lead.pipelineState?.stage ?? PipelineStage.NEW_LEAD;
-  // Read from the shared state machine rather than a hardcoded map. The old map
-  // still pointed NEW_LEAD at UNDER_REVIEW, which stopped being a legal
-  // transition when VERIFIED and RESEARCH_COMPLETED were added — the button
-  // looked fine and the API rejected every click.
+  const stage: PipelineStage = lead.pipelineState?.stage ?? PipelineStage.READY_FOR_OUTREACH;
+  // Read from the shared state machine rather than a hardcoded map — see its
+  // own doc comment for why (a hardcoded map here previously drifted out of
+  // sync with a state-machine change made elsewhere).
   const nextStages = ALLOWED_TRANSITIONS[stage] ?? [];
   const backOptions = PIPELINE_STAGE_ORDER.filter((s) => isValidRewind(stage, s));
   const s = lead.score ?? {};

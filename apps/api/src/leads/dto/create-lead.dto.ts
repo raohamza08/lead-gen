@@ -1,5 +1,5 @@
 import { IsArray, IsBoolean, IsEnum, IsIn, IsInt, IsNumber, IsOptional, IsString } from "class-validator";
-import { LeadSourceLayer, PipelineStage } from "@leadgen/types";
+import { LeadSourceLayer } from "@leadgen/types";
 
 /**
  * Payload the Claude lead-gen agent posts once a candidate clears verification
@@ -97,17 +97,4 @@ export class CreateLeadDto {
 
   @IsOptional() @IsString() filterId?: string;
   @IsOptional() @IsString() runId?: string;
-
-  /**
-   * Stage to start the lead at.
-   *
-   * A lead reaching this endpoint has already passed the verification agent,
-   * and usually the research agent too, so starting it at NEW_LEAD would
-   * misreport the funnel and force it through transitions that already
-   * happened. The agent runner sets this to what actually completed; a
-   * manually created lead omits it and starts at NEW_LEAD.
-   */
-  @IsOptional()
-  @IsIn(Object.values(PipelineStage))
-  initialStage?: PipelineStage;
 }

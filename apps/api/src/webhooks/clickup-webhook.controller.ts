@@ -5,9 +5,11 @@ import { LeadsService } from "../leads/leads.service";
 import { verifyHmacSignature } from "./signature.util";
 import { PipelineStage } from "@leadgen/types";
 
+// "new lead" and "under review" used to map to their own PipelineStage
+// values; both were removed 2026-08-29 (no agent was ever gated on either),
+// so a ClickUp card still carrying one of those old statuses now just goes
+// unmapped below — a no-op, not an error.
 const CLICKUP_TO_PIPELINE_STAGE: Record<string, PipelineStage> = {
-  "new lead": PipelineStage.NEW_LEAD,
-  "under review": PipelineStage.UNDER_REVIEW,
   "ready for outreach": PipelineStage.READY_FOR_OUTREACH,
   "replied": PipelineStage.REPLIED,
   "meeting booked": PipelineStage.MEETING_BOOKED,

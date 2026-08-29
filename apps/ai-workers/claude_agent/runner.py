@@ -153,12 +153,6 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
         buyer = ctx.get("buyer_intelligence") or {}
         opportunities = ctx.get("opportunities") or {}
 
-        # Start the lead at the stage it has genuinely reached. Every lead
-        # persisted here already passed the verification agent, and most also
-        # completed research — starting them all at NEW_LEAD would misreport the
-        # funnel and force them through transitions that already happened.
-        initial_stage = "RESEARCH_COMPLETED" if intel else "VERIFIED"
-
         result = await api_client.create_lead(
             org_id,
             {
@@ -169,7 +163,6 @@ async def run_extraction(run_id: str, niche_filter: dict, org_context: dict | No
                 **_map_agent_scores(intel, buyer, opportunities),
                 "runId": run_id,
                 "filterId": niche_filter.get("id"),
-                "initialStage": initial_stage,
             },
         )
 

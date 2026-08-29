@@ -170,10 +170,6 @@ function LastEmail({ lead }: { lead: LeadRow }) {
 }
 
 const LABELS: Record<string, string> = {
-  NEW_LEAD: "New Lead",
-  VERIFIED: "Verified",
-  RESEARCH_COMPLETED: "Research Done",
-  UNDER_REVIEW: "Under Review",
   READY_FOR_OUTREACH: "Ready",
   EMAIL_1_SENT: "Email 1: Trigger",
   WAITING_EMAIL_2: "Waiting (E2)",
@@ -220,11 +216,14 @@ export default function PipelinePage() {
   const queryClient = useQueryClient();
   const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState<LeadRow | null>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [deleteStage, setDeleteStage] = useState("");
   const [deletingStage, setDeletingStage] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verifyProgress, setVerifyProgress] = useState<{ done: number; total: number } | null>(null);
   // How many cards are rendered per column, independent of how many exist —
   // a column used to render its whole list at once, so the page grew taller
   // as leads piled up in one stage. Fixed-height scrollable columns now
@@ -421,7 +420,7 @@ export default function PipelinePage() {
     try {
       await api.deleteLeadsByStage(deleteStage);
       queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
-        (rows ?? []).filter((r) => (r.pipelineState?.stage ?? "NEW_LEAD") !== deleteStage),
+        (rows ?? []).filter((r) => (r.pipelineState?.stage ?? "READY_FOR_OUTREACH") !== deleteStage),
       );
       setDeleteStage("");
     } catch (err) {
@@ -429,6 +428,50 @@ export default function PipelinePage() {
     } finally {
       setDeletingStage(false);
     }
+  }
+
+  /**
+   * Bulk "Verify emails" for the Ready column — every lead lands here on
+   * creation/promotion now, verified or not (Part: pipeline simplification,
+   * 2026-08-29), and this is the only thing that gets an unverified one
+   * (human-added, CSV-imported, Email Hub) from sitting there to actually
+   * drafting Email 1. Sequential per-lead calls with a live progress bar,
+   * same pattern as Lead Room's bulk delete — not a single opaque batch
+   * call, and not parallel, since a real NeverBounce key behind this is a
+   * rate-limited external API. Sourced from the cards already loaded for
+   * this column rather than a fresh fetch, same as deleteAllInStage above.
+   */
+  async function verifyAllInReady() {
+    const targets = (byStage.get(PipelineStage.READY_FOR_OUTREACH) ?? []).filter(
+      (l) => !l.verifiedEmail && l.email,
+    );
+    if (targets.length === 0) return;
+
+    setVerifying(true);
+    setError(null);
+    setNotice(null);
+    setVerifyProgress({ done: 0, total: targets.length });
+
+    let verified = 0;
+    let failed = 0;
+    for (const lead of targets) {
+      try {
+        const result: any = await api.verifyEmail(lead.id);
+        if (result.verifiedEmail) verified += 1;
+        else failed += 1;
+        queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
+          (rows ?? []).map((r) => (r.id === lead.id ? { ...r, verifiedEmail: !!result.verifiedEmail } : r)),
+        );
+      } catch {
+        failed += 1;
+      }
+      setVerifyProgress((p) => (p ? { done: p.done + 1, total: p.total } : p));
+    }
+
+    setNotice(`Verified ${verified} of ${targets.length} — ${failed} did not verify.`);
+    setVerifying(false);
+    setVerifyProgress(null);
+    invalidateLeads();
   }
 
   return (
@@ -484,6 +527,11 @@ export default function PipelinePage() {
           {error ?? (leadsQuery.error as Error).message}
         </div>
       )}
+      {notice && (
+        <div className="rounded-lg border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-3 py-2 text-sm text-good">
+          {notice}
+        </div>
+      )}
 
       {leadsQuery.isLoading ? (
         <LoadingRow label="Loading pipeline…" />
@@ -528,6 +576,27 @@ export default function PipelinePage() {
                 </span>
               </header>
 
+              {stage === PipelineStage.READY_FOR_OUTREACH && (() => {
+                const unverifiedCount = cards.filter((l) => !l.verifiedEmail && l.email).length;
+                return (
+                  <div className="border-b border-[var(--line)] px-3 py-2">
+                    <button
+                      type="button"
+                      disabled={verifying || unverifiedCount === 0}
+                      onClick={verifyAllInReady}
+                      title="Re-check every unverified email in this column — a verified lead starts drafting Email 1 right away."
+                      className="w-full rounded border border-[var(--line)] px-2 py-1 text-[11px] font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-40"
+                    >
+                      {verifyProgress
+                        ? `Verifying… ${Math.round((verifyProgress.done / verifyProgress.total) * 100)}% (${verifyProgress.done}/${verifyProgress.total})`
+                        : unverifiedCount > 0
+                          ? `Verify ${unverifiedCount} email${unverifiedCount === 1 ? "" : "s"}`
+                          : "All emails verified"}
+                    </button>
+                  </div>
+                );
+              })()}
+
               <div
                 onScroll={(e) => handleColumnScroll(stage, e)}
                 className="flex h-[65vh] flex-col gap-2 overflow-y-auto p-2"
@@ -549,6 +618,14 @@ export default function PipelinePage() {
                       <div className="flex items-center gap-1.5">
                         <div className="truncate font-medium leading-snug text-ink">{lead.companyName}</div>
                         <SourceBadge source={lead.sourceLayer} />
+                        {stage === PipelineStage.READY_FOR_OUTREACH && !lead.verifiedEmail && (
+                          <span
+                            className="shrink-0 rounded-full bg-[rgb(var(--bad-rgb)/0.12)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-bad"
+                            title={lead.email ? "Email not yet verified — outreach won't start until it is" : "No email on this lead"}
+                          >
+                            Unverified
+                          </span>
+                        )}
                       </div>
                       <div className="mt-1.5 flex items-center justify-between gap-2">
                         <span className="truncate text-ink/55">{lead.industry ?? "—"}</span>
@@ -564,7 +641,7 @@ export default function PipelinePage() {
                     </Link>
                     <div className="mt-1.5 flex items-center gap-1.5">
                       {(() => {
-                        const currentStage = (lead.pipelineState?.stage ?? "NEW_LEAD") as PipelineStage;
+                        const currentStage = (lead.pipelineState?.stage ?? "READY_FOR_OUTREACH") as PipelineStage;
                         const backOptions = PIPELINE_STAGE_ORDER.filter((s) => isValidRewind(currentStage, s));
                         if (backOptions.length === 0) return null;
                         return (

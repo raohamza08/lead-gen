@@ -198,6 +198,16 @@ export class LeadsController {
     return this.leadsService.rewindTo(user.orgId, id, dto.stage);
   }
 
+  /** Re-checks this lead's email and starts outreach immediately if it now
+   *  verifies. See LeadsService.verifyEmail. */
+  @Post(":id/verify-email")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  verifyEmail(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.leadsService.verifyEmail(user.orgId, id);
+  }
+
   @Post(":id/emails/:emailMessageId/resend")
   @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
   @RequiresModule("LEAD_GENERATION")

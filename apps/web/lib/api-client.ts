@@ -244,6 +244,7 @@ export const api = {
   moveBack: (id: string) => request(`/leads/${id}/move-back`, { method: "POST" }),
   rewindLead: (id: string, stage: string) =>
     request(`/leads/${id}/rewind`, { method: "POST", body: JSON.stringify({ stage }) }),
+  verifyEmail: (id: string) => request(`/leads/${id}/verify-email`, { method: "POST" }),
   resendEmail: (id: string, emailMessageId: string) =>
     request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>

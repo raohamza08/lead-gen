@@ -27,10 +27,6 @@ enum Role {
 // Declaration order is funnel order — see the note on the shared PipelineStage
 // enum in packages/types/src/enums.ts.
 enum PipelineStage {
-  NEW_LEAD
-  VERIFIED
-  RESEARCH_COMPLETED
-  UNDER_REVIEW
   READY_FOR_OUTREACH
   EMAIL_1_SENT
   WAITING_EMAIL_2
@@ -606,7 +602,7 @@ model AgentReview {
 model PipelineState {
   leadId          String   @id @map("lead_id")
   lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  stage           PipelineStage @default(NEW_LEAD)
+  stage           PipelineStage @default(READY_FOR_OUTREACH)
   enteredStageAt  DateTime @default(now()) @map("entered_stage_at")
   nextActionAt    DateTime? @map("next_action_at")
   // BullMQ delayed-job id for the pending wait-timer (Part C6). Lets the

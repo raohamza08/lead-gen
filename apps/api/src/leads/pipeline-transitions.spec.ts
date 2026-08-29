@@ -4,10 +4,6 @@ import { ALLOWED_TRANSITIONS, isValidTransition } from "./pipeline-transitions";
 describe("isValidTransition", () => {
   it("allows the full documented forward path", () => {
     const path: [PipelineStage, PipelineStage][] = [
-      [PipelineStage.NEW_LEAD, PipelineStage.VERIFIED],
-      [PipelineStage.VERIFIED, PipelineStage.RESEARCH_COMPLETED],
-      [PipelineStage.RESEARCH_COMPLETED, PipelineStage.UNDER_REVIEW],
-      [PipelineStage.UNDER_REVIEW, PipelineStage.READY_FOR_OUTREACH],
       [PipelineStage.READY_FOR_OUTREACH, PipelineStage.EMAIL_1_SENT],
       [PipelineStage.EMAIL_1_SENT, PipelineStage.WAITING_EMAIL_2],
       [PipelineStage.WAITING_EMAIL_2, PipelineStage.EMAIL_2_SENT],
@@ -39,13 +35,12 @@ describe("isValidTransition", () => {
   });
 
   it("rejects skipping stages", () => {
-    expect(isValidTransition(PipelineStage.NEW_LEAD, PipelineStage.READY_FOR_OUTREACH)).toBe(false);
-    expect(isValidTransition(PipelineStage.NEW_LEAD, PipelineStage.WON)).toBe(false);
-    expect(isValidTransition(PipelineStage.VERIFIED, PipelineStage.UNDER_REVIEW)).toBe(false);
+    expect(isValidTransition(PipelineStage.READY_FOR_OUTREACH, PipelineStage.WON)).toBe(false);
+    expect(isValidTransition(PipelineStage.EMAIL_1_SENT, PipelineStage.LINKEDIN_OUTREACH)).toBe(false);
   });
 
   it("rejects moving backwards", () => {
-    expect(isValidTransition(PipelineStage.UNDER_REVIEW, PipelineStage.VERIFIED)).toBe(false);
+    expect(isValidTransition(PipelineStage.WAITING_EMAIL_2, PipelineStage.READY_FOR_OUTREACH)).toBe(false);
     expect(isValidTransition(PipelineStage.WON, PipelineStage.NEGOTIATION)).toBe(false);
   });
 

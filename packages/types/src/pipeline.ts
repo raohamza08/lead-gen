@@ -19,10 +19,6 @@ import { PipelineStage } from "./enums";
  * a stranded deal is invisible in the funnel.
  */
 export const ALLOWED_TRANSITIONS: Record<PipelineStage, PipelineStage[]> = {
-  [PipelineStage.NEW_LEAD]: [PipelineStage.VERIFIED],
-  [PipelineStage.VERIFIED]: [PipelineStage.RESEARCH_COMPLETED],
-  [PipelineStage.RESEARCH_COMPLETED]: [PipelineStage.UNDER_REVIEW],
-  [PipelineStage.UNDER_REVIEW]: [PipelineStage.READY_FOR_OUTREACH],
   [PipelineStage.READY_FOR_OUTREACH]: [PipelineStage.EMAIL_1_SENT],
   [PipelineStage.EMAIL_1_SENT]: [PipelineStage.WAITING_EMAIL_2],
   [PipelineStage.WAITING_EMAIL_2]: [PipelineStage.EMAIL_2_SENT],

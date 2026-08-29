@@ -68,14 +68,20 @@ export class AnalyticsService {
     // that was ~1.2s of pure waiting where ~400ms does the same work.
     const [
       todaysLeads, weeklyLeads, monthlyLeads, verifiedLeads,
-      pendingReviews, wonDeals, lostDeals, meetingsBooked, scoreAgg, failedRuns,
+      awaitingVerification, wonDeals, lostDeals, meetingsBooked, scoreAgg, failedRuns,
       duplicateAgg, tasksWaiting,
     ] = await Promise.all([
       this.prisma.lead.count({ where: { orgId, createdAt: { gte: startOfToday } } }),
       this.prisma.lead.count({ where: { orgId, createdAt: { gte: startOfWeek } } }),
       this.prisma.lead.count({ where: { orgId, createdAt: { gte: startOfMonth } } }),
       this.prisma.lead.count({ where: { orgId, verifiedEmail: true } }),
-      this.prisma.pipelineState.count({ where: { stage: PipelineStage.UNDER_REVIEW, lead: { orgId } } }),
+      // Every lead lands at READY_FOR_OUTREACH on creation/promotion now —
+      // this used to count UNDER_REVIEW (a distinct stage), and now counts
+      // the thing that actually blocks outreach: sitting in Ready with an
+      // email nothing has verified yet. See EmailVerificationService.
+      this.prisma.lead.count({
+        where: { orgId, verifiedEmail: false, email: { not: null }, pipelineState: { stage: PipelineStage.READY_FOR_OUTREACH } },
+      }),
       this.prisma.pipelineState.count({ where: { stage: PipelineStage.WON, lead: { orgId } } }),
       this.prisma.pipelineState.count({ where: { stage: PipelineStage.LOST, lead: { orgId } } }),
       this.prisma.pipelineState.count({ where: { stage: PipelineStage.MEETING_BOOKED, lead: { orgId } } }),
@@ -122,7 +128,7 @@ export class AnalyticsService {
       duplicateRate: found > 0 ? Math.round((dup / (found + dup)) * 1000) / 10 : 0,
       avgLeadScore: Math.round(scoreAgg._avg.leadScore ?? 0),
       avgAiOpportunityScore: Math.round(scoreAgg._avg.aiOpportunityScore ?? 0),
-      pendingReviews,
+      awaitingVerification,
       tasksWaiting,
       meetingsBooked,
       wonDeals,

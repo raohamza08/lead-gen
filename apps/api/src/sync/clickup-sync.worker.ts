@@ -6,8 +6,6 @@ import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connectio
 import { ClickupClient } from "./clickup.client";
 
 const CLICKUP_STATUS_MAP: Record<string, string> = {
-  NEW_LEAD: "New Lead",
-  UNDER_REVIEW: "Under Review",
   READY_FOR_OUTREACH: "Ready for Outreach",
   EMAIL_1_SENT: "Email 1 Sent (Problem Trigger)",
   WAITING_EMAIL_2: "Waiting for Email 2",

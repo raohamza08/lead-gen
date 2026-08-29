@@ -18,9 +18,13 @@ const MAX_WAIT_MS = 10 * 60 * 1000;
  * just an approximation via a delay between dispatches. Dispatches through
  * the normal AgentDispatchQueue (so the existing retry/failure-notification
  * behavior still applies), then waits for that lead to actually finish —
- * signalled by its pipeline stage moving off NEW_LEAD, which
- * LeadsService.applyEnrichment always does once it runs, regardless of what
- * the enrichment found — before letting the next queued lead start.
+ * signalled by an AgentRun row for "lead_scoring" (Part: pipeline
+ * simplification, 2026-08-29 — this used to watch the pipeline stage move
+ * off NEW_LEAD, but a freshly-imported lead has no PipelineState at all
+ * until explicitly promoted, so that check never actually fired; scoring is
+ * the terminal agent in every enrichment run — see agent-architecture notes
+ * — so its AgentRun landing is the real completion signal) — before letting
+ * the next queued lead start.
  */
 @Injectable()
 export class ImportEnrichmentWorker implements OnModuleInit, OnModuleDestroy {
@@ -49,18 +53,23 @@ export class ImportEnrichmentWorker implements OnModuleInit, OnModuleDestroy {
 
   private async handle(job: Job<ImportEnrichmentJob>): Promise<void> {
     const { leadId, orgId } = job.data;
+    const dispatchedAt = new Date();
     await this.agentDispatch.add({ kind: "enrich", leadId, orgId });
 
     const startedAt = Date.now();
     while (Date.now() - startedAt < MAX_WAIT_MS) {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
-      const state = await this.prisma.pipelineState.findUnique({ where: { leadId } });
-      // Gone (lead deleted mid-import) or moved past NEW_LEAD — either way,
-      // nothing left to wait for.
-      if (!state || state.stage !== "NEW_LEAD") return;
+      const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { id: true } });
+      if (!lead) return; // deleted mid-import — nothing left to wait for
+
+      const scored = await this.prisma.agentRun.findFirst({
+        where: { leadId, agent: "lead_scoring", startedAt: { gte: dispatchedAt } },
+        select: { id: true },
+      });
+      if (scored) return;
     }
     this.logger.warn(
-      `Lead ${leadId} still at NEW_LEAD after ${MAX_WAIT_MS}ms — moving on to the next imported lead anyway`,
+      `Lead ${leadId} still not scored after ${MAX_WAIT_MS}ms — moving on to the next imported lead anyway`,
     );
   }
 }

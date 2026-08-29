@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue, Worker, Job } from "bullmq";
-import { ALLOWED_TRANSITIONS, PipelineStage } from "@leadgen/types";
+import { PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { SyncService } from "../sync/sync.service";
@@ -115,59 +115,31 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     // other stages are human- or reply-driven, not sequencer-driven
   }
 
-  /** Stages a lead walks through before it's ready to be contacted — the
-   *  segment autoAdvanceToOutreach below auto-chains instead of waiting for
-   *  a human to click "advance" at each one. */
-  private static readonly PRE_OUTREACH_CHAIN: PipelineStage[] = [
-    PipelineStage.NEW_LEAD,
-    PipelineStage.VERIFIED,
-    PipelineStage.RESEARCH_COMPLETED,
-    PipelineStage.UNDER_REVIEW,
-  ];
-
   /**
-   * Walks a lead straight through NEW_LEAD -> VERIFIED -> RESEARCH_COMPLETED
-   * -> UNDER_REVIEW -> READY_FOR_OUTREACH the moment it's ready, instead of
-   * waiting for a human to advance it one stage at a time (Part: autonomous
-   * system). A human can still add or edit a review note at any point —
-   * that no longer gates outreach from starting, it just stops being
-   * required before it can.
+   * Kicks off outreach for a lead already sitting at READY_FOR_OUTREACH —
+   * setting up LinkedIn and dispatching Email 1 — the moment its email is
+   * verified (Part: autonomous system). Every lead now lands at
+   * READY_FOR_OUTREACH on creation/promotion (there's no earlier stage to
+   * walk through any more), so this is just the verified-email gate that
+   * used to sit ahead of it, called from wherever verifiedEmail can flip to
+   * true: lead creation, CSV-promotion, enrichment landing verifiedEmail,
+   * or the "Verify emails" bulk action.
    *
-   * Never takes even the first step if the lead's email hasn't verified yet:
-   * auto-discovered leads can't reach this method without one (verification
-   * runs before they're ever persisted), but a manually-entered/imported
-   * lead can — and until it does, VERIFIED/RESEARCH_COMPLETED/UNDER_REVIEW
-   * are all still genuinely unearned, not just READY_FOR_OUTREACH. Confirmed
-   * live: promoting a batch of not-yet-enriched Lead Room leads walked them
-   * straight to "Under Review" instantly, with verifiedEmail still false and
-   * no research or score on the row — the old code only checked this right
-   * before the *last* hop, so every earlier stage got relabeled for free
-   * with nothing behind it. Once verification genuinely completes (and with
-   * it, research + scoring, since they're the same enrichment call), the
-   * whole chain still walks in one shot exactly as before — this only
-   * blocks the premature, no-work-behind-it version of that jump.
+   * Both onStageEntered side effects (setUpLinkedin, dispatchEmailDraft) are
+   * idempotent — a lead already past READY_FOR_OUTREACH, or already
+   * outreach-dispatched, is a safe no-op to call this against again.
    */
-  async autoAdvanceToOutreach(leadId: string): Promise<void> {
+  async maybeEnterOutreach(leadId: string): Promise<void> {
     const lead = await this.prisma.lead.findUnique({
       where: { id: leadId },
       select: { verifiedEmail: true },
     });
-    if (!lead) return;
-    if (!lead.verifiedEmail) return;
+    if (!lead?.verifiedEmail) return;
 
-    let state = await this.prisma.pipelineState.findUnique({ where: { leadId } });
-    while (state && SequencerService.PRE_OUTREACH_CHAIN.includes(state.stage as PipelineStage)) {
-      const next = ALLOWED_TRANSITIONS[state.stage as PipelineStage]?.[0];
-      if (!next) break;
+    const state = await this.prisma.pipelineState.findUnique({ where: { leadId } });
+    if (!state || state.stage !== PipelineStage.READY_FOR_OUTREACH) return;
 
-      state = await this.prisma.pipelineState.update({
-        where: { leadId },
-        data: { stage: next, previousStage: state.stage, enteredStageAt: new Date() },
-      });
-      await this.prisma.lead.update({ where: { id: leadId }, data: { lastActivityAt: new Date() } });
-      await this.sync.onStageChanged(leadId, next);
-      await this.onStageEntered(leadId, next);
-    }
+    await this.onStageEntered(leadId, PipelineStage.READY_FOR_OUTREACH);
   }
 
   private async handleWaitJob(job: Job<{ leadId: string; nextStage: PipelineStage }>) {

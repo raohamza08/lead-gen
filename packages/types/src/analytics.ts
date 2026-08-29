@@ -6,7 +6,7 @@ export interface AnalyticsSummary {
   duplicateRate: number;
   avgLeadScore: number;
   avgAiOpportunityScore: number;
-  pendingReviews: number;
+  awaitingVerification: number;
   tasksWaiting: number;
   meetingsBooked: number;
   wonDeals: number;
