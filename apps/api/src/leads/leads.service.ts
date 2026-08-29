@@ -6,6 +6,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { randomUUID } from "crypto";
 import { Prisma } from "@prisma/client";
 import { LeadSourceLayer, PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
@@ -1064,9 +1065,20 @@ export class LeadsService {
    * lead import). Each row gets the exact same duplicate check a single
    * manual add does — a company already in the system is skipped, never
    * merged or overwritten. Enrichment for every created lead is queued
-   * through ImportEnrichmentQueue (concurrency 1) only after every row has
-   * been inserted, so the AI work happens one lead at a time and a slow
-   * first lead never delays the 50th from even being created.
+   * through ImportEnrichmentQueue (concurrency 1, deliberately — see that
+   * queue's own docblock) only after every row has been inserted.
+   *
+   * Batched, not per-row: this DB sits in a different region from the app
+   * server (~200-400ms per round trip, see CacheService's docblock), and
+   * the old version did up to 4 duplicate-check queries plus a 2-statement
+   * insert transaction PER ROW — ~9000+ round trips for a 1500-row import.
+   * Confirmed live: leads visibly trickled into the table one at a time
+   * over tens of minutes. Every existing lead's dedupe identities (website
+   * domain, email, LinkedIn slug, company-name key) are fetched once into
+   * in-memory Sets; each accepted row's identities are added to those same
+   * Sets immediately so a later row in the SAME CSV that duplicates an
+   * earlier one is still caught, exactly like the old sequential version.
+   * Inserts happen via chunked createMany instead of one row at a time.
    */
   async importLeads(
     orgId: string,
@@ -1080,9 +1092,25 @@ export class LeadsService {
       throw new BadRequestException(`Could not parse this file as CSV: ${(err as Error).message}`);
     }
 
-    const createdIds: string[] = [];
-    let duplicateCount = 0;
+    const [existingDomains, existingEmails, existingLinkedinSlugs, existingCompanyKeys] = await Promise.all([
+      this.prisma.lead.findMany({ where: { orgId, websiteDomain: { not: null } }, select: { websiteDomain: true } }),
+      this.prisma.lead.findMany({ where: { orgId, email: { not: null } }, select: { email: true } }),
+      this.prisma.lead.findMany({ where: { orgId, linkedinSlug: { not: null } }, select: { linkedinSlug: true } }),
+      this.prisma.lead.findMany({ where: { orgId }, select: { companyNameKey: true } }),
+    ]);
+    const domainSet = new Set(existingDomains.map((l) => l.websiteDomain as string));
+    const emailSet = new Set(existingEmails.map((l) => (l.email as string).toLowerCase()));
+    const linkedinSet = new Set(existingLinkedinSlugs.map((l) => l.linkedinSlug as string));
+    const companyKeySet = new Set(existingCompanyKeys.map((l) => l.companyNameKey));
+
     const failed: { row: number; reason: string }[] = [];
+    let duplicateCount = 0;
+    const accepted: {
+      rowNumber: number;
+      leadId: string;
+      dto: Partial<CreateManualLeadDto> & { companyName: string };
+      websiteDomain?: string;
+    }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       // +2: 1-indexed for a human, plus the header row itself isn't a data row.
@@ -1095,40 +1123,98 @@ export class LeadsService {
         continue;
       }
       const dto = { ...fields, companyName } as Partial<CreateManualLeadDto> & { companyName: string };
+      const websiteDomain = extractDomain(dto.website);
+      const email = dto.email?.toLowerCase();
+      const linkedinSlug = normaliseLinkedin(dto.linkedinUrl);
+      const companyKey = normaliseCompanyName(dto.companyName);
 
+      const isDuplicate =
+        (!!websiteDomain && domainSet.has(websiteDomain)) ||
+        (!!email && emailSet.has(email)) ||
+        (!!linkedinSlug && linkedinSet.has(linkedinSlug)) ||
+        (!!companyKey && companyKeySet.has(companyKey));
+
+      if (isDuplicate) {
+        duplicateCount++;
+        continue;
+      }
+
+      if (websiteDomain) domainSet.add(websiteDomain);
+      if (email) emailSet.add(email);
+      if (linkedinSlug) linkedinSet.add(linkedinSlug);
+      if (companyKey) companyKeySet.add(companyKey);
+
+      accepted.push({ rowNumber, leadId: randomUUID(), dto, websiteDomain });
+    }
+
+    const created: typeof accepted = [];
+    const CHUNK_SIZE = 200;
+    for (let i = 0; i < accepted.length; i += CHUNK_SIZE) {
+      const chunk = accepted.slice(i, i + CHUNK_SIZE);
       try {
-        const websiteDomain = extractDomain(dto.website);
-        const existing = await this.findExistingDuplicate(
-          orgId,
-          { companyName: dto.companyName, email: dto.email, linkedinUrl: dto.linkedinUrl },
-          websiteDomain,
-        );
-        if (existing) {
-          duplicateCount++;
-          continue;
-        }
-
-        const lead = await this.insertManualLead(orgId, dto, websiteDomain);
-        createdIds.push(lead.id);
-
-        this.sync.onLeadCreated(lead.id).catch((err) =>
-          this.logger.warn(`Sync dispatch failed for imported lead ${lead.id}: ${(err as Error).message}`),
-        );
-        this.socialMedia
-          .runAutomationsForNewLead({ id: lead.id, orgId, companyName: dto.companyName, industry: dto.industry })
-          .catch((err) => this.logger.warn(`Social automation dispatch failed for imported lead ${lead.id}: ${(err as Error).message}`));
+        await this.prisma.lead.createMany({
+          data: chunk.map(({ leadId, dto, websiteDomain }) => ({
+            id: leadId,
+            orgId,
+            companyName: dto.companyName,
+            sourceLayer: LeadSourceLayer.MANUAL,
+            companyNameKey: normaliseCompanyName(dto.companyName),
+            linkedinSlug: normaliseLinkedin(dto.linkedinUrl),
+            website: dto.website,
+            websiteDomain,
+            linkedinUrl: dto.linkedinUrl,
+            contactName: dto.contactName,
+            contactLinkedinUrl: dto.contactLinkedinUrl,
+            jobTitle: dto.jobTitle,
+            email: dto.email,
+            personalEmail: dto.personalEmail,
+            phone: dto.phone,
+            industry: dto.industry,
+            country: dto.country,
+            city: dto.city,
+            employeeCount: dto.employeeCount,
+            businessDescription: dto.businessDescription,
+            campaignId: dto.campaignId,
+            researchEvidence: dto.notes ? `[MANUAL ENTRY] ${dto.notes}` : "[MANUAL ENTRY]",
+          })),
+        });
+        await this.prisma.leadScore.createMany({
+          data: chunk.map(({ leadId }) => ({
+            leadId,
+            leadScore: 0,
+            confidenceScore: 0,
+            aiOpportunityScore: 0,
+            automationScore: 0,
+            crmReadinessScore: 0,
+            websiteQualityScore: 0,
+            fitReason: "Added manually — not yet researched or scored.",
+          })),
+        });
+        created.push(...chunk);
       } catch (err) {
-        failed.push({ row: rowNumber, reason: (err as Error).message });
+        // createMany doesn't report which row in the chunk failed, so the
+        // whole chunk is reported as failed rather than silently losing
+        // rows or guessing which one was the problem.
+        for (const row of chunk) failed.push({ row: row.rowNumber, reason: (err as Error).message });
       }
     }
 
-    for (const leadId of createdIds) {
+    for (const { leadId, dto } of created) {
+      this.sync.onLeadCreated(leadId).catch((err) =>
+        this.logger.warn(`Sync dispatch failed for imported lead ${leadId}: ${(err as Error).message}`),
+      );
+      this.socialMedia
+        .runAutomationsForNewLead({ id: leadId, orgId, companyName: dto.companyName, industry: dto.industry })
+        .catch((err) => this.logger.warn(`Social automation dispatch failed for imported lead ${leadId}: ${(err as Error).message}`));
+    }
+
+    for (const { leadId } of created) {
       await this.importEnrichment.add({ leadId, orgId }).catch((err) =>
         this.logger.warn(`Import-enrichment dispatch failed for lead ${leadId}: ${(err as Error).message}`),
       );
     }
 
-    return { created: createdIds.length, duplicates: duplicateCount, failed };
+    return { created: created.length, duplicates: duplicateCount, failed };
   }
 
   /**
