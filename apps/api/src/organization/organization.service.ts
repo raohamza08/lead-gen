@@ -7,6 +7,10 @@ import { UpdateOrgBrandingDto } from "./dto/update-org-branding.dto";
 
 export interface OrgBranding {
   emailOrgName: string;
+  /** The inbox From display name — independent of emailOrgName/
+   *  emailSenderName, see UpdateOrgBrandingDto's docblock. Falls back to
+   *  emailOrgName when the org hasn't set one explicitly. */
+  emailFromName: string;
   emailSenderName: string;
   /** Physical mailing address rendered into {{org.postal_address}} — a
    *  CAN-SPAM requirement for commercial email, same as the unsubscribe
@@ -52,8 +56,14 @@ export class OrganizationService {
   private async fetchBranding(orgId: string): Promise<OrgBranding> {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
     const settings = (org.settings as Record<string, unknown>) ?? {};
+    const emailOrgName = (settings.emailOrgName as string)?.trim() || org.name;
     return {
-      emailOrgName: (settings.emailOrgName as string)?.trim() || org.name,
+      emailOrgName,
+      // Falls back to the company name, not a separate hardcoded default —
+      // an org that only ever set emailOrgName (pre-existing orgs, or one
+      // that hasn't visited this field yet) keeps the inbox showing that
+      // name rather than silently reverting to something else.
+      emailFromName: (settings.emailFromName as string)?.trim() || emailOrgName,
       emailSenderName: (settings.emailSenderName as string)?.trim() || "The Team",
       postalAddress: (settings.postalAddress as string)?.trim() || "",
     };
