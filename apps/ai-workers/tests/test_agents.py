@@ -15,6 +15,7 @@ SEEDS = {
     "lead_acquisition": ("niche_filter", "org_context", "attempt", "already_found"),
     "lead_enrichment": ("candidate", "verification", "org_context"),
     "manual_lead_enrichment": ("candidate", "org_context"),
+    "company_intelligence_only": ("candidate", "org_context"),
     "rescore": ("candidate", "verification", "org_context"),
     "outreach": ("lead", "org_context", "case_study", "sequence_step"),
     "email_only": ("lead", "org_context", "case_study", "sequence_step"),

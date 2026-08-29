@@ -408,6 +408,15 @@ export class LeadsService {
       this.sequencer.maybeEnterOutreach(id).catch((err) =>
         this.logger.warn(`Outreach entry failed for lead ${id}: ${(err as Error).message}`),
       );
+      // Company research is spent here, on promotion, rather than at
+      // creation (Part: token reduction, 2026-08-29) — createManual/
+      // importLeads' own enrichment dispatch no longer includes
+      // company_intelligence (see registry.py's "manual_lead_enrichment"),
+      // so every un-promoted Lead Room lead that never makes it here never
+      // costs this call either.
+      this.agentDispatch.add({ kind: "company_intelligence", leadId: id, orgId }).catch((err) =>
+        this.logger.warn(`Company intelligence dispatch failed for lead ${id}: ${(err as Error).message}`),
+      );
     }
 
     return { promoted: candidates.length };

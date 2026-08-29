@@ -494,3 +494,69 @@ async def run_manual_enrichment_in_background(
         await run_manual_enrichment(lead_id, org_id, org_context)
     except Exception:
         logger.exception("manual enrichment for lead %s failed", lead_id)
+
+
+async def run_company_intelligence(lead_id: str, org_id: str, org_context: dict | None = None) -> None:
+    """Runs company_intelligence alone against a lead that's just been
+    promoted to Pipeline (Part: token reduction, 2026-08-29) — see
+    "company_intelligence_only" in registry.py for why this is split out of
+    run_manual_enrichment rather than run there for every hand-entered/
+    imported lead regardless of whether it's ever promoted."""
+    org_context = dict(org_context or {})
+    org_context["promptOverrides"] = await api_client.get_prompt_overrides(org_id)
+    lead = await api_client.get_lead_detail(lead_id, org_id)
+    candidate = _lead_to_candidate(lead)
+
+    async def announce_start(agent) -> None:
+        await api_client.record_agent_started(org_id, lead_id, agent.name, agent.responsibility)
+
+    async def stream(record) -> None:
+        record.lead_id = lead_id
+        await api_client.record_agent_runs(
+            org_id,
+            None,
+            [
+                {
+                    "agent": record.agent,
+                    "status": record.status,
+                    "durationMs": record.duration_ms,
+                    "attempts": record.attempts,
+                    "error": record.error,
+                    "notes": record.notes,
+                    "leadId": record.lead_id,
+                }
+            ],
+        )
+
+    orchestrator = build("company_intelligence_only", seed_keys=("candidate", "org_context"))
+    ctx = AgentContext(
+        run_id=f"company-intel-{lead_id}",
+        org_id=org_id,
+        data={"candidate": candidate, "org_context": org_context},
+    )
+    await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
+
+    intel = ctx.get("company_intelligence") or {}
+    # audit/buyer/opps are deliberately empty — this pipeline doesn't run
+    # those agents, and both mappers already drop keys with no value, so
+    # passing {} for them is just "nothing from that agent" rather than a
+    # special case.
+    patch = {
+        **_map_intelligence_fields(intel, {}, {}, {}),
+        **_map_agent_scores(intel, {}, {}),
+    }
+    patch = {k: v for k, v in patch.items() if v is not None}
+
+    try:
+        await api_client.apply_enrichment(lead_id, org_id, patch)
+    except Exception:
+        logger.exception("failed to apply company intelligence results for lead %s", lead_id)
+
+
+async def run_company_intelligence_in_background(
+    lead_id: str, org_id: str, org_context: dict | None = None
+) -> None:
+    try:
+        await run_company_intelligence(lead_id, org_id, org_context)
+    except Exception:
+        logger.exception("company intelligence for lead %s failed", lead_id)

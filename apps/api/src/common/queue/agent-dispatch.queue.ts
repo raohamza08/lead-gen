@@ -14,6 +14,7 @@ import { getRedisConnection, QUEUE_NAMES } from "./redis-connection";
  */
 export type AgentDispatchJob =
   | { kind: "enrich"; leadId: string; orgId: string }
+  | { kind: "company_intelligence"; leadId: string; orgId: string }
   | {
       kind: "email_draft";
       leadId: string;

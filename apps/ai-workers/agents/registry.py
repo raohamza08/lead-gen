@@ -89,15 +89,27 @@ PIPELINES: dict[str, tuple[str, ...]] = {
     # Verification is the soft variant: a manual lead with an unverified email
     # still gets fully enriched, it just carries that as information rather
     # than being dropped (see LeadVerificationAgent.reject_unqualified).
+    #
+    # company_intelligence is deliberately NOT here (Part: token reduction,
+    # 2026-08-29) — it used to run immediately for every hand-entered/CSV-
+    # imported lead, including the many that never get promoted out of Lead
+    # Room. See "company_intelligence_only" below: it runs once, on promotion
+    # to Pipeline, only for leads the user actually chose to move forward.
     "manual_lead_enrichment": (
         "lead_verification_soft",
-        "company_intelligence",
         "website_audit",
         "buyer_intelligence",
         "ai_opportunity",
         "lead_scoring",
         "agent_review",
     ),
+    # Company research for a lead the user just promoted to Pipeline (Part:
+    # token reduction, 2026-08-29) — split out of manual_lead_enrichment
+    # above so this one call is spent only on leads reaching Ready, not
+    # every raw import. Safe to run standalone: company_intelligence only
+    # requires "candidate" (see intelligence_agents.py), nothing website_audit/
+    # buyer_intelligence/ai_opportunity/lead_scoring produced upstream.
+    "company_intelligence_only": ("company_intelligence",),
     # Cheap re-score after a human edits the review notes: no external calls
     # beyond the scorer itself.
     "rescore": ("lead_scoring",),

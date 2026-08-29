@@ -15,6 +15,7 @@ from agents import PIPELINES, describe_fleet
 from claude_agent.runner import request_cancel as request_extraction_cancel
 from claude_agent.runner import run_in_background as run_extraction_in_background
 from claude_agent.runner import run_manual_enrichment_in_background
+from claude_agent.runner import run_company_intelligence_in_background
 from gemini_agent.runner import run_email_draft
 from outreach_runner import (
     run_case_study_review,
@@ -190,6 +191,16 @@ async def start_manual_enrichment(req: ManualEnrichmentRequest, background_tasks
     exists — triggered once automatically when a manual lead is created
     (LeadsService.createManual), and on demand from the lead's detail page."""
     background_tasks.add_task(run_manual_enrichment_in_background, req.leadId, req.orgId, req.orgContext)
+    return {"accepted": True, "leadId": req.leadId}
+
+
+@app.post("/lead-gen/company-intelligence")
+async def start_company_intelligence(req: ManualEnrichmentRequest, background_tasks: BackgroundTasks):
+    """Runs company_intelligence alone against a lead that's just been
+    promoted to Pipeline — triggered from LeadsService.promoteToPipeline, not
+    at lead creation (Part: token reduction, 2026-08-29). See
+    "company_intelligence_only" in agents/registry.py."""
+    background_tasks.add_task(run_company_intelligence_in_background, req.leadId, req.orgId, req.orgContext)
     return {"accepted": True, "leadId": req.leadId}
 
 
