@@ -78,6 +78,17 @@ enum ExtractionRunStatus {
   CANCELLED
 }
 
+/// RUNNING is a lock, not just a status: AgentExecutionService.start()
+/// refuses to acquire it again for the same (leadId, agent) unless the
+/// existing row is stale (see STALE_RUNNING_MS) — this is what stops a retry
+/// and a manual re-trigger from running the same agent twice at once.
+enum AgentExecutionStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED_RETRY_SCHEDULED
+  FAILED_TERMINAL
+}
+
 enum EmailProvider {
   GMAIL
   MICROSOFT_365
@@ -155,6 +166,8 @@ model Organization {
   hashtagGroups    HashtagGroup[]
   contentTemplates ContentTemplate[]
   socialAutomations SocialAutomation[]
+  hubEmailOpenTracking HubEmailOpenTracking[]
+  auditLogs    AuditLog[]
 
   @@map("organizations")
 }
@@ -175,6 +188,28 @@ model User {
   leadGenAccess     Boolean @default(true) @map("lead_gen_access")
   emailHubAccess    Boolean @default(true) @map("email_hub_access")
   socialMediaAccess Boolean @default(true) @map("social_media_access")
+  /// The org's single authorized administrator (Part: Notification Center &
+  /// Admin/Audit, 2026-08-31) — distinct from Role.ADMIN, which any admin can
+  /// already grant to any other user. This flag gates System Logs and
+  /// SECURITY-category notifications; it is a legitimate, visible column on
+  /// a real user row (never hidden from DB queries), transferable only by
+  /// whoever currently holds it (see UsersService.transferPrimaryAdmin) —
+  /// never a hidden bypass. At most one true per org, enforced in the
+  /// service layer, not a DB constraint (a partial unique index would work
+  /// too, but the transfer is already transactional at the application
+  /// layer where the invariant is easier to express and test).
+  isPrimaryAdmin    Boolean @default(false) @map("is_primary_admin")
+  /// Personal profile fields (Part: User Profile, 2026-08-31) — all optional,
+  /// unlike `name` (set at account creation, required). `avatarStorageKey`
+  /// is the disk key from LocalDiskMediaStorageService, not a public URL —
+  /// the servable URL is computed on read (GET /users/:id/avatar) the same
+  /// way social media's MediaAsset does it, so changing the storage backend
+  /// later doesn't mean rewriting stored URLs.
+  displayName    String? @map("display_name")
+  jobTitle       String? @map("job_title")
+  phone          String?
+  avatarStorageKey String? @map("avatar_storage_key")
+  avatarMimeType   String? @map("avatar_mime_type")
   createdAt DateTime @default(now()) @map("created_at")
 
   assignedLeads Lead[] @relation("AssignedUser")
@@ -186,8 +221,43 @@ model User {
   socialAccountAccess SocialAccountAccess[]
   assignedConversations SocialConversation[]
   socialInternalNotes   SocialInternalNote[]
+  notificationStates    NotificationUserState[]
+  notificationPreference NotificationPreference?
 
   @@map("users")
+}
+
+/// Per-user notification settings (Part: Desktop notifications, 2026-08-31)
+/// — one row per user, created lazily on first read (see
+/// NotificationPreferencesService.get) rather than at signup, so adding a
+/// new preference field later doesn't require a data migration for every
+/// existing user. Category toggles mirror NotificationCategory 1:1 rather
+/// than the spec's example labels (New Emails/Lead Failures/etc.) — those
+/// examples don't cleanly separate (e.g. "Lead Failures" vs. "Agent
+/// Failures" are the same underlying AGENTS-category events), and reusing
+/// the categories that already drive delivery eligibility (see
+/// NotificationsService) keeps one taxonomy instead of two that could drift
+/// apart.
+model NotificationPreference {
+  id             String  @id @default(uuid())
+  userId         String  @unique @map("user_id")
+  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inAppEnabled   Boolean @default(true) @map("in_app_enabled")
+  /// Off by default — requires explicit opt-in, same reasoning as email
+  /// tracking's default-off checkbox: no surprise OS-level popups.
+  desktopEnabled Boolean @default(false) @map("desktop_enabled")
+  soundEnabled   Boolean @default(true) @map("sound_enabled")
+  /// DEFAULT | SOFT | PROFESSIONAL | MINIMAL | ALERT | NONE
+  soundTone      String  @default("DEFAULT") @map("sound_tone")
+  emailEnabled       Boolean @default(true) @map("email_enabled")
+  leadsEnabled       Boolean @default(true) @map("leads_enabled")
+  agentsEnabled      Boolean @default(true) @map("agents_enabled")
+  automationsEnabled Boolean @default(true) @map("automations_enabled")
+  socialEnabled      Boolean @default(true) @map("social_enabled")
+  systemEnabled      Boolean @default(true) @map("system_enabled")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("notification_preferences")
 }
 
 model RefreshToken {
@@ -358,6 +428,42 @@ model AgentRun {
   @@map("agent_runs")
 }
 
+/// Current retry/lock state of one (lead, agent) pair — NOT a log (AgentRun
+/// above is the historical trail). Generalizes the fix in commit ae6d24e
+/// (email-drafting failures silently stranding leads) to every agent kind
+/// dispatched through AgentDispatchQueue: `agent` matches
+/// AgentDispatchJob["kind"] (enrich | company_intelligence | email_draft |
+/// linkedin_draft) so a retry can be replayed by re-adding `payload` to that
+/// same queue. One row per (leadId, agent) — a fresh dispatch upserts it.
+model AgentExecution {
+  id            String   @id @default(uuid())
+  leadId        String   @map("lead_id")
+  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  agent         String
+  /// Identifies which attempt last wrote this row — a success/failure report
+  /// carrying a stale executionId (a slow response from an attempt already
+  /// superseded by a newer retry) is ignored rather than corrupting the
+  /// current attempt's state.
+  executionId   String   @map("execution_id")
+  status        AgentExecutionStatus @default(RUNNING)
+  attempt       Int      @default(1)
+  /// Short, human-readable ("Claude limit reached") — shown on the lead
+  /// card. Full exception/traceback goes in errorDetail, server logs only.
+  errorSummary  String?  @map("error_summary")
+  errorDetail   String?  @map("error_detail")
+  /// Exact extra fields AgentDispatchQueue needs to redispatch this agent
+  /// (e.g. email_draft's step/orgContext/caseStudy) — the retry sweep does
+  /// `agentDispatch.add({ kind: agent, leadId, orgId, ...payload })`.
+  payload       Json?
+  startedAt     DateTime @default(now()) @map("started_at")
+  lastAttemptAt DateTime @default(now()) @map("last_attempt_at")
+  nextRetryAt   DateTime? @map("next_retry_at")
+
+  @@unique([leadId, agent])
+  @@index([status, nextRetryAt])
+  @@map("agent_executions")
+}
+
 /// The analytics/learning agents' latest output, persisted so it survives a
 /// page reload instead of living only in the browser's React state until the
 /// next "Run analysis" click. One row per org — each run overwrites the
@@ -473,6 +579,8 @@ model Lead {
   /// Every agent execution attributable to this lead, in run order — the
   /// per-lead trail behind the Automation dashboard's aggregate view.
   agentRuns           AgentRun[]
+  /// Current retry/lock state per agent kind — see AgentExecution's docblock.
+  agentExecutions     AgentExecution[]
   notifications       Notification[]
   inboundEmailThreads InboundEmailThread[]
 
@@ -732,11 +840,37 @@ model EmailMessage {
   /// email on file" from a transient SMTP error apart from reading server
   /// logs by hand.
   failureReason String? @map("failure_reason")
+  /// Whether the outreach-tracking pixel should be embedded in this message
+  /// (Part: reliability overhaul, 2026-08-31 — tracking used to be injected
+  /// unconditionally). Defaults off: a human explicitly opts in when
+  /// approving/sending the draft, rather than every outbound email silently
+  /// carrying a pixel.
+  trackEmailOpen Boolean @default(false) @map("track_email_open")
 
   events        EmailEvent[]
 
   @@index([leadId])
   @@map("email_messages")
+}
+
+/// Open tracking for Email Hub compose/reply sends (Part: reliability
+/// overhaul, 2026-08-31) — deliberately separate from EmailMessage/EmailEvent
+/// above, which belong to the Lead-linked 5-email outreach sequence. A Hub
+/// compose/reply has no EmailMessage row to attach to, so this is its own
+/// minimal row, created only when the sender checks "Track Email" — no row
+/// is ever created otherwise, so there is no way for a false "opened" signal
+/// to occur for an untracked send.
+model HubEmailOpenTracking {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id])
+  toAddress String   @map("to_address")
+  subject   String
+  sentAt    DateTime @default(now()) @map("sent_at")
+  openedAt  DateTime? @map("opened_at")
+
+  @@index([orgId])
+  @@map("hub_email_open_tracking")
 }
 
 model EmailEvent {
@@ -1008,8 +1142,18 @@ model SuppressionEntry {
   @@map("suppression_entries")
 }
 
+/// Generalized in place (Part: Admin/System Logs, 2026-08-31) — this used to
+/// be lead-only (populated by one generic interceptor that fired on any
+/// `:id`-mutation route and mislabeled everything as a lead action). Now
+/// covers auth, user management, permission denials, and lead mutations
+/// under one queryable table, gated to the org's primary admin via
+/// AuditLogController. `leadId` stays for the existing lead-specific
+/// relation/queries; `entityType`/`entityId` is the generic reference for
+/// everything else (a user, a permission check, an agent execution).
 model AuditLog {
   id        String   @id @default(uuid())
+  orgId     String?  @map("org_id")
+  org       Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
   leadId    String?  @map("lead_id")
   // SetNull rather than the default: deleting a lead must keep the audit
   // trail entry (who did what, when) even though the row it was about is
@@ -1017,24 +1161,58 @@ model AuditLog {
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
   actorId   String?  @map("actor_id")
   actor     User?    @relation(fields: [actorId], references: [id])
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
   action    String
+  /// SUCCESS | FAILURE — a failed login or a denied permission check is as
+  /// important to have on record as a successful mutation.
+  result    String   @default("SUCCESS")
+  ipAddress String?  @map("ip_address")
+  metadata  Json     @default("{}")
   diff      Json     @default("{}")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([leadId])
+  @@index([orgId, createdAt])
+  @@index([actorId, createdAt])
   @@map("audit_logs")
 }
 
-/// Surfaced when automatic recovery fails and a human genuinely needs to
-/// know — an agent-dispatch job exhausting its retries, a pipeline hitting a
-/// permanent failure. Everyday agent activity (OK/DEGRADED runs, normal
-/// stage transitions) does NOT create one of these; that's what AgentRun and
-/// the live event stream are for. A Notification means "autonomous recovery
-/// could not fix this on its own."
+/// Which module-access flag (or admin tier) a NotificationCategory requires
+/// to be visible to a given user — enforced identically on the REST list
+/// query and the realtime push (Part: Notification Center, 2026-08-31), so
+/// "don't create it for everyone and hide it in the frontend" is true at the
+/// data layer. SYSTEM/ERRORS/OTHER require no extra gate beyond active org
+/// membership; SECURITY is visible only to the org's primary admin.
+/// SOCIAL requires socialMediaAccess, same shape as EMAIL/leadGenAccess.
+enum NotificationCategory {
+  EMAIL
+  LEADS
+  AGENTS
+  AUTOMATIONS
+  SOCIAL
+  SYSTEM
+  ERRORS
+  SECURITY
+  OTHER
+}
+
+/// One row per event, not per recipient — who can see it is computed live
+/// from `category` (see NotificationCategory) rather than fanned out into a
+/// row per user, since eligibility is a coarse module-level rule, not a
+/// hand-picked recipient list (Part: Notification Center, 2026-08-31,
+/// replacing the previous org-wide-only design). Read/dismissed state is
+/// per-user — see NotificationUserState.
 model Notification {
   id        String   @id @default(uuid())
   orgId     String   @map("org_id")
   org       Organization @relation(fields: [orgId], references: [id])
+  category  NotificationCategory @default(OTHER)
+  /// Short header shown in bold ("Lead Automation Failed") — `message` is
+  /// the one-line body underneath it. Existing `type` stays as the specific
+  /// machine-readable event key (EMAIL_DRAFT_FAILED, etc.), now purely
+  /// informational/for filtering, not the only thing rendered.
+  title     String   @default("")
   leadId    String?  @map("lead_id")
   lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
   /// Set for Social Inbox notifications (new message, assignment) — parallel
@@ -1042,14 +1220,48 @@ model Notification {
   /// shape rather than a polymorphic target.
   conversationId String?  @map("conversation_id")
   conversation   SocialConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  /// Generic entity reference for types leadId/conversationId don't cover
+  /// (an inbound email thread, an agent execution) — kept alongside the two
+  /// typed FKs above rather than replacing them, since those still back
+  /// real relations/queries elsewhere.
+  entityType String? @map("entity_type")
+  entityId   String? @map("entity_id")
+  /// Precomputed server-side deep link ("/leads/104") — the frontend
+  /// navigates here directly instead of guessing from leadId/conversationId/
+  /// type, per "the backend notification record should contain enough
+  /// information to reliably identify the related entity."
+  actionUrl String? @map("action_url")
   type      String
   severity  String   @default("ERROR") // ERROR | WARNING
   message   String
-  read      Boolean  @default(false)
   createdAt DateTime @default(now()) @map("created_at")
 
-  @@index([orgId, read, createdAt])
+  userStates NotificationUserState[]
+
+  @@index([orgId, category, createdAt])
   @@map("notifications")
+}
+
+/// Per-user read/dismissed state for a Notification (Part: Notification
+/// Center, 2026-08-31) — split out because one Notification row can be
+/// visible to several users (everyone in the org with the required module
+/// access), and "User A marking read/clearing must not affect User B" rules
+/// out a single shared `read` boolean on the Notification itself. A row's
+/// absence for (notificationId, userId) means unread + not dismissed — no
+/// row is created just to represent "unread", only on an actual read or
+/// dismiss action.
+model NotificationUserState {
+  id             String   @id @default(uuid())
+  notificationId String   @map("notification_id")
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  userId         String   @map("user_id")
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime? @map("read_at")
+  dismissedAt    DateTime? @map("dismissed_at")
+
+  @@unique([notificationId, userId])
+  @@index([userId])
+  @@map("notification_user_states")
 }
 
 // ============================================================================

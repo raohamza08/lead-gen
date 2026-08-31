@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma, SocialAccount } from "@prisma/client";
+import { Prisma, SocialAccount, NotificationCategory } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -125,10 +125,15 @@ export class SocialInboxIngestService {
         socialAccountId: socialAccount.id,
       });
       await this.notifications.notify(socialAccount.orgId, {
+        category: NotificationCategory.SOCIAL,
         type: "SOCIAL_MESSAGE_RECEIVED",
         severity: "WARNING",
+        title: "New Social Message",
         conversationId: result.conversationId,
         message: `New ${socialAccount.platform} message on @${socialAccount.username}${input.senderName ? ` from ${input.senderName}` : ""}.`,
+        entityType: "socialConversation",
+        entityId: result.conversationId,
+        actionUrl: `/social-inbox?conversationId=${result.conversationId}`,
       });
     }
 

@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
+import { useRealtimeRefetch } from "../lib/realtime";
 
 interface NavLink {
   href: string;
@@ -12,12 +14,17 @@ interface NavLink {
    *  query string (the Email Hub's view switcher) — plain startsWith would
    *  make every one of those links show active at once. */
   matchSearch?: string;
+  /** Which field of GET /email-hub/stats this link's unread badge reads
+   *  (Part: reliability overhaul, 2026-08-31) — e.g. "unread" for Unified
+   *  Inbox. Omitted for links with no meaningful unread count (Leads,
+   *  Follow-ups, Sent, Settings). */
+  countKey?: "unread" | "important" | "ignored";
 }
 
 type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess";
 
 type NavItem =
-  | { type: "link"; href: string; label: string; moduleFlag?: ModuleFlag }
+  | { type: "link"; href: string; label: string; moduleFlag?: ModuleFlag; requiresPrimaryAdmin?: boolean }
   | { type: "group"; label: string; links: NavLink[] };
 
 /**
@@ -52,11 +59,11 @@ const NAV: NavItem[] = [
     type: "group",
     label: "Email Hub",
     links: [
-      { href: "/email-hub", label: "Unified Inbox", matchSearch: "" },
-      { href: "/email-hub?view=important", label: "Important", matchSearch: "view=important" },
+      { href: "/email-hub", label: "Unified Inbox", matchSearch: "", countKey: "unread" },
+      { href: "/email-hub?view=important", label: "Important", matchSearch: "view=important", countKey: "important" },
       { href: "/email-hub?view=leads", label: "Leads", matchSearch: "view=leads" },
       { href: "/email-hub?view=followups", label: "Follow-ups", matchSearch: "view=followups" },
-      { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored" },
+      { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored", countKey: "ignored" },
       { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent" },
       { href: "/settings/email-hub", label: "Settings" },
     ],
@@ -77,7 +84,13 @@ const NAV: NavItem[] = [
       { href: "/settings/social-media", label: "Settings" },
     ],
   },
+  { type: "link", href: "/profile", label: "My Profile" },
   { type: "link", href: "/settings", label: "Settings" },
+  // Not a moduleFlag gate — System Logs is restricted to the org's single
+  // primary admin (Part: Admin/System Logs, 2026-08-31), distinct from the
+  // shared Role.ADMIN. This entry is UX-only; the real enforcement is
+  // PrimaryAdminGuard on the backend route.
+  { type: "link", href: "/admin/system-logs", label: "System Logs", requiresPrimaryAdmin: true },
 ];
 
 /** Maps a NAV group's label to the module flag from GET /users/me that gates it. */
@@ -99,24 +112,48 @@ export function SidebarNav() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ?? "";
+  const queryClient = useQueryClient();
 
   // null = still loading (or fetch failed) — default every module visible in
   // that case so there's no flash-of-empty-sidebar; the backend's
   // ModuleAccessGuard is what actually enforces this either way, this is UX
   // discoverability only.
   const [moduleAccess, setModuleAccess] = useState<Record<string, boolean> | null>(null);
+  // Fails CLOSED, unlike moduleAccess above — System Logs must never flash
+  // visible to a non-admin even briefly while /users/me is loading (Part:
+  // Admin/System Logs, 2026-08-31 — "hidden from unauthorized users" is the
+  // point, unlike the other three flags where fail-open is fine).
+  const [isPrimaryAdmin, setIsPrimaryAdmin] = useState(false);
 
   useEffect(() => {
     api
       .getMe()
       .then((me) => {
-        const m = me as { leadGenAccess: boolean; emailHubAccess: boolean; socialMediaAccess: boolean };
+        const m = me as { leadGenAccess: boolean; emailHubAccess: boolean; socialMediaAccess: boolean; isPrimaryAdmin: boolean };
         setModuleAccess({ leadGenAccess: m.leadGenAccess, emailHubAccess: m.emailHubAccess, socialMediaAccess: m.socialMediaAccess });
+        setIsPrimaryAdmin(m.isPrimaryAdmin);
       })
       .catch(() => {});
   }, []);
 
+  // Same query key as the Email Hub page's own stats query — one cache
+  // entry, so this badge and that page's stats strip never disagree (Part:
+  // reliability overhaul, 2026-08-31 — nav items previously showed no count
+  // at all). Only fetched once module access is confirmed, to avoid a 403
+  // for a user without Email Hub access.
+  const statsQuery = useQuery({
+    queryKey: ["email-stats"],
+    queryFn: () => api.getEmailHubStats() as Promise<{ unread: number; important: number; ignored: number }>,
+    enabled: Boolean(moduleAccess?.emailHubAccess),
+  });
+  useRealtimeRefetch(
+    ["emailHub.messageReceived", "emailHub.messagesUpdated"],
+    () => queryClient.invalidateQueries({ queryKey: ["email-stats"] }),
+  );
+  const stats = statsQuery.data;
+
   const visibleNav = NAV.filter((item) => {
+    if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
     const flag = item.type === "group" ? MODULE_FLAG_BY_GROUP[item.label] : item.moduleFlag;
     if (!flag || !moduleAccess) return true;
     return moduleAccess[flag];
@@ -170,16 +207,26 @@ export function SidebarNav() {
               <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
                 {item.links.map((link) => {
                   const active = isActive(pathname, search, link);
+                  const count = link.countKey ? stats?.[link.countKey] ?? 0 : 0;
                   return (
                     <Link
                       key={link.href}
                       href={link.href}
                       aria-current={active ? "page" : undefined}
-                      className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${
+                      className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors ${
                         active ? "bg-accent font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                       }`}
                     >
-                      {link.label}
+                      <span>{link.label}</span>
+                      {count > 0 && (
+                        <span
+                          className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                            active ? "bg-white/25 text-white" : "bg-accent/15 text-accent"
+                          }`}
+                        >
+                          {count > 99 ? "99+" : count}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}

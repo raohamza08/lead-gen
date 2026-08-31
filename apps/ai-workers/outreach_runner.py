@@ -20,6 +20,11 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
     lead_detail = await api_client.get_lead_detail(lead_id, org_id)
     lead = lead_detail["lead"] if "lead" in lead_detail else lead_detail
     org_id = org_id or lead.get("orgId")
+
+    execution_id = await api_client.start_execution(org_id, lead_id, "linkedin_draft") if org_id else None
+    if org_id and execution_id is None:
+        return
+
     org_context = {"promptOverrides": await api_client.get_prompt_overrides(org_id)}
 
     async def announce_start(agent) -> None:
@@ -55,11 +60,19 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
     if messages:
         await api_client.submit_linkedin_draft(lead_id, messages)
         logger.info("LinkedIn draft submitted for lead %s", lead_id)
+        if org_id and execution_id:
+            await api_client.report_execution_success(org_id, lead_id, "linkedin_draft", execution_id)
     else:
-        logger.error(
-            "LinkedIn drafting pipeline produced nothing for lead %s: stopped at %s (%s)",
-            lead_id, result.stopped_at, result.stop_reason,
-        )
+        reason = f"stopped at {result.stopped_at} ({result.stop_reason})"
+        logger.error("LinkedIn drafting pipeline produced nothing for lead %s: %s", lead_id, reason)
+        if org_id and execution_id:
+            # FATAL means the precondition for success is absent (e.g. no
+            # contact name to personalize against) — retrying won't help;
+            # anything else (a Claude CLI rate limit/timeout) is transient.
+            retryable = not (result.records and result.records[-1].status == "FATAL")
+            await api_client.report_execution_failed(
+                org_id, lead_id, "linkedin_draft", execution_id, reason, retryable=retryable,
+            )
 
 
 async def run_optimisation(

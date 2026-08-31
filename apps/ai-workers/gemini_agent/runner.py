@@ -33,6 +33,16 @@ async def run_email_draft(
     lead_detail = await api_client.get_lead_detail(lead_id, org_id)
     lead = lead_detail["lead"] if "lead" in lead_detail else lead_detail
     org_id = org_id or lead.get("orgId")
+
+    # Payload must match AgentDispatchWorker's dispatchBody for "email_draft"
+    # exactly — the retry sweep replays it verbatim to redispatch this exact
+    # step (Part: reliability overhaul, 2026-08-31).
+    execution_id = await api_client.start_execution(
+        org_id, lead_id, "email_draft", {"step": step, "orgContext": org_context, "caseStudy": case_study},
+    ) if org_id else None
+    if org_id and execution_id is None:
+        return
+
     org_context["promptOverrides"] = await api_client.get_prompt_overrides(org_id)
 
     async def announce_start(agent) -> None:
@@ -88,10 +98,22 @@ async def run_email_draft(
             draft.get("rationale") or {}, draft.get("needsReview", False),
         )
         logger.info("Email %d draft submitted for lead %s", step, lead_id)
+        if org_id and execution_id:
+            await api_client.report_execution_success(org_id, lead_id, "email_draft", execution_id)
     else:
         reason = f"stopped at {result.stopped_at} ({result.stop_reason})"
         logger.error(
             "Email %d drafting pipeline produced no draft for lead %s: %s", step, lead_id, reason,
         )
         if org_id:
+            # Records the FAILED EmailMessage row + immediate notification
+            # (commit ae6d24e) — unchanged. report_execution_failed below is
+            # the separate retry-scheduling layer added on top of it, so it
+            # skips its own notification rather than doubling up.
             await api_client.report_email_draft_failed(lead_id, step, reason)
+            if execution_id:
+                retryable = not (result.records and result.records[-1].status == "FATAL")
+                await api_client.report_execution_failed(
+                    org_id, lead_id, "email_draft", execution_id, reason,
+                    retryable=retryable, skip_notification=True,
+                )

@@ -36,6 +36,10 @@ export default function SequencesPage() {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
 
+  // "Track Email" checkbox per pending draft — off by default (Part:
+  // reliability overhaul, 2026-08-31), only threaded through on Approve.
+  const [trackOpen, setTrackOpen] = useState<Record<string, boolean>>({});
+
   const approvalsQuery = useQuery({
     queryKey: ["sequences-approvals"],
     queryFn: () => api.getPendingApprovals() as Promise<PendingApproval[]>,
@@ -52,8 +56,10 @@ export default function SequencesPage() {
   const isFetching = approvalsQuery.isFetching || mailboxesQuery.isFetching;
 
   const actMutation = useMutation({
-    mutationFn: ({ leadId, emailMessageId, action }: { leadId: string; emailMessageId: string; action: "APPROVE" | "REJECT" }) =>
-      api.approveEmail(leadId, { emailMessageId, action }),
+    mutationFn: (
+      { leadId, emailMessageId, action, trackEmailOpen }:
+        { leadId: string; emailMessageId: string; action: "APPROVE" | "REJECT"; trackEmailOpen?: boolean },
+    ) => api.approveEmail(leadId, { emailMessageId, action, trackEmailOpen }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["sequences-approvals"] });
     },
@@ -152,9 +158,22 @@ export default function SequencesPage() {
                     </button>
                   ) : (
                     <>
+                      <label className="flex items-center gap-1 text-[11px] text-ink/60" title="Embed an open-tracking pixel in this email">
+                        <input
+                          type="checkbox"
+                          checked={trackOpen[a.id] ?? false}
+                          onChange={(e) => setTrackOpen((cur) => ({ ...cur, [a.id]: e.target.checked }))}
+                        />
+                        Track email
+                      </label>
                       <button
                         disabled={actMutation.isPending}
-                        onClick={() => actMutation.mutate({ leadId: a.lead.id, emailMessageId: a.id, action: "APPROVE" })}
+                        onClick={() =>
+                          actMutation.mutate({
+                            leadId: a.lead.id, emailMessageId: a.id, action: "APPROVE",
+                            trackEmailOpen: trackOpen[a.id] ?? false,
+                          })
+                        }
                         className="rounded bg-good px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50"
                       >
                         Approve

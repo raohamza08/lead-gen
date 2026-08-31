@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Worker } from "bullmq";
-import { SocialPost, SocialPostVersion, SocialAccount } from "@prisma/client";
+import { SocialPost, SocialPostVersion, SocialAccount, NotificationCategory } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
@@ -130,10 +130,16 @@ export class SocialPublishWorker implements OnModuleInit, OnModuleDestroy {
 
     if (anyFailed) {
       await this.notifications.notify(post.orgId, {
+        category: NotificationCategory.SOCIAL,
         type: "SOCIAL_POST_PUBLISH_FAILED",
+        severity: "ERROR",
+        title: "Social Post Publish Failed",
         message: anySucceeded
           ? `A post partially failed to publish — some accounts succeeded, others need Retry.`
           : `A scheduled post failed to publish. Check the error and Retry once fixed.`,
+        entityType: "socialPost",
+        entityId: post.id,
+        actionUrl: "/social-media/calendar",
       });
     }
   }

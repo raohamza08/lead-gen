@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Job, Worker } from "bullmq";
+import { NotificationCategory } from "@prisma/client";
 import { getRedisConnection, QUEUE_NAMES } from "./redis-connection";
 import { RealtimeGateway } from "../../realtime/realtime.gateway";
 import { NotificationsService } from "../../notifications/notifications.service";
@@ -112,10 +113,13 @@ export class AgentDispatchWorker implements OnModuleInit, OnModuleDestroy {
 
     const leadId = leadIdOf(data);
     await this.notifications.notify(data.orgId, {
+      category: NotificationCategory.AUTOMATIONS,
       type: "AGENT_DISPATCH_FAILED",
       severity: "ERROR",
+      title: "Automation Degraded",
       message: `${data.kind} could not be dispatched after ${job.attemptsMade} attempts: ${err.message}`,
       leadId,
+      actionUrl: leadId ? `/leads/${leadId}` : "/automation",
     });
     if (leadId) {
       this.realtime.emitToOrg(data.orgId, "agentDispatch.status", {

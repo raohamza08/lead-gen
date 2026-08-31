@@ -22,7 +22,9 @@ import { corsOriginValidator } from "../common/cors";
  *   agentRun.recorded    { leadId?, agent, status, notes, durationMs }
  *   email.sent           { leadId, emailMessageId }
  *   email.failed         { leadId, emailMessageId }
- *   notification.created { id, severity, message, leadId? }
+ *   notification.created { id, category, title, severity, message, actionUrl?, leadId? }
+ *   notification.userStateChanged { ids, readAt?, dismissedAt? } — pushed to
+ *     the acting user's own room so a second open tab stays in sync without polling
  *   socialInbox.messageReceived    { conversationId, socialAccountId }
  *   socialInbox.conversationUpdated { conversationId } — status/assignment changed
  */
@@ -60,6 +62,11 @@ export class RealtimeGateway implements OnGatewayConnection {
         secret: this.config.get<string>("JWT_ACCESS_SECRET"),
       });
       client.join(`org:${claims.orgId}`);
+      // Per-user room (Part: Notification Center, 2026-08-31) — lets a
+      // notification target exactly the users eligible to see it (per their
+      // module access / admin tier) instead of every socket in the org
+      // receiving everything and the frontend filtering it out.
+      client.join(`user:${claims.sub}`);
     } catch (err) {
       this.logger.debug(`Rejected socket connection: ${(err as Error).message}`);
       client.disconnect(true);
@@ -71,5 +78,12 @@ export class RealtimeGateway implements OnGatewayConnection {
    *  only has one place to update. */
   emitToOrg(orgId: string, event: string, payload: unknown): void {
     this.server?.to(`org:${orgId}`).emit(event, payload);
+  }
+
+  /** Targets exactly one user's connections (all their open tabs) — used for
+   *  permission-filtered notification delivery and for syncing read/dismiss
+   *  state back to a user's own other open tabs. */
+  emitToUser(userId: string, event: string, payload: unknown): void {
+    this.server?.to(`user:${userId}`).emit(event, payload);
   }
 }

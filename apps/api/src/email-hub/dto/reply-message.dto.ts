@@ -14,6 +14,9 @@ export class ReplyMessageDto {
   @IsOptional() @IsArray() @IsString({ each: true }) bcc?: string[];
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OutboundAttachmentDto)
   attachments?: OutboundAttachmentDto[];
+  /** "Track Email" checkbox — off unless explicitly checked (Part:
+   *  reliability overhaul, 2026-08-31). */
+  @IsOptional() @IsBoolean() trackOpen?: boolean;
 }
 
 export class ComposeEmailDto {
@@ -25,4 +28,5 @@ export class ComposeEmailDto {
   @IsString() @MinLength(1) bodyHtml!: string;
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OutboundAttachmentDto)
   attachments?: OutboundAttachmentDto[];
+  @IsOptional() @IsBoolean() trackOpen?: boolean;
 }

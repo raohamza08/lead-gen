@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { NotificationCategory } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { NotificationsService } from "../notifications/notifications.service";
 
@@ -62,9 +63,14 @@ export class EmailLeadClassifierService {
       // Classification) -- surfaced via the bell, not just a badge someone
       // has to happen to scroll past in the inbox.
       await this.notifications.notify(orgId, {
+        category: NotificationCategory.EMAIL,
         type: "POSSIBLE_LEAD_EMAIL",
         severity: "WARNING",
+        title: "Possible Lead Detected",
         message: `Possible lead from ${email.fromName || email.fromEmail}: "${email.subject}"`,
+        entityType: "inboundEmailMessage",
+        entityId: messageId,
+        actionUrl: "/email-hub?view=leads",
       });
     } catch (err) {
       this.logger.warn(`Lead classification failed for message ${messageId}: ${(err as Error).message}`);

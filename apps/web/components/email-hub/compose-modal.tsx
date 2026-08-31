@@ -46,6 +46,7 @@ export function ComposeModal({
   const [bodyHtml, setBodyHtml] = useState("");
   const [attachments, setAttachments] = useState<OutboundAttachmentInput[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [trackOpen, setTrackOpen] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,6 +63,7 @@ export function ComposeModal({
         subject,
         bodyHtml,
         attachments,
+        trackOpen,
       });
       onSent();
       onClose();
@@ -160,6 +162,12 @@ export function ComposeModal({
           <div className="block">
             <AttachmentPicker attachments={attachments} onChange={setAttachments} onError={setAttachmentError} />
             {attachmentError && <p className="mt-1 text-xs text-bad">{attachmentError}</p>}
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-1.5 text-xs text-ink/60" title="Embed an open-tracking pixel in this email">
+              <input type="checkbox" checked={trackOpen} onChange={(e) => setTrackOpen(e.target.checked)} />
+              Track email
+            </label>
           </div>
           <div className="flex justify-end gap-2">
             <button

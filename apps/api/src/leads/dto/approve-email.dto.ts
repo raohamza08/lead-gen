@@ -1,4 +1,4 @@
-import { IsEnum, IsOptional, IsString } from "class-validator";
+import { IsBoolean, IsEnum, IsOptional, IsString } from "class-validator";
 
 export enum ApproveEmailAction {
   APPROVE = "APPROVE",
@@ -20,4 +20,10 @@ export class ApproveEmailDto {
   @IsOptional()
   @IsString()
   editedSubject?: string;
+
+  /** "Track Email" checkbox — off unless the sender explicitly opts in
+   *  (Part: reliability overhaul, 2026-08-31). Ignored on REJECT. */
+  @IsOptional()
+  @IsBoolean()
+  trackEmailOpen?: boolean;
 }

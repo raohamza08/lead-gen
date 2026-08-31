@@ -5,6 +5,7 @@ import * as bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "crypto";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { AuthTokens, JwtClaims, Role } from "@leadgen/types";
+import { AuditLogService } from "../audit-log/audit-log.service";
 
 @Injectable()
 export class AuthService {
@@ -12,17 +13,35 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
-  async login(email: string, password: string): Promise<AuthTokens> {
+  async login(email: string, password: string, ipAddress?: string): Promise<AuthTokens> {
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.active) {
+      this.auditLog.write({
+        action: "LOGIN_FAILED",
+        entityType: "auth",
+        result: "FAILURE",
+        ipAddress,
+        metadata: { email, reason: user ? "inactive account" : "unknown email" },
+      });
       throw new UnauthorizedException("Invalid credentials");
     }
     const passwordOk = await bcrypt.compare(password, user.passwordHash);
     if (!passwordOk) {
+      this.auditLog.write({
+        orgId: user.orgId,
+        actorId: user.id,
+        action: "LOGIN_FAILED",
+        entityType: "auth",
+        result: "FAILURE",
+        ipAddress,
+        metadata: { email, reason: "wrong password" },
+      });
       throw new UnauthorizedException("Invalid credentials");
     }
+    this.auditLog.write({ orgId: user.orgId, actorId: user.id, action: "LOGIN", entityType: "auth", ipAddress });
     return this.issueTokens({ sub: user.id, orgId: user.orgId, role: user.role as Role, email: user.email });
   }
 
@@ -41,8 +60,9 @@ export class AuthService {
     return this.issueTokens({ sub: user.id, orgId: user.orgId, role: user.role as Role, email: user.email });
   }
 
-  async logout(userId: string): Promise<void> {
+  async logout(userId: string, orgId?: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({ where: { userId, revoked: false }, data: { revoked: true } });
+    this.auditLog.write({ orgId, actorId: userId, action: "LOGOUT", entityType: "auth" });
   }
 
   private async issueTokens(claims: JwtClaims): Promise<AuthTokens> {

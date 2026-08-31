@@ -16,6 +16,7 @@ interface ThreadMessage {
   bodyText: string;
   receivedAt: string;
   isImportant: boolean;
+  isIgnored: boolean;
   hasAttachments: boolean;
   suggestedCategory: string | null;
   aiSuggestedAction: string | null;
@@ -123,6 +124,7 @@ export function MessageDetailPanel({
   const [addingToLead, setAddingToLead] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [openingAttachment, setOpeningAttachment] = useState<string | null>(null);
+  const [actioning, setActioning] = useState(false);
 
   async function openAttachment(messageId: string, index: number, key: string) {
     setOpeningAttachment(key);
@@ -149,12 +151,15 @@ export function MessageDetailPanel({
   async function sendReply(
     messageId: string,
     replyAll: boolean,
-    input: { bodyHtml: string; cc: string[]; bcc: string[]; attachments: OutboundAttachmentInput[] },
+    input: { bodyHtml: string; cc: string[]; bcc: string[]; attachments: OutboundAttachmentInput[]; trackOpen: boolean },
   ) {
     setSending(true);
     setError(null);
     try {
-      await api.replyToEmail(messageId, { bodyHtml: input.bodyHtml, replyAll, cc: input.cc, bcc: input.bcc, attachments: input.attachments });
+      await api.replyToEmail(messageId, {
+        bodyHtml: input.bodyHtml, replyAll, cc: input.cc, bcc: input.bcc,
+        attachments: input.attachments, trackOpen: input.trackOpen,
+      });
       setReplyMode(null);
       setNotice("Reply sent.");
       onChanged();
@@ -162,6 +167,25 @@ export function MessageDetailPanel({
       setError((err as Error).message);
     } finally {
       setSending(false);
+    }
+  }
+
+  /** Applies to every message in the thread — a thread reads as one unit in
+   *  the list view, so marking it important/ignored should too, rather than
+   *  leaving some of its messages in a different state than the one the
+   *  user just acted on. */
+  async function applyToThread(action: "IMPORTANT" | "UNIMPORTANT" | "IGNORE" | "UNIGNORE") {
+    if (!thread) return;
+    setActioning(true);
+    setError(null);
+    try {
+      await api.bulkEmailAction({ messageIds: thread.messages.map((m) => m.id), action });
+      load();
+      onChanged();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setActioning(false);
     }
   }
 
@@ -206,6 +230,26 @@ export function MessageDetailPanel({
 
           {thread && (
             <div className="mx-auto mt-4 flex w-full max-w-3xl flex-wrap items-center gap-2">
+              <button
+                onClick={() => applyToThread(thread.messages[0]?.isImportant ? "UNIMPORTANT" : "IMPORTANT")}
+                disabled={actioning}
+                title="Mark this thread important"
+                className={`rounded-full border px-3 py-1.5 text-sm transition-colors disabled:opacity-50 ${
+                  thread.messages[0]?.isImportant
+                    ? "border-gold/40 bg-gold/15 text-gold"
+                    : "border-[var(--line)] text-ink/70 hover:bg-ink/5"
+                }`}
+              >
+                {thread.messages[0]?.isImportant ? "★ Important" : "☆ Mark important"}
+              </button>
+              <button
+                onClick={() => applyToThread(thread.messages[0]?.isIgnored ? "UNIGNORE" : "IGNORE")}
+                disabled={actioning}
+                title="Move this thread out of the unified inbox"
+                className="rounded-full border border-[var(--line)] px-3 py-1.5 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+              >
+                {thread.messages[0]?.isIgnored ? "Unignore" : "🔇 Ignore"}
+              </button>
               {thread.lead ? (
                 <Link
                   href={`/leads/${thread.lead.id}`}

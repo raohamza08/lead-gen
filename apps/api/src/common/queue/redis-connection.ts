@@ -35,4 +35,8 @@ export const QUEUE_NAMES = {
   // real-time path, this is the safety net for anything it missed. See
   // social-inbox-sync.worker.ts.
   SOCIAL_INBOX_SYNC: "social-inbox-sync",
+  // Re-dispatches AgentExecution rows whose retry is due, and reclaims
+  // RUNNING rows a crashed worker left stuck (Part: reliability overhaul,
+  // 2026-08-31) — see agent-execution-sweep.worker.ts.
+  AGENT_EXECUTION_SWEEP: "agent-execution-sweep",
 } as const;

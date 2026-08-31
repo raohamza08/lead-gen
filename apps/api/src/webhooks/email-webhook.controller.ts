@@ -1,11 +1,12 @@
 import { Body, Controller, Post } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
+import { NotificationCategory, Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { SequencerService } from "../sequencer/sequencer.service";
 import { SyncService } from "../sync/sync.service";
 import { EmailEventType, PipelineStage } from "@leadgen/types";
 import { GmailAdapterService } from "./gmail-adapter.service";
 import { GraphAdapterService } from "./graph-adapter.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 interface InboundEventPayload {
   emailMessageId?: string;
@@ -30,6 +31,7 @@ export class EmailWebhookController {
     private readonly sync: SyncService,
     private readonly gmailAdapter: GmailAdapterService,
     private readonly graphAdapter: GraphAdapterService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   @Post("email-events")
@@ -119,6 +121,20 @@ export class EmailWebhookController {
       data: { stage: PipelineStage.REPLIED, enteredStageAt: new Date() },
     });
     await this.sync.onStageChanged(lead.id, PipelineStage.REPLIED);
+
+    // A genuine reply is the one stage change worth a notification — every
+    // other automated hop (WAITING_EMAIL_N, EMAIL_N_SENT) is routine
+    // automation progress, not something a salesperson needs pinged about.
+    await this.notifications.notify(lead.orgId, {
+      category: NotificationCategory.LEADS,
+      type: "LEAD_REPLIED",
+      severity: "WARNING",
+      title: "Lead Replied",
+      message: `${lead.companyName ?? "A lead"} replied to your outreach.`,
+      leadId: lead.id,
+      actionUrl: `/leads/${lead.id}`,
+    });
+
     return { ok: true };
   }
 

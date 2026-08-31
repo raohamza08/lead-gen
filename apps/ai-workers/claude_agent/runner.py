@@ -490,10 +490,20 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
 async def run_manual_enrichment_in_background(
     lead_id: str, org_id: str, org_context: dict | None = None
 ) -> None:
+    execution_id = await api_client.start_execution(org_id, lead_id, "enrich")
+    if execution_id is None:
+        return
     try:
         await run_manual_enrichment(lead_id, org_id, org_context)
-    except Exception:
+    except Exception as err:
+        # Before this, a failure here (Claude CLI error/timeout) only logged
+        # locally — no retry, nothing visible on the lead (the same class of
+        # silent-stranding bug fixed for email drafting in commit ae6d24e,
+        # generalized here — Part: reliability overhaul, 2026-08-31).
         logger.exception("manual enrichment for lead %s failed", lead_id)
+        await api_client.report_execution_failed(org_id, lead_id, "enrich", execution_id, str(err))
+    else:
+        await api_client.report_execution_success(org_id, lead_id, "enrich", execution_id)
 
 
 async def run_company_intelligence(lead_id: str, org_id: str, org_context: dict | None = None) -> None:
@@ -556,7 +566,13 @@ async def run_company_intelligence(lead_id: str, org_id: str, org_context: dict 
 async def run_company_intelligence_in_background(
     lead_id: str, org_id: str, org_context: dict | None = None
 ) -> None:
+    execution_id = await api_client.start_execution(org_id, lead_id, "company_intelligence")
+    if execution_id is None:
+        return
     try:
         await run_company_intelligence(lead_id, org_id, org_context)
-    except Exception:
+    except Exception as err:
         logger.exception("company intelligence for lead %s failed", lead_id)
+        await api_client.report_execution_failed(org_id, lead_id, "company_intelligence", execution_id, str(err))
+    else:
+        await api_client.report_execution_success(org_id, lead_id, "company_intelligence", execution_id)

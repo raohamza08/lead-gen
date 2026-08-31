@@ -10,6 +10,7 @@ import { BulkAction, BulkActionDto } from "./dto/bulk-action.dto";
 import { CreateTagDto, UpdateTagDto } from "./dto/create-tag.dto";
 import { ComposeEmailDto, ReplyMessageDto } from "./dto/reply-message.dto";
 import { ImapReaderProvider } from "./readers/imap-reader.provider";
+import { apiPublicUrl } from "../common/api-url";
 
 export interface ListMessagesQuery {
   accountId?: string;
@@ -400,13 +401,14 @@ export class EmailHubService {
     const autoCc = dto.replyAll ? original.ccEmails.filter((e) => e !== original.account.address) : [];
     const cc = Array.from(new Set([...autoCc, ...(dto.cc ?? [])]));
     const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
+    const bodyHtml = await this.withTrackingPixel(user.orgId, to, subject, dto.bodyHtml, dto.trackOpen);
 
     const result = await this.transactionalEmail.sendFromAccount(original.account, {
       toAddress: to,
       cc: cc.length > 0 ? cc : undefined,
       bcc: dto.bcc,
       subject,
-      bodyHtml: dto.bodyHtml,
+      bodyHtml,
       headers: original.messageIdHeader
         ? { "In-Reply-To": original.messageIdHeader, References: original.messageIdHeader }
         : undefined,
@@ -423,16 +425,36 @@ export class EmailHubService {
     if (!account) throw new NotFoundException("Account not found");
     await this.assertAccountAccess(user, account.id, true);
     this.assertAttachmentsWithinLimit(dto.attachments);
+    const bodyHtml = await this.withTrackingPixel(user.orgId, dto.to.join(", "), dto.subject, dto.bodyHtml, dto.trackOpen);
 
     const result = await this.transactionalEmail.sendFromAccount(account, {
       toAddress: dto.to.join(", "),
       cc: dto.cc,
       bcc: dto.bcc,
       subject: dto.subject,
-      bodyHtml: dto.bodyHtml,
+      bodyHtml,
       attachments: dto.attachments,
     });
     return { sent: true, providerMessageId: result.providerMessageId };
+  }
+
+  /**
+   * Appends an open-tracking pixel for Email Hub compose/reply, only when
+   * the sender explicitly checked "Track Email" (Part: reliability
+   * overhaul, 2026-08-31) — no checkbox, no row, no pixel, so there is no
+   * path to a false "opened" signal for an untracked send. Separate from
+   * EmailMessage/EmailEvent (see HubEmailOpenTracking's schema docblock).
+   * The tracking row is created before the send attempt so its id is ready
+   * to embed; if the send then fails, the row is simply never opened —
+   * inert, no notification, no cleanup needed.
+   */
+  private async withTrackingPixel(
+    orgId: string, toAddress: string, subject: string, bodyHtml: string, trackOpen?: boolean,
+  ): Promise<string> {
+    if (!trackOpen) return bodyHtml;
+    const row = await this.prisma.hubEmailOpenTracking.create({ data: { orgId, toAddress, subject } });
+    const pixel = `<img src="${apiPublicUrl()}/track/open/hub/${row.id}.png" width="1" height="1" alt="" style="display:none" />`;
+    return `${bodyHtml}${pixel}`;
   }
 
   /** Attachments travel as base64 in the JSON body (never persisted — see

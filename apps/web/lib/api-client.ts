@@ -245,6 +245,8 @@ export const api = {
   rewindLead: (id: string, stage: string) =>
     request(`/leads/${id}/rewind`, { method: "POST", body: JSON.stringify({ stage }) }),
   verifyEmail: (id: string) => request(`/leads/${id}/verify-email`, { method: "POST" }),
+  verifyEmails: (leadIds: string[]) =>
+    request(`/leads/verify-emails`, { method: "POST", body: JSON.stringify({ leadIds }) }),
   resendEmail: (id: string, emailMessageId: string) =>
     request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
@@ -309,10 +311,18 @@ export const api = {
     request("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: string, body: Record<string, unknown>) =>
     request(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  getNotifications: (limit = 50) => request(`/notifications?limit=${limit}`),
+  getNotifications: (params: Record<string, string> = {}) =>
+    request(`/notifications?${new URLSearchParams(params).toString()}`),
+  getUnreadNotificationCount: () => request("/notifications/unread-count"),
   markNotificationRead: (id: string) => request(`/notifications/${id}/read`, { method: "PATCH" }),
-  markAllNotificationsRead: () => request("/notifications/read-all", { method: "PATCH" }),
-  clearAllNotifications: () => request("/notifications", { method: "DELETE" }),
+  markAllNotificationsRead: (category?: string) =>
+    request(`/notifications/read-all${category ? `?category=${category}` : ""}`, { method: "PATCH" }),
+  dismissNotification: (id: string) => request(`/notifications/${id}`, { method: "DELETE" }),
+  clearAllNotifications: (category?: string) =>
+    request(`/notifications${category ? `?category=${category}` : ""}`, { method: "DELETE" }),
+  getNotificationPreferences: () => request("/notifications/preferences"),
+  updateNotificationPreferences: (body: Record<string, unknown>) =>
+    request("/notifications/preferences", { method: "PATCH", body: JSON.stringify(body) }),
   getAutomationSettings: () => request("/settings/organization/automation"),
   updateAutomationSettings: (body: Record<string, unknown>) =>
     request("/settings/organization/automation", { method: "PATCH", body: JSON.stringify(body) }),
@@ -330,10 +340,33 @@ export const api = {
   activateUser: (id: string) => request(`/users/${id}/activate`, { method: "PATCH" }),
   deactivateUser: (id: string) => request(`/users/${id}/deactivate`, { method: "PATCH" }),
   changeUserRole: (id: string, role: string) => request(`/users/${id}/role/${role}`, { method: "PATCH" }),
+  transferPrimaryAdmin: (id: string) => request(`/users/${id}/primary-admin`, { method: "PATCH" }),
   getMe: () => request("/users/me"),
   getUserAccess: (id: string) => request(`/users/${id}/access`),
   updateUserAccess: (id: string, body: Record<string, unknown>) =>
     request(`/users/${id}/access`, { method: "PATCH", body: JSON.stringify(body) }),
+  getAuditLogs: (params: Record<string, string> = {}) =>
+    request(`/admin/audit-logs?${new URLSearchParams(params).toString()}`),
+  updateProfile: (body: { displayName?: string; jobTitle?: string; phone?: string }) =>
+    request("/users/me/profile", { method: "PATCH", body: JSON.stringify(body) }),
+  changePassword: (body: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+    request("/users/me/password", { method: "POST", body: JSON.stringify(body) }),
+  removeAvatar: () => request("/users/me/avatar", { method: "DELETE" }),
+  uploadAvatar: async (file: File) => {
+    const token = getAccessToken();
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`${API_BASE_URL}/users/me/avatar`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message ?? `Upload failed with ${res.status}`);
+    }
+    return res.json();
+  },
 
   // ---- Email Hub ----
   getEmailHubAccounts: () => request("/email-hub/accounts"),
@@ -358,6 +391,7 @@ export const api = {
       cc?: string[];
       bcc?: string[];
       attachments?: OutboundAttachmentInput[];
+      trackOpen?: boolean;
     },
   ) => request(`/email-hub/messages/${messageId}/reply`, { method: "POST", body: JSON.stringify(body) }),
   composeEmail: (body: {
@@ -368,6 +402,7 @@ export const api = {
     subject: string;
     bodyHtml: string;
     attachments?: OutboundAttachmentInput[];
+    trackOpen?: boolean;
   }) => request("/email-hub/compose", { method: "POST", body: JSON.stringify(body) }),
   getEmailThread: (id: string) => request(`/email-hub/threads/${id}`),
   addEmailThreadToLead: (id: string) => request(`/email-hub/threads/${id}/add-to-lead`, { method: "POST" }),

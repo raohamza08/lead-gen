@@ -7,6 +7,9 @@ import { OrganizationService } from "../organization/organization.service";
 import { dashboardUrl } from "../common/cors";
 import { Role } from "@leadgen/types";
 import { UpdateUserAccessDto } from "./dto/update-user-access.dto";
+import { AuditLogService } from "../audit-log/audit-log.service";
+import { LocalDiskMediaStorageService } from "../social-media/media/local-disk-media-storage.service";
+import { apiPublicUrl } from "../common/api-url";
 
 function credentialsEmailHtml(params: { recipientName: string; orgName: string; email: string; password: string }): string {
   const { recipientName, orgName, email, password } = params;
@@ -34,10 +37,12 @@ export class UsersService {
     private readonly prisma: PrismaService,
     private readonly transactionalEmail: TransactionalEmailService,
     private readonly organization: OrganizationService,
+    private readonly auditLog: AuditLogService,
+    private readonly mediaStorage: LocalDiskMediaStorageService,
   ) {}
 
-  findAllForOrg(orgId: string) {
-    return this.prisma.user.findMany({
+  async findAllForOrg(orgId: string) {
+    const users = await this.prisma.user.findMany({
       where: { orgId },
       select: {
         id: true,
@@ -49,17 +54,28 @@ export class UsersService {
         leadGenAccess: true,
         emailHubAccess: true,
         socialMediaAccess: true,
+        isPrimaryAdmin: true,
+        displayName: true,
+        avatarStorageKey: true,
       },
       orderBy: { createdAt: "asc" },
     });
+    return users.map(({ avatarStorageKey, ...u }) => ({
+      ...u,
+      avatarUrl: avatarStorageKey ? `${apiPublicUrl()}/users/${u.id}/avatar` : null,
+    }));
   }
 
-  async create(orgId: string, input: { email: string; name: string; password: string; role: Role }) {
+  async create(orgId: string, actorId: string, input: { email: string; name: string; password: string; role: Role }) {
     const passwordHash = await bcrypt.hash(input.password, 12);
     try {
       const user = await this.prisma.user.create({
         data: { orgId, email: input.email, name: input.name, passwordHash, role: input.role },
         select: { id: true, email: true, name: true, role: true, active: true, createdAt: true },
+      });
+      this.auditLog.write({
+        orgId, actorId, action: "USER_CREATED", entityType: "user", entityId: user.id,
+        metadata: { email: input.email, role: input.role },
       });
 
       const branding = await this.organization.getBranding(orgId);
@@ -87,12 +103,28 @@ export class UsersService {
     }
   }
 
-  setActive(id: string, active: boolean) {
-    return this.prisma.user.update({ where: { id }, data: { active } });
+  /**
+   * `updateMany` scoped by orgId, not `update({ where: { id } })` — the
+   * bare-id version let any ADMIN deactivate/promote a user in a DIFFERENT
+   * org by guessing/enumerating a UUID (Part: Admin tier & audit hardening,
+   * 2026-08-31 — found during a guard-coverage audit; every other id-based
+   * write in this service already went through findFirst({ id, orgId })
+   * first, this pair was the one place that didn't).
+   */
+  async setActive(orgId: string, actorId: string, id: string, active: boolean) {
+    const result = await this.prisma.user.updateMany({ where: { id, orgId }, data: { active } });
+    if (result.count === 0) throw new NotFoundException("User not found");
+    this.auditLog.write({
+      orgId, actorId, action: active ? "USER_ACTIVATED" : "USER_DEACTIVATED", entityType: "user", entityId: id,
+    });
+    return this.prisma.user.findUniqueOrThrow({ where: { id } });
   }
 
-  setRole(id: string, role: Role) {
-    return this.prisma.user.update({ where: { id }, data: { role } });
+  async setRole(orgId: string, actorId: string, id: string, role: Role) {
+    const result = await this.prisma.user.updateMany({ where: { id, orgId }, data: { role } });
+    if (result.count === 0) throw new NotFoundException("User not found");
+    this.auditLog.write({ orgId, actorId, action: "ROLE_CHANGED", entityType: "user", entityId: id, metadata: { role } });
+    return this.prisma.user.findUniqueOrThrow({ where: { id } });
   }
 
   // ---- Person Access: module toggles + email/social account grants, read/written from one place ----
@@ -154,7 +186,7 @@ export class UsersService {
    * endpoints use, keyed on the same composite id, so both surfaces read
    * back in sync automatically — no shadow copy.
    */
-  async updateAccess(orgId: string, userId: string, dto: UpdateUserAccessDto) {
+  async updateAccess(orgId: string, actorId: string, userId: string, dto: UpdateUserAccessDto) {
     const targetUser = await this.prisma.user.findFirst({ where: { id: userId, orgId } });
     if (!targetUser) throw new NotFoundException("User not found");
 
@@ -194,12 +226,16 @@ export class UsersService {
       }
     });
 
+    this.auditLog.write({
+      orgId, actorId, action: "PERMISSION_CHANGED", entityType: "user", entityId: userId,
+      metadata: { modules: dto.modules ?? null },
+    });
     return this.getAccess(orgId, userId);
   }
 
   /** Backs GET /users/me — every authenticated user (any role) reads their own module flags, e.g. for the sidebar. */
-  getSelf(orgId: string, userId: string) {
-    return this.prisma.user.findFirst({
+  async getSelf(orgId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({
       where: { id: userId, orgId },
       select: {
         id: true,
@@ -209,7 +245,105 @@ export class UsersService {
         leadGenAccess: true,
         emailHubAccess: true,
         socialMediaAccess: true,
+        isPrimaryAdmin: true,
+        displayName: true,
+        jobTitle: true,
+        phone: true,
+        avatarStorageKey: true,
       },
     });
+    if (!user) return null;
+    const { avatarStorageKey, ...rest } = user;
+    return { ...rest, avatarUrl: avatarStorageKey ? `${apiPublicUrl()}/users/${userId}/avatar` : null };
+  }
+
+  /**
+   * Personal details a user manages themselves (Part: User Profile,
+   * 2026-08-31) — distinct from `name` (set at account creation by an
+   * admin) and from role/module access (admin-only, see updateAccess).
+   */
+  async updateProfile(userId: string, patch: { displayName?: string; jobTitle?: string; phone?: string }) {
+    await this.prisma.user.update({ where: { id: userId }, data: patch });
+    return this.getSelf((await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })).orgId, userId);
+  }
+
+  /**
+   * Requires the current password before allowing a change — the standard
+   * "prove you're already logged in as this account" check, not just trust
+   * the JWT alone (a stolen but still-valid access token shouldn't be
+   * enough to lock the real owner out by changing their password).
+   */
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const currentOk = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!currentOk) {
+      this.auditLog.write({
+        orgId: user.orgId, actorId: userId, action: "PASSWORD_CHANGE_FAILED", entityType: "auth", result: "FAILURE",
+      });
+      throw new ForbiddenException("Current password is incorrect");
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+    this.auditLog.write({ orgId: user.orgId, actorId: userId, action: "PASSWORD_CHANGED", entityType: "auth" });
+    return { changed: true };
+  }
+
+  /** Replaces any existing avatar in one call — the old file is deleted only
+   *  after the new one is safely written, so a mid-upload failure never
+   *  leaves the user with no avatar at all. */
+  async uploadAvatar(userId: string, file: { buffer: Buffer; mimetype: string; originalname: string }) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const saved = await this.mediaStorage.save({ buffer: file.buffer, orgId: user.orgId, filename: file.originalname });
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { avatarStorageKey: saved.storageKey, avatarMimeType: file.mimetype },
+    });
+    if (user.avatarStorageKey) await this.mediaStorage.delete(user.avatarStorageKey);
+    return this.getSelf(user.orgId, userId);
+  }
+
+  async removeAvatar(userId: string) {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    if (user.avatarStorageKey) await this.mediaStorage.delete(user.avatarStorageKey);
+    await this.prisma.user.update({ where: { id: userId }, data: { avatarStorageKey: null, avatarMimeType: null } });
+    return this.getSelf(user.orgId, userId);
+  }
+
+  /** Backs the public-within-the-app GET /users/:id/avatar — same "UUID id
+   *  is the only access control" reasoning as MediaFileController for
+   *  social assets; a profile picture isn't sensitive enough to warrant
+   *  per-request org checks for every avatar rendered across the team list. */
+  async getAvatarFile(userId: string): Promise<{ buffer: Buffer; mimeType: string } | null> {
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.avatarStorageKey) return null;
+    const buffer = await this.mediaStorage.read(user.avatarStorageKey);
+    return { buffer, mimeType: user.avatarMimeType ?? "image/png" };
+  }
+
+  /**
+   * Hands the primary-admin flag to another ADMIN-role user (Part: Admin
+   * tier & audit hardening, 2026-08-31). Only the current primary admin can
+   * call this — enforced by PrimaryAdminGuard on the route, not re-checked
+   * here — so the flag is always a deliberate, visible, auditable transfer
+   * rather than something anyone could grab. Transactional: the old holder
+   * loses it in the same write that grants the new one, so there's never a
+   * moment with zero or two primary admins for this org.
+   */
+  async transferPrimaryAdmin(orgId: string, fromUserId: string, toUserId: string) {
+    const target = await this.prisma.user.findFirst({ where: { id: toUserId, orgId } });
+    if (!target) throw new NotFoundException("User not found");
+    if (target.role !== Role.ADMIN) {
+      throw new ForbiddenException("The primary admin must already hold the ADMIN role — promote them first.");
+    }
+    if (target.id === fromUserId) return target;
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: fromUserId }, data: { isPrimaryAdmin: false } }),
+      this.prisma.user.update({ where: { id: toUserId }, data: { isPrimaryAdmin: true } }),
+    ]);
+    this.auditLog.write({
+      orgId, actorId: fromUserId, action: "PRIMARY_ADMIN_TRANSFERRED", entityType: "user", entityId: toUserId,
+    });
+    return this.prisma.user.findUniqueOrThrow({ where: { id: toUserId } });
   }
 }

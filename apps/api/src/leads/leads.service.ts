@@ -7,7 +7,7 @@ import {
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { randomUUID } from "crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, NotificationCategory } from "@prisma/client";
 import { LeadSourceLayer, PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateLeadDto } from "./dto/create-lead.dto";
@@ -269,6 +269,10 @@ export class LeadsService {
           // agent touch and email attempt, not the full history — a card
           // needs "what happened last", the lead detail page has the trail.
           agentRuns: { orderBy: { startedAt: "desc" }, take: 1 },
+          // Current retry/lock state per agent — typically 0-4 rows per lead,
+          // drives the card's error banner + retry countdown (Part:
+          // reliability overhaul, 2026-08-31).
+          agentExecutions: true,
           // select, not include, here too — bodyHtml is the full rendered
           // email (every paragraph of real copy) and was going out for every
           // lead's most recent message on every list/board load; the list
@@ -308,6 +312,7 @@ export class LeadsService {
         // Full trail, oldest first, so the detail page can render it as a
         // timeline of what the fleet actually did to this specific lead.
         agentRuns: { orderBy: { startedAt: "asc" } },
+        agentExecutions: true,
       },
     });
     if (!lead) throw new NotFoundException("Lead not found");
@@ -546,6 +551,43 @@ export class LeadsService {
   }
 
   /**
+   * Bulk counterpart to verifyEmail — the Ready column's "Verify emails"
+   * button used to be a client-side loop awaiting one HTTP call at a time
+   * (Part: reliability overhaul, 2026-08-31), which meant the whole batch's
+   * wall-clock time was every lead's NeverBounce round trip added together.
+   * Bounded concurrency here keeps that same rate-limit-friendly ceiling
+   * (NeverBounce's single-check endpoint, not built for a parallel blast)
+   * while actually running leads concurrently instead of one at a time.
+   * Each lead still goes through verifyEmail unchanged, so the existing
+   * per-lead `lead.updated` realtime event is what updates that card's
+   * badge — this only adds a batch-level progress event on top.
+   */
+  async verifyEmails(orgId: string, leadIds: string[]): Promise<{ total: number; verified: number }> {
+    const CONCURRENCY = 5;
+    const total = leadIds.length;
+    let done = 0;
+    let verified = 0;
+    let cursor = 0;
+
+    const worker = async () => {
+      while (cursor < leadIds.length) {
+        const leadId = leadIds[cursor++];
+        try {
+          const result = await this.verifyEmail(orgId, leadId);
+          if (result.verifiedEmail) verified++;
+        } catch (err) {
+          this.logger.warn(`Bulk email verification failed for lead ${leadId}: ${(err as Error).message}`);
+        }
+        done++;
+        this.realtime.emitToOrg(orgId, "leads.verifyEmailsProgress", { done, total });
+      }
+    };
+
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, total) }, worker));
+    return { total, verified };
+  }
+
+  /**
    * Called by the AI workers once the manual-lead enrichment pipeline
    * finishes (lead_verification/company_intelligence/website_audit/
    * buyer_intelligence/ai_opportunity/lead_scoring/agent_review). Unlike
@@ -674,8 +716,32 @@ export class LeadsService {
     );
 
     await this.sequencer.onStageEntered(lead.id, toStage);
+    await this.notifyMilestoneStage(orgId, lead.id, lead.companyName, toStage);
 
     return updated;
+  }
+
+  /** Only the stages a salesperson would actually want pinged about —
+   *  every other automated hop (WAITING_EMAIL_N, EMAIL_N_SENT) is routine
+   *  progress a notification would just be noise for. */
+  private static readonly MILESTONE_STAGES = new Set<PipelineStage>([
+    PipelineStage.MEETING_BOOKED,
+    PipelineStage.PROPOSAL_SENT,
+    PipelineStage.WON,
+    PipelineStage.LOST,
+  ]);
+
+  private async notifyMilestoneStage(orgId: string, leadId: string, companyName: string, toStage: PipelineStage) {
+    if (!LeadsService.MILESTONE_STAGES.has(toStage)) return;
+    await this.notifications.notify(orgId, {
+      category: NotificationCategory.LEADS,
+      type: "LEAD_STAGE_CHANGED",
+      severity: "WARNING",
+      title: "Lead Moved to New Stage",
+      message: `${companyName} moved to ${toStage.replace(/_/g, " ").toLowerCase()}.`,
+      leadId,
+      actionUrl: `/leads/${leadId}`,
+    });
   }
 
   /**
@@ -787,7 +853,13 @@ export class LeadsService {
 
     const approved = await this.prisma.emailMessage.update({
       where: { id: message.id },
-      data: { subject: finalSubject, bodyHtml: finalBody, generatedBy, status: "QUEUED" },
+      data: {
+        subject: finalSubject,
+        bodyHtml: finalBody,
+        generatedBy,
+        status: "QUEUED",
+        trackEmailOpen: dto.trackEmailOpen ?? false,
+      },
     });
 
     // Sends synchronously (Part E5, revised — no queue), so `approved` above
@@ -912,10 +984,15 @@ export class LeadsService {
 
     this.realtime.emitToOrg(lead.orgId, "lead.updated", { leadId });
     await this.notifications.notify(lead.orgId, {
+      category: NotificationCategory.AGENTS,
       type: "EMAIL_DRAFT_FAILED",
       severity: "ERROR",
+      title: "Lead Automation Failed",
       message: `Email ${dto.sequenceStep} drafting failed for ${lead.companyName ?? leadId}: ${dto.reason}`,
       leadId,
+      entityType: "emailMessage",
+      entityId: message.id,
+      actionUrl: `/leads/${leadId}`,
     });
 
     return message;

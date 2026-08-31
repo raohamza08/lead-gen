@@ -4,6 +4,7 @@ import { AuthGuard } from "../../components/auth-guard";
 import { SignOutButton } from "../../components/sign-out-button";
 import { ThemeToggle } from "../../components/theme-toggle";
 import { NotificationsBell } from "../../components/notifications-bell";
+import { HeaderUserMenu } from "../../components/header-user-menu";
 import { QueryProvider } from "../../components/query-provider";
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -24,6 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <div className="flex items-center gap-2">
                 <NotificationsBell />
                 <ThemeToggle />
+                <HeaderUserMenu />
                 <SignOutButton />
               </div>
             </div>

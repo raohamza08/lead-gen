@@ -162,6 +162,98 @@ async def report_email_draft_failed(lead_id: str, step: int, reason: str) -> Non
         )
 
 
+async def start_execution(
+    org_id: str, lead_id: str, agent: str, payload: dict | None = None,
+) -> str | None:
+    """Acquires the retry/lock row for one (lead, agent) pair before an agent
+    that gates a lead's next stage begins (Part: reliability overhaul,
+    2026-08-31) — see NestJS's AgentExecutionService. `payload` should carry
+    exactly the extra fields AgentDispatchQueue needs to redispatch this
+    agent (e.g. email_draft's step/orgContext/caseStudy) — the retry sweep
+    replays it verbatim, so it must match AgentDispatchWorker's dispatchBody
+    for this agent kind.
+
+    Returns None (never raises) on a 409 (already running — a retry landed
+    while a previous attempt was still in flight) or any other failure
+    (core API briefly unreachable). Either way the caller should skip running
+    rather than risk a duplicate concurrent execution of the same agent.
+    """
+    try:
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=15) as client:
+            resp = await client.post(
+                "/agent-executions/start",
+                json={"orgId": org_id, "leadId": lead_id, "agent": agent, "payload": payload or {}},
+                headers=_headers(),
+            )
+            if resp.status_code == 409:
+                logging.getLogger("shared.api_client").info(
+                    "%s already running for lead %s — skipping duplicate attempt", agent, lead_id,
+                )
+                return None
+            resp.raise_for_status()
+            return resp.json()["executionId"]
+    except Exception as err:  # noqa: BLE001
+        logging.getLogger("shared.api_client").error(
+            "could not start execution %s for lead %s: %s", agent, lead_id, err
+        )
+        return None
+
+
+async def report_execution_success(org_id: str, lead_id: str, agent: str, execution_id: str) -> None:
+    """Counterpart to start_execution for a successful run. Swallowed on
+    failure like the other telemetry-shaped calls here."""
+    try:
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=15) as client:
+            resp = await client.post(
+                "/agent-executions/succeed",
+                json={"orgId": org_id, "leadId": lead_id, "agent": agent, "executionId": execution_id},
+                headers=_headers(),
+            )
+            resp.raise_for_status()
+    except Exception as err:  # noqa: BLE001
+        logging.getLogger("shared.api_client").error(
+            "could not report success for %s on lead %s: %s", agent, lead_id, err
+        )
+
+
+async def report_execution_failed(
+    org_id: str,
+    lead_id: str,
+    agent: str,
+    execution_id: str,
+    error_detail: str,
+    retryable: bool = True,
+    skip_notification: bool = False,
+) -> None:
+    """Counterpart to start_execution for a failed run — records the failure
+    and, if retryable, schedules an automatic retry roughly every hour with
+    progressively increasing backoff (Part: reliability overhaul,
+    2026-08-31; generalizes commit ae6d24e's fix for email drafting to every
+    agent). Swallowed on failure like every other telemetry-shaped call
+    here: losing this report must not raise past the caller and mask the
+    original error with a different traceback."""
+    try:
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=15) as client:
+            resp = await client.post(
+                "/agent-executions/fail",
+                json={
+                    "orgId": org_id,
+                    "leadId": lead_id,
+                    "agent": agent,
+                    "executionId": execution_id,
+                    "errorDetail": error_detail[:4000],
+                    "retryable": retryable,
+                    "skipNotification": skip_notification,
+                },
+                headers=_headers(),
+            )
+            resp.raise_for_status()
+    except Exception as err:  # noqa: BLE001
+        logging.getLogger("shared.api_client").error(
+            "could not report failure for %s on lead %s: %s", agent, lead_id, err
+        )
+
+
 async def submit_linkedin_draft(lead_id: str, messages: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
         resp = await client.patch(

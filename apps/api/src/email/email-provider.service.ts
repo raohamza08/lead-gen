@@ -1,4 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { NotificationCategory } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { GmailProvider } from "./providers/gmail.provider";
 import { SmtpProvider } from "./providers/smtp.provider";
@@ -43,7 +44,9 @@ export class EmailProviderService {
     const message = await this.prisma.emailMessage.findUniqueOrThrow({ where: { id: emailMessageId } });
 
     try {
-      const { accountId, providerMessageId } = await this.sendForLead(message.leadId, message.subject, message.bodyHtml, message.id);
+      const { accountId, providerMessageId } = await this.sendForLead(
+        message.leadId, message.subject, message.bodyHtml, message.id, message.trackEmailOpen,
+      );
 
       await this.prisma.emailMessage.update({
         where: { id: emailMessageId },
@@ -80,10 +83,15 @@ export class EmailProviderService {
         // the one worth interrupting someone for.
         if (!(err instanceof ComplianceGateError)) {
           await this.notifications.notify(lead.orgId, {
+            category: NotificationCategory.EMAIL,
             type: "EMAIL_SEND_FAILED",
             severity: "ERROR",
+            title: "Email Send Failed",
             message: `Email send failed: ${failureReason}`,
             leadId: message.leadId,
+            entityType: "emailMessage",
+            entityId: emailMessageId,
+            actionUrl: `/leads/${message.leadId}`,
           });
         }
       }
@@ -97,12 +105,18 @@ export class EmailProviderService {
    * EmailMessage row to attach an open-tracking pixel to — every real
    * outreach send has one, and skipping the pixel there just means an
    * operator's own test open never appears in analytics, which is correct.
+   *
+   * `trackOpen` gates the pixel itself (Part: reliability overhaul,
+   * 2026-08-31 — it used to be injected unconditionally whenever a
+   * messageId existed). Defaults false: no explicit opt-in, no pixel, no
+   * possibility of an open notification for a send nobody asked to track.
    */
   async sendForLead(
     leadId: string,
     subject: string,
     bodyHtml: string,
     messageId?: string,
+    trackOpen = false,
   ): Promise<{ accountId: string; providerMessageId: string }> {
     const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
     if (!lead.email) {
@@ -142,7 +156,7 @@ export class EmailProviderService {
       .replace(/\{\{org\.name\}\}/g, branding.emailOrgName)
       .replace(/\{\{sender\.name\}\}/g, branding.emailSenderName);
 
-    if (messageId) {
+    if (messageId && trackOpen) {
       renderedBody += `<img src="${apiRoot}/track/open/${messageId}.png" width="1" height="1" alt="" style="display:none" />`;
     }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, getCurrentUser } from "../../../lib/api-client";
@@ -8,7 +8,7 @@ import { useRealtimeEvent, useRealtimeRefetch } from "../../../lib/realtime";
 import { AGENT_LABELS } from "../../../lib/agent-labels";
 import { ALLOWED_TRANSITIONS, PIPELINE_STAGE_ORDER, PipelineStage, isValidRewind } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
-import { LoadingRow, Spinner } from "../../../components/spinner";
+import { AgentPulse, LoadingRow, Spinner } from "../../../components/spinner";
 
 interface AgentRunSummary {
   agent: string;
@@ -24,11 +24,24 @@ interface EmailSummary {
   events?: { occurredAt: string }[];
 }
 
+/** Persisted retry/lock state for one (lead, agent) pair — survives a
+ *  refresh, unlike the live "agentRun.started" ping (see AGENT_LABELS'
+ *  runningAgents). Mirrors AgentExecutionStatus in schema.prisma. */
+interface AgentExecutionSummary {
+  agent: string;
+  status: "RUNNING" | "SUCCEEDED" | "FAILED_RETRY_SCHEDULED" | "FAILED_TERMINAL";
+  attempt: number;
+  errorSummary: string | null;
+  lastAttemptAt: string;
+  nextRetryAt: string | null;
+}
+
 interface LeadRow extends Lead {
   score: LeadScore | null;
-  pipelineState: { stage: string; previousStage: string | null; enteredStageAt: string } | null;
+  pipelineState: { stage: string; previousStage: string | null; enteredStageAt: string; nextActionAt: string | null } | null;
   agentRuns?: AgentRunSummary[];
   emailMessages?: EmailSummary[];
+  agentExecutions?: AgentExecutionSummary[];
 }
 
 /** Which method actually found this lead. No "dark web" value exists —
@@ -67,6 +80,57 @@ function timeAgo(iso: string | null | undefined): string | null {
   return `${Math.round(hrs / 24)}d ago`;
 }
 
+/** Live countdown to a server-provided timestamp — `now` is a ticking value
+ *  from the parent (one shared interval, not one per card), same pattern as
+ *  the automation page's Send queue. Only ever displays a backend-scheduled
+ *  time (PipelineState.nextActionAt / AgentExecution.nextRetryAt); a
+ *  refresh just re-fetches that same timestamp, it never resets a client
+ *  timer. */
+function formatCountdown(targetIso: string, now: number): string {
+  const ms = new Date(targetIso).getTime() - now;
+  if (ms <= 0) return "Any moment now";
+  const totalSeconds = Math.floor(ms / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+}
+
+/** "Next stage in: 47m 23s" — only shown once a wait timer is actually
+ *  scheduled (nextActionAt set), i.e. the lead is between automated steps,
+ *  not waiting on a human/agent action. */
+function StageCountdown({ lead, now }: { lead: LeadRow; now: number }) {
+  const nextActionAt = lead.pipelineState?.nextActionAt;
+  if (!nextActionAt) return null;
+  return (
+    <div className="mt-1 text-[11px] text-ink/45">
+      Next stage in: <span className="tabular font-medium text-ink/65">{formatCountdown(nextActionAt, now)}</span>
+    </div>
+  );
+}
+
+/** "Status: Failed / Error: ... / Last attempt: .../ Next retry: ..." — the
+ *  exact shape the spec asks for. Only rendered for a row the backend has
+ *  actually scheduled a retry for (FAILED_RETRY_SCHEDULED); a terminal
+ *  failure (precondition absent, not transient) shows the error without a
+ *  retry line since none is coming. */
+function ErrorBanner({ execution, now }: { execution: AgentExecutionSummary; now: number }) {
+  const retrying = execution.status === "FAILED_RETRY_SCHEDULED";
+  return (
+    <div className="mt-1.5 rounded border border-[rgb(var(--bad-rgb)/0.3)] bg-[rgb(var(--bad-rgb)/0.06)] px-1.5 py-1 text-[10px] leading-tight text-bad">
+      <div className="font-semibold uppercase tracking-wide">Status: Failed</div>
+      <div className="truncate" title={execution.errorSummary ?? undefined}>Error: {execution.errorSummary ?? "Agent execution failed"}</div>
+      <div className="text-bad/80">Last attempt: {timeAgo(execution.lastAttemptAt) ?? "just now"}</div>
+      {retrying && execution.nextRetryAt && (
+        <div className="text-bad/80">Next retry: {formatCountdown(execution.nextRetryAt, now)}</div>
+      )}
+    </div>
+  );
+}
+
 /** The email_only pipeline (review -> email -> scheduler) that drafts each
  *  step of the 5-email sequence. */
 const EMAIL_PIPELINE_AGENTS = new Set(["review", "email", "scheduler"]);
@@ -95,18 +159,37 @@ interface RunningAgent {
  * hit once, see SequencerService.onStageEntered) — that case flags as "Not
  * started" rather than showing nothing.
  */
-function AgentActivity({ lead, running }: { lead: LeadRow; running?: RunningAgent }) {
+function AgentActivity({ lead, running, now }: { lead: LeadRow; running?: RunningAgent; now: number }) {
   const stage = lead.pipelineState?.stage;
   const last = lead.agentRuns?.[0];
 
+  // Persisted state takes priority over the live ping: a failure survives a
+  // refresh (it comes from the AgentExecution row the backend keeps), while
+  // `running` is only an in-memory socket ping that's gone the moment the
+  // page reloads (Part: reliability overhaul, 2026-08-31).
+  const failedExecution = lead.agentExecutions?.find(
+    (e) => e.status === "FAILED_RETRY_SCHEDULED" || e.status === "FAILED_TERMINAL",
+  );
+  if (failedExecution) {
+    return <ErrorBanner execution={failedExecution} now={now} />;
+  }
+
   if (running) {
     return (
-      <div
-        className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent"
-        title={running.responsibility}
-      >
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-        <span className="truncate">{AGENT_LABELS[running.agent] ?? running.agent} working…</span>
+      <div className="mt-1.5">
+        <AgentPulse label={`${AGENT_LABELS[running.agent] ?? running.agent} working…`} title={running.responsibility} />
+      </div>
+    );
+  }
+
+  // No live ping yet (e.g. right after a page load) but the backend's own
+  // lock says an agent is still mid-run — same visual as `running` above,
+  // just sourced from the persisted row instead of the socket event.
+  const runningExecution = lead.agentExecutions?.find((e) => e.status === "RUNNING");
+  if (runningExecution) {
+    return (
+      <div className="mt-1.5">
+        <AgentPulse label={`${AGENT_LABELS[runningExecution.agent] ?? runningExecution.agent} working…`} />
       </div>
     );
   }
@@ -129,9 +212,8 @@ function AgentActivity({ lead, running }: { lead: LeadRow; running?: RunningAgen
     }
     if (!relevant) {
       return (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-accent">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
-          Starting…
+        <div className="mt-1.5">
+          <AgentPulse label="Starting…" />
         </div>
       );
     }
@@ -222,7 +304,6 @@ export default function PipelinePage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [deleteStage, setDeleteStage] = useState("");
   const [deletingStage, setDeletingStage] = useState(false);
-  const [verifying, setVerifying] = useState(false);
   const [verifyProgress, setVerifyProgress] = useState<{ done: number; total: number } | null>(null);
   // How many cards are rendered per column, independent of how many exist —
   // a column used to render its whole list at once, so the page grew taller
@@ -249,6 +330,17 @@ export default function PipelinePage() {
   // agentRun.started event lands, not on the 400ms-debounced full refetch
   // below (agentRun.recorded's status/notes still come from that refetch).
   const [runningAgents, setRunningAgents] = useState<Record<string, RunningAgent & { at: number }>>({});
+
+  // Drives every countdown on the board (StageCountdown, ErrorBanner's "Next
+  // retry") — one shared ticking clock, not one setInterval per card, same
+  // pattern as the automation page's Send queue. Only ever formats a
+  // server-provided timestamp; a refresh re-fetches that timestamp from the
+  // API, it never resets a client-side schedule.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // Same query key as /leads — both pages call the identical endpoint with
   // identical params, so they share one cache entry: switching between them
@@ -281,7 +373,19 @@ export default function PipelinePage() {
   // mount and never again, so a card another user (or the pipeline itself)
   // moved stayed frozen in its old column until someone happened to refresh.
   useRealtimeRefetch(
-    ["lead.created", "lead.stageChanged", "lead.updated", "agentRun.recorded", "agentDispatch.status"],
+    [
+      "lead.created",
+      "lead.stageChanged",
+      "lead.updated",
+      "agentRun.recorded",
+      "agentDispatch.status",
+      // Carries the fresh errorSummary/nextRetryAt/status onto the card the
+      // moment a retry is scheduled or resolved (Part: reliability
+      // overhaul, 2026-08-31) — same debounced-refetch plumbing as every
+      // other live event here, no separate socket state needed since the
+      // countdown itself just formats whatever nextRetryAt comes back.
+      "agentExecution.updated",
+    ],
     invalidateLeads,
   );
 
@@ -317,6 +421,22 @@ export default function PipelinePage() {
       return next;
     });
   });
+  // Drives the "Verify emails" button's progress bar directly — each lead's
+  // own badge updates separately via the existing lead.updated-triggered
+  // refetch above; this is just the batch-level counter (Part: reliability
+  // overhaul, 2026-08-31 — verification itself is now a fire-and-forget
+  // bulk call, not a client-side await loop, so this is the only way left
+  // to know how far the backend has gotten).
+  useRealtimeEvent<{ done: number; total: number }>("leads.verifyEmailsProgress", (payload) => {
+    setVerifyProgress((p) => (p ? payload : p));
+  });
+  // Briefly shows "100%" before the button resets to normal, instead of it
+  // vanishing the instant the last lead resolves.
+  useEffect(() => {
+    if (!verifyProgress || verifyProgress.done < verifyProgress.total) return;
+    const id = setTimeout(() => setVerifyProgress(null), 1500);
+    return () => clearTimeout(id);
+  }, [verifyProgress]);
 
   // Leads with no pipelineState haven't been promoted out of Lead Room yet
   // (Part: Lead Room / Move to Pipeline) — this board only ever shows what's
@@ -348,7 +468,7 @@ export default function PipelinePage() {
     queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
       (rows ?? []).map((r) =>
         r.id === lead.id
-          ? { ...r, pipelineState: { stage, previousStage: from, enteredStageAt: new Date().toISOString() } }
+          ? { ...r, pipelineState: { stage, previousStage: from, enteredStageAt: new Date().toISOString(), nextActionAt: null } }
           : r,
       ),
     );
@@ -443,11 +563,16 @@ export default function PipelinePage() {
    * creation/promotion now, verified or not (Part: pipeline simplification,
    * 2026-08-29), and this is the only thing that gets an unverified one
    * (human-added, CSV-imported, Email Hub) from sitting there to actually
-   * drafting Email 1. Sequential per-lead calls with a live progress bar,
-   * same pattern as Lead Room's bulk delete — not a single opaque batch
-   * call, and not parallel, since a real NeverBounce key behind this is a
-   * rate-limited external API. Sourced from the cards already loaded for
-   * this column rather than a fresh fetch, same as deleteAllInStage above.
+   * drafting Email 1.
+   *
+   * Fire-and-forget (Part: reliability overhaul, 2026-08-31) — this used to
+   * be a client-side loop awaiting one HTTP call at a time, so the whole
+   * batch's wall-clock time was every lead's NeverBounce round trip added
+   * together and the button stayed disabled the entire time. The backend
+   * now runs the batch itself with bounded concurrency
+   * (LeadsService.verifyEmails) and reports progress
+   * (leads.verifyEmailsProgress) plus each lead's own result (lead.updated)
+   * over realtime — this call just kicks it off and returns immediately.
    */
   async function verifyAllInReady() {
     const targets = (byStage.get(PipelineStage.READY_FOR_OUTREACH) ?? []).filter(
@@ -455,31 +580,17 @@ export default function PipelinePage() {
     );
     if (targets.length === 0) return;
 
-    setVerifying(true);
     setError(null);
     setNotice(null);
     setVerifyProgress({ done: 0, total: targets.length });
 
-    let verified = 0;
-    let failed = 0;
-    for (const lead of targets) {
-      try {
-        const result: any = await api.verifyEmail(lead.id);
-        if (result.verifiedEmail) verified += 1;
-        else failed += 1;
-        queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
-          (rows ?? []).map((r) => (r.id === lead.id ? { ...r, verifiedEmail: !!result.verifiedEmail } : r)),
-        );
-      } catch {
-        failed += 1;
-      }
-      setVerifyProgress((p) => (p ? { done: p.done + 1, total: p.total } : p));
+    try {
+      await api.verifyEmails(targets.map((l) => l.id));
+      setNotice(`Verifying ${targets.length} email${targets.length === 1 ? "" : "s"}… results will update live.`);
+    } catch (err) {
+      setError(`Could not start verification: ${(err as Error).message}`);
+      setVerifyProgress(null);
     }
-
-    setNotice(`Verified ${verified} of ${targets.length} — ${failed} did not verify.`);
-    setVerifying(false);
-    setVerifyProgress(null);
-    invalidateLeads();
   }
 
   return (
@@ -590,7 +701,7 @@ export default function PipelinePage() {
                   <div className="border-b border-[var(--line)] px-3 py-2">
                     <button
                       type="button"
-                      disabled={verifying || unverifiedCount === 0}
+                      disabled={Boolean(verifyProgress) || unverifiedCount === 0}
                       onClick={verifyAllInReady}
                       title="Re-check every unverified email in this column — a verified lead starts drafting Email 1 right away."
                       className="w-full rounded border border-[var(--line)] px-2 py-1 text-[11px] font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-40"
@@ -644,7 +755,8 @@ export default function PipelinePage() {
                       {lead.country && (
                         <div className="mt-1 text-[11px] text-ink/40">{lead.country}</div>
                       )}
-                      <AgentActivity lead={lead} running={runningAgents[lead.id]} />
+                      <AgentActivity lead={lead} running={runningAgents[lead.id]} now={now} />
+                      <StageCountdown lead={lead} now={now} />
                       <LastEmail lead={lead} />
                     </Link>
                     <div className="mt-1.5 flex items-center gap-1.5">

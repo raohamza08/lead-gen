@@ -3,6 +3,7 @@ import { Reflector } from "@nestjs/core";
 import { Role, JwtClaims } from "@leadgen/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AccessModule, MODULE_ACCESS_KEY } from "../decorators/requires-module.decorator";
+import { PermissionDenialLogger } from "./permission-denial-logger.service";
 
 const FIELD_BY_MODULE: Record<AccessModule, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess"> = {
   LEAD_GENERATION: "leadGenAccess",
@@ -30,6 +31,7 @@ export class ModuleAccessGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
     private readonly prisma: PrismaService,
+    private readonly denialLogger: PermissionDenialLogger,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -47,6 +49,7 @@ export class ModuleAccessGuard implements CanActivate {
     const field = FIELD_BY_MODULE[requiredModule];
     const record = await this.prisma.user.findUnique({ where: { id: user.sub }, select: { [field]: true } });
     if (!record?.[field]) {
+      this.denialLogger.log(user, `missing ${field}`, context.switchToHttp().getRequest().route?.path);
       throw new ForbiddenException("You don't have access to this module — ask an admin to grant it in Settings > Team.");
     }
     return true;

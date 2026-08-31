@@ -15,6 +15,7 @@ import { ReportEmailDraftFailureDto } from "./dto/report-email-draft-failure.dto
 import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { PromoteToPipelineDto } from "./dto/promote-to-pipeline.dto";
 import { BulkDeleteLeadsDto } from "./dto/bulk-delete-leads.dto";
+import { VerifyEmailsDto } from "./dto/verify-emails.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { InternalAuthGuard } from "../common/guards/internal-auth.guard";
@@ -207,6 +208,24 @@ export class LeadsController {
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   verifyEmail(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.leadsService.verifyEmail(user.orgId, id);
+  }
+
+  /**
+   * Bulk verify — the Ready column's "Verify emails" button (Part:
+   * reliability overhaul, 2026-08-31). Fire-and-forget on purpose: the
+   * batch runs with bounded concurrency in the background and reports
+   * progress (leads.verifyEmailsProgress) plus each lead's own result
+   * (lead.updated, from verifyEmail) over realtime, rather than blocking
+   * this request for however long NeverBounce takes across the whole
+   * column — see LeadsService.verifyEmails.
+   */
+  @Post("verify-emails")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  verifyEmails(@CurrentUser() user: JwtClaims, @Body() dto: VerifyEmailsDto) {
+    this.leadsService.verifyEmails(user.orgId, dto.leadIds).catch(() => undefined);
+    return { accepted: true, total: dto.leadIds.length };
   }
 
   @Post(":id/emails/:emailMessageId/resend")

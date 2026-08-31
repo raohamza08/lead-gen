@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { api, getCurrentUser } from "../lib/api-client";
 import { PersonAccessPanel } from "./person-access-panel";
+import { Avatar } from "./avatar";
 
 interface TeamMember {
   id: string;
@@ -11,6 +12,9 @@ interface TeamMember {
   role: "ADMIN" | "MANAGER" | "LEAD_REVIEWER" | "SALES_REP" | "VIEWER";
   active: boolean;
   createdAt: string;
+  isPrimaryAdmin: boolean;
+  displayName: string | null;
+  avatarUrl: string | null;
 }
 
 const ROLES: TeamMember["role"][] = ["ADMIN", "MANAGER", "LEAD_REVIEWER", "SALES_REP", "VIEWER"];
@@ -37,6 +41,10 @@ export function TeamSection() {
 
   const currentUser = getCurrentUser();
   const isAdmin = currentUser?.role === "ADMIN";
+  // isPrimaryAdmin is deliberately absent from the JWT (it's a live,
+  // instantly-revocable DB flag — see PrimaryAdminGuard) — read it off the
+  // already-loaded members list instead of a second /users/me round trip.
+  const isPrimaryAdmin = members.find((m) => m.id === currentUser?.sub)?.isPrimaryAdmin ?? false;
 
   function refresh() {
     api
@@ -74,6 +82,25 @@ export function TeamSection() {
     setError(null);
     try {
       await api.changeUserRole(member.id, role);
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function makePrimaryAdmin(member: TeamMember) {
+    if (
+      !window.confirm(
+        `Make ${member.name} the primary administrator?\n\nThey will gain exclusive access to System Logs and security notifications — you will lose that access.`,
+      )
+    )
+      return;
+    setBusyId(member.id);
+    setError(null);
+    try {
+      await api.transferPrimaryAdmin(member.id);
       refresh();
     } catch (err) {
       setError((err as Error).message);
@@ -143,8 +170,21 @@ export function TeamSection() {
                 <Fragment key={m.id}>
                 <tr className="border-b border-[var(--line)] last:border-0">
                   <td className="py-2 pr-3">
-                    {m.name}
-                    {isSelf ? <span className="text-ink/40"> (you)</span> : null}
+                    <div className="flex items-center gap-2">
+                      <Avatar name={m.displayName || m.name} email={m.email} avatarUrl={m.avatarUrl} sizeClass="h-6 w-6 text-[10px]" />
+                      <span>
+                        {m.name}
+                        {isSelf ? <span className="text-ink/40"> (you)</span> : null}
+                      </span>
+                    </div>
+                    {m.isPrimaryAdmin && (
+                      <span
+                        className="ml-1.5 rounded-full bg-gold/15 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-gold"
+                        title="The organization's single authorized administrator — exclusive access to System Logs and security notifications."
+                      >
+                        Primary Admin
+                      </span>
+                    )}
                   </td>
                   <td className="py-2 pr-3 text-ink/60">{m.email}</td>
                   <td className="py-2 pr-3">
@@ -178,6 +218,15 @@ export function TeamSection() {
                   </td>
                   <td className="py-2">
                     <div className="flex items-center gap-2">
+                      {isPrimaryAdmin && !isSelf && m.role === "ADMIN" && !m.isPrimaryAdmin && (
+                        <button
+                          disabled={busyId === m.id}
+                          onClick={() => makePrimaryAdmin(m)}
+                          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                        >
+                          Make primary admin
+                        </button>
+                      )}
                       {isAdmin && (
                         <button
                           onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}

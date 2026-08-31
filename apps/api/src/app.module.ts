@@ -25,6 +25,7 @@ import { AgentsModule } from "./agents/agents.module";
 import { CampaignsModule } from "./campaigns/campaigns.module";
 import { OrganizationModule } from "./organization/organization.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { AuditLogModule } from "./audit-log/audit-log.module";
 import { CaseStudiesModule } from "./case-studies/case-studies.module";
 import { EmailHubModule } from "./email-hub/email-hub.module";
 import { SocialMediaModule } from "./social-media/social-media.module";
@@ -56,6 +57,7 @@ import { SocialMediaModule } from "./social-media/social-media.module";
     CampaignsModule,
     OrganizationModule,
     NotificationsModule,
+    AuditLogModule,
     CaseStudiesModule,
     EmailHubModule,
     SocialMediaModule,

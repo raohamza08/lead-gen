@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Inject, Injectable, Logger, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtClaims, Role } from "@leadgen/types";
-import { Prisma, SocialAccount, SocialAutomation, SocialPlatform, SocialPostStatus } from "@prisma/client";
+import { Prisma, SocialAccount, SocialAutomation, SocialPlatform, SocialPostStatus, NotificationCategory } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { EncryptionService } from "../common/crypto/encryption.service";
 import { apiPublicUrl } from "../common/api-url";
@@ -179,9 +179,14 @@ export class SocialMediaService {
     });
     await this.writeAudit(user.orgId, user.sub, "ACCOUNT_DISCONNECTED", { accountId: id });
     await this.notifications.notify(user.orgId, {
+      category: NotificationCategory.SOCIAL,
       type: "SOCIAL_ACCOUNT_DISCONNECTED",
       severity: "WARNING",
+      title: "Social Account Disconnected",
       message: `${existing.platform} account @${existing.username} was disconnected.`,
+      entityType: "socialAccount",
+      entityId: id,
+      actionUrl: "/social-media/accounts",
     });
     return this.sanitizeAccount(updated);
   }
@@ -352,9 +357,14 @@ export class SocialMediaService {
 
     await this.writeAudit(pending.orgId, pending.userId, "ACCOUNT_CONNECTED", { accountId: account.id, diff: { platform, username: profile.username } });
     await this.notifications.notify(pending.orgId, {
+      category: NotificationCategory.SOCIAL,
       type: "SOCIAL_ACCOUNT_CONNECTED",
       severity: "WARNING",
+      title: "Social Account Connected",
       message: `${platform} account @${profile.username} connected successfully.`,
+      entityType: "socialAccount",
+      entityId: account.id,
+      actionUrl: "/social-media/accounts",
     });
     this.realtime.emitToOrg(pending.orgId, "socialMedia.accountConnected", { accountId: account.id, platform });
 
@@ -591,7 +601,16 @@ export class SocialMediaService {
     await this.writeAudit(user.orgId, user.sub, "POST_SUBMITTED", { postId: id, diff: { nextStatus } });
     this.realtime.emitToOrg(user.orgId, "socialMedia.postUpdated", { postId: id, status: nextStatus });
     if (nextStatus === "PENDING_REVIEW") {
-      await this.notifications.notify(user.orgId, { type: "SOCIAL_POST_PENDING_REVIEW", message: "A social post is waiting for approval." });
+      await this.notifications.notify(user.orgId, {
+        category: NotificationCategory.SOCIAL,
+        type: "SOCIAL_POST_PENDING_REVIEW",
+        severity: "WARNING",
+        title: "Post Awaiting Approval",
+        message: "A social post is waiting for approval.",
+        entityType: "socialPost",
+        entityId: id,
+        actionUrl: "/social-media/calendar",
+      });
     }
     return this.withMediaUrls(updated);
   }
@@ -790,8 +809,13 @@ export class SocialMediaService {
         notes.push(`created draft post ${postId}`);
       } else if (action.type === "NOTIFY") {
         await this.notifications.notify(automation.orgId, {
+          category: NotificationCategory.SOCIAL,
           type: "SOCIAL_AUTOMATION_FIRED",
+          severity: "WARNING",
+          title: "Automation Fired",
           message: (action.message as string) || `Automation "${automation.name}" fired for new lead ${lead.companyName}.`,
+          leadId: lead.id,
+          actionUrl: `/leads/${lead.id}`,
         });
         notes.push("sent notification");
       }

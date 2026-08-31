@@ -31,7 +31,9 @@ export function ReplyComposer({
   /** Prefilled when opened via "Reply All"; empty when opened via "Reply". */
   initialCc?: string;
   sending: boolean;
-  onSend: (input: { bodyHtml: string; cc: string[]; bcc: string[]; attachments: OutboundAttachmentInput[] }) => void;
+  onSend: (input: {
+    bodyHtml: string; cc: string[]; bcc: string[]; attachments: OutboundAttachmentInput[]; trackOpen: boolean;
+  }) => void;
   onCancel: () => void;
 }) {
   const [bodyHtml, setBodyHtml] = useState("");
@@ -41,6 +43,7 @@ export function ReplyComposer({
   const [showBcc, setShowBcc] = useState(false);
   const [attachments, setAttachments] = useState<OutboundAttachmentInput[]>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [trackOpen, setTrackOpen] = useState(false);
 
   const isEmpty = bodyHtml.replace(/<[^>]+>/g, "").trim().length === 0;
 
@@ -94,10 +97,14 @@ export function ReplyComposer({
       <div className="flex flex-col gap-3 border-t border-[var(--line)] bg-ink/[0.02] px-5 py-4">
         <AttachmentPicker attachments={attachments} onChange={setAttachments} onError={setAttachmentError} />
         {attachmentError && <p className="text-sm text-bad">{attachmentError}</p>}
+        <label className="flex items-center gap-1.5 text-sm text-ink/60" title="Embed an open-tracking pixel in this email">
+          <input type="checkbox" checked={trackOpen} onChange={(e) => setTrackOpen(e.target.checked)} />
+          Track email
+        </label>
         <div className="flex items-center gap-2.5">
           <button
             onClick={() =>
-              onSend({ bodyHtml, cc: parseAddressList(cc), bcc: parseAddressList(bcc), attachments })
+              onSend({ bodyHtml, cc: parseAddressList(cc), bcc: parseAddressList(bcc), attachments, trackOpen })
             }
             disabled={sending || isEmpty || !!attachmentError}
             className="rounded-full bg-accent px-5 py-2 text-sm font-medium text-white shadow-[var(--shadow-sm)] transition-opacity hover:opacity-90 disabled:opacity-50"

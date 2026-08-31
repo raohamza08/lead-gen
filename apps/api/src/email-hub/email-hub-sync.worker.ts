@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Worker } from "bullmq";
-import { EmailAccount, Prisma } from "@prisma/client";
+import { EmailAccount, NotificationCategory, Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
@@ -133,9 +133,14 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
         data: { status: "SUSPENDED" },
       });
       await this.notifications.notify(account.orgId, {
+        category: NotificationCategory.EMAIL,
         type: "EMAIL_SYNC_AUTH_FAILED",
         severity: "ERROR",
+        title: "Email Sync Suspended",
         message: `Inbox sync for ${account.address} was suspended — IMAP login failed. Check the password in Settings > Email Hub > Accounts.`,
+        entityType: "emailAccount",
+        entityId: account.id,
+        actionUrl: "/settings/email-hub",
       });
       return;
     }

@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Role, JwtClaims } from "@leadgen/types";
 import { ROLES_KEY } from "../decorators/roles.decorator";
+import { PermissionDenialLogger } from "./permission-denial-logger.service";
 
 /**
  * Server-side RBAC enforcement (Part E4). Runs after JwtAuthGuard so request.user
@@ -10,7 +11,10 @@ import { ROLES_KEY } from "../decorators/roles.decorator";
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(
+    private reflector: Reflector,
+    private readonly denialLogger: PermissionDenialLogger,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
@@ -25,6 +29,10 @@ export class RolesGuard implements CanActivate {
     if (!user) {
       return false;
     }
-    return requiredRoles.includes(user.role);
+    const allowed = requiredRoles.includes(user.role);
+    if (!allowed) {
+      this.denialLogger.log(user, `requires role ${requiredRoles.join("/")}, has ${user.role}`, request.route?.path ?? request.url);
+    }
+    return allowed;
   }
 }
