@@ -1,6 +1,16 @@
 # Resume here
 
-State as of **2026-08-10**. Read this first.
+State as of **2026-08-29**. Read this first.
+
+**Production has moved off this workstation.** As of 2026-08-26, the live
+dashboard/API run on a Hetzner Cloud VPS under systemd (`outly-api`,
+`outly-web`, `outly-ai-workers`), deployed by `git pull` + build + restart —
+not the Tailscale-Funnel-off-this-PC setup the "Restart the stack" / "Public
+access" sections below describe. Those sections are kept for **local dev**
+context only (they're still how you run this app on your own machine to
+develop against) and no longer describe where the real thing runs. VPS
+IP/SSH access is deliberately not written into this public repo — same
+reasoning as the admin login below.
 
 ---
 
@@ -184,29 +194,67 @@ used any of the four removed values before writing the migration.
 
 ---
 
-## Current state (2026-07-31, campaign facts stale — see lead count above)
+## Pipeline simplification + token reduction (2026-08-29)
+
+**Collapsed the four pre-outreach checkpoints into one entry stage.**
+`NEW_LEAD → VERIFIED → RESEARCH_COMPLETED → UNDER_REVIEW` are gone from
+`PipelineStage` — removed from the enum (both `packages/types` and the
+Postgres type; migration
+`20260829120000_remove_pre_outreach_pipeline_stages` moved every existing
+row to `READY_FOR_OUTREACH` first, then swapped the enum type, since
+Postgres can't drop enum values in place). Root cause for removing them:
+no agent or automation was ever actually gated on any of the four — the AI
+research pipeline runs off lead creation, not pipeline stage — so a lead
+walked through all four the instant its email verified, with nothing behind
+the earlier three rungs. `READY_FOR_OUTREACH` is now the only pre-outreach
+stage; every lead lands there on creation or promotion from Lead Room,
+verified or not (19 stages total now, down from 23).
+
+**Bulk "Verify emails" action**, Pipeline board's Ready column — the real
+gate on outreach starting. No `NEVERBOUNCE_API_KEY` is configured in this
+deployment (deliberate — user declined to add one), so it runs in **DEMO
+MODE**: a syntactic check (domain has a dot), not real deliverability
+verification. Add the key to `.env` to switch to real NeverBounce checks —
+`EmailVerificationService` (`apps/api/src/leads/`) picks it up automatically,
+no code change needed. A lead that verifies immediately drafts Email 1 via
+`SequencerService.maybeEnterOutreach` (replaces the old
+`autoAdvanceToOutreach`, which used to walk the now-removed four-stage
+chain).
+
+**`company_intelligence` deferred from lead creation to Pipeline
+promotion** (token reduction) — it used to run immediately for every
+hand-entered/CSV-imported lead as part of `manual_lead_enrichment`,
+including the many that never get promoted out of Lead Room. Split into its
+own `company_intelligence_only` pipeline, dispatched from
+`LeadsService.promoteToPipeline` instead — see `docs/AGENT_ARCHITECTURE.md`.
+AI-discovered leads (niche filter runs) are unaffected — that path's
+`company_intelligence` cost is still governed by the per-filter Full/Reduced
+toggle, unchanged.
+
+**Also this session:** CSV import batches inserts (`createMany` in chunks
+of 200) instead of one row at a time — was ~9000 DB round trips for a
+1500-row import, now a handful. `/leads` and `/pipeline` both used to fetch
+only the first 200 leads with no pagination, silently hiding anything past
+that — both now page through the full result set.
+
+---
+
+## Current state (2026-07-31 — see note above; stage names below now stale)
 
 **Everything needed to run a campaign is configured and working:**
 
 - One active mailbox: `sales@euroshub.com` (SMTP), verified with a real test send.
 - One campaign ("Healthcare AI Campaign") linked to the "Healthcare" niche filter.
-- As of 2026-08-12 there is exactly **one** lead in the pipeline, at
-  `CLIENT_ONBOARDING` (won). The "2 leads" and `PERSONALIZED_PITCH` reference
-  below is what this file said on 2026-07-31 and is no longer current —
-  `PERSONALIZED_PITCH` doesn't exist as a stage anymore either (see the
-  5-email sequence section above).
+- Lead counts move too fast to keep accurate here — check the dashboard
+  directly rather than trusting a number in this file.
 
-**The pipeline is now autonomous end to end (2026-07-30/31 session) — this
-is the biggest behavioural change since launch:**
+**The pipeline is autonomous end to end (2026-07-30/31, revised 2026-08-29
+above) — this remains the biggest behavioural change since launch:**
 
-- A lead that clears verification (auto-discovered, or manually entered and
-  enriched) now walks itself straight through `VERIFIED → RESEARCH_COMPLETED
-  → UNDER_REVIEW → READY_FOR_OUTREACH` with **no manual advance needed** —
-  Email #1 sends and a LinkedIn draft generates automatically. It only stops
-  short of outreach if the lead's email never verified. This replaces the old
-  "drag through review to Ready" step described in earlier versions of this
-  doc — that step no longer exists as a gate (a human can still edit the
-  review note, it just doesn't block anything anymore).
+- A lead now lands at `READY_FOR_OUTREACH` immediately on creation/promotion
+  (see the 2026-08-29 section above for what changed) — no manual advance
+  needed once its email verifies. Email #1 sends and a LinkedIn draft
+  generates automatically the moment that happens.
 - Every AI-drafted email in the 5-email sequence (see above) **sends itself
   by default** — `/settings` has an "Automation" toggle to require approval
   again per org. A draft the worker's own safety checks flagged
@@ -228,30 +276,41 @@ is the biggest behavioural change since launch:**
 **To run a campaign for real:** create/edit a niche filter on `/settings`,
 decide Full vs Reduced enrichment cost there, link it to a campaign on
 `/campaigns`, then either wait for its daily cron or hit **Run now**. New
-leads now handle themselves from there — nothing to drag or click.
+leads now handle themselves from there — nothing to drag or click. For
+hand-entered/imported leads: promote them to Pipeline from Lead Room, then
+use the Ready column's "Verify emails" button once they're there.
 
 ---
 
 ## What exists
 
-**14 agents** behind an orchestrator (`apps/ai-workers/agents/`), 8 pipelines.
-See [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md). Enrichment cost is
-tunable per niche filter — Full (6 Claude CLI calls/candidate) or Reduced (3,
-skips `company_intelligence`/`website_audit`/`buyer_intelligence`) — via a
-toggle or per-agent checkboxes on `/settings`. All AI-worker dispatch now
-goes through a retrying BullMQ queue rather than a bare `fetch()`.
+**17 agents** behind an orchestrator (`apps/ai-workers/agents/`), 12
+pipelines. See [AGENT_ARCHITECTURE.md](./AGENT_ARCHITECTURE.md). AI-discovery
+enrichment cost is tunable per niche filter — Full (6 Claude CLI
+calls/candidate) or Reduced (3, skips
+`company_intelligence`/`website_audit`/`buyer_intelligence`) — via a toggle or
+per-agent checkboxes on `/settings`. Hand-entered/imported leads run a lighter
+set immediately (verification, `website_audit`, `buyer_intelligence`,
+`ai_opportunity`, `lead_scoring`, `agent_review`); `company_intelligence` for
+those runs separately, once, on promotion to Pipeline (see 2026-08-29 above).
+All AI-worker dispatch goes through a retrying BullMQ queue rather than a
+bare `fetch()`.
 
 `lead_discovery · lead_verification · company_intelligence · website_audit ·
 buyer_intelligence · ai_opportunity · lead_scoring · review · email · linkedin ·
-scheduler · analytics · learning · agent_review`
+scheduler · analytics · learning · agent_review · case_study_review ·
+social_content · email_lead_classifier`
 
-**Pipeline:** 20 stages, `NEW_LEAD → … → WON → CLIENT_ONBOARDING`, with `LOST`
-reachable from any active stage. State machine lives in
-`packages/types/src/pipeline.ts` — shared between API and dashboard so the
-board only offers drops the API will actually accept. As of 2026-07-30/31,
-`NEW_LEAD → … → READY_FOR_OUTREACH` auto-advances on its own (see Current
-state above) — dragging/back/forward controls still work, they're just no
-longer required. One level of undo: every stage change records
+**Pipeline:** 19 stages, `READY_FOR_OUTREACH → … → WON → CLIENT_ONBOARDING`,
+with `LOST` reachable from any active stage (see 2026-08-29 above — this used
+to start `NEW_LEAD → VERIFIED → RESEARCH_COMPLETED → UNDER_REVIEW →
+READY_FOR_OUTREACH`, 20 stages; the first three transitions were removed).
+State machine lives in `packages/types/src/pipeline.ts` — shared between API
+and dashboard so the board only offers drops the API will actually accept.
+Every lead lands at `READY_FOR_OUTREACH` immediately now; the "Verify emails"
+bulk action or a verified email flipping true is what kicks off outreach from
+there (see 2026-08-29 above) — dragging/back/forward controls still work for
+everything past that point. One level of undo: every stage change records
 `previousStage`, and a "← Back" control (`/pipeline` cards, lead detail page)
 swaps back to it — also how a failed automated send gets retried (back to
 Ready, forward again). A direct **Resend** button on the lead detail page's
@@ -316,8 +375,10 @@ CSV export), pipeline (drag-and-drop + back + delete), analytics, campaigns,
 automation (agent telemetry), sequences, settings (niche filters + email
 accounts + team).
 
-**Tests:** 37 API (`npm test --workspace=apps/api`) + 22 agent
-(`cd apps/ai-workers; .venv\Scripts\python.exe -m pytest tests/ -q`).
+**Tests:** 37 API (`npm test --workspace=apps/api`) + 32 agent
+(`cd apps/ai-workers; .venv\Scripts\python.exe -m pytest tests/ -q`,
+2 pre-existing known failures unrelated to recent changes — see
+AGENT_ARCHITECTURE.md's Testing section).
 
 ---
 
@@ -472,10 +533,12 @@ successful web-search turns. Not reproducible with short prompts, so it looks
 like subscription rate limiting — unconfirmed. Mitigated with 3× backoff and a
 concurrency semaphore.
 
-**Cost:** the full acquisition pipeline makes **6 CLI calls per candidate**
+**Cost:** the full AI-discovery pipeline makes **6 CLI calls per candidate**
 (~600/day at a 100 target). Use the Full/Reduced toggle or per-agent
 checkboxes on `/settings` to drop to 3. Discovery, verification, opportunity
-and scoring cannot be disabled.
+and scoring cannot be disabled. Hand-entered/imported leads cost 5 calls
+immediately (not 6 — `company_intelligence` is deferred to promotion, see
+2026-08-29 above) plus one more, once, only if actually promoted to Pipeline.
 
 **`ALLOW_DEMO_FALLBACK` is off** and should stay off — with it on, a CLI failure
 inserts synthetic `.example.com` companies into the real leads table.

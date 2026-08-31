@@ -72,25 +72,28 @@ later.
 
 ## Agents
 
-All 14 are **built and wired into a live pipeline** as of 2026-07-31 — the
-table below used to track several as "not yet an agent"; that gap is closed.
+**17 unique agents** (18 registry entries — `lead_verification` is registered
+twice under different keys, see below) built and wired into a live pipeline.
 
 | Agent | Responsibility | Notes |
 |---|---|---|
 | `lead_discovery` | Finds companies matching the filters | critical |
 | `lead_verification` | Validates website, LinkedIn, email; rejects unqualified | critical. Registered twice — see below |
-| `company_intelligence` | Business model, competitors, growth signals, digital maturity | optional enrichment (Full/Reduced toggle) |
+| `company_intelligence` | Business model, competitors, growth signals, digital maturity | optional enrichment (Full/Reduced toggle) for AI-discovered leads. For hand-entered/imported leads, runs once on promotion to Pipeline, not at creation (Part: token reduction, 2026-08-29) — see `company_intelligence_only` below |
 | `website_audit` | Design/UX/SEO/speed/security findings quotable to the prospect | optional enrichment |
 | `buyer_intelligence` | Decision-maker persona, authority/engagement scores | optional enrichment |
 | `ai_opportunity` | Manual workflows, automation ideas, ROI, deal size | always runs |
 | `lead_scoring` | Six-dimension rubric + priority score | always runs, always last |
-| `agent_review` | AI's own review note — same fields Human review asks a person to fill in | added 2026-07-30, feeds `manual_lead_enrichment` |
+| `agent_review` | AI's own review note — same fields Human review asks a person to fill in | feeds `manual_lead_enrichment` |
 | `review` | Merges the human's review note with AI findings for outreach copy | not the same agent as `agent_review` above — this one blends, that one authors from scratch |
 | `email` | Drafts one email of the 5-email sequence (Claude CLI, not Gemini — see `docs/RESUME.md`'s 2026-08-12 entry) | step-aware via `sequence_step` in context |
 | `linkedin` | Drafts connection/follow-up copy only | sending itself is permanently out of scope (ToS/ban risk) — this has not changed and should not |
 | `scheduler` | Wait periods, follow-up timing | BullMQ sequencer in the API |
 | `analytics` | Campaign performance and optimisation suggestions | |
 | `learning` | Learns which niches, offers and subject lines perform | |
+| `case_study_review` | Reviews a submitted case study for niche fit and email-ready wording | triggered from Settings when an operator adds one |
+| `social_content` | Drafts or repurposes a social post caption from a brief | triggered from the composer or an automation's `CREATE_DRAFT` action |
+| `email_lead_classifier` | Judges whether an inbound Email Hub sender looks like a viable prospect | triggered on a thread's first message only |
 
 **`lead_verification` is registered under two dict keys** in
 `registry.py` — `"lead_verification"` (the strict form: an unqualified
@@ -111,18 +114,35 @@ confident-sounding opportunities with nothing underneath.
 ## Pipelines
 
 ```python
-"lead_acquisition":      lead_discovery -> lead_verification -> company_intelligence
-                          -> website_audit -> buyer_intelligence -> ai_opportunity -> lead_scoring
-"lead_enrichment":        company_intelligence -> website_audit -> buyer_intelligence
-                          -> ai_opportunity -> lead_scoring       # re-enrich an existing lead; unused today
-"manual_lead_enrichment": lead_verification_soft -> company_intelligence -> website_audit
-                          -> buyer_intelligence -> ai_opportunity -> lead_scoring -> agent_review
-"rescore":                lead_scoring          # cheap re-score after a review-note edit
-"outreach":                review -> email -> linkedin -> scheduler
-"email_only":              review -> email -> scheduler         # drives every step of the 5-email sequence
-"linkedin_draft":          review -> linkedin
-"optimisation":            analytics -> learning                # cross-lead, not per-candidate
+"lead_acquisition":         lead_discovery -> lead_verification -> company_intelligence
+                             -> website_audit -> buyer_intelligence -> ai_opportunity -> lead_scoring
+"lead_enrichment":           company_intelligence -> website_audit -> buyer_intelligence
+                             -> ai_opportunity -> lead_scoring       # re-enrich an existing lead; unused today
+"manual_lead_enrichment":    lead_verification_soft -> website_audit -> buyer_intelligence
+                             -> ai_opportunity -> lead_scoring -> agent_review
+                             # company_intelligence deliberately NOT here (2026-08-29) — see below
+"company_intelligence_only": company_intelligence   # dispatched from LeadsService.promoteToPipeline,
+                                                     # not lead creation — spent only on leads that
+                                                     # actually reach Ready, not every raw import
+"rescore":                   lead_scoring          # cheap re-score after a review-note edit
+"outreach":                   review -> email -> linkedin -> scheduler
+"email_only":                 review -> email -> scheduler         # drives every step of the 5-email sequence
+"linkedin_draft":             review -> linkedin
+"optimisation":               analytics -> learning                # cross-lead, not per-candidate
+"case_study_review":          case_study_review    # one agent, its own pipeline
+"social_content":             social_content        # one agent, its own pipeline
+"email_lead_classifier":      email_lead_classifier # one agent, its own pipeline
 ```
+
+**Why `company_intelligence` could be split out safely:** every intelligence
+agent (`company_intelligence`/`website_audit`/`buyer_intelligence`) only
+`requires = ("candidate",)` — none of them consumes another's output, so
+pulling one out of the pipeline and dispatching it separately, later, doesn't
+break the others' contracts. `ai_opportunity`/`lead_scoring` likewise only
+require `candidate`(/`verification`), not `company_intelligence`'s output, so
+scoring a lead before its company research has run (or without it ever
+running, if the lead is never promoted) degrades gracefully rather than
+failing.
 
 `GET /agents` on the worker returns the live roster and pipeline definitions,
 read from the registry rather than a hand-maintained list — an agent added to
@@ -166,8 +186,15 @@ constructs (a `SEEDS` dict per pipeline — add an entry here when adding a
 pipeline, or `test_every_pipeline_validates` fails with a `KeyError`), that
 `describe_fleet()` names stay unique despite the two `lead_verification`
 registry keys, plus behaviour tests for `ReviewAgent`/`SchedulerAgent`/sample-
-size guards. 22 tests total. Run with:
+size guards. 32 tests total. Run with:
 
 ```bash
 cd apps/ai-workers && .venv\Scripts\python.exe -m pytest tests/ -q
 ```
+
+**Known pre-existing failures (2026-08-29), not caused by any change
+documented here:** `SEEDS` in `test_agents.py` is missing an entry for
+`email_lead_classifier` (`test_every_pipeline_validates` raises `KeyError:
+'email_lead_classifier'`), and `TestSampleSizeGuards::test_learning_refuses_to_learn_from_too_few_decided_deals`
+asserts the word "noise" appears in `LearningAgent`'s skip message, which no
+longer matches the agent's current wording. Neither has been fixed yet.

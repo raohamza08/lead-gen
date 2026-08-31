@@ -1,7 +1,19 @@
 # Deployment
 
-Two options. **Option A is what is currently live**, and it is the better fit
-for this project.
+**STALE as of 2026-08-29 — neither option below is what's actually live.**
+Production now runs on a Hetzner Cloud VPS: systemd services (`outly-api`,
+`outly-web`, `outly-ai-workers`), deployed by `git pull` + build + restart,
+not Vercel/Cloudflare/Render. See the note at the top of `docs/RESUME.md`.
+This file is kept as-is for now (not rewritten) since Option A's local-dev
+instructions (`npm run dev:*`, Redis via Docker) are still how you run this
+app on your own machine — only the "how it's published to the internet"
+parts are wrong. VPS access details are deliberately not written into this
+public repo.
+
+---
+
+Two options below. **Neither is what is currently live** (see banner above).
+Option A was the setup as of 2026-08-10; kept for local-dev reference.
 
 ---
 
