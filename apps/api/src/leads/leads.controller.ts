@@ -11,6 +11,7 @@ import { AdvanceStageDto } from "./dto/advance-stage.dto";
 import { ApproveEmailDto } from "./dto/approve-email.dto";
 import { QueryLeadsDto } from "./dto/query-leads.dto";
 import { CreateEmailDraftDto } from "./dto/create-email-draft.dto";
+import { ReportEmailDraftFailureDto } from "./dto/report-email-draft-failure.dto";
 import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { PromoteToPipelineDto } from "./dto/promote-to-pipeline.dto";
 import { BulkDeleteLeadsDto } from "./dto/bulk-delete-leads.dto";
@@ -234,6 +235,15 @@ export class LeadsController {
   @UseGuards(InternalAuthGuard)
   receiveDraft(@Param("id") id: string, @Body() dto: CreateEmailDraftDto) {
     return this.leadsService.receiveEmailDraft(id, dto);
+  }
+
+  /** Called by the ai-workers "email" agent when drafting produced no
+   *  usable output (Claude CLI error/timeout, or a lint failure that
+   *  survived the retry) — the failure counterpart to draft-email above. */
+  @Post(":id/draft-email/failed")
+  @UseGuards(InternalAuthGuard)
+  receiveDraftFailure(@Param("id") id: string, @Body() dto: ReportEmailDraftFailureDto) {
+    return this.leadsService.receiveEmailDraftFailure(id, dto);
   }
 
   /** (Re)triggers the AI draft for whichever step the lead is currently

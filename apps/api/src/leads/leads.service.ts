@@ -26,6 +26,8 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { SocialMediaService } from "../social-media/social-media.service";
 import { mapRowToDto, parseCsvHeaders, parseCsvRows, suggestMapping } from "./lead-import-mapping";
 import { EmailVerificationService } from "./email-verification.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { ReportEmailDraftFailureDto } from "./dto/report-email-draft-failure.dto";
 
 export interface CreateLeadResult {
   status: "created" | "duplicate";
@@ -45,6 +47,7 @@ export class LeadsService {
     private readonly realtime: RealtimeGateway,
     private readonly socialMedia: SocialMediaService,
     private readonly emailVerification: EmailVerificationService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /**
@@ -861,6 +864,59 @@ export class LeadsService {
       await this.sequencer.enqueueApprovedSend(message.id);
       return this.prisma.emailMessage.findUniqueOrThrow({ where: { id: message.id } });
     }
+
+    return message;
+  }
+
+  /**
+   * Counterpart to receiveEmailDraft for when drafting itself produced
+   * nothing (Claude CLI error/timeout, or a lint failure that survived the
+   * retry — see gemini_agent/runner.py's run_email_draft). Before this
+   * existed, that path just logged an error inside the ai-workers process
+   * and returned — no EmailMessage row, no notification, nothing visible on
+   * the lead. The lead was left sitting at whatever stage it was in,
+   * indistinguishable from one that was simply waiting its turn (confirmed
+   * 2026-08-31: 96 leads stuck at READY_FOR_OUTREACH for ~2 days after a
+   * bulk-verify burst rate-limited the CLI, with no error surfaced anywhere).
+   *
+   * Recording a FAILED row here — rather than only notifying — is what makes
+   * this self-healing: dispatchEmailDraft's existing idempotency check
+   * already deletes-and-redispatches on a FAILED sequenceStep row, so the
+   * "Generate pitch draft" button (requestEmailDraft) becomes a real retry
+   * instead of a silent no-op ("already drafted, skip").
+   */
+  async receiveEmailDraftFailure(leadId: string, dto: ReportEmailDraftFailureDto) {
+    const lead = await this.prisma.lead.findUniqueOrThrow({ where: { id: leadId } });
+
+    const existing = await this.prisma.emailMessage.findFirst({
+      where: { leadId, sequenceStep: dto.sequenceStep },
+    });
+    if (existing) {
+      // A message already exists for this step (e.g. a second drafting
+      // attempt failed after a first one already succeeded) — don't
+      // clobber real content with a failure row.
+      return existing;
+    }
+
+    const message = await this.prisma.emailMessage.create({
+      data: {
+        leadId,
+        sequenceStep: dto.sequenceStep,
+        subject: "",
+        bodyHtml: "",
+        generatedBy: "CLAUDE",
+        status: "FAILED",
+        failureReason: dto.reason,
+      },
+    });
+
+    this.realtime.emitToOrg(lead.orgId, "lead.updated", { leadId });
+    await this.notifications.notify(lead.orgId, {
+      type: "EMAIL_DRAFT_FAILED",
+      severity: "ERROR",
+      message: `Email ${dto.sequenceStep} drafting failed for ${lead.companyName ?? leadId}: ${dto.reason}`,
+      leadId,
+    });
 
     return message;
   }

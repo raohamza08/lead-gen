@@ -135,6 +135,33 @@ async def submit_email_draft(
         resp.raise_for_status()
 
 
+async def report_email_draft_failed(lead_id: str, step: int, reason: str) -> None:
+    """Counterpart to submit_email_draft for when drafting produced no
+    usable output at all (Claude CLI error/timeout, or a lint failure that
+    survived the retry — see gemini_agent/runner.py). Before this existed,
+    that path only logged locally: no EmailMessage row, no notification, and
+    the lead was left sitting at its current stage indistinguishable from one
+    still waiting its turn (confirmed 2026-08-31: a rate-limit burst silently
+    stranded 96 leads at READY_FOR_OUTREACH for two days).
+
+    Swallowed on failure like the other telemetry-shaped calls here — a
+    reporting error must not be allowed to raise past the caller and mask the
+    original drafting failure with a different traceback.
+    """
+    try:
+        async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
+            resp = await client.post(
+                f"/leads/{lead_id}/draft-email/failed",
+                json={"sequenceStep": step, "reason": reason[:500]},
+                headers=_headers(),
+            )
+            resp.raise_for_status()
+    except Exception as err:  # noqa: BLE001
+        logging.getLogger("shared.api_client").error(
+            "could not report drafting failure for lead %s step %s: %s", lead_id, step, err
+        )
+
+
 async def submit_linkedin_draft(lead_id: str, messages: dict) -> None:
     async with httpx.AsyncClient(base_url=settings.api_base_url, timeout=30) as client:
         resp = await client.patch(

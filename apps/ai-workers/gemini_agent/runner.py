@@ -89,7 +89,9 @@ async def run_email_draft(
         )
         logger.info("Email %d draft submitted for lead %s", step, lead_id)
     else:
+        reason = f"stopped at {result.stopped_at} ({result.stop_reason})"
         logger.error(
-            "Email %d drafting pipeline produced no draft for lead %s: stopped at %s (%s)",
-            step, lead_id, result.stopped_at, result.stop_reason,
+            "Email %d drafting pipeline produced no draft for lead %s: %s", step, lead_id, reason,
         )
+        if org_id:
+            await api_client.report_email_draft_failed(lead_id, step, reason)
