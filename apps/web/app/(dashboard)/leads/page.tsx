@@ -8,6 +8,9 @@ import { useRealtimeEvent, useRealtimeRefetch } from "../../../lib/realtime";
 import { PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 import { LoadingRow, Spinner } from "../../../components/spinner";
+import { Button } from "../../../components/ui/button";
+import { StatusBadge } from "../../../components/ui/status-badge";
+import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../components/ui/table";
 
 interface LeadRow extends Lead {
   score: LeadScore | null;
@@ -116,37 +119,18 @@ const SOURCE_LABELS: Record<string, string> = {
 
 function SourceBadge({ source }: { source?: string | null }) {
   if (!source) return <span className="text-ink/40">—</span>;
-  return (
-    <span className="whitespace-nowrap rounded-full bg-ink/8 px-2 py-0.5 text-[11px] text-ink/60">
-      {SOURCE_LABELS[source] ?? source}
-    </span>
-  );
+  return <StatusBadge tone="neutral" label={SOURCE_LABELS[source] ?? source} />;
 }
 
 function StagePill({ stage }: { stage?: string | null }) {
   // No PipelineState row at all means this lead hasn't been promoted out of
   // Lead Room yet (Part: Lead Room / Move to Pipeline) — distinct from any
   // real stage, so it gets its own badge rather than reading as "unknown".
-  if (!stage) {
-    return (
-      <span className="whitespace-nowrap rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold">
-        Lead Room
-      </span>
-    );
-  }
+  if (!stage) return <StatusBadge tone="warning" label="Lead Room" />;
   const won = stage === PipelineStage.WON || stage === PipelineStage.CLIENT_ONBOARDING;
   const lost = stage === PipelineStage.LOST;
-  return (
-    <span
-      className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11px] ${
-        won ? "bg-[rgb(var(--good-rgb)/0.12)] text-good"
-          : lost ? "bg-[rgb(var(--bad-rgb)/0.1)] text-bad"
-          : "bg-ink/8 text-ink/70"
-      }`}
-    >
-      {stage.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase())}
-    </span>
-  );
+  const label = stage.replace(/_/g, " ").toLowerCase().replace(/^./, (c) => c.toUpperCase());
+  return <StatusBadge tone={won ? "success" : lost ? "error" : "neutral"} label={label} />;
 }
 
 export default function LeadsPage() {
@@ -462,26 +446,16 @@ export default function LeadsPage() {
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && selected.size > 0 && (
-            <button
-              type="button"
-              onClick={deleteSelected}
-              disabled={deletingSelected}
-              className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] px-3.5 py-2 text-sm font-medium text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)] disabled:opacity-50"
-            >
+            <Button type="button" variant="danger" onClick={deleteSelected} disabled={deletingSelected}>
               {deleteProgress
                 ? `Deleting… ${Math.round((deleteProgress.done / deleteProgress.total) * 100)}% (${deleteProgress.done}/${deleteProgress.total})`
                 : `Delete selected (${selected.size})`}
-            </button>
+            </Button>
           )}
-          <button
-            type="button"
-            onClick={exportCsv}
-            disabled={exporting || leads.length === 0}
-            className="rounded-lg border border-[var(--line)] px-3.5 py-2 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-          >
-            {exporting ? "Exporting…" : "Export CSV"}
-          </button>
-          <label className="cursor-pointer rounded-lg border border-[var(--line)] px-3.5 py-2 text-sm font-medium text-ink/70 transition-colors hover:bg-ink/5">
+          <Button type="button" variant="secondary" onClick={exportCsv} disabled={exporting || leads.length === 0} loading={exporting}>
+            Export CSV
+          </Button>
+          <label className="cursor-pointer rounded-lg border border-[var(--line)] px-3.5 py-2 text-sm font-medium text-ink/70 transition-colors duration-fast hover:bg-ink/5">
             Import CSV
             <input
               type="file"
@@ -494,16 +468,15 @@ export default function LeadsPage() {
               }}
             />
           </label>
-          <button
+          <Button
             type="button"
             onClick={() => {
               setShowForm((v) => !v);
               cancelImport();
             }}
-            className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90"
           >
             {showForm ? "Cancel" : "+ Add lead"}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -543,13 +516,9 @@ export default function LeadsPage() {
               ))}
             </div>
           )}
-          <button
-            type="button"
-            onClick={() => setImportResult(null)}
-            className="mt-3 rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 transition-colors hover:bg-ink/5"
-          >
+          <Button type="button" variant="secondary" size="sm" onClick={() => setImportResult(null)} className="mt-3">
             Dismiss
-          </button>
+          </Button>
         </div>
       )}
 
@@ -624,11 +593,10 @@ export default function LeadsPage() {
             </table>
           </div>
           <div className="mt-4 flex items-center gap-2">
-            <button
+            <Button
               type="button"
               onClick={confirmImport}
               disabled={importing || !Object.values(importMapping).includes("companyName")}
-              className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
               title={
                 Object.values(importMapping).includes("companyName")
                   ? undefined
@@ -638,15 +606,10 @@ export default function LeadsPage() {
               {importing
                 ? `Importing… ${Math.min(100, Math.round((importCreated / importPreview.totalRows) * 100))}% (${importCreated}/${importPreview.totalRows})`
                 : `Import ${importPreview.totalRows} lead${importPreview.totalRows === 1 ? "" : "s"}`}
-            </button>
-            <button
-              type="button"
-              onClick={cancelImport}
-              disabled={importing}
-              className="rounded-lg border border-[var(--line)] px-3.5 py-2 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-            >
+            </Button>
+            <Button type="button" variant="secondary" onClick={cancelImport} disabled={importing}>
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -696,13 +659,9 @@ export default function LeadsPage() {
               className="w-full rounded-lg border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none transition-colors focus:border-[rgb(var(--accent-rgb)/0.6)]"
             />
           </label>
-          <button
-            type="submit"
-            disabled={saving || !draft.companyName.trim()}
-            className="mt-4 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-          >
-            {saving ? "Adding…" : "Add lead"}
-          </button>
+          <Button type="submit" disabled={saving || !draft.companyName.trim()} loading={saving} className="mt-4">
+            Add lead
+          </Button>
         </form>
       )}
 
@@ -737,14 +696,14 @@ export default function LeadsPage() {
             className="w-28 rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none"
           />
         </label>
-        <button
+        <Button
           type="button"
           onClick={promoteToPipeline}
           disabled={promoting || promoteCount === 0 || (promoteLimitNum !== null && promoteLimitNum <= 0)}
-          className="rounded-lg bg-accent px-3.5 py-2 text-sm font-medium text-white shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
+          loading={promoting}
         >
-          {promoting ? "Moving…" : `Move ${promoteCount} to Pipeline`}
-        </button>
+          {`Move ${promoteCount} to Pipeline`}
+        </Button>
       </div>
 
       <div className="card flex flex-wrap items-end gap-3 p-3">
@@ -800,13 +759,14 @@ export default function LeadsPage() {
           </select>
         </label>
         {(search || industry || country || stage || source) && (
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="sm"
             onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); setSource(""); }}
-            className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 hover:bg-ink/5"
           >
             Clear
-          </button>
+          </Button>
         )}
       </div>
 
@@ -815,118 +775,108 @@ export default function LeadsPage() {
           <LoadingRow label="Loading leads…" />
         </div>
       ) : (
-      <div className="card overflow-x-auto">
-        <table className="w-full min-w-[900px] text-sm">
-          <thead className="border-b border-[var(--line)] text-left text-[11px] uppercase tracking-wide text-ink/55">
-            <tr>
+      <>
+      <Table>
+        <TableHead>
+          <TableHeadRow>
+            {isAdmin && (
+              <Th className="w-8">
+                <input
+                  type="checkbox"
+                  checked={leads.length > 0 && leads.every((l) => selected.has(l.id))}
+                  onChange={toggleAllVisible}
+                  aria-label="Select all visible leads"
+                />
+              </Th>
+            )}
+            <Th>Company</Th>
+            <Th>Source</Th>
+            <Th>Industry</Th>
+            <Th>Country</Th>
+            <Th>Decision maker</Th>
+            <Th>Email</Th>
+            <Th className="text-right">Score</Th>
+            <Th className="text-right">AI opp.</Th>
+            <Th>Stage</Th>
+          </TableHeadRow>
+        </TableHead>
+        <TableBody>
+          {leads.map((lead) => (
+            <Tr key={lead.id}>
               {isAdmin && (
-                <th className="w-8 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={leads.length > 0 && leads.every((l) => selected.has(l.id))}
-                    onChange={toggleAllVisible}
-                    aria-label="Select all visible leads"
-                  />
-                </th>
-              )}
-              <th className="px-4 py-3">Company</th>
-              <th className="px-4 py-3">Source</th>
-              <th className="px-4 py-3">Industry</th>
-              <th className="px-4 py-3">Country</th>
-              <th className="px-4 py-3">Decision maker</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3 text-right">Score</th>
-              <th className="px-4 py-3 text-right">AI opp.</th>
-              <th className="px-4 py-3">Stage</th>
-            </tr>
-          </thead>
-          <tbody>
-            {leads.map((lead) => (
-              <tr key={lead.id} className="border-b border-[var(--line)] transition-colors last:border-0 hover:bg-ink/5">
-                {isAdmin && (
-                  <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                <Td>
+                  <span onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={selected.has(lead.id)}
                       onChange={() => toggleOne(lead.id)}
                       aria-label={`Select ${lead.companyName}`}
                     />
-                  </td>
+                  </span>
+                </Td>
+              )}
+              <Td>
+                <Link href={`/leads/${lead.id}`} className="font-medium text-primary hover:underline">
+                  {lead.companyName}
+                </Link>
+                {lead.website && (
+                  <div className="mt-0.5 truncate text-[11px] text-ink/45">
+                    {lead.website.replace(/^https?:\/\//, "")}
+                  </div>
                 )}
-                <td className="px-4 py-3">
-                  <Link href={`/leads/${lead.id}`} className="font-medium text-accent hover:underline">
-                    {lead.companyName}
-                  </Link>
-                  {lead.website && (
-                    <div className="mt-0.5 truncate text-[11px] text-ink/45">
-                      {lead.website.replace(/^https?:\/\//, "")}
-                    </div>
-                  )}
-                  {lead.uploadedByUser && (
-                    <div className="mt-0.5 truncate text-[11px] text-ink/40" title={`Uploaded by ${lead.uploadedByUser.name}`}>
-                      Uploaded by {lead.uploadedByUser.name}
-                    </div>
-                  )}
-                </td>
-                <td className="px-4 py-3"><SourceBadge source={lead.sourceLayer} /></td>
-                <td className="px-4 py-3 text-ink/70">{lead.industry ?? "—"}</td>
-                <td className="px-4 py-3 text-ink/70">{lead.country ?? "—"}</td>
-                <td className="px-4 py-3">
-                  {lead.contactName ? (
-                    <>
-                      <div className="text-ink/80">{lead.contactName}</div>
-                      {lead.jobTitle && <div className="text-[11px] text-ink/45">{lead.jobTitle}</div>}
-                    </>
-                  ) : <span className="text-ink/40">—</span>}
-                </td>
-                <td className="px-4 py-3 text-ink/60">
-                  {lead.email ?? <span className="text-ink/40">—</span>}
-                  {lead.personalEmail && (
-                    <div className="text-[11px] text-ink/40" title="Personal email">{lead.personalEmail}</div>
-                  )}
-                </td>
-                <td className={`tabular px-4 py-3 text-right font-semibold ${scoreTone(lead.score?.leadScore)}`}>
-                  {lead.score?.leadScore ?? "—"}
-                </td>
-                <td className={`tabular px-4 py-3 text-right ${scoreTone(lead.score?.aiOpportunityScore)}`}>
-                  {lead.score?.aiOpportunityScore ?? "—"}
-                </td>
-                <td className="px-4 py-3"><StagePill stage={lead.pipelineState?.stage} /></td>
-              </tr>
-            ))}
-            {leads.length === 0 && (
-              <tr>
-                <td colSpan={isAdmin ? 10 : 9} className="px-4 py-10 text-center text-ink/50">
-                  {total === 0 && !search && !industry && !country && !stage && !source
-                    ? "No leads yet — configure a niche filter in Settings, or add one manually above."
-                    : "No leads match these filters."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-        {pageCount > 1 && (
-          <div className="flex items-center justify-between border-t border-[var(--line)] px-4 py-3 text-xs text-ink/60">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="rounded-lg border border-[var(--line)] px-3 py-1.5 disabled:opacity-40"
-            >
-              Previous
-            </button>
-            <span>Page {page} of {pageCount}</span>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
-              disabled={page >= pageCount}
-              className="rounded-lg border border-[var(--line)] px-3 py-1.5 disabled:opacity-40"
-            >
-              Next
-            </button>
-          </div>
-        )}
-      </div>
+                {lead.uploadedByUser && (
+                  <div className="mt-0.5 truncate text-[11px] text-ink/40" title={`Uploaded by ${lead.uploadedByUser.name}`}>
+                    Uploaded by {lead.uploadedByUser.name}
+                  </div>
+                )}
+              </Td>
+              <Td><SourceBadge source={lead.sourceLayer} /></Td>
+              <Td className="text-ink/70">{lead.industry ?? "—"}</Td>
+              <Td className="text-ink/70">{lead.country ?? "—"}</Td>
+              <Td>
+                {lead.contactName ? (
+                  <>
+                    <div className="text-ink/80">{lead.contactName}</div>
+                    {lead.jobTitle && <div className="text-[11px] text-ink/45">{lead.jobTitle}</div>}
+                  </>
+                ) : <span className="text-ink/40">—</span>}
+              </Td>
+              <Td className="text-ink/60">
+                {lead.email ?? <span className="text-ink/40">—</span>}
+                {lead.personalEmail && (
+                  <div className="text-[11px] text-ink/40" title="Personal email">{lead.personalEmail}</div>
+                )}
+              </Td>
+              <Td className={`tabular text-right font-semibold ${scoreTone(lead.score?.leadScore)}`}>
+                {lead.score?.leadScore ?? "—"}
+              </Td>
+              <Td className={`tabular text-right ${scoreTone(lead.score?.aiOpportunityScore)}`}>
+                {lead.score?.aiOpportunityScore ?? "—"}
+              </Td>
+              <Td><StagePill stage={lead.pipelineState?.stage} /></Td>
+            </Tr>
+          ))}
+          {leads.length === 0 && (
+            <TableEmptyRow colSpan={isAdmin ? 10 : 9}>
+              {total === 0 && !search && !industry && !country && !stage && !source
+                ? "No leads yet — configure a niche filter in Settings, or add one manually above."
+                : "No leads match these filters."}
+            </TableEmptyRow>
+          )}
+        </TableBody>
+      </Table>
+      {pageCount > 1 && (
+        <div className="card flex items-center justify-between px-4 py-3 text-xs text-ink/60">
+          <Button type="button" variant="secondary" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+            Previous
+          </Button>
+          <span>Page {page} of {pageCount}</span>
+          <Button type="button" variant="secondary" size="sm" onClick={() => setPage((p) => Math.min(pageCount, p + 1))} disabled={page >= pageCount}>
+            Next
+          </Button>
+        </div>
+      )}
+      </>
       )}
     </div>
   );

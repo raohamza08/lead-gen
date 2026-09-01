@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { ReactNode } from "react";
 import { api } from "../../../lib/api-client";
 import {
   AXIS_PROPS,
@@ -23,6 +24,39 @@ import {
 } from "../../../components/chart-kit";
 import { PipelineStage } from "@leadgen/types";
 import type { AnalyticsSummary, CohortTrendsReport, FunnelStageCount } from "@leadgen/types";
+import { Button } from "../../../components/ui/button";
+import { ErrorState } from "../../../components/ui/error-state";
+import { SkeletonCard } from "../../../components/ui/skeleton";
+
+/** One stat card, reused across this page's several tile grids (main KPIs,
+ *  Lead Room, Social Media, Email Overview) instead of duplicating the same
+ *  card+label+value markup four times (Part: UI/UX Redesign, 2026-09-01). */
+function StatTile({
+  label,
+  value,
+  href,
+  tone = "default",
+}: {
+  label: string;
+  value: ReactNode;
+  href?: string;
+  tone?: "default" | "good" | "bad" | "warn";
+}) {
+  const toneClass = tone === "bad" ? "text-error" : tone === "warn" ? "text-warning" : tone === "good" ? "text-success" : "text-ink";
+  const body = (
+    <>
+      <div className="text-label uppercase text-ink/55">{label}</div>
+      <div className={`mt-1 text-numeric-lg ${toneClass}`}>{value}</div>
+    </>
+  );
+  return href ? (
+    <Link href={href} className="card card-interactive px-4 py-3.5">
+      {body}
+    </Link>
+  ) : (
+    <div className="card px-4 py-3.5">{body}</div>
+  );
+}
 
 interface AgentHealth {
   totalRuns: number;
@@ -67,19 +101,15 @@ export default function OverviewPage() {
   const error = summaryQuery.error || funnelQuery.error || trendsQuery.error;
 
   if (error) {
-    return (
-      <div className="card border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] p-4 text-sm text-bad">
-        {(error as Error).message}
-      </div>
-    );
+    return <ErrorState message={(error as Error).message} onRetry={() => { summaryQuery.refetch(); funnelQuery.refetch(); trendsQuery.refetch(); }} />;
   }
   if (!summary) {
     return (
       <div className="flex flex-col gap-4">
         {/* Skeleton matches the real layout so nothing shifts when data lands. */}
-        <div className="card h-32 animate-pulse" />
+        <SkeletonCard className="h-32" />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          {Array.from({ length: 8 }).map((_, i) => <div key={i} className="card h-20 animate-pulse" />)}
+          {Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} className="h-20" />)}
         </div>
       </div>
     );
@@ -118,9 +148,9 @@ export default function OverviewPage() {
       <section className="card overflow-hidden">
         <div className="grid gap-0 md:grid-cols-[minmax(0,320px)_1fr]">
           <div className="border-b border-[var(--line)] p-6 md:border-b-0 md:border-r">
-            <div className="text-[11px] uppercase tracking-wide text-ink/55">Leads this month</div>
+            <div className="text-label uppercase text-ink/55">Leads this month</div>
             <div className="mt-1 flex items-end gap-3">
-              <span className="text-5xl font-semibold tracking-tight">{summary.monthlyLeads}</span>
+              <span className="text-display text-ink">{summary.monthlyLeads}</span>
               {delta !== null && (
                 <span
                   className={`mb-1.5 text-sm font-medium ${delta >= 0 ? "text-good" : "text-bad"}`}
@@ -136,17 +166,17 @@ export default function OverviewPage() {
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
-              <Link href="/leads" className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90">
-                Review leads
-              </Link>
-              <Link href="/settings" className="rounded-lg border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 transition-colors hover:bg-ink/5">
-                Run extraction
-              </Link>
+              <Button asChild size="sm">
+                <Link href="/leads">Review leads</Link>
+              </Button>
+              <Button asChild variant="secondary" size="sm">
+                <Link href="/settings">Run extraction</Link>
+              </Button>
             </div>
           </div>
 
           <div className="p-4">
-            <div className="mb-1 px-2 text-[11px] uppercase tracking-wide text-ink/55">
+            <div className="mb-1 px-2 text-label uppercase text-ink/55">
               Daily leads — last 30 days
             </div>
             <div className="h-[168px] w-full">
@@ -179,25 +209,20 @@ export default function OverviewPage() {
       </section>
 
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {KPIS.map((k) => {
-          const tone = k.bad ? "text-bad" : k.warn ? "text-gold" : k.good ? "text-good" : "text-ink";
-          const body = (
-            <>
-              <div className="text-[11px] uppercase tracking-wide text-ink/55">{k.label}</div>
-              <div className={`mt-1 text-2xl font-semibold tracking-tight ${tone}`}>{k.value}</div>
-            </>
-          );
-          return k.href ? (
-            <Link key={k.label} href={k.href} className="card card-interactive px-4 py-3.5">{body}</Link>
-          ) : (
-            <div key={k.label} className="card px-4 py-3.5">{body}</div>
-          );
-        })}
+        {KPIS.map((k) => (
+          <StatTile
+            key={k.label}
+            label={k.label}
+            value={k.value}
+            href={k.href}
+            tone={k.bad ? "bad" : k.warn ? "warn" : k.good ? "good" : "default"}
+          />
+        ))}
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
         <section className="card p-5">
-          <h2 className="text-sm font-semibold tracking-tight">Pipeline funnel</h2>
+          <h2 className="text-section-title text-ink">Pipeline funnel</h2>
           <p className="mb-4 mt-0.5 text-xs text-ink/50">
             Stages with at least one lead. Empty stages are hidden so the active ones stay readable.
           </p>
@@ -222,7 +247,7 @@ export default function OverviewPage() {
         </section>
 
         <section className="card p-5">
-          <h2 className="text-sm font-semibold tracking-tight">Automation health</h2>
+          <h2 className="text-section-title text-ink">Automation health</h2>
           <p className="mb-4 mt-0.5 text-xs text-ink/50">Agent runs, last 24 hours.</p>
 
           {!agents || agents.totalRuns === 0 ? (
@@ -266,10 +291,7 @@ export default function OverviewPage() {
           ["Tasks waiting", summary.tasksWaiting],
           ["Avg AI opportunity", summary.avgAiOpportunityScore],
         ].map(([label, value]) => (
-          <div key={label as string} className="card px-4 py-3">
-            <div className="text-[11px] uppercase tracking-wide text-ink/55">{label}</div>
-            <div className="mt-0.5 text-lg font-semibold">{formatCompact(Number(value))}</div>
-          </div>
+          <StatTile key={label as string} label={label as string} value={formatCompact(Number(value))} />
         ))}
       </section>
 
@@ -317,17 +339,14 @@ function LeadRoomOverviewSection() {
 
   return (
     <section className="card p-5">
-      <h2 className="text-sm font-semibold tracking-tight">Lead Room</h2>
+      <h2 className="text-section-title text-ink">Lead Room</h2>
       <p className="mb-4 mt-0.5 text-xs text-ink/50">
         Every lead captured so far, from every source. Human-added leads (manual, email, social) wait
         here until you promote them to the Pipeline; AI-discovered leads advance automatically.
       </p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {tiles.map((t) => (
-          <Link key={t.label} href={t.href} className="card card-interactive px-4 py-3.5">
-            <div className="text-[11px] uppercase tracking-wide text-ink/55">{t.label}</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight">{t.value}</div>
-          </Link>
+          <StatTile key={t.label} label={t.label} value={t.value} href={t.href} />
         ))}
       </div>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
@@ -373,18 +392,11 @@ function SocialMediaOverviewSection() {
 
   return (
     <section className="card p-5">
-      <h2 className="text-sm font-semibold tracking-tight">Social Media</h2>
+      <h2 className="text-section-title text-ink">Social Media</h2>
       <p className="mb-4 mt-0.5 text-xs text-ink/50">Across every connected account you have access to.</p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (
-          <Link
-            key={t.label}
-            href={t.href}
-            className={`card card-interactive px-4 py-3.5 ${t.warn ? "text-gold" : ""}`}
-          >
-            <div className="text-[11px] uppercase tracking-wide text-ink/55">{t.label}</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight">{t.value}</div>
-          </Link>
+          <StatTile key={t.label} label={t.label} value={t.value} href={t.href} tone={t.warn ? "warn" : "default"} />
         ))}
       </div>
     </section>
@@ -423,14 +435,11 @@ function EmailOverviewSection() {
 
   return (
     <section className="card p-5">
-      <h2 className="text-sm font-semibold tracking-tight">Email Overview</h2>
+      <h2 className="text-section-title text-ink">Email Overview</h2>
       <p className="mb-4 mt-0.5 text-xs text-ink/50">Across every mailbox you have access to.</p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (
-          <Link key={t.label} href={t.href} className="card card-interactive px-4 py-3.5">
-            <div className="text-[11px] uppercase tracking-wide text-ink/55">{t.label}</div>
-            <div className="mt-1 text-2xl font-semibold tracking-tight">{t.value}</div>
-          </Link>
+          <StatTile key={t.label} label={t.label} value={t.value} href={t.href} />
         ))}
       </div>
     </section>
