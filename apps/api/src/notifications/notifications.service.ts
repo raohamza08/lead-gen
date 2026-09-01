@@ -3,6 +3,7 @@ import { JwtClaims } from "@leadgen/types";
 import { NotificationCategory, Prisma, Role } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
+import { UserAccessCacheService } from "../common/access/user-access-cache.service";
 
 export interface NotifyInput {
   category: NotificationCategory;
@@ -60,6 +61,7 @@ export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
+    private readonly userAccess: UserAccessCacheService,
   ) {}
 
   async notify(orgId: string, input: NotifyInput) {
@@ -107,11 +109,15 @@ export class NotificationsService {
     return users.filter((u) => this.isEligible(u, category)).map((u) => u.id);
   }
 
+  /** Reads through UserAccessCacheService (Part: performance audit,
+   *  2026-09-02) instead of its own fresh `prisma.user.findUnique` — this
+   *  used to run on every list()/unreadCount()/applyToVisible() call, so
+   *  opening the notification panel or switching a tab each paid a full DB
+   *  round trip just to re-read data that barely ever changes. */
   private async requestingUser(user: JwtClaims): Promise<EligibilityUser> {
-    return this.prisma.user.findUniqueOrThrow({
-      where: { id: user.sub },
-      select: { role: true, leadGenAccess: true, emailHubAccess: true, socialMediaAccess: true, isPrimaryAdmin: true },
-    });
+    const record = await this.userAccess.get(user.sub);
+    if (!record) throw new Error(`User ${user.sub} not found`);
+    return record;
   }
 
   async list(

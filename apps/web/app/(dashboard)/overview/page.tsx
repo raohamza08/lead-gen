@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
   Area,
@@ -40,35 +40,36 @@ const stageLabel = (s: string) =>
  * "is this working and is it getting better" — a grid of equal-weight tiles
  * answers neither, since nothing tells you where to look first.
  */
+/**
+ * Converted to React Query (Part: performance audit, 2026-09-02) — the 4
+ * requests already ran concurrently via Promise.all (no waterfall), but
+ * raw useState/useEffect meant every navigation back to Overview re-fetched
+ * everything from a blank state. Now the last-known data renders instantly
+ * on revisit (within the app-wide 60s staleTime) while a background
+ * revalidation runs behind it — no more blank skeleton on every return trip
+ * to this page.
+ */
 export default function OverviewPage() {
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [funnel, setFunnel] = useState<FunnelStageCount[]>([]);
-  const [trends, setTrends] = useState<CohortTrendsReport | null>(null);
-  const [agents, setAgents] = useState<AgentHealth | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const summaryQuery = useQuery({ queryKey: ["overview", "summary"], queryFn: () => api.getSummary() as Promise<AnalyticsSummary> });
+  const funnelQuery = useQuery({ queryKey: ["overview", "funnel"], queryFn: () => api.getFunnel() as Promise<FunnelStageCount[]> });
+  const trendsQuery = useQuery({ queryKey: ["overview", "trends"], queryFn: () => api.getCohortTrends(30) as Promise<CohortTrendsReport> });
+  // Agent health is supplementary: if it fails the dashboard still works,
+  // so it must not be able to blank the whole page.
+  const agentsQuery = useQuery({
+    queryKey: ["overview", "agent-health"],
+    queryFn: () => api.getAgentHealth(24).catch(() => null) as Promise<AgentHealth | null>,
+  });
 
-  useEffect(() => {
-    Promise.all([
-      api.getSummary(),
-      api.getFunnel(),
-      api.getCohortTrends(30),
-      // Agent health is supplementary: if it fails the dashboard still works,
-      // so it must not be able to blank the whole page.
-      api.getAgentHealth(24).catch(() => null),
-    ])
-      .then(([s, f, t, a]) => {
-        setSummary(s as AnalyticsSummary);
-        setFunnel(f as FunnelStageCount[]);
-        setTrends(t as CohortTrendsReport);
-        setAgents(a as AgentHealth | null);
-      })
-      .catch((err) => setError((err as Error).message));
-  }, []);
+  const summary = summaryQuery.data ?? null;
+  const funnel = funnelQuery.data ?? [];
+  const trends = trendsQuery.data ?? null;
+  const agents = agentsQuery.data ?? null;
+  const error = summaryQuery.error || funnelQuery.error || trendsQuery.error;
 
   if (error) {
     return (
       <div className="card border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] p-4 text-sm text-bad">
-        {error}
+        {(error as Error).message}
       </div>
     );
   }
@@ -301,11 +302,10 @@ const SOURCE_DISPLAY: Record<string, string> = {
  *  regardless of promotion status, same data the hero above already
  *  summarizes from a different angle. */
 function LeadRoomOverviewSection() {
-  const [breakdown, setBreakdown] = useState<SourceBreakdown | null>(null);
-
-  useEffect(() => {
-    api.getLeadSourceBreakdown().then((b) => setBreakdown(b as SourceBreakdown)).catch(() => {});
-  }, []);
+  const { data: breakdown } = useQuery({
+    queryKey: ["overview", "lead-source-breakdown"],
+    queryFn: () => api.getLeadSourceBreakdown() as Promise<SourceBreakdown>,
+  });
 
   if (!breakdown || breakdown.total === 0) return null;
 
@@ -355,11 +355,10 @@ interface SocialStats {
 /** Social Media card — same shape as EmailOverviewSection below, so every
  *  module the Dashboard covers reads the same way. */
 function SocialMediaOverviewSection() {
-  const [stats, setStats] = useState<SocialStats | null>(null);
-
-  useEffect(() => {
-    api.getSocialStats().then((s) => setStats(s as SocialStats)).catch(() => {});
-  }, []);
+  const { data: stats } = useQuery({
+    queryKey: ["overview", "social-stats"],
+    queryFn: () => api.getSocialStats() as Promise<SocialStats>,
+  });
 
   if (!stats || stats.connectedAccounts === 0) return null;
 
@@ -406,11 +405,10 @@ interface EmailHubStats {
  *  into the matching filtered Email Hub view, per the spec's explicit
  *  "should be clickable" requirement, not just a static count. */
 function EmailOverviewSection() {
-  const [stats, setStats] = useState<EmailHubStats | null>(null);
-
-  useEffect(() => {
-    api.getEmailHubStats().then((s) => setStats(s as EmailHubStats)).catch(() => {});
-  }, []);
+  const { data: stats } = useQuery({
+    queryKey: ["overview", "email-hub-stats"],
+    queryFn: () => api.getEmailHubStats() as Promise<EmailHubStats>,
+  });
 
   if (!stats || stats.connectedAccounts === 0) return null;
 

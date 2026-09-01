@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadLeadsCsv, getCurrentUser } from "../../../lib/api-client";
@@ -162,12 +162,27 @@ export default function LeadsPage() {
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
 
-  // Filters. The backend already supports these query params; this exposes them.
+  // Filters — server-side (Part: performance audit, 2026-09-02; the backend
+  // already supported these query params, the page just wasn't passing them,
+  // fetching the entire org's leads and filtering in the browser instead).
   const [search, setSearch] = useState("");
+  // Debounced separately from `search` so the input feels instant while the
+  // network request (now one per keystroke's worth of typing, not free
+  // client-side filtering) only fires once typing pauses (spec #39).
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(id);
+  }, [search]);
   const [industry, setIndustry] = useState("");
   const [country, setCountry] = useState("");
   const [stage, setStage] = useState("");
   const [source, setSource] = useState("");
+  const [page, setPage] = useState(1);
+  // Any filter change invalidates whatever page you were on — landing on
+  // page 5 of a now-much-smaller filtered result set would either show
+  // nothing or read past the end silently.
+  useEffect(() => setPage(1), [debouncedSearch, industry, country, stage, source]);
 
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(EMPTY_LEAD);
@@ -254,26 +269,30 @@ export default function LeadsPage() {
     }
   }
 
-  // Cached: revisiting this tab shows the last-known list instantly while
-  // quietly re-verifying in the background (staleTime in query-provider.tsx).
+  const PAGE_SIZE = 50;
+
+  // Cached per filter+page combination: revisiting the same page shows the
+  // last-known list instantly while quietly re-verifying in the background
+  // (staleTime in query-provider.tsx). Part: performance audit, 2026-09-02 —
+  // this used to loop-fetch every page of the org's ENTIRE lead table (200 at
+  // a time) before rendering anything; now it fetches exactly the one page
+  // in view, filtered server-side.
+  const leadsParams = {
+    page: String(page),
+    pageSize: String(PAGE_SIZE),
+    ...(debouncedSearch ? { search: debouncedSearch } : {}),
+    ...(industry ? { industry } : {}),
+    ...(country ? { country } : {}),
+    ...(stage ? { stage } : {}),
+    ...(source ? { sourceLayer: source } : {}),
+  };
   const leadsQuery = useQuery({
-    queryKey: ["leads"],
-    queryFn: async () => {
-      const pageSize = 200;
-      const first: any = await api.getLeads({ page: "1", pageSize: String(pageSize) });
-      const items: LeadRow[] = first.items ?? first;
-      const total: number = first.total ?? items.length;
-      const pageCount = Math.ceil(total / pageSize);
-      for (let page = 2; page <= pageCount; page++) {
-        const res: any = await api.getLeads({ page: String(page), pageSize: String(pageSize) });
-        items.push(...((res.items ?? res) as LeadRow[]));
-      }
-      return items;
-    },
+    queryKey: ["leads", leadsParams],
+    queryFn: () => api.getLeads(leadsParams) as Promise<{ items: LeadRow[]; total: number }>,
   });
-  // Stable empty-array identity when data is undefined -- `?? []` would mint
-  // a new array every render and defeat the useMemo hooks below it.
-  const leads = leadsQuery.data ?? EMPTY_LEADS;
+  const leads = leadsQuery.data?.items ?? EMPTY_LEADS;
+  const total = leadsQuery.data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function invalidateLeads() {
     queryClient.invalidateQueries({ queryKey: ["leads"] });
@@ -286,36 +305,33 @@ export default function LeadsPage() {
   // directly for the actor, this is for everyone else watching.
   useRealtimeRefetch(["lead.created", "lead.stageChanged"], invalidateLeads);
 
-  // Filtered in the browser because the whole page is already loaded; going
-  // back to the server for each keystroke would be slower and no more correct
-  // at this size. Swap to server-side filtering past a few thousand leads.
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return leads.filter((l) => {
-      if (q && ![l.companyName, l.contactName, l.email, l.personalEmail, l.website].some((v) => v?.toLowerCase().includes(q))) return false;
-      if (industry && l.industry !== industry) return false;
-      if (country && l.country !== country) return false;
-      if (stage && (l.pipelineState?.stage ?? "") !== stage) return false;
-      if (source && l.sourceLayer !== source) return false;
-      return true;
-    });
-  }, [leads, search, industry, country, stage, source]);
+  // Filter dropdown options — their own small, cached, org-wide query
+  // (Part: performance audit, 2026-09-02) rather than derived from whatever
+  // happens to be on the currently-loaded page, now that the page is a real
+  // slice instead of the whole table.
+  const filterOptionsQuery = useQuery({
+    queryKey: ["leads", "filter-options"],
+    queryFn: () => api.getLeadFilterOptions(),
+  });
+  const industries = filterOptionsQuery.data?.industries ?? [];
+  const countries = filterOptionsQuery.data?.countries ?? [];
 
-  const industries = useMemo(
-    () => [...new Set(leads.map((l) => l.industry).filter(Boolean))].sort() as string[],
-    [leads],
-  );
-  const countries = useMemo(
-    () => [...new Set(leads.map((l) => l.country).filter(Boolean))].sort() as string[],
-    [leads],
-  );
-
-  // Leads with no PipelineState row are sitting in Lead Room, un-promoted.
-  const unpromotedLeads = useMemo(() => leads.filter((l) => !l.pipelineState), [leads]);
-  const promoteMatchCount = useMemo(
-    () => unpromotedLeads.filter((l) => !promoteSource || l.sourceLayer === promoteSource).length,
-    [unpromotedLeads, promoteSource],
-  );
+  // Live preview for "Move N to Pipeline" — a dedicated count query using
+  // promoteToPipeline's exact filter, instead of requiring every un-promoted
+  // lead to be loaded client-side just to count a subset of them. The
+  // unfiltered total (for the "N leads waiting in Lead Room" line) is the
+  // same query with no source, cached separately.
+  const allUnpromotedQuery = useQuery({
+    queryKey: ["leads", "promote-preview", ""],
+    queryFn: () => api.getPromotePreviewCount(),
+  });
+  const promotePreviewQuery = useQuery({
+    queryKey: ["leads", "promote-preview", promoteSource],
+    queryFn: () => api.getPromotePreviewCount(promoteSource || undefined),
+    enabled: promoteSource !== "",
+  });
+  const totalUnpromoted = allUnpromotedQuery.data?.count ?? 0;
+  const promoteMatchCount = promoteSource ? promotePreviewQuery.data?.count ?? 0 : totalUnpromoted;
   const promoteLimitNum = promoteLimit.trim() ? Number(promoteLimit) : null;
   const promoteCount = promoteLimitNum && promoteLimitNum < promoteMatchCount ? promoteLimitNum : promoteMatchCount;
 
@@ -331,6 +347,7 @@ export default function LeadsPage() {
       setNotice(`Moved ${result.promoted} lead${result.promoted === 1 ? "" : "s"} to the Pipeline.`);
       setPromoteLimit("");
       invalidateLeads();
+      queryClient.invalidateQueries({ queryKey: ["leads", "promote-preview"] });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -349,9 +366,9 @@ export default function LeadsPage() {
 
   function toggleAllVisible() {
     setSelected((s) => {
-      const allVisibleSelected = filtered.length > 0 && filtered.every((l) => s.has(l.id));
+      const allVisibleSelected = leads.length > 0 && leads.every((l) => s.has(l.id));
       if (allVisibleSelected) return new Set();
-      return new Set(filtered.map((l) => l.id));
+      return new Set(leads.map((l) => l.id));
     });
   }
 
@@ -384,7 +401,6 @@ export default function LeadsPage() {
       try {
         await api.deleteLead(id);
         succeeded += 1;
-        queryClient.setQueryData<LeadRow[]>(["leads"], (rows) => (rows ?? []).filter((r) => r.id !== id));
         setSelected((s) => {
           const next = new Set(s);
           next.delete(id);
@@ -395,6 +411,10 @@ export default function LeadsPage() {
       }
       setDeleteProgress((p) => (p ? { done: p.done + 1, total: p.total } : p));
     }
+    // One invalidate after the whole batch, not per-item — the query key now
+    // carries the current filter/page (Part: performance audit, 2026-09-02),
+    // so there's no longer one single cache entry to hand-patch per delete.
+    invalidateLeads();
 
     setNotice(
       failed === 0
@@ -436,9 +456,8 @@ export default function LeadsPage() {
             {leadsQuery.isFetching && !leadsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
           <p className="mt-0.5 text-xs text-ink/55">
-            {filtered.length === leads.length
-              ? `${leads.length} leads`
-              : `${filtered.length} of ${leads.length} leads`}
+            {total.toLocaleString()} lead{total === 1 ? "" : "s"}
+            {pageCount > 1 && ` · page ${page} of ${pageCount}`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -691,7 +710,7 @@ export default function LeadsPage() {
         <div className="min-w-[160px]">
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Move to Pipeline</span>
           <p className="text-xs text-ink/50">
-            {unpromotedLeads.length} lead{unpromotedLeads.length === 1 ? "" : "s"} waiting in Lead Room.
+            {totalUnpromoted} lead{totalUnpromoted === 1 ? "" : "s"} waiting in Lead Room.
           </p>
         </div>
         <label>
@@ -804,7 +823,7 @@ export default function LeadsPage() {
                 <th className="w-8 px-4 py-3">
                   <input
                     type="checkbox"
-                    checked={filtered.length > 0 && filtered.every((l) => selected.has(l.id))}
+                    checked={leads.length > 0 && leads.every((l) => selected.has(l.id))}
                     onChange={toggleAllVisible}
                     aria-label="Select all visible leads"
                   />
@@ -822,7 +841,7 @@ export default function LeadsPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((lead) => (
+            {leads.map((lead) => (
               <tr key={lead.id} className="border-b border-[var(--line)] transition-colors last:border-0 hover:bg-ink/5">
                 {isAdmin && (
                   <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
@@ -875,10 +894,10 @@ export default function LeadsPage() {
                 <td className="px-4 py-3"><StagePill stage={lead.pipelineState?.stage} /></td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {leads.length === 0 && (
               <tr>
                 <td colSpan={isAdmin ? 10 : 9} className="px-4 py-10 text-center text-ink/50">
-                  {leads.length === 0
+                  {total === 0 && !search && !industry && !country && !stage && !source
                     ? "No leads yet — configure a niche filter in Settings, or add one manually above."
                     : "No leads match these filters."}
                 </td>
@@ -886,6 +905,27 @@ export default function LeadsPage() {
             )}
           </tbody>
         </table>
+        {pageCount > 1 && (
+          <div className="flex items-center justify-between border-t border-[var(--line)] px-4 py-3 text-xs text-ink/60">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span>Page {page} of {pageCount}</span>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={page >= pageCount}
+              className="rounded-lg border border-[var(--line)] px-3 py-1.5 disabled:opacity-40"
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
       )}
     </div>

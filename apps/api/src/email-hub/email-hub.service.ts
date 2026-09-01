@@ -250,7 +250,20 @@ export class EmailHubService {
         orderBy: searchIds ? undefined : { receivedAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
-        include: {
+        // `select`, not `include` (Part: performance audit, 2026-09-02) —
+        // `include` returned every scalar column on every row of every page,
+        // notably the full `bodyHtml` (markup, styling, tracking pixels,
+        // signatures — routinely several times the size of the plain-text
+        // body) and the `attachments` JSON blob, for a list view that only
+        // ever renders a sender/subject/120-char bodyText preview/timestamp/
+        // flags row. Full body stays available exactly where it's actually
+        // read — the thread detail fetch below — unaffected by this.
+        select: {
+          id: true, threadId: true, accountId: true,
+          fromName: true, fromEmail: true, toEmails: true,
+          folder: true, subject: true, bodyText: true, receivedAt: true,
+          isRead: true, isImportant: true, isIgnored: true, hasAttachments: true,
+          suggestedCategory: true, aiSuggestedAction: true,
           account: { select: { id: true, address: true, mailboxLabel: true } },
           thread: { select: { id: true, leadId: true } },
           tags: { include: { tag: true } },

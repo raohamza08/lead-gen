@@ -23,7 +23,7 @@ import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { JwtClaims, PipelineStage, Role } from "@leadgen/types";
+import { JwtClaims, LeadSourceLayer, PipelineStage, Role } from "@leadgen/types";
 
 @Controller("leads")
 export class LeadsController {
@@ -111,6 +111,22 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   sourceBreakdown(@CurrentUser() user: JwtClaims) {
     return this.leadsService.getSourceBreakdown(user.orgId);
+  }
+
+  // Must come before ":id" for the same reason "export"/"source-breakdown" do
+  // above.
+  @Get("filter-options")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  filterOptions(@CurrentUser() user: JwtClaims) {
+    return this.leadsService.getFilterOptions(user.orgId);
+  }
+
+  @Get("promote-preview")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  promotePreview(@CurrentUser() user: JwtClaims, @Query("sourceLayer") sourceLayer?: LeadSourceLayer) {
+    return this.leadsService.getPromotePreviewCount(user.orgId, sourceLayer);
   }
 
   // Must come before ":id" for the same reason "export"/"source-breakdown" do

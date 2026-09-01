@@ -234,6 +234,9 @@ export const api = {
   getLeads: (params: Record<string, string> = {}) =>
     request(`/leads?${new URLSearchParams(params).toString()}`),
   getLeadSourceBreakdown: () => request("/leads/source-breakdown"),
+  getLeadFilterOptions: () => request<{ industries: string[]; countries: string[] }>("/leads/filter-options"),
+  getPromotePreviewCount: (sourceLayer?: string) =>
+    request<{ count: number }>(`/leads/promote-preview${sourceLayer ? `?sourceLayer=${sourceLayer}` : ""}`),
   getLead: (id: string) => request(`/leads/${id}`),
   updateReview: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/review`, { method: "PATCH", body: JSON.stringify(body) }),

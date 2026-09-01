@@ -230,16 +230,70 @@ export class LeadsService {
     };
   }
 
+  /**
+   * Distinct industry/country values for the Lead Room filter dropdowns
+   * (Part: performance audit, 2026-09-02) — previously these options were
+   * derived client-side from the entire lead table already being held in
+   * memory; now that the list is genuinely paginated, the page in view no
+   * longer reliably contains every value that exists, so this is its own
+   * small, cheap, indexed query instead.
+   */
+  async getFilterOptions(orgId: string) {
+    const [industries, countries] = await Promise.all([
+      this.prisma.lead.findMany({
+        where: { orgId, industry: { not: null } },
+        distinct: ["industry"],
+        select: { industry: true },
+        orderBy: { industry: "asc" },
+      }),
+      this.prisma.lead.findMany({
+        where: { orgId, country: { not: null } },
+        distinct: ["country"],
+        select: { country: true },
+        orderBy: { country: "asc" },
+      }),
+    ]);
+    return {
+      industries: industries.map((i) => i.industry as string),
+      countries: countries.map((c) => c.country as string),
+    };
+  }
+
+  /**
+   * Count-only preview for the "Move N to Pipeline" button (Part:
+   * performance audit, 2026-09-02) — reuses promoteToPipeline's exact WHERE
+   * shape so the number shown is always exactly what that action would
+   * actually do, without requiring the frontend to hold every un-promoted
+   * lead in memory just to count a subset of them.
+   */
+  async getPromotePreviewCount(orgId: string, sourceLayer?: LeadSourceLayer): Promise<{ count: number }> {
+    const count = await this.prisma.lead.count({
+      where: { orgId, pipelineState: null, ...(sourceLayer ? { sourceLayer } : {}) },
+    });
+    return { count };
+  }
+
   async findAll(orgId: string, query: QueryLeadsDto) {
     const page = query.page ?? 1;
     const pageSize = query.pageSize ?? 50;
+
+    // Part: performance audit, 2026-09-02 — server-side, matching every
+    // field the frontend used to search client-side over a fully-loaded
+    // table (companyName/contactName/email/personalEmail/website), so
+    // moving this to the server didn't narrow what a search actually finds.
+    const searchOr: Prisma.LeadWhereInput[] | undefined = query.search
+      ? (["companyName", "contactName", "email", "personalEmail", "website"] as const).map((field) => ({
+          [field]: { contains: query.search, mode: "insensitive" as const },
+        }))
+      : undefined;
 
     const where: Prisma.LeadWhereInput = {
       orgId,
       industry: query.industry,
       country: query.country,
       assignedUserId: query.assignedUserId,
-      companyName: query.search ? { contains: query.search, mode: "insensitive" } : undefined,
+      sourceLayer: query.sourceLayer,
+      ...(searchOr ? { OR: searchOr } : {}),
       pipelineState: query.stage ? { stage: query.stage } : undefined,
     };
 

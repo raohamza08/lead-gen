@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useRealtimeEvent } from "../lib/realtime";
 import { playNotificationTone, unlockNotificationAudio, SoundTone } from "../lib/notification-sounds";
@@ -30,6 +31,10 @@ interface Preferences {
   socialEnabled: boolean;
   systemEnabled: boolean;
 }
+
+const NOTIFICATIONS_QUERY_KEY = ["notifications", "list"] as const;
+const UNREAD_COUNT_QUERY_KEY = ["notifications", "unread-count"] as const;
+const PREFERENCES_QUERY_KEY = ["notifications", "preferences"] as const;
 
 /** Every real category a notification can carry — see NotificationCategory
  *  in schema.prisma. ERRORS/SECURITY/OTHER fold into "All" rather than
@@ -66,44 +71,43 @@ function timeAgo(iso: string): string {
 }
 
 /**
- * Notification Center (Part: Notification Center, 2026-08-31) — replaces
- * the previous flat, org-wide, non-actionable dropdown. Every item here has
- * already passed the backend's eligibility check (see NotificationsService)
- * before it ever reached this browser, both in the initial fetch and in the
- * realtime push, so there is nothing left to filter client-side for
- * permissions — only for the category tab the user has selected.
+ * Notification Center (Part: Notification Center, 2026-08-31; converted to
+ * React Query Part: performance audit, 2026-09-02). Previously this fetched
+ * fresh from the server on every single tab click (`useEffect(() =>
+ * loadList(category), [category])`) with no caching at all — an outlier in
+ * an app that uses TanStack Query everywhere else. Now: one query fetches
+ * every notification this user is eligible for (already filtered
+ * server-side, same as before — nothing client-visible here was ever
+ * unauthorized), and every category tab is just a client-side filter over
+ * that same cached array — switching tabs never touches the network.
+ * Realtime events patch the query cache directly (`setQueryData`) instead
+ * of triggering a refetch, so one new notification never re-fetches the
+ * other 49.
  */
 export function NotificationsBell() {
   const router = useRouter();
-  const [items, setItems] = useState<NotificationItem[]>([]);
-  const [unreadTotal, setUnreadTotal] = useState(0);
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState("");
-  const [preferences, setPreferences] = useState<Preferences | null>(null);
   const ref = useRef<HTMLDivElement>(null);
 
-  function loadList(cat: string) {
-    api
-      .getNotifications(cat ? { category: cat } : {})
-      .then((res) => setItems((res as { items: NotificationItem[] }).items))
-      .catch(() => undefined);
-  }
+  const notificationsQuery = useQuery({
+    queryKey: NOTIFICATIONS_QUERY_KEY,
+    queryFn: () => api.getNotifications({}) as Promise<{ items: NotificationItem[] }>,
+  });
+  const unreadQuery = useQuery({
+    queryKey: UNREAD_COUNT_QUERY_KEY,
+    queryFn: () => api.getUnreadNotificationCount() as Promise<{ total: number }>,
+  });
+  const preferencesQuery = useQuery({
+    queryKey: PREFERENCES_QUERY_KEY,
+    queryFn: () => api.getNotificationPreferences() as Promise<Preferences>,
+  });
 
-  function loadUnreadCount() {
-    api
-      .getUnreadNotificationCount()
-      .then((res) => setUnreadTotal((res as { total: number }).total))
-      .catch(() => undefined);
-  }
-
-  useEffect(() => loadList(category), [category]);
-  useEffect(loadUnreadCount, []);
-  useEffect(() => {
-    api
-      .getNotificationPreferences()
-      .then((res) => setPreferences(res as Preferences))
-      .catch(() => undefined);
-  }, []);
+  const allItems = notificationsQuery.data?.items ?? [];
+  const items = category === "" ? allItems : allItems.filter((n) => n.category === category);
+  const unreadTotal = unreadQuery.data?.total ?? 0;
+  const preferences = preferencesQuery.data ?? null;
 
   // Browsers block Web Audio playback until a user gesture happens anywhere
   // on the page — this just unlocks it the first time one does, so a sound
@@ -119,8 +123,12 @@ export function NotificationsBell() {
   }, []);
 
   useRealtimeEvent<NotificationItem>("notification.created", (n) => {
-    setItems((prev) => (category === "" || category === n.category ? [n, ...prev].slice(0, 50) : prev));
-    setUnreadTotal((c) => c + 1);
+    queryClient.setQueryData(NOTIFICATIONS_QUERY_KEY, (old?: { items: NotificationItem[] }) =>
+      old ? { ...old, items: [n, ...old.items].slice(0, 50) } : old,
+    );
+    queryClient.setQueryData(UNREAD_COUNT_QUERY_KEY, (old?: { total: number }) =>
+      old ? { ...old, total: old.total + 1 } : old,
+    );
 
     const prefKey = PREFERENCE_KEY_BY_CATEGORY[n.category];
     const categoryAllowed = !prefKey || preferences?.[prefKey] !== false;
@@ -154,14 +162,22 @@ export function NotificationsBell() {
 
   // Keeps a second open tab in sync the instant this user reads/dismisses
   // something in the first one — no page in this app should need a manual
-  // refresh to reflect the user's own action elsewhere.
+  // refresh to reflect the user's own action elsewhere. Unread count is
+  // invalidated (background refetch) rather than patched locally here,
+  // since a cross-tab "mark all read" doesn't carry enough info in this
+  // payload to compute the new count without just asking the server.
   useRealtimeEvent<{ ids: string[]; readAt?: string; dismissedAt?: string }>("notification.userStateChanged", (payload) => {
-    if (payload.dismissedAt) {
-      setItems((prev) => prev.filter((n) => !payload.ids.includes(n.id)));
-    } else if (payload.readAt) {
-      setItems((prev) => prev.map((n) => (payload.ids.includes(n.id) ? { ...n, read: true } : n)));
-    }
-    loadUnreadCount();
+    queryClient.setQueryData(NOTIFICATIONS_QUERY_KEY, (old?: { items: NotificationItem[] }) => {
+      if (!old) return old;
+      if (payload.dismissedAt) {
+        return { ...old, items: old.items.filter((n) => !payload.ids.includes(n.id)) };
+      }
+      if (payload.readAt) {
+        return { ...old, items: old.items.map((n) => (payload.ids.includes(n.id) ? { ...n, read: true } : n)) };
+      }
+      return old;
+    });
+    queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
   });
 
   useEffect(() => {
@@ -172,11 +188,23 @@ export function NotificationsBell() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => api.markNotificationRead(id),
+  });
+
   function openNotification(n: NotificationItem) {
     if (!n.read) {
-      setItems((prev) => prev.map((x) => (x.id === n.id ? { ...x, read: true } : x)));
-      setUnreadTotal((c) => Math.max(0, c - 1));
-      api.markNotificationRead(n.id).catch(() => undefined);
+      // Optimistic (Part: performance audit #36 — safe, reversible, low-risk
+      // action): the UI flips immediately, the request runs behind it; a
+      // failure here just leaves it unread again on the next real fetch,
+      // no data was ever at risk.
+      queryClient.setQueryData(NOTIFICATIONS_QUERY_KEY, (old?: { items: NotificationItem[] }) =>
+        old ? { ...old, items: old.items.map((x) => (x.id === n.id ? { ...x, read: true } : x)) } : old,
+      );
+      queryClient.setQueryData(UNREAD_COUNT_QUERY_KEY, (old?: { total: number }) =>
+        old ? { ...old, total: Math.max(0, old.total - 1) } : old,
+      );
+      markReadMutation.mutate(n.id);
     }
     if (n.actionUrl) {
       setOpen(false);
@@ -184,16 +212,31 @@ export function NotificationsBell() {
     }
   }
 
-  async function markAllRead() {
-    setItems((prev) => prev.map((n) => ({ ...n, read: true })));
-    setUnreadTotal(0);
-    await api.markAllNotificationsRead(category || undefined).catch(() => undefined);
+  const markAllReadMutation = useMutation({
+    mutationFn: () => api.markAllNotificationsRead(category || undefined),
+  });
+
+  function markAllRead() {
+    queryClient.setQueryData(NOTIFICATIONS_QUERY_KEY, (old?: { items: NotificationItem[] }) =>
+      old
+        ? { ...old, items: old.items.map((n) => (category === "" || n.category === category ? { ...n, read: true } : n)) }
+        : old,
+    );
+    queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
+    markAllReadMutation.mutate();
   }
 
-  async function dismissAll() {
-    setItems([]);
-    await api.clearAllNotifications(category || undefined).catch(() => undefined);
-    loadUnreadCount();
+  const dismissAllMutation = useMutation({
+    mutationFn: () => api.clearAllNotifications(category || undefined),
+  });
+
+  function dismissAll() {
+    queryClient.setQueryData(NOTIFICATIONS_QUERY_KEY, (old?: { items: NotificationItem[] }) =>
+      old ? { ...old, items: old.items.filter((n) => !(category === "" || n.category === category)) } : old,
+    );
+    dismissAllMutation.mutate(undefined, {
+      onSettled: () => queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY }),
+    });
   }
 
   const unreadVisible = items.some((n) => !n.read);
@@ -244,7 +287,9 @@ export function NotificationsBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {items.length === 0 && (
-              <p className="px-3 py-6 text-center text-xs text-ink/40">Nothing here right now.</p>
+              <p className="px-3 py-6 text-center text-xs text-ink/40">
+                {notificationsQuery.isLoading ? "Loading…" : "Nothing here right now."}
+              </p>
             )}
             {items.map((n) => (
               <div

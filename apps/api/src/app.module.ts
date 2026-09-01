@@ -6,6 +6,7 @@ import { ValidationPipe } from "@nestjs/common";
 import { PrismaModule } from "./common/prisma/prisma.module";
 import { CryptoModule } from "./common/crypto/crypto.module";
 import { CacheModule } from "./common/cache/cache.module";
+import { UserAccessCacheModule } from "./common/access/user-access-cache.module";
 import { RealtimeModule } from "./realtime/realtime.module";
 import { AgentDispatchModule } from "./common/queue/agent-dispatch.module";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter";
@@ -43,6 +44,7 @@ import { PreparationModule } from "./preparation/preparation.module";
     PrismaModule,
     CryptoModule,
     CacheModule,
+    UserAccessCacheModule,
     RealtimeModule,
     AgentDispatchModule,
     AuthModule,

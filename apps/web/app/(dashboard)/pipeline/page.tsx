@@ -380,20 +380,27 @@ export default function PipelinePage() {
     return () => clearInterval(id);
   }, []);
 
-  // Same query key as /leads — both pages call the identical endpoint with
-  // identical params, so they share one cache entry: switching between them
-  // shows the other's already-loaded data instantly.
+  // The kanban genuinely needs every lead (each column's count/contents
+  // depend on the whole set, not a page of it) — unlike /leads, which
+  // switched to real server-side pagination (Part: performance audit,
+  // 2026-09-02) and no longer shares this cache key. What changed here:
+  // pages are now fetched in PARALLEL after the first tells us the total
+  // page count, instead of one-at-a-time — wall-clock time drops from
+  // roughly N round trips to about 2 (page 1, then every remaining page
+  // concurrently), the same total data either way.
   const leadsQuery = useQuery({
-    queryKey: ["leads"],
+    queryKey: ["pipeline-leads"],
     queryFn: async () => {
       const pageSize = 200;
       const first: any = await api.getLeads({ page: "1", pageSize: String(pageSize) });
-      const items: LeadRow[] = first.items ?? first;
+      const items: LeadRow[] = [...(first.items ?? first)];
       const total: number = first.total ?? items.length;
       const pageCount = Math.ceil(total / pageSize);
-      for (let page = 2; page <= pageCount; page++) {
-        const res: any = await api.getLeads({ page: String(page), pageSize: String(pageSize) });
-        items.push(...((res.items ?? res) as LeadRow[]));
+      if (pageCount > 1) {
+        const rest = await Promise.all(
+          Array.from({ length: pageCount - 1 }, (_, i) => api.getLeads({ page: String(i + 2), pageSize: String(pageSize) })),
+        );
+        for (const res of rest as any[]) items.push(...(res.items ?? res));
       }
       return items;
     },
@@ -403,7 +410,7 @@ export default function PipelinePage() {
   const leads = leadsQuery.data ?? EMPTY_LEADS;
 
   function invalidateLeads() {
-    queryClient.invalidateQueries({ queryKey: ["leads"] });
+    queryClient.invalidateQueries({ queryKey: ["pipeline-leads"] });
   }
 
   // No page in this app should ever need a manual reload to see current
@@ -509,8 +516,8 @@ export default function PipelinePage() {
     // Optimistic: the card moves immediately so dragging feels direct. Reverted
     // below if the API rejects it, which it can — the server re-validates the
     // transition and is the authority.
-    const previous = queryClient.getQueryData<LeadRow[]>(["leads"]);
-    queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
+    const previous = queryClient.getQueryData<LeadRow[]>(["pipeline-leads"]);
+    queryClient.setQueryData<LeadRow[]>(["pipeline-leads"], (rows) =>
       (rows ?? []).map((r) =>
         r.id === lead.id
           ? { ...r, pipelineState: { stage, previousStage: from, enteredStageAt: new Date().toISOString(), nextActionAt: null } }
@@ -522,7 +529,7 @@ export default function PipelinePage() {
       await api.advanceStage(lead.id, stage);
       invalidateLeads();
     } catch (err) {
-      queryClient.setQueryData(["leads"], previous);
+      queryClient.setQueryData(["pipeline-leads"], previous);
       setError(`Could not move ${lead.companyName}: ${(err as Error).message}`);
     } finally {
       setBusy(null);
@@ -564,7 +571,7 @@ export default function PipelinePage() {
     setError(null);
     try {
       await api.deleteLead(lead.id);
-      queryClient.setQueryData<LeadRow[]>(["leads"], (rows) => (rows ?? []).filter((r) => r.id !== lead.id));
+      queryClient.setQueryData<LeadRow[]>(["pipeline-leads"], (rows) => (rows ?? []).filter((r) => r.id !== lead.id));
     } catch (err) {
       setError(`Could not delete ${lead.companyName}: ${(err as Error).message}`);
     } finally {
@@ -592,7 +599,7 @@ export default function PipelinePage() {
     setError(null);
     try {
       await api.deleteLeadsByStage(deleteStage);
-      queryClient.setQueryData<LeadRow[]>(["leads"], (rows) =>
+      queryClient.setQueryData<LeadRow[]>(["pipeline-leads"], (rows) =>
         (rows ?? []).filter((r) => (r.pipelineState?.stage ?? "READY_FOR_OUTREACH") !== deleteStage),
       );
       setDeleteStage("");

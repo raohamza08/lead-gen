@@ -10,6 +10,7 @@ import { UpdateUserAccessDto } from "./dto/update-user-access.dto";
 import { AuditLogService } from "../audit-log/audit-log.service";
 import { LocalDiskMediaStorageService } from "../social-media/media/local-disk-media-storage.service";
 import { apiPublicUrl } from "../common/api-url";
+import { UserAccessCacheService } from "../common/access/user-access-cache.service";
 
 function credentialsEmailHtml(params: { recipientName: string; orgName: string; email: string; password: string }): string {
   const { recipientName, orgName, email, password } = params;
@@ -39,6 +40,7 @@ export class UsersService {
     private readonly organization: OrganizationService,
     private readonly auditLog: AuditLogService,
     private readonly mediaStorage: LocalDiskMediaStorageService,
+    private readonly userAccessCache: UserAccessCacheService,
   ) {}
 
   async findAllForOrg(orgId: string) {
@@ -114,6 +116,7 @@ export class UsersService {
   async setActive(orgId: string, actorId: string, id: string, active: boolean) {
     const result = await this.prisma.user.updateMany({ where: { id, orgId }, data: { active } });
     if (result.count === 0) throw new NotFoundException("User not found");
+    await this.userAccessCache.invalidate(id);
     this.auditLog.write({
       orgId, actorId, action: active ? "USER_ACTIVATED" : "USER_DEACTIVATED", entityType: "user", entityId: id,
     });
@@ -123,6 +126,7 @@ export class UsersService {
   async setRole(orgId: string, actorId: string, id: string, role: Role) {
     const result = await this.prisma.user.updateMany({ where: { id, orgId }, data: { role } });
     if (result.count === 0) throw new NotFoundException("User not found");
+    await this.userAccessCache.invalidate(id);
     this.auditLog.write({ orgId, actorId, action: "ROLE_CHANGED", entityType: "user", entityId: id, metadata: { role } });
     return this.prisma.user.findUniqueOrThrow({ where: { id } });
   }
@@ -226,6 +230,7 @@ export class UsersService {
       }
     });
 
+    if (dto.modules) await this.userAccessCache.invalidate(userId);
     this.auditLog.write({
       orgId, actorId, action: "PERMISSION_CHANGED", entityType: "user", entityId: userId,
       metadata: { modules: dto.modules ?? null },
@@ -341,6 +346,7 @@ export class UsersService {
       this.prisma.user.update({ where: { id: fromUserId }, data: { isPrimaryAdmin: false } }),
       this.prisma.user.update({ where: { id: toUserId }, data: { isPrimaryAdmin: true } }),
     ]);
+    await Promise.all([this.userAccessCache.invalidate(fromUserId), this.userAccessCache.invalidate(toUserId)]);
     this.auditLog.write({
       orgId, actorId: fromUserId, action: "PRIMARY_ADMIN_TRANSFERRED", entityType: "user", entityId: toUserId,
     });

@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, ForbiddenException, Injectable } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Role, JwtClaims } from "@leadgen/types";
-import { PrismaService } from "../prisma/prisma.service";
+import { UserAccessCacheService } from "../access/user-access-cache.service";
 import { AccessModule, MODULE_ACCESS_KEY } from "../decorators/requires-module.decorator";
 import { PermissionDenialLogger } from "./permission-denial-logger.service";
 
@@ -22,15 +22,20 @@ const FIELD_BY_MODULE: Record<AccessModule, "leadGenAccess" | "emailHubAccess" |
  * locked out of a module by these flags, only UsersService.updateAccess
  * rejecting an attempt to disable them in the first place.
  *
- * Deliberately a live DB lookup every request rather than trusting anything
- * off the JWT (which only carries `role`, not these flags) — same
- * instant-revocation reasoning as the two existing per-resource grant guards.
+ * Reads through `UserAccessCacheService` (Part: performance audit,
+ * 2026-09-02) rather than a fresh `prisma.user.findUnique` every request —
+ * a live DB round trip on nearly every request in the app was measured
+ * costing ~830ms each (cross-region DB latency). Revocation is invalidated
+ * immediately on write (see UsersService's four mutation points), with the
+ * cache's short TTL as a fallback ceiling, not the only mechanism — not
+ * "trusting the JWT" (still never in JwtClaims), just no longer paying a
+ * fresh round trip for data that changes rarely.
  */
 @Injectable()
 export class ModuleAccessGuard implements CanActivate {
   constructor(
     private readonly reflector: Reflector,
-    private readonly prisma: PrismaService,
+    private readonly userAccess: UserAccessCacheService,
     private readonly denialLogger: PermissionDenialLogger,
   ) {}
 
@@ -47,7 +52,7 @@ export class ModuleAccessGuard implements CanActivate {
     if (user.role === Role.ADMIN) return true;
 
     const field = FIELD_BY_MODULE[requiredModule];
-    const record = await this.prisma.user.findUnique({ where: { id: user.sub }, select: { [field]: true } });
+    const record = await this.userAccess.get(user.sub);
     if (!record?.[field]) {
       this.denialLogger.log(user, `missing ${field}`, context.switchToHttp().getRequest().route?.path);
       throw new ForbiddenException("You don't have access to this module — ask an admin to grant it in Settings > Team.");
