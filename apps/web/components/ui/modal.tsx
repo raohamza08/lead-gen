@@ -18,12 +18,21 @@ export function Modal({
   onOpenChange,
   variant = "center",
   title,
+  contentClassName,
+  bodyClassName,
   children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   variant?: "center" | "drawer-right";
+  /** Omit when the caller builds its own header (see ModalTitle/ModalClose)
+   *  — a real Radix-labeled title is still required for accessibility in
+   *  that case, just rendered by the caller instead of here. */
   title?: string;
+  /** Overrides the default max-width — message-detail-panel's drawer is
+   *  much wider (94vw/1200px) than compose-modal's default. */
+  contentClassName?: string;
+  bodyClassName?: string;
   children: ReactNode;
 }) {
   const isDrawer = variant === "drawer-right";
@@ -33,9 +42,10 @@ export function Modal({
         <DialogPrimitive.Overlay className="modal-overlay fixed inset-0 z-40 bg-ink/40 backdrop-blur-[1px]" />
         <DialogPrimitive.Content
           className={
-            isDrawer
+            (isDrawer
               ? "modal-content-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col overflow-y-auto border-l border-[var(--line)] bg-surface shadow-lg focus:outline-none"
-              : "modal-content-center fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none"
+              : "modal-content-center fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none") +
+            (contentClassName ? ` ${contentClassName}` : "")
           }
         >
           {title && (
@@ -51,7 +61,7 @@ export function Modal({
               </DialogPrimitive.Close>
             </div>
           )}
-          <div className={isDrawer ? "flex-1 px-5 py-4" : "flex-1"}>{children}</div>
+          <div className={bodyClassName ?? (isDrawer ? "flex-1 px-5 py-4" : "flex-1")}>{children}</div>
         </DialogPrimitive.Content>
       </DialogPrimitive.Portal>
     </DialogPrimitive.Root>
@@ -59,3 +69,4 @@ export function Modal({
 }
 
 export const ModalClose = DialogPrimitive.Close;
+export const ModalTitle = DialogPrimitive.Title;

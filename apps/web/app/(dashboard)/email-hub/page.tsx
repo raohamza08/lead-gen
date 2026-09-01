@@ -8,6 +8,10 @@ import { useRealtimeRefetch } from "../../../lib/realtime";
 import { ComposeModal } from "../../../components/email-hub/compose-modal";
 import { MessageDetailPanel } from "../../../components/email-hub/message-detail-panel";
 import { LoadingRow, Spinner } from "../../../components/spinner";
+import { Button } from "../../../components/ui/button";
+import { StatusBadge } from "../../../components/ui/status-badge";
+import { Tabs } from "../../../components/ui/tabs";
+import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../components/ui/table";
 
 interface Account {
   id: string;
@@ -298,18 +302,12 @@ function EmailHubPageContent() {
           {messagesQuery.isFetching && !messagesQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => setShowTagManager((v) => !v)}
-            className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 hover:bg-ink/5"
-          >
+          <Button variant="secondary" size="sm" onClick={() => setShowTagManager((v) => !v)}>
             Manage tags
-          </button>
-          <button
-            onClick={() => setShowCompose(true)}
-            className="rounded-md bg-accent px-3 py-1.5 text-xs text-white hover:opacity-90"
-          >
+          </Button>
+          <Button size="sm" onClick={() => setShowCompose(true)}>
             New email
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -385,9 +383,9 @@ function EmailHubPageContent() {
               placeholder="New tag name"
               className="rounded border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm"
             />
-            <button type="submit" className="rounded-md bg-accent px-3 py-1.5 text-xs text-white">
+            <Button type="submit" size="sm">
               Add tag
-            </button>
+            </Button>
           </form>
           <div className="flex flex-wrap gap-2">
             {tags.map((t) => (
@@ -409,33 +407,20 @@ function EmailHubPageContent() {
 
       {/* Account switcher — All accounts + one tab per connected mailbox
           (Part: Individual Account View / Unified Inbox toggle). */}
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          onClick={() => resetPage(setAccountId)("")}
-          className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
-            accountId === "" ? "bg-accent font-medium text-white" : "border border-[var(--line)] text-ink/65 hover:bg-ink/5"
-          }`}
-        >
-          All accounts
-        </button>
-        {accounts.map((a) => (
-          <button
-            key={a.id}
-            onClick={() => resetPage(setAccountId)(a.id)}
-            className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
-              accountId === a.id ? "bg-accent font-medium text-white" : "border border-[var(--line)] text-ink/65 hover:bg-ink/5"
-            }`}
-          >
-            {a.mailboxLabel || a.address}
-            {a.unreadCount > 0 && <span className="ml-1.5 opacity-80">({a.unreadCount})</span>}
-          </button>
-        ))}
-        {accounts.length === 0 && !accountsQuery.isLoading && (
-          <span className="text-xs text-ink/50">
-            No inbox-connected accounts yet — add one in Settings &gt; Email Hub &gt; Accounts.
-          </span>
-        )}
-      </div>
+      {accounts.length === 0 && !accountsQuery.isLoading ? (
+        <span className="text-xs text-ink/50">
+          No inbox-connected accounts yet — add one in Settings &gt; Email Hub &gt; Accounts.
+        </span>
+      ) : (
+        <Tabs
+          value={accountId}
+          onValueChange={(v) => resetPage(setAccountId)(v)}
+          tabs={[
+            { value: "", label: "All accounts" },
+            ...accounts.map((a) => ({ value: a.id, label: a.mailboxLabel || a.address, count: a.unreadCount })),
+          ]}
+        />
+      )}
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-2">
@@ -463,19 +448,20 @@ function EmailHubPageContent() {
       {selected.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--line)] bg-ink/5 px-3 py-2 text-xs">
           <span className="font-medium">{selected.size} selected</span>
-          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("READ")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark read</button>
-          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNREAD")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark unread</button>
-          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IMPORTANT")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark important</button>
-          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IGNORE", undefined, "SENDER")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Ignore sender</button>
-          <button
+          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("READ")}>Mark read</Button>
+          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNREAD")}>Mark unread</Button>
+          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IMPORTANT")}>Mark important</Button>
+          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IGNORE", undefined, "SENDER")}>Ignore sender</Button>
+          <Button
+            variant="secondary"
+            size="sm"
             disabled={bulkActionMutation.isPending}
             onClick={() => bulkAction("IGNORE", undefined, "DOMAIN")}
             title="Mutes every sender at the selected messages' domain(s), not just these exact addresses"
-            className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5"
           >
             Ignore domain
-          </button>
-          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNIGNORE")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Unignore</button>
+          </Button>
+          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNIGNORE")}>Unignore</Button>
           {tags.length > 0 && (
             <select
               disabled={bulkActionMutation.isPending}
@@ -493,13 +479,14 @@ function EmailHubPageContent() {
               ))}
             </select>
           )}
-          <button
+          <Button
+            variant="danger"
+            size="sm"
             disabled={bulkActionMutation.isPending}
             onClick={() => window.confirm(`Delete ${selected.size} message(s)? This removes them from the Email Hub, not the real mailbox.`) && bulkAction("DELETE")}
-            className="rounded border border-[rgb(var(--bad-rgb)/0.4)] px-2 py-1 text-bad hover:bg-[rgb(var(--bad-rgb)/0.06)]"
           >
             Delete
-          </button>
+          </Button>
         </div>
       )}
 
@@ -509,97 +496,87 @@ function EmailHubPageContent() {
           <LoadingRow label="Loading messages…" />
         </div>
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[720px] border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-[var(--line)] text-left text-xs text-ink/55">
-                <th className="w-8 px-3 py-2">
-                  <input type="checkbox" checked={allSelected} onChange={toggleAll} />
-                </th>
-                <th className="px-3 py-2">{status === "SENT" ? "To" : "Sender"}</th>
-                <th className="px-3 py-2">Subject</th>
-                <th className="px-3 py-2">Account</th>
-                <th className="px-3 py-2">Tags</th>
-                <th className="px-3 py-2 text-right">Received</th>
-              </tr>
-            </thead>
-            <tbody>
-              {messages.map((m) => (
-                <tr
-                  key={m.id}
-                  onClick={() => openMessage(m)}
-                  className={`cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-ink/5 ${
-                    m.isRead ? "" : "font-medium"
-                  }`}
-                >
-                  <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+        <Table>
+          <TableHead>
+            <TableHeadRow>
+              <Th className="w-8">
+                <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+              </Th>
+              <Th>{status === "SENT" ? "To" : "Sender"}</Th>
+              <Th>Subject</Th>
+              <Th>Account</Th>
+              <Th>Tags</Th>
+              <Th className="text-right">Received</Th>
+            </TableHeadRow>
+          </TableHead>
+          <TableBody>
+            {messages.map((m) => (
+              <Tr key={m.id} onClick={() => openMessage(m)} className={m.isRead ? "" : "font-medium"}>
+                <Td>
+                  <span onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggleOne(m.id)} />
-                  </td>
-                  <td className="px-3 py-2">
-                    {m.folder === "SENT" ? (
-                      <div>{m.toEmails.join(", ") || "(no recipient)"}</div>
-                    ) : (
-                      <>
-                        <div>{m.fromName || m.fromEmail}</div>
-                        <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
-                      </>
+                  </span>
+                </Td>
+                <Td>
+                  {m.folder === "SENT" ? (
+                    <div>{m.toEmails.join(", ") || "(no recipient)"}</div>
+                  ) : (
+                    <>
+                      <div>{m.fromName || m.fromEmail}</div>
+                      <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
+                    </>
+                  )}
+                </Td>
+                <Td>
+                  <div className="flex items-center gap-1.5">
+                    {m.isImportant && <span className="text-warning">★</span>}
+                    {m.hasAttachments && <span title="Has attachments">📎</span>}
+                    <span className="line-clamp-1">{m.subject}</span>
+                  </div>
+                  <div className="line-clamp-1 text-xs font-normal text-ink/50">{m.bodyText.slice(0, 120)}</div>
+                </Td>
+                <Td className="text-xs font-normal text-ink/60">
+                  {m.account.mailboxLabel || m.account.address}
+                </Td>
+                <Td>
+                  <div className="flex flex-wrap items-center gap-1">
+                    {m.thread.leadId && <StatusBadge tone="accent" label="Lead" />}
+                    {!m.thread.leadId && m.suggestedCategory === "POSSIBLE_LEAD" && (
+                      <span
+                        className="flex items-center gap-1 rounded-full bg-warning/15 px-2 py-0.5 text-[11px] text-warning"
+                        title={m.aiSuggestedAction ?? undefined}
+                      >
+                        Possible lead
+                        <button
+                          onClick={(e) => confirmPossibleLead(m.thread.id, e)}
+                          disabled={confirmingLeadId === m.thread.id}
+                          className="rounded-full border border-warning/40 px-1.5 py-0 text-[10px] font-medium transition-colors duration-fast hover:bg-warning/10 disabled:opacity-50"
+                        >
+                          {confirmingLeadId === m.thread.id ? "Adding…" : "Add to Lead"}
+                        </button>
+                      </span>
                     )}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex items-center gap-1.5">
-                      {m.isImportant && <span className="text-gold">★</span>}
-                      {m.hasAttachments && <span title="Has attachments">📎</span>}
-                      <span className="line-clamp-1">{m.subject}</span>
-                    </div>
-                    <div className="line-clamp-1 text-xs font-normal text-ink/50">{m.bodyText.slice(0, 120)}</div>
-                  </td>
-                  <td className="px-3 py-2 text-xs font-normal text-ink/60">
-                    {m.account.mailboxLabel || m.account.address}
-                  </td>
-                  <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-1">
-                      {m.thread.leadId && (
-                        <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[11px] text-accent">Lead</span>
-                      )}
-                      {!m.thread.leadId && m.suggestedCategory === "POSSIBLE_LEAD" && (
-                        <span
-                          className="flex items-center gap-1 rounded-full bg-gold/15 px-2 py-0.5 text-[11px] text-gold"
-                          title={m.aiSuggestedAction ?? undefined}
-                        >
-                          Possible lead
-                          <button
-                            onClick={(e) => confirmPossibleLead(m.thread.id, e)}
-                            disabled={confirmingLeadId === m.thread.id}
-                            className="rounded-full border border-gold/40 px-1.5 py-0 text-[10px] font-medium hover:bg-gold/10 disabled:opacity-50"
-                          >
-                            {confirmingLeadId === m.thread.id ? "Adding…" : "Add to Lead"}
-                          </button>
-                        </span>
-                      )}
-                      {m.tags.map(({ tag }) => (
-                        <span
-                          key={tag.id}
-                          className="rounded-full px-2 py-0.5 text-[11px] text-white"
-                          style={{ backgroundColor: tag.color }}
-                        >
-                          {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-3 py-2 text-right text-xs font-normal text-ink/50">{timeAgo(m.receivedAt)}</td>
-                </tr>
-              ))}
-              {messages.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-sm text-ink/50">
-                    {view === "leads" ? "No leads yet — confirmed or AI-suggested ones show up here." : "Nothing here."}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                    {m.tags.map(({ tag }) => (
+                      <span
+                        key={tag.id}
+                        className="rounded-full px-2 py-0.5 text-[11px] text-white"
+                        style={{ backgroundColor: tag.color }}
+                      >
+                        {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                </Td>
+                <Td className="text-right text-xs font-normal text-ink/50">{timeAgo(m.receivedAt)}</Td>
+              </Tr>
+            ))}
+            {messages.length === 0 && (
+              <TableEmptyRow colSpan={6}>
+                {view === "leads" ? "No leads yet — confirmed or AI-suggested ones show up here." : "Nothing here."}
+              </TableEmptyRow>
+            )}
+          </TableBody>
+        </Table>
       )}
 
       {/* Pagination — the API caps every response to one page even when a
@@ -627,15 +604,15 @@ function EmailHubPageContent() {
               ))}
             </select>
           </label>
-          <button disabled={page === 1} onClick={() => setPage((p) => p - 1)} className="disabled:opacity-30">
+          <Button variant="ghost" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>
             ← Prev
-          </button>
+          </Button>
           <span>
             Page {page} of {Math.max(1, Math.ceil(total / pageSize))}
           </span>
-          <button disabled={page * pageSize >= total} onClick={() => setPage((p) => p + 1)} className="disabled:opacity-30">
+          <Button variant="ghost" size="sm" disabled={page * pageSize >= total} onClick={() => setPage((p) => p + 1)}>
             Next →
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -4,6 +4,11 @@ import { useState } from "react";
 import { api, OutboundAttachmentInput } from "../../lib/api-client";
 import { AttachmentPicker } from "./attachment-picker";
 import { RichHtmlEditor } from "./rich-html-editor";
+import { Modal } from "../ui/modal";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
+import { Select } from "../ui/select";
+import { Checkbox } from "../ui/checkbox";
 
 interface Account {
   id: string;
@@ -75,118 +80,85 @@ export function ComposeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="card w-full max-w-lg p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-sm font-semibold tracking-tight">New email</h2>
-          <button onClick={onClose} className="text-ink/50 hover:text-ink">
-            ✕
-          </button>
+    <Modal open onOpenChange={(o) => !o && onClose()} variant="center" title="New email">
+      {error && (
+        <div className="mb-3 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-error">
+          {error}
         </div>
-        {error && (
-          <div className="mb-3 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-            {error}
-          </div>
-        )}
-        <form onSubmit={send} className="flex flex-col gap-3">
-          <label className="block">
-            <span className="mb-1 block text-xs text-ink/60">From</span>
-            <select
-              value={accountId}
-              onChange={(e) => setAccountId(e.target.value)}
-              className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-            >
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.mailboxLabel || a.address}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <div className="mb-1 flex items-center justify-between">
-              <span className="text-xs text-ink/60">To (comma-separated)</span>
-              <div className="flex items-center gap-2 text-[11px]">
-                {!showCc && (
-                  <button type="button" onClick={() => setShowCc(true)} className="text-ink/40 hover:text-accent">
-                    Cc
-                  </button>
-                )}
-                {!showBcc && (
-                  <button type="button" onClick={() => setShowBcc(true)} className="text-ink/40 hover:text-accent">
-                    Bcc
-                  </button>
-                )}
-              </div>
+      )}
+      <form onSubmit={send} className="flex flex-col gap-3">
+        <label className="block">
+          <span className="mb-1 block text-xs text-ink/60">From</span>
+          <Select
+            value={accountId}
+            onValueChange={setAccountId}
+            options={accounts.map((a) => ({ value: a.id, label: a.mailboxLabel || a.address }))}
+          />
+        </label>
+        <label className="block">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-xs text-ink/60">To (comma-separated)</span>
+            <div className="flex items-center gap-2 text-[11px]">
+              {!showCc && (
+                <button type="button" onClick={() => setShowCc(true)} className="text-ink/40 transition-colors duration-fast hover:text-primary">
+                  Cc
+                </button>
+              )}
+              {!showBcc && (
+                <button type="button" onClick={() => setShowBcc(true)} className="text-ink/40 transition-colors duration-fast hover:text-primary">
+                  Bcc
+                </button>
+              )}
             </div>
-            <input
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              required
-              className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-            />
-          </label>
-          {showCc && (
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink/60">Cc</span>
-              <input
-                value={cc}
-                onChange={(e) => setCc(e.target.value)}
-                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-              />
-            </label>
-          )}
-          {showBcc && (
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink/60">Bcc</span>
-              <input
-                value={bcc}
-                onChange={(e) => setBcc(e.target.value)}
-                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-              />
-            </label>
-          )}
+          </div>
+          <Input value={to} onChange={(e) => setTo(e.target.value)} required />
+        </label>
+        {showCc && (
           <label className="block">
-            <span className="mb-1 block text-xs text-ink/60">Subject</span>
-            <input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              required
-              className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-            />
+            <span className="mb-1 block text-xs text-ink/60">Cc</span>
+            <Input value={cc} onChange={(e) => setCc(e.target.value)} />
           </label>
-          <div className="block">
-            <span className="mb-1 block text-xs text-ink/60">Message</span>
-            <RichHtmlEditor onChange={setBodyHtml} placeholder="Write your message…" />
-          </div>
-          <div className="block">
-            <AttachmentPicker attachments={attachments} onChange={setAttachments} onError={setAttachmentError} />
-            {attachmentError && <p className="mt-1 text-xs text-bad">{attachmentError}</p>}
-          </div>
-          <div className="flex items-center justify-between">
-            <label className="flex items-center gap-1.5 text-xs text-ink/60" title="Embed an open-tracking pixel in this email">
-              <input type="checkbox" checked={trackOpen} onChange={(e) => setTrackOpen(e.target.checked)} />
-              Track email
-            </label>
-          </div>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 hover:bg-ink/5"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={sending || !accountId || !bodyHtml.replace(/<[^>]+>/g, "").trim() || !!attachmentError}
-              className="rounded-md bg-accent px-4 py-1.5 text-xs text-white disabled:opacity-50"
-            >
-              {sending ? "Sending…" : "Send"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+        {showBcc && (
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink/60">Bcc</span>
+            <Input value={bcc} onChange={(e) => setBcc(e.target.value)} />
+          </label>
+        )}
+        <label className="block">
+          <span className="mb-1 block text-xs text-ink/60">Subject</span>
+          <Input value={subject} onChange={(e) => setSubject(e.target.value)} required />
+        </label>
+        <div className="block">
+          <span className="mb-1 block text-xs text-ink/60">Message</span>
+          <RichHtmlEditor onChange={setBodyHtml} placeholder="Write your message…" />
+        </div>
+        <div className="block">
+          <AttachmentPicker attachments={attachments} onChange={setAttachments} onError={setAttachmentError} />
+          {attachmentError && <p className="mt-1 text-xs text-error">{attachmentError}</p>}
+        </div>
+        <div className="flex items-center justify-between">
+          <Checkbox
+            id="compose-track-open"
+            checked={trackOpen}
+            onCheckedChange={setTrackOpen}
+            label={<span title="Embed an open-tracking pixel in this email">Track email</span>}
+          />
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="secondary" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            size="sm"
+            loading={sending}
+            disabled={sending || !accountId || !bodyHtml.replace(/<[^>]+>/g, "").trim() || !!attachmentError}
+          >
+            Send
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 }
