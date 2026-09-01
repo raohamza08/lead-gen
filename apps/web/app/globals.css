@@ -209,6 +209,50 @@ select, option {
   cursor: not-allowed;
 }
 
+/* The EurosHub loading identity, "Orbit Ring" (Part: UI/UX Redesign,
+   2026-09-01) — see components/ui/euroshub-loader.tsx for the full
+   rationale. Only opacity and stroke-dashoffset animate; both are cheap to
+   repaint and neither triggers layout, and the element count is fixed
+   regardless of the rendered size. */
+.euroshub-loader-node {
+  animation: pulse-node 1.35s ease-in-out infinite;
+}
+@keyframes pulse-node {
+  0%, 100% { opacity: 0.25; }
+  50% { opacity: 1; }
+}
+.euroshub-loader-segment {
+  animation: travel-segment 1.8s linear infinite;
+}
+@keyframes travel-segment {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -100%; }
+}
+/* An intentional static mark (fully lit, fully drawn) rather than relying on
+   the app-wide reduced-motion override, which would otherwise freeze this
+   animation at an arbitrary, possibly half-erased frame. */
+@media (prefers-reduced-motion: reduce) {
+  .euroshub-loader-node, .euroshub-loader-segment {
+    animation: none;
+    opacity: 1;
+  }
+}
+
+/* Skeleton shimmer (Part: UI/UX Redesign, 2026-09-01) — a horizontal sweep
+   rather than the Orbit Ring loader above: a spinner per table/list row
+   reads as slow or broken, while a shimmer reads as "rows incoming."
+   Generalizes the ad hoc `card h-32 animate-pulse` skeletons already used on
+   the Overview page. */
+.skeleton {
+  background: linear-gradient(90deg, rgb(var(--ink-rgb) / 0.06) 25%, rgb(var(--ink-rgb) / 0.11) 37%, rgb(var(--ink-rgb) / 0.06) 63%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-shimmer {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
 /* Interaction-state convention (Part: UI/UX Redesign, 2026-09-01) — not
    literal color tokens, since Tailwind 3's <alpha-value> binding can't
    address an arbitrary runtime overlay the way it does for the palette
