@@ -46,21 +46,33 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "primary", size = "md", loading = false, asChild = false, disabled, className = "", children, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
+    const classes = `relative inline-flex shrink-0 items-center justify-center rounded-lg font-medium transition-colors duration-fast ease-standard disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`;
+
+    if (asChild) {
+      // Radix Slot requires exactly one child element with nothing wrapped
+      // around it — cloning its own props directly onto that element rather
+      // than a button. The loading-overlay span below is structurally
+      // incompatible with that contract (Slot throws "expected a single
+      // React element child" the moment there's a wrapper), and no asChild
+      // call site today needs a loading state anyway (they're all plain
+      // navigation links styled as buttons) — so this path skips it
+      // entirely instead of trying to support both.
+      return (
+        <Slot ref={ref} className={classes} {...props}>
+          {children}
+        </Slot>
+      );
+    }
+
     return (
-      <Comp
-        ref={ref}
-        disabled={disabled || loading}
-        className={`relative inline-flex shrink-0 items-center justify-center rounded-lg font-medium transition-colors duration-fast ease-standard disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`}
-        {...props}
-      >
+      <button ref={ref} disabled={disabled || loading} className={classes} {...props}>
         {loading && (
           <span className="absolute inset-0 flex items-center justify-center">
             <EurosHubLoader mode="button" size={16} />
           </span>
         )}
         <span className={loading ? "invisible" : "contents"}>{children}</span>
-      </Comp>
+      </button>
     );
   },
 );
