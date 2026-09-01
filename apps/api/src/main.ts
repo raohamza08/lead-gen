@@ -32,7 +32,14 @@ async function bootstrap() {
   app.useWebSocketAdapter(new IoAdapter(app));
 
   app.setGlobalPrefix("api/v1", {
-    exclude: ["webhooks/(.*)", "track/(.*)", "unsubscribe", "media/(.*)", "social-oauth/(.*)"],
+    // users/:id/avatar (AvatarFileController) is public-by-design, same
+    // reasoning as media/(.*) below — a plain <img src> can't carry the
+    // Bearer token the api/v1 prefix's routes otherwise require, and its
+    // URL is built without the prefix (users.service.ts's avatarUrl),
+    // matching how media's own public URL is built. Without this exclusion
+    // that URL 404'd against the real (prefixed) route while every avatar
+    // in the app silently failed to load.
+    exclude: ["webhooks/(.*)", "track/(.*)", "unsubscribe", "media/(.*)", "social-oauth/(.*)", "users/:id/avatar"],
   });
 
   // Managed hosts (Render, Railway, Fly) inject the port to bind and route to
