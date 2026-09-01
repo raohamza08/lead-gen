@@ -23,6 +23,11 @@
   --gold-rgb: 184 134 58;
   --good-rgb: 46 125 82;
   --bad-rgb: 176 71 59;
+  /* Semantic slots with no existing color to alias (Part: UI/UX Redesign,
+     2026-09-01) — everything else in this file aliases paper/ink/accent/
+     gold/good/bad rather than introducing a parallel palette. */
+  --secondary-rgb: 71 85 105;
+  --info-rgb: 37 99 235;
 
   --paper: rgb(var(--paper-rgb));
   --ink: rgb(var(--ink-rgb));
@@ -59,6 +64,8 @@
     --gold-rgb: 209 165 92;
     --good-rgb: 87 178 128;
     --bad-rgb: 216 116 105;
+    --secondary-rgb: 148 163 184;
+    --info-rgb: 96 165 250;
 
     --chart-grid: #24272c;
     --chart-axis: #383c42;
@@ -85,6 +92,8 @@
   --gold-rgb: 209 165 92;
   --good-rgb: 87 178 128;
   --bad-rgb: 216 116 105;
+  --secondary-rgb: 148 163 184;
+  --info-rgb: 96 165 250;
 
   --chart-grid: #24272c;
   --chart-axis: #383c42;
@@ -99,20 +108,40 @@
 /* Elevation. Two levels only — a card and a lifted card. More steps make a
    dashboard read as cluttered, because every surface competes for attention. */
 :root {
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
+  /* RGB-channel form (Part: UI/UX Redesign, 2026-09-01) so Tailwind's
+     `surface`/`surface-elevated` aliases can apply an opacity modifier the
+     same way `text-ink/60` already works — the fixed-hex --surface/
+     --surface-raised below stay as the plain-CSS-consumer aliases. */
+  --surface-rgb: 255 255 255;
+  --surface-raised-rgb: 255 255 255;
+  --surface: rgb(var(--surface-rgb));
+  --surface-raised: rgb(var(--surface-raised-rgb));
   --shadow-sm: 0 1px 2px rgb(23 27 33 / 0.06), 0 1px 3px rgb(23 27 33 / 0.04);
   --shadow-md: 0 4px 12px rgb(23 27 33 / 0.08), 0 2px 4px rgb(23 27 33 / 0.04);
   --shadow-lg: 0 12px 32px rgb(23 27 33 / 0.14);
   --radius: 12px;
+
+  /* Animation tokens (Part: UI/UX Redesign, 2026-09-01) — every transition
+     added across the redesign draws from these three durations and three
+     easings rather than one-off values per component, so motion feels like
+     one system instead of accidental drift. Mirrored in tailwind.config.ts'
+     transitionDuration/transitionTimingFunction for utility-class use. */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --duration-slow: 320ms;
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-decelerate: cubic-bezier(0, 0, 0.2, 1);
+  --ease-accelerate: cubic-bezier(0.4, 0, 1, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     /* Dark surfaces are LIGHTER than the page, not darker: shadow barely reads
        on a dark background, so elevation has to come from luminance instead. */
-    --surface: #1a1e25;
-    --surface-raised: #212630;
+    --surface-rgb: 26 30 37;
+    --surface-raised-rgb: 33 38 48;
+    --surface: rgb(var(--surface-rgb));
+    --surface-raised: rgb(var(--surface-raised-rgb));
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
     --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
     --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
@@ -120,8 +149,10 @@
 }
 
 :root[data-theme="dark"] {
-  --surface: #1a1e25;
-  --surface-raised: #212630;
+  --surface-rgb: 26 30 37;
+  --surface-raised-rgb: 33 38 48;
+  --surface: rgb(var(--surface-rgb));
+  --surface-raised: rgb(var(--surface-raised-rgb));
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
@@ -177,6 +208,16 @@ select, option {
   background: rgb(var(--bad-rgb) / 0.06);
   cursor: not-allowed;
 }
+
+/* Interaction-state convention (Part: UI/UX Redesign, 2026-09-01) — not
+   literal color tokens, since Tailwind 3's <alpha-value> binding can't
+   address an arbitrary runtime overlay the way it does for the palette
+   above. Every new components/ui/* file applies this recipe via Tailwind's
+   own hover:/active:/disabled: variants instead of inventing per-component
+   values:
+     hover    -> +5-6% neutral overlay  (e.g. hover:bg-ink/5, hover:bg-white/10 on filled buttons)
+     active   -> +10% neutral overlay   (e.g. active:bg-ink/10)
+     disabled -> 50% opacity + cursor-not-allowed */
 
 /* Respect a reduced-motion preference: these transitions are decorative, and
    motion sensitivity is a real accessibility need, not a style choice. */
