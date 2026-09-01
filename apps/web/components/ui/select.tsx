@@ -9,6 +9,13 @@ import * as SelectPrimitive from "@radix-ui/react-select";
  * in app/globals.css's `select, option` rule for every call site migrated —
  * Radix renders its own popup content, not the browser's native one, so
  * dark mode just applies normally like everywhere else in the app.
+ *
+ * Radix forbids an empty-string item value (throws at runtime) — unlike a
+ * native `<select>`, there's no built-in way to represent "nothing selected/
+ * any/all" as a real, re-selectable option. Call sites that need a clearable
+ * "Any X" state must use a non-empty sentinel value (e.g. "ALL") for that
+ * option and translate to/from "" at the call site's own onValueChange,
+ * rather than passing value="" through to `options` directly.
  */
 export function Select({
   value,

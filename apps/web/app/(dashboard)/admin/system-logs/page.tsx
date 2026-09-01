@@ -4,6 +4,12 @@ import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { LoadingRow, Spinner } from "../../../../components/spinner";
+import { Button } from "../../../../components/ui/button";
+import { ErrorState } from "../../../../components/ui/error-state";
+import { StatusBadge } from "../../../../components/ui/status-badge";
+import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../../components/ui/table";
+import { Input } from "../../../../components/ui/input";
+import { Select } from "../../../../components/ui/select";
 
 interface AuditLogEntry {
   id: string;
@@ -72,133 +78,102 @@ export default function SystemLogsPage() {
       </div>
 
       <div className="card grid grid-cols-2 gap-3 p-3 sm:grid-cols-4">
-        <input
+        <Input
           value={filters.search}
           onChange={(e) => setFilter("search", e.target.value)}
           placeholder="Search action or entity id…"
-          className="rounded border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs sm:col-span-2"
+          className="text-xs sm:col-span-2"
         />
-        <input
+        <Input
           value={filters.entityType}
           onChange={(e) => setFilter("entityType", e.target.value)}
           placeholder="Entity type (user, lead, auth…)"
-          className="rounded border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
+          className="text-xs"
         />
-        <select
-          value={filters.result}
-          onChange={(e) => setFilter("result", e.target.value)}
-          className="rounded border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
-        >
-          <option value="">Any result</option>
-          <option value="SUCCESS">Success</option>
-          <option value="FAILURE">Failure</option>
-        </select>
+        <Select
+          value={filters.result || "ANY"}
+          onValueChange={(v) => setFilter("result", v === "ANY" ? "" : v)}
+          options={[
+            { value: "ANY", label: "Any result" },
+            { value: "SUCCESS", label: "Success" },
+            { value: "FAILURE", label: "Failure" },
+          ]}
+        />
         <label className="flex items-center gap-1.5 text-[11px] text-ink/60">
           From
-          <input
-            type="date"
-            value={filters.dateFrom}
-            onChange={(e) => setFilter("dateFrom", e.target.value)}
-            className="w-full rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs"
-          />
+          <Input type="date" value={filters.dateFrom} onChange={(e) => setFilter("dateFrom", e.target.value)} className="text-xs" />
         </label>
         <label className="flex items-center gap-1.5 text-[11px] text-ink/60">
           To
-          <input
-            type="date"
-            value={filters.dateTo}
-            onChange={(e) => setFilter("dateTo", e.target.value)}
-            className="w-full rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs"
-          />
+          <Input type="date" value={filters.dateTo} onChange={(e) => setFilter("dateTo", e.target.value)} className="text-xs" />
         </label>
-        <input
+        <Input
           value={filters.leadId}
           onChange={(e) => setFilter("leadId", e.target.value)}
           placeholder="Lead ID"
-          className="rounded border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
+          className="text-xs"
         />
       </div>
 
       {logsQuery.isLoading ? (
         <LoadingRow label="Loading system logs…" />
       ) : logsQuery.error ? (
-        <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-          {(logsQuery.error as Error).message}
-        </div>
+        <ErrorState message={(logsQuery.error as Error).message} onRetry={() => logsQuery.refetch()} />
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="w-full min-w-[720px] text-xs">
-            <thead className="border-b border-[var(--line)] text-left uppercase tracking-wide text-ink/55">
-              <tr>
-                <th className="px-3 py-2">Time</th>
-                <th className="px-3 py-2">User</th>
-                <th className="px-3 py-2">Action</th>
-                <th className="px-3 py-2">Entity</th>
-                <th className="px-3 py-2">Result</th>
-                <th className="px-3 py-2">IP</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((entry) => (
-                <Fragment key={entry.id}>
-                  <tr
-                    onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}
-                    className="cursor-pointer border-b border-[var(--line)] last:border-0 hover:bg-ink/[0.03]"
-                  >
-                    <td className="whitespace-nowrap px-3 py-2 text-ink/60">{formatTimestamp(entry.createdAt)}</td>
-                    <td className="px-3 py-2">{entry.actor ? entry.actor.name : <span className="text-ink/40">System</span>}</td>
-                    <td className="px-3 py-2 font-medium">{entry.action}</td>
-                    <td className="px-3 py-2 text-ink/60">
-                      {entry.entityType ?? "—"}
-                      {entry.entityId && <span className="text-ink/35"> · {entry.entityId.slice(0, 8)}</span>}
+        <Table>
+          <TableHead>
+            <TableHeadRow>
+              <Th>Time</Th>
+              <Th>User</Th>
+              <Th>Action</Th>
+              <Th>Entity</Th>
+              <Th>Result</Th>
+              <Th>IP</Th>
+            </TableHeadRow>
+          </TableHead>
+          <TableBody>
+            {items.map((entry) => (
+              <Fragment key={entry.id}>
+                <Tr onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}>
+                  <Td className="whitespace-nowrap text-ink/60">{formatTimestamp(entry.createdAt)}</Td>
+                  <Td>{entry.actor ? entry.actor.name : <span className="text-ink/40">System</span>}</Td>
+                  <Td className="font-medium">{entry.action}</Td>
+                  <Td className="text-ink/60">
+                    {entry.entityType ?? "—"}
+                    {entry.entityId && <span className="text-ink/35"> · {entry.entityId.slice(0, 8)}</span>}
+                  </Td>
+                  <Td>
+                    <StatusBadge tone={entry.result === "FAILURE" ? "error" : "success"} label={entry.result} />
+                  </Td>
+                  <Td className="text-ink/40">{entry.ipAddress ?? "—"}</Td>
+                </Tr>
+                {expandedId === entry.id && (
+                  <tr className="border-b border-[var(--line)] bg-ink/[0.02] last:border-0">
+                    <td colSpan={6} className="px-3 py-2">
+                      <pre className="whitespace-pre-wrap break-all text-[11px] text-ink/70">
+                        {JSON.stringify(entry.metadata, null, 2)}
+                      </pre>
                     </td>
-                    <td className="px-3 py-2">
-                      <span className={entry.result === "FAILURE" ? "text-bad" : "text-good"}>{entry.result}</span>
-                    </td>
-                    <td className="px-3 py-2 text-ink/40">{entry.ipAddress ?? "—"}</td>
                   </tr>
-                  {expandedId === entry.id && (
-                    <tr className="border-b border-[var(--line)] bg-ink/[0.02] last:border-0">
-                      <td colSpan={6} className="px-3 py-2">
-                        <pre className="whitespace-pre-wrap break-all text-[11px] text-ink/70">
-                          {JSON.stringify(entry.metadata, null, 2)}
-                        </pre>
-                      </td>
-                    </tr>
-                  )}
-                </Fragment>
-              ))}
-              {items.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-ink/40">
-                    No matching log entries.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                )}
+              </Fragment>
+            ))}
+            {items.length === 0 && <TableEmptyRow colSpan={6}>No matching log entries.</TableEmptyRow>}
+          </TableBody>
+        </Table>
       )}
 
       {pageCount > 1 && (
         <div className="flex items-center justify-center gap-3 text-xs text-ink/60">
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="rounded border border-[var(--line)] px-2 py-1 disabled:opacity-40"
-          >
+          <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
             Previous
-          </button>
+          </Button>
           <span>
             Page {page} of {pageCount} ({total} entries)
           </span>
-          <button
-            disabled={page >= pageCount}
-            onClick={() => setPage((p) => p + 1)}
-            className="rounded border border-[var(--line)] px-2 py-1 disabled:opacity-40"
-          >
+          <Button variant="secondary" size="sm" disabled={page >= pageCount} onClick={() => setPage((p) => p + 1)}>
             Next
-          </button>
+          </Button>
         </div>
       )}
     </div>

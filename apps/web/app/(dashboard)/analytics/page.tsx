@@ -36,6 +36,7 @@ import type {
   EmailStepPerformance,
   LinkedinFunnelReport,
 } from "@leadgen/types";
+import { Button } from "../../../components/ui/button";
 
 const TREND_WINDOWS = [7, 30, 90] as const;
 
@@ -144,7 +145,7 @@ export default function AnalyticsPage() {
 
   const refreshing = funnelQuery.isFetching;
 
-  if (funnelQuery.error) return <p className="text-bad">{(funnelQuery.error as Error).message}</p>;
+  if (funnelQuery.error) return <p className="text-error">{(funnelQuery.error as Error).message}</p>;
   if (!funnelQuery.data) return <p className="text-ink/60">Loading…</p>;
   const { email, linkedin, trends } = funnelQuery.data;
 
@@ -189,20 +190,16 @@ export default function AnalyticsPage() {
       <div className={`flex flex-col gap-6 transition-opacity ${refreshing ? "opacity-60" : ""}`}>
         <section className="rounded-xl border border-[var(--line)] p-5">
           <div className="mb-1 flex items-center justify-between">
-            <h2 className="text-sm font-semibold tracking-tight">AI insights</h2>
-            <button
-              onClick={runAiInsights}
-              disabled={aiLoading}
-              className="rounded-md bg-accent px-3 py-1.5 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-            >
-              {aiLoading ? "Analysing…" : "Run analysis"}
-            </button>
+            <h2 className="text-section-title text-ink">AI insights</h2>
+            <Button size="sm" onClick={runAiInsights} disabled={aiLoading} loading={aiLoading}>
+              Run analysis
+            </Button>
           </div>
           <p className="mb-3 text-xs text-ink/50">
             The analytics/learning agents reading campaign performance and outcomes — on demand, since
             each run costs a model call. Recommendations only; nothing here changes targeting by itself.
           </p>
-          {aiError && <p className="text-sm text-bad">{aiError}</p>}
+          {aiError && <p className="text-sm text-error">{aiError}</p>}
           {aiInsights && (
             <div className="flex flex-col gap-3">
               {!!aiInsights.notes?.length && (
@@ -356,7 +353,7 @@ export default function AnalyticsPage() {
               ))}
             </div>
           </div>
-          {emailListError && <p className="text-sm text-bad">{emailListError}</p>}
+          {emailListError && <p className="text-sm text-error">{emailListError}</p>}
           {emailListLoading ? (
             <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
           ) : !emailList || emailList.length === 0 ? (

@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useRealtimeEvent } from "../lib/realtime";
 import { playNotificationTone, unlockNotificationAudio, SoundTone } from "../lib/notification-sounds";
+import { Popover, PopoverTrigger, PopoverContent } from "./ui/popover";
+import { Tabs } from "./ui/tabs";
+import { EmptyState } from "./ui/empty-state";
 
 interface NotificationItem {
   id: string;
@@ -89,7 +92,6 @@ export function NotificationsBell() {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
 
   const notificationsQuery = useQuery({
     queryKey: NOTIFICATIONS_QUERY_KEY,
@@ -180,14 +182,6 @@ export function NotificationsBell() {
     queryClient.invalidateQueries({ queryKey: UNREAD_COUNT_QUERY_KEY });
   });
 
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
-
   const markReadMutation = useMutation({
     mutationFn: (id: string) => api.markNotificationRead(id),
   });
@@ -242,84 +236,73 @@ export function NotificationsBell() {
   const unreadVisible = items.some((n) => !n.read);
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((o) => !o)}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
         aria-label="Notifications"
-        className="relative rounded-lg p-2 text-ink/70 transition-colors hover:bg-ink/5"
+        className="relative rounded-lg p-2 text-ink/70 transition-colors duration-fast hover:bg-ink/5"
       >
         <span aria-hidden>🔔</span>
         {unreadTotal > 0 && (
-          <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-bad px-1 text-[10px] font-semibold text-white">
+          <span className="absolute right-1 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-error px-1 text-[10px] font-semibold text-white">
             {unreadTotal > 99 ? "99+" : unreadTotal}
           </span>
         )}
-      </button>
-      {open && (
-        <div className="absolute right-0 z-30 mt-2 w-[26rem] rounded-xl border border-[var(--line)] bg-[var(--paper)] shadow-lg">
-          <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-ink/50">Notifications</span>
-            <div className="flex items-center gap-2.5">
-              {unreadVisible && (
-                <button onClick={markAllRead} className="text-[11px] text-accent hover:underline">
-                  Mark all read
-                </button>
-              )}
-              {items.length > 0 && (
-                <button onClick={dismissAll} className="text-[11px] text-ink/50 hover:text-bad hover:underline">
-                  Clear all
-                </button>
-              )}
-            </div>
-          </div>
-          <div className="flex gap-1 overflow-x-auto border-b border-[var(--line)] px-2 py-1.5">
-            {CATEGORY_TABS.map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setCategory(tab.key)}
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors ${
-                  category === tab.key ? "bg-accent text-white" : "text-ink/55 hover:bg-ink/5"
-                }`}
-              >
-                {tab.label}
+      </PopoverTrigger>
+      <PopoverContent className="w-[26rem]">
+        <div className="flex items-center justify-between border-b border-[var(--line)] px-3 py-2">
+          <span className="text-label uppercase text-ink/50">Notifications</span>
+          <div className="flex items-center gap-2.5">
+            {unreadVisible && (
+              <button onClick={markAllRead} className="text-[11px] text-primary transition-colors duration-fast hover:underline">
+                Mark all read
               </button>
-            ))}
-          </div>
-          <div className="max-h-96 overflow-y-auto">
-            {items.length === 0 && (
-              <p className="px-3 py-6 text-center text-xs text-ink/40">
-                {notificationsQuery.isLoading ? "Loading…" : "Nothing here right now."}
-              </p>
             )}
-            {items.map((n) => (
-              <div
-                key={n.id}
-                onClick={() => openNotification(n)}
-                className={`cursor-pointer border-b border-[var(--line)] px-3 py-2.5 text-xs last:border-0 hover:bg-ink/5 ${
-                  n.read ? "opacity-60" : ""
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className={`mt-0.5 shrink-0 ${n.severity === "ERROR" ? "text-bad" : "text-gold"}`}>
-                    {n.severity === "ERROR" ? "●" : "▲"}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate font-semibold text-ink/85">{n.title || n.type}</span>
-                      {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
-                    </div>
-                    <p className="mt-0.5 text-ink/70">{n.message}</p>
-                    <div className="mt-1 flex items-center justify-between text-[10px] text-ink/40">
-                      <span>{timeAgo(n.createdAt)}</span>
-                      {n.actionUrl && <span className="text-accent">View →</span>}
-                    </div>
+            {items.length > 0 && (
+              <button onClick={dismissAll} className="text-[11px] text-ink/50 transition-colors duration-fast hover:text-error hover:underline">
+                Clear all
+              </button>
+            )}
+          </div>
+        </div>
+        <div className="border-b border-[var(--line)] px-2 py-1.5">
+          <Tabs value={category} onValueChange={setCategory} tabs={CATEGORY_TABS.map((t) => ({ value: t.key, label: t.label }))} />
+        </div>
+        <div className="max-h-96 overflow-y-auto">
+          {items.length === 0 && (
+            notificationsQuery.isLoading ? (
+              <p className="px-3 py-6 text-center text-xs text-ink/40">Loading…</p>
+            ) : (
+              <EmptyState title="Nothing here right now" />
+            )
+          )}
+          {items.map((n) => (
+            <div
+              key={n.id}
+              onClick={() => openNotification(n)}
+              className={`cursor-pointer border-b border-[var(--line)] px-3 py-2.5 text-xs transition-colors duration-fast last:border-0 hover:bg-ink/5 ${
+                n.read ? "opacity-60" : ""
+              }`}
+            >
+              <div className="flex items-start gap-2">
+                <span className={`mt-0.5 shrink-0 ${n.severity === "ERROR" ? "text-error" : "text-warning"}`}>
+                  {n.severity === "ERROR" ? "●" : "▲"}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate font-semibold text-ink/85">{n.title || n.type}</span>
+                    {!n.read && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />}
+                  </div>
+                  <p className="mt-0.5 text-ink/70">{n.message}</p>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-ink/40">
+                    <span>{timeAgo(n.createdAt)}</span>
+                    {n.actionUrl && <span className="text-primary">View →</span>}
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
