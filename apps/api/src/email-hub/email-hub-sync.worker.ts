@@ -103,8 +103,23 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
         const domain = fromEmail.split("@")[1]?.toLowerCase();
         return !!domain && ignoredDomains.some((d) => d.toLowerCase() === domain);
       };
+      // One message's failure must never cost every message after it — the
+      // cursor below only ever advances to the highest UID *fetched* this
+      // tick, regardless of persist outcome, so a message that throws here
+      // and isn't caught would abort the loop, skip the cursor update, and
+      // (on retry) hit the exact same failure forever: every later message
+      // in this batch, and every future message, would be silently stuck
+      // unsynced behind it. Confirmed live — this is exactly how two
+      // mailboxes ended up with a cursor far ahead of their actual stored
+      // message count (Part: Email Hub completeness fix, 2026-09-01).
       for (const message of allMessages) {
-        await this.persistMessage(account, message, isPreIgnored(message.fromEmail));
+        try {
+          await this.persistMessage(account, message, isPreIgnored(message.fromEmail));
+        } catch (err) {
+          this.logger.error(
+            `Failed to persist message uid=${message.providerMessageId} from ${account.address} (subject: "${message.subject}"): ${(err as Error)?.message || err}`,
+          );
+        }
       }
     }
 
@@ -155,7 +170,10 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
       });
       return;
     }
-    this.logger.error(`Sync failed for ${account.address} (will retry next tick): ${err.message}`);
+    // err.message can be empty for some rejection shapes (e.g. a bare
+    // connection-reset object) — falling back to String(err) so the log line
+    // is never silently blank, which previously made these undiagnosable.
+    this.logger.error(`Sync failed for ${account.address} (will retry next tick): ${err.message || String(err)}`);
   }
 
   /** Finds the thread this message belongs to (Message-ID/References/
