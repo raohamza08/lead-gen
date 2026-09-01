@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { UsersService } from "./users.service";
 import { UsersController } from "./users.controller";
+import { AvatarFileController } from "./avatar-file.controller";
 import { EmailModule } from "../email/email.module";
 import { OrganizationModule } from "../organization/organization.module";
 import { LocalDiskMediaStorageService } from "../social-media/media/local-disk-media-storage.service";
@@ -13,7 +14,7 @@ import { LocalDiskMediaStorageService } from "../social-media/media/local-disk-m
   // MEDIA_STORAGE_DIR from config), so no cross-module coupling beyond the
   // shared class.
   providers: [UsersService, LocalDiskMediaStorageService],
-  controllers: [UsersController],
+  controllers: [UsersController, AvatarFileController],
   exports: [UsersService],
 })
 export class UsersModule {}

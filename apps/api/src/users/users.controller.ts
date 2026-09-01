@@ -5,17 +5,14 @@ import {
   Delete,
   ForbiddenException,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,
-  Res,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
-import { Response } from "express";
 import { UsersService } from "./users.service";
 import { CreateUserDto } from "./dto/create-user.dto";
 import { UpdateUserAccessDto } from "./dto/update-user-access.dto";
@@ -131,15 +128,7 @@ export class UsersController {
     return this.usersService.removeAvatar(user.sub);
   }
 
-  /** Same "the UUID id is the only access control" reasoning as
-   *  MediaFileController for social assets — any authenticated user can
-   *  render any other user's avatar (needed for team lists, activity feeds,
-   *  notifications), gated only by JwtAuthGuard at the class level. */
-  @Get(":id/avatar")
-  async getAvatar(@Param("id") id: string, @Res() res: Response) {
-    const file = await this.usersService.getAvatarFile(id);
-    if (!file) throw new NotFoundException("No avatar set");
-    res.set({ "Content-Type": file.mimeType, "Cache-Control": "private, max-age=3600" });
-    res.send(file.buffer);
-  }
+  // GET :id/avatar lives in AvatarFileController instead — a plain <img src>
+  // tag can't attach the Bearer token this controller's class-level
+  // JwtAuthGuard requires, so it needs to be unguarded (see that file).
 }
