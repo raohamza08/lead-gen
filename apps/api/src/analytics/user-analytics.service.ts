@@ -195,13 +195,20 @@ export class UserAnalyticsService {
    * counts. Callers without Role.ADMIN/MANAGER must pass their own userId
    * as `restrictToUserId` — enforced by AnalyticsController, not trusted
    * from a query string here.
+   *
+   * Every active org member gets a row, not just users who have already
+   * uploaded something — filtering to "has uploaded at least one lead ever"
+   * meant this table showed literally nobody, for any org, until the very
+   * first lead was ever uploaded through the app, which made a genuinely
+   * working feature look like it didn't exist at all. A zero row is honest
+   * and immediately provable; an empty table is not.
    */
   async getUserBreakdown(orgId: string, range: ResolvedDateRange, restrictToUserId?: string) {
     const uploaders = await this.prisma.user.findMany({
       where: {
         orgId,
+        active: true,
         ...(restrictToUserId ? { id: restrictToUserId } : {}),
-        uploadedLeads: { some: {} },
       },
       select: { id: true, name: true },
     });

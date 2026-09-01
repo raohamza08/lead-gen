@@ -273,11 +273,22 @@ export function EmailAnalyticsSection() {
         />
       </div>
 
-      {breakdown.length > 0 && (
-        <div className="mt-5">
-          <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">
-            {breakdown.length > 1 ? "Team Breakdown" : "My Statistics"}
-          </h3>
+      <div className="mt-5">
+        <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">
+          {breakdown.length > 1 ? "Team Breakdown" : "My Statistics"}
+        </h3>
+        {breakdownQuery.isLoading ? (
+          <p className="py-6 text-center text-sm text-ink/50">Loading…</p>
+        ) : breakdown.length === 0 ? (
+          // Shown instead of hiding the section entirely — an empty state is
+          // how someone finds out this exists at all, before anyone has
+          // uploaded a lead through the app yet (this table only ever
+          // includes users who have uploaded at least one, ever).
+          <p className="py-6 text-center text-sm text-ink/50">
+            No leads have been uploaded through the app yet. Once someone adds or imports a lead, their
+            per-user stats will appear here.
+          </p>
+        ) : (
           <DataTable<UserBreakdownRow>
             rows={breakdown}
             rowKey={(r) => r.userId}
@@ -292,8 +303,8 @@ export function EmailAnalyticsSection() {
               { key: "failed", header: "Failures", numeric: true, render: (r) => r.failed },
             ]}
           />
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 }
