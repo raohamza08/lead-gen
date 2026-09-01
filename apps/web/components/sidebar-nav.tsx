@@ -84,7 +84,9 @@ const NAV: NavItem[] = [
       { href: "/settings/social-media", label: "Settings" },
     ],
   },
-  { type: "link", href: "/profile", label: "My Profile" },
+  // My Profile deliberately isn't a nav entry (Part: UI/UX Redesign,
+  // 2026-09-01) — it moved into HeaderUserMenu's dropdown, which is now the
+  // only place it's reachable from; it used to be duplicated here too.
   { type: "link", href: "/settings", label: "Settings" },
   // Not a moduleFlag gate — System Logs is restricted to the org's single
   // primary admin (Part: Admin/System Logs, 2026-08-31), distinct from the
@@ -108,7 +110,15 @@ function isActive(pathname: string | null, search: string, link: NavLink): boole
   return search === link.matchSearch;
 }
 
-export function SidebarNav() {
+const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
+
+export function SidebarNav({
+  mobileOpen,
+  onMobileClose,
+}: {
+  mobileOpen: boolean;
+  onMobileClose: () => void;
+}) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const search = searchParams?.toString() ?? "";
@@ -161,7 +171,7 @@ export function SidebarNav() {
 
   // Auto-expand whichever group contains the current page, so a direct link
   // or refresh never lands on a page whose group looks collapsed/unselected.
-  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+  const [groupCollapsed, setGroupCollapsed] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     for (const item of NAV) {
       if (item.type === "group") {
@@ -171,70 +181,150 @@ export function SidebarNav() {
     return initial;
   });
 
-  return (
-    <nav className="flex h-full w-56 shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3">
-      {visibleNav.map((item) => {
-        if (item.type === "link") {
-          const active = pathname === item.href;
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={active ? "page" : undefined}
-              className={`rounded-lg px-3 py-2 text-sm transition-colors ${
-                active ? "bg-accent font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        }
+  // Sidebar-wide collapse-to-icons (Part: UI/UX Redesign, 2026-09-01) — a
+  // deliberately different concept from groupCollapsed above (which section
+  // headers are expanded). Persisted the same way theme-toggle.tsx persists
+  // its own preference: read once on mount (SSR has no localStorage, so this
+  // starts false and settles after hydration — a one-frame width flash is an
+  // acceptable trade for not needing a cookie round-trip just for this).
+  const [iconsOnly, setIconsOnly] = useState(false);
+  useEffect(() => {
+    setIconsOnly(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
+  }, []);
+  function toggleIconsOnly() {
+    setIconsOnly((v) => {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, v ? "0" : "1");
+      return !v;
+    });
+  }
 
-        const isOpen = !collapsed[item.label];
-        return (
-          <div key={item.label} className="flex flex-col">
-            <button
-              type="button"
-              onClick={() => setCollapsed((c) => ({ ...c, [item.label]: !c[item.label] }))}
-              className="flex items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink/50 hover:text-ink/80"
-            >
-              {item.label}
-              <span aria-hidden className={`transition-transform ${isOpen ? "rotate-90" : ""}`}>
-                ›
-              </span>
-            </button>
-            {isOpen && (
-              <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
-                {item.links.map((link) => {
-                  const active = isActive(pathname, search, link);
-                  const count = link.countKey ? stats?.[link.countKey] ?? 0 : 0;
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      aria-current={active ? "page" : undefined}
-                      className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors ${
-                        active ? "bg-accent font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
-                      }`}
-                    >
-                      <span>{link.label}</span>
-                      {count > 0 && (
-                        <span
-                          className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                            active ? "bg-white/25 text-white" : "bg-accent/15 text-accent"
-                          }`}
-                        >
-                          {count > 99 ? "99+" : count}
-                        </span>
-                      )}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </nav>
+  function renderNav(compact: boolean, onNavigate?: () => void) {
+    return (
+      <>
+        {visibleNav.map((item) => {
+          if (item.type === "link") {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? "page" : undefined}
+                title={compact ? item.label : undefined}
+                className={`flex items-center rounded-lg text-sm transition-colors duration-fast ${
+                  compact ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2"
+                } ${active ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
+              >
+                {compact ? (
+                  <span aria-hidden className="flex h-5 w-5 items-center justify-center text-xs font-semibold">
+                    {item.label[0]}
+                  </span>
+                ) : (
+                  item.label
+                )}
+              </Link>
+            );
+          }
+
+          const isOpen = compact || !groupCollapsed[item.label];
+          return (
+            <div key={item.label} className="flex flex-col">
+              {!compact && (
+                <button
+                  type="button"
+                  onClick={() => setGroupCollapsed((c) => ({ ...c, [item.label]: !c[item.label] }))}
+                  className="flex items-center justify-between rounded-lg px-3 py-2 text-label uppercase text-ink/50 transition-colors duration-fast hover:text-ink/80"
+                >
+                  {item.label}
+                  <span aria-hidden className={`transition-transform duration-fast ${isOpen ? "rotate-90" : ""}`}>
+                    ›
+                  </span>
+                </button>
+              )}
+              {isOpen && (
+                <div className={compact ? "flex flex-col gap-0.5" : "ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2"}>
+                  {item.links.map((link) => {
+                    const active = isActive(pathname, search, link);
+                    const count = link.countKey ? stats?.[link.countKey] ?? 0 : 0;
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        onClick={onNavigate}
+                        aria-current={active ? "page" : undefined}
+                        title={compact ? link.label : undefined}
+                        className={`flex items-center justify-between rounded-lg text-sm transition-colors duration-fast ${
+                          compact ? "justify-center px-2 py-2" : "px-3 py-1.5"
+                        } ${active ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
+                      >
+                        {compact ? (
+                          <span aria-hidden className="flex h-5 w-5 items-center justify-center text-xs font-semibold">
+                            {link.label[0]}
+                          </span>
+                        ) : (
+                          <>
+                            <span>{link.label}</span>
+                            {count > 0 && (
+                              <span
+                                className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                  active ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
+                                }`}
+                              >
+                                {count > 99 ? "99+" : count}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </>
+    );
+  }
+
+  return (
+    <>
+      {/* Desktop: persistent, collapsible to icons-only. Hidden below md,
+          where the mobile drawer below takes over instead. */}
+      <nav
+        className={`hidden h-full shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3 transition-[width] duration-normal ease-standard md:flex ${
+          iconsOnly ? "w-16" : "w-56"
+        }`}
+      >
+        <div className="flex flex-1 flex-col gap-1 overflow-y-auto">{renderNav(iconsOnly)}</div>
+        <button
+          type="button"
+          onClick={toggleIconsOnly}
+          aria-label={iconsOnly ? "Expand sidebar" : "Collapse sidebar"}
+          title={iconsOnly ? "Expand sidebar" : "Collapse sidebar"}
+          className="mt-1 flex items-center justify-center rounded-lg py-2 text-ink/50 transition-colors duration-fast hover:bg-ink/5 hover:text-ink/80"
+        >
+          <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none" className={`transition-transform duration-normal ${iconsOnly ? "rotate-180" : ""}`}>
+            <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      </nav>
+
+      {/* Mobile: overlay + slide-over drawer, always full-width (no
+          icons-only mode — the drawer is already temporary, so nothing is
+          gained by shrinking it further). */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <div
+            className="absolute inset-0 bg-ink/40 backdrop-blur-[1px]"
+            onClick={onMobileClose}
+            aria-hidden
+          />
+          <nav className="animate-slide-in-left absolute inset-y-0 left-0 flex w-64 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] bg-surface p-3 shadow-lg">
+            {renderNav(false, onMobileClose)}
+          </nav>
+        </div>
+      )}
+    </>
   );
 }
