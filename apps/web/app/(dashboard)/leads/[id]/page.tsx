@@ -103,6 +103,15 @@ export default function LeadDetailPage() {
   };
   useRealtimeEvent<LeadEvent>("lead.updated", refetchIfThisLead);
   useRealtimeEvent<LeadEvent>("lead.stageChanged", refetchIfThisLead);
+  // Part: Preparation Pipeline / Sending Queue, 2026-09-01 — preparation
+  // progress, queue/schedule status, and session outcomes for this lead's
+  // emails, pushed live with no page refresh needed. sendingQueue/
+  // sendingSession events aren't leadId-scoped (they key off the message/
+  // session, not the lead), so this page just reloads on either — one extra
+  // GET while this specific lead's detail page happens to be open.
+  useRealtimeEvent<LeadEvent>("preparation.updated", refetchIfThisLead);
+  useRealtimeEvent("sendingQueue.updated", load);
+  useRealtimeEvent("sendingSession.updated", load);
 
   // Live "an agent is working on this lead right now" indicator. `started`
   // fires the instant the orchestrator picks the agent up; cleared once
@@ -285,6 +294,13 @@ export default function LeadDetailPage() {
             {[lead.industry, lead.country, lead.employeeCount && `${lead.employeeCount} staff`]
               .filter(Boolean).join(" · ") || "No firmographics yet"}
           </p>
+          {/* Part: Lead Upload Analytics, 2026-09-01 — absent for an
+              AI-discovered lead, which nobody uploaded. */}
+          {lead.uploadedByUser && (
+            <p className="mt-0.5 text-xs text-ink/45">
+              Uploaded by {lead.uploadedByUser.name} · {new Date(lead.createdAt).toLocaleString()}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {isPromoted ? (
@@ -610,7 +626,17 @@ export default function LeadDetailPage() {
                             ? `Sent ${new Date(m.sentAt).toLocaleString()}`
                             : m.status === "FAILED"
                               ? "Failed to send"
-                              : "Queued"}
+                              : m.status === "WAITING_FOR_SCHEDULE" && m.scheduledAt
+                                ? `Scheduled for ${new Date(m.scheduledAt).toLocaleString()}`
+                                : m.status === "SENDING"
+                                  ? "Sending…"
+                                  : m.status === "RETRY_SCHEDULED"
+                                    ? `Retrying${m.nextSendRetryAt ? ` at ${new Date(m.nextSendRetryAt).toLocaleTimeString()}` : ""}`
+                                    : m.status === "READY_TO_SEND"
+                                      ? "Ready to send"
+                                      : m.status === "PENDING_APPROVAL"
+                                        ? "Awaiting approval"
+                                        : "Queued"}
                         </div>
                         {m.status === "FAILED" && m.failureReason && (
                           <div className="mt-1 text-[11px] text-bad">{m.failureReason}</div>
@@ -623,19 +649,22 @@ export default function LeadDetailPage() {
                               ? "bg-good/20 text-good"
                               : m.status === "FAILED"
                                 ? "bg-bad/20 text-bad"
-                                : "bg-ink/8 text-ink/60"
+                                : m.status === "SENDING"
+                                  ? "bg-accent/20 text-accent"
+                                  : m.status === "RETRY_SCHEDULED"
+                                    ? "bg-gold/20 text-gold"
+                                    : "bg-ink/8 text-ink/60"
                           }`}
                         >
                           {m.status}
                         </span>
-                        {Array.isArray(m.events) && m.events.some((e: any) => e.eventType === "OPENED") ? (
+                        {/* Only a verified open counts (Part: 3-minute open verification,
+                            2026-09-01) — a raw EmailEvent{OPENED} inside the first 3 minutes
+                            after sending is a prefetch/scanner hit, not a person reading it,
+                            so it must not show here even though it's still logged internally. */}
+                        {m.verifiedOpenedAt ? (
                           <span className="text-[11px] text-accent">
-                            Opened{" "}
-                            {(() => {
-                              const opens = m.events.filter((e: any) => e.eventType === "OPENED");
-                              const last = opens[opens.length - 1];
-                              return `${new Date(last.occurredAt).toLocaleString()}${opens.length > 1 ? ` (${opens.length}×)` : ""}`;
-                            })()}
+                            Opened {new Date(m.verifiedOpenedAt).toLocaleString()}
                           </span>
                         ) : m.status === "SENT" ? (
                           <span className="text-[11px] text-ink/35">Not opened yet</span>

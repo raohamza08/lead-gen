@@ -8,6 +8,7 @@ import { NotificationsService } from "../notifications/notifications.service";
 import { ImapReaderProvider } from "./readers/imap-reader.provider";
 import { FetchedMessage } from "./mailbox-reader.interface";
 import { EmailLeadClassifierService } from "./email-lead-classifier.service";
+import { SequencerService } from "../sequencer/sequencer.service";
 
 /** Strips reply/forward prefixes and collapses whitespace so "Re: Re: Fwd:
  *  Website proposal" and "Website proposal" thread together when no
@@ -42,6 +43,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
     private readonly leadClassifier: EmailLeadClassifierService,
+    private readonly sequencer: SequencerService,
   ) {}
 
   onModuleInit() {
@@ -87,13 +89,22 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
       // sits in a different region from the app server (~200-400ms per
       // round trip, see CacheService's docblock), so a per-message lookup
       // in a loop would be needlessly expensive at any real message volume.
-      const ignoredSenders = new Set(
-        (await this.prisma.ignoredSender.findMany({ where: { orgId: account.orgId }, select: { fromEmail: true } })).map(
-          (s) => s.fromEmail,
-        ),
-      );
+      // Two shapes of rule (Part: Ignore Groups, 2026-09-01): an exact
+      // SENDER match via Set lookup, and a DOMAIN match via suffix check —
+      // a message is pre-ignored if either applies.
+      const rules = await this.prisma.ignoredSender.findMany({
+        where: { orgId: account.orgId },
+        select: { fromEmail: true, senderDomain: true },
+      });
+      const ignoredSenders = new Set(rules.map((r) => r.fromEmail).filter((e): e is string => !!e));
+      const ignoredDomains = rules.map((r) => r.senderDomain).filter((d): d is string => !!d);
+      const isPreIgnored = (fromEmail: string) => {
+        if (ignoredSenders.has(fromEmail)) return true;
+        const domain = fromEmail.split("@")[1]?.toLowerCase();
+        return !!domain && ignoredDomains.some((d) => d.toLowerCase() === domain);
+      };
       for (const message of allMessages) {
-        await this.persistMessage(account, message, ignoredSenders.has(message.fromEmail));
+        await this.persistMessage(account, message, isPreIgnored(message.fromEmail));
       }
     }
 
@@ -194,6 +205,25 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
       where: { id: threadId },
       data: { lastMessageAt: message.receivedAt },
     });
+
+    // Reply detection for the outreach sequence (Part: Lead Upload
+    // Analytics / Email Performance / Ignore Groups, 2026-09-01) — checked
+    // for every new inbound message, not just isNewThread ones below: a
+    // correctly-threaded reply (Sent-folder sync matched it via Message-ID)
+    // lands in an EXISTING thread, so gating this on isNewThread the same
+    // way the classifier dispatch below does would miss most real replies.
+    // recordReply itself no-ops cheaply when fromEmail matches no lead or
+    // that lead has no prior SENT message, so this is safe to attempt
+    // unconditionally rather than trying to predict which messages are
+    // replies ahead of time. Previously this detection only ran from the
+    // Gmail-push/Graph-push webhook adapters — an unshipped path — so a
+    // reply via plain IMAP (the only sync that's actually live) never
+    // registered at all; see SequencerService.recordReply's docblock.
+    if (message.folder !== "SENT" && !preIgnored) {
+      this.sequencer
+        .recordReply(message.fromEmail, account.orgId)
+        .catch((err) => this.logger.warn(`Reply detection failed for message ${created.id}: ${(err as Error).message}`));
+    }
 
     // Only a thread's first message gets classified (Part: Lead Room) — a
     // reply in an already-seen thread doesn't need re-judging, and the

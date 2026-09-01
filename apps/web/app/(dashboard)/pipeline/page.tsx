@@ -21,7 +21,14 @@ interface EmailSummary {
   status: string;
   sequenceStep: number;
   sentAt: string | null;
-  events?: { occurredAt: string }[];
+  // Only a *verified* open (Part: 3-minute open verification, 2026-09-01) —
+  // a raw pixel fetch inside the first 3 minutes after sending never counts.
+  verifiedOpenedAt: string | null;
+  // Display-only countdown target while status is WAITING_FOR_SCHEDULE
+  // (Part: Preparation Pipeline / Sending Queue, 2026-09-01) — the backend
+  // scheduler, not this timestamp, is what actually decides when the send
+  // happens; a refresh just re-fetches the same server value.
+  scheduledAt: string | null;
 }
 
 /** Persisted retry/lock state for one (lead, agent) pair — survives a
@@ -38,7 +45,16 @@ interface AgentExecutionSummary {
 
 interface LeadRow extends Lead {
   score: LeadScore | null;
-  pipelineState: { stage: string; previousStage: string | null; enteredStageAt: string; nextActionAt: string | null } | null;
+  pipelineState: {
+    stage: string;
+    previousStage: string | null;
+    enteredStageAt: string;
+    nextActionAt: string | null;
+    // Part: Preparation Pipeline / Sending Queue, 2026-09-01 — aggregate
+    // readiness of the CURRENT sequence step's required agents.
+    preparationStatus?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE" | "FAILED";
+    preparationStep?: number | null;
+  } | null;
   agentRuns?: AgentRunSummary[];
   emailMessages?: EmailSummary[];
   agentExecutions?: AgentExecutionSummary[];
@@ -229,23 +245,45 @@ function AgentActivity({ lead, running, now }: { lead: LeadRow; running?: Runnin
   );
 }
 
-function LastEmail({ lead }: { lead: LeadRow }) {
+/** Text (and tone) for every EmailMessageStatus the sending pipeline can
+ *  leave a message in (Part: Preparation Pipeline / Sending Queue,
+ *  2026-09-01) — WAITING_FOR_SCHEDULE gets a live countdown to the
+ *  backend-computed `scheduledAt`, same display-only pattern as
+ *  StageCountdown/ErrorBanner above. */
+function emailStatusText(email: EmailSummary, now: number): { text: string; tone: string } {
+  switch (email.status) {
+    case "SENT":
+      return { text: timeAgo(email.sentAt) ?? "sent", tone: "text-good" };
+    case "FAILED":
+      return { text: "failed", tone: "text-bad" };
+    case "SENDING":
+      return { text: "sending…", tone: "text-accent" };
+    case "RETRY_SCHEDULED":
+      return { text: "retrying", tone: "text-gold" };
+    case "READY_TO_SEND":
+      return { text: "ready to send", tone: "text-ink/50" };
+    case "WAITING_FOR_SCHEDULE":
+      return {
+        text: email.scheduledAt ? `sending in ${formatCountdown(email.scheduledAt, now)}` : "scheduled",
+        tone: "text-ink/50",
+      };
+    case "PENDING_APPROVAL":
+      return { text: "needs approval", tone: "text-gold" };
+    default:
+      return { text: "queued", tone: "text-ink/50" };
+  }
+}
+
+function LastEmail({ lead, now }: { lead: LeadRow; now: number }) {
   const email = lead.emailMessages?.[0];
   if (!email) return null;
-  const tone =
-    email.status === "SENT" ? "text-good" : email.status === "FAILED" ? "text-bad" : "text-ink/50";
-  const when =
-    email.status === "SENT"
-      ? timeAgo(email.sentAt)
-      : email.status === "FAILED"
-        ? "failed"
-        : "queued";
-  const opened = email.events?.[0]?.occurredAt;
+  const { text, tone } = emailStatusText(email, now);
+  const opened = email.verifiedOpenedAt;
   return (
     <div className="mt-1 flex items-center gap-1 text-[11px] text-ink/50" title={email.subject}>
       <span aria-hidden>✉</span>
       <span className="truncate">Email {email.sequenceStep}</span>
-      <span className={tone}>· {when}</span>
+      <span className={tone}>· {text}</span>
       {opened && <span className="text-accent" title={`Opened ${new Date(opened).toLocaleString()}`}>· opened {timeAgo(opened)}</span>}
     </div>
   );
@@ -385,6 +423,13 @@ export default function PipelinePage() {
       // other live event here, no separate socket state needed since the
       // countdown itself just formats whatever nextRetryAt comes back.
       "agentExecution.updated",
+      // Part: Preparation Pipeline / Sending Queue, 2026-09-01 — the same
+      // debounced-refetch plumbing picks up every state this new pipeline
+      // introduces (preparation progress, queue/schedule status, and the
+      // eventual send outcome) without a separate live-state map.
+      "preparation.updated",
+      "sendingQueue.updated",
+      "sendingSession.updated",
     ],
     invalidateLeads,
   );
@@ -757,7 +802,7 @@ export default function PipelinePage() {
                       )}
                       <AgentActivity lead={lead} running={runningAgents[lead.id]} now={now} />
                       <StageCountdown lead={lead} now={now} />
-                      <LastEmail lead={lead} />
+                      <LastEmail lead={lead} now={now} />
                     </Link>
                     <div className="mt-1.5 flex items-center gap-1.5">
                       {(() => {

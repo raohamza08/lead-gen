@@ -46,6 +46,14 @@ export class EmailHubController {
     return this.emailHub.listIgnoredSenders(user);
   }
 
+  /** Rule-management row's "Unignore" button (Part: Ignore Groups,
+   *  2026-09-01) — targets one rule by id, alongside the existing
+   *  "select messages -> Unignore" bulk-action path. */
+  @Delete("ignored-senders/:ruleId")
+  unignoreRule(@CurrentUser() user: JwtClaims, @Param("ruleId") ruleId: string) {
+    return this.emailHub.unignoreRule(user, ruleId);
+  }
+
   @Post("tags")
   createTag(@CurrentUser() user: JwtClaims, @Body() dto: CreateTagDto) {
     return this.emailHub.createTag(user.orgId, dto);

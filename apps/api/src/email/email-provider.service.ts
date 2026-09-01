@@ -191,9 +191,12 @@ export class EmailProviderService {
 
   /**
    * Rotation + rate limiting (Part B2/E5/I1): picks the least-recently-used
-   * ACTIVE account that hasn't hit its daily limit. A production version should
-   * track a rolling send counter per account rather than counting rows on every
-   * send; this scaffold favors correctness/readability over that optimization.
+   * ACTIVE account that hasn't hit its daily OR hourly limit — hourlyLimit
+   * was defined on EmailAccount but never actually checked anywhere until
+   * Part: Preparation Pipeline / Sending Queue, 2026-09-01. A production
+   * version should track a rolling send counter per account rather than
+   * counting rows on every send; this scaffold favors correctness/
+   * readability over that optimization.
    */
   private async pickAvailableAccount(orgId: string) {
     // sendingEnabled is a separate, explicit opt-in from status — a mailbox
@@ -201,25 +204,61 @@ export class EmailProviderService {
     // keep it out of real outreach rotation on its own. See EmailAccount.
     // sendingEnabled's schema comment for the live incident that caused this.
     const accounts = await this.prisma.emailAccount.findMany({ where: { orgId, status: "ACTIVE", sendingEnabled: true } });
+    const accountIds = accounts.map((a) => a.id);
     const since = new Date();
     since.setHours(0, 0, 0, 0);
+    const hourSince = new Date(Date.now() - 60 * 60 * 1000);
 
-    // One grouped query instead of one count() per account — this ran in a
+    // Two grouped queries instead of one count() per account — this ran in a
     // loop before, paying a full DB round trip per mailbox in sequence
     // (~400ms each against this DB's region) on every single outbound send.
+    const [dailyCounts, hourlyCounts] = await Promise.all([
+      this.prisma.emailMessage.groupBy({
+        by: ["accountId"],
+        where: { accountId: { in: accountIds }, sentAt: { gte: since } },
+        _count: { _all: true },
+      }),
+      this.prisma.emailMessage.groupBy({
+        by: ["accountId"],
+        where: { accountId: { in: accountIds }, sentAt: { gte: hourSince } },
+        _count: { _all: true },
+      }),
+    ]);
+    const sentToday = new Map(dailyCounts.map((c) => [c.accountId, c._count._all]));
+    const sentThisHour = new Map(hourlyCounts.map((c) => [c.accountId, c._count._all]));
+
+    for (const account of accounts) {
+      if ((sentToday.get(account.id) ?? 0) < account.dailyLimit && (sentThisHour.get(account.id) ?? 0) < account.hourlyLimit) {
+        return account;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Sum of remaining daily send capacity across every sending-enabled ACTIVE
+   * account for this org (Part: Preparation Pipeline / Sending Queue,
+   * 2026-09-01) — used by SendingSchedulerService to decide how many
+   * WAITING_FOR_SCHEDULE messages a scheduled fire can actually release at
+   * once, so a large batch is split into multiple SendingSessions instead of
+   * handed to the worker all at once only to fail the compliance gate one by
+   * one. Deliberately daily-only (not also capped per-hour here): the
+   * per-send hourlyLimit check in pickAvailableAccount above already
+   * throttles a released batch's actual send rate, backing off the rest into
+   * RETRY_SCHEDULED — that's a real per-account clock, not something this
+   * up-front estimate needs to duplicate.
+   */
+  async getDailyCapacity(orgId: string): Promise<number> {
+    const accounts = await this.prisma.emailAccount.findMany({ where: { orgId, status: "ACTIVE", sendingEnabled: true } });
+    if (accounts.length === 0) return 0;
+    const since = new Date();
+    since.setHours(0, 0, 0, 0);
     const sentCounts = await this.prisma.emailMessage.groupBy({
       by: ["accountId"],
       where: { accountId: { in: accounts.map((a) => a.id) }, sentAt: { gte: since } },
       _count: { _all: true },
     });
     const sentByAccount = new Map(sentCounts.map((c) => [c.accountId, c._count._all]));
-
-    for (const account of accounts) {
-      const sentToday = sentByAccount.get(account.id) ?? 0;
-      if (sentToday < account.dailyLimit) {
-        return account;
-      }
-    }
-    return null;
+    return accounts.reduce((sum, a) => sum + Math.max(0, a.dailyLimit - (sentByAccount.get(a.id) ?? 0)), 0);
   }
 }

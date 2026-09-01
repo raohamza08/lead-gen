@@ -1,12 +1,10 @@
 import { Body, Controller, Post } from "@nestjs/common";
-import { NotificationCategory, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { SequencerService } from "../sequencer/sequencer.service";
-import { SyncService } from "../sync/sync.service";
-import { EmailEventType, PipelineStage } from "@leadgen/types";
+import { EmailEventType } from "@leadgen/types";
 import { GmailAdapterService } from "./gmail-adapter.service";
 import { GraphAdapterService } from "./graph-adapter.service";
-import { NotificationsService } from "../notifications/notifications.service";
 
 interface InboundEventPayload {
   emailMessageId?: string;
@@ -28,16 +26,14 @@ export class EmailWebhookController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequencer: SequencerService,
-    private readonly sync: SyncService,
     private readonly gmailAdapter: GmailAdapterService,
     private readonly graphAdapter: GraphAdapterService,
-    private readonly notifications: NotificationsService,
   ) {}
 
   @Post("email-events")
   async ingest(@Body() payload: InboundEventPayload) {
     if (payload.eventType === "REPLIED" && payload.leadEmail) {
-      return this.handleReply(payload.leadEmail);
+      return this.sequencer.recordReply(payload.leadEmail);
     }
 
     if (payload.emailMessageId) {
@@ -63,7 +59,7 @@ export class EmailWebhookController {
     const events = await this.gmailAdapter.translate(payload);
     for (const event of events) {
       if (event.eventType === "REPLIED" && event.leadEmail) {
-        await this.handleReply(event.leadEmail);
+        await this.sequencer.recordReply(event.leadEmail);
       } else {
         // Bounce without a resolvable emailMessageId — no EmailEvent row to attach
         // it to, so this stays a log-only signal rather than a fabricated one.
@@ -80,62 +76,10 @@ export class EmailWebhookController {
     const events = await this.graphAdapter.translate(payload);
     for (const event of events) {
       if (event.eventType === "REPLIED" && event.leadEmail) {
-        await this.handleReply(event.leadEmail);
+        await this.sequencer.recordReply(event.leadEmail);
       }
     }
     return { ok: true, translated: events.length };
-  }
-
-  /**
-   * Reply detection short-circuits the whole sequence (Part C6) — cancel any
-   * pending wait timer immediately.
-   *
-   * Also records an EmailEvent{REPLIED} against whichever message this lead
-   * most recently received — without it, reply rate has no row to count:
-   * analytics.service.ts's getEmailFunnel counts REPLIED strictly from
-   * email_events, and every path into this method (the generic
-   * /email-events ingest, Gmail, and Graph) previously only updated
-   * PipelineState, so replyRate has been silently stuck at 0% however many
-   * real replies came in. The most-recently-SENT message is the one being
-   * replied to; a lead with none yet (replied before any send somehow
-   * recorded) has nothing to attach the event to, so that case is skipped
-   * rather than guessed.
-   */
-  private async handleReply(leadEmail: string) {
-    const lead = await this.prisma.lead.findFirst({ where: { email: leadEmail } });
-    if (!lead) return { ignored: true, reason: "unknown recipient" };
-
-    const lastSent = await this.prisma.emailMessage.findFirst({
-      where: { leadId: lead.id, status: "SENT" },
-      orderBy: { sentAt: "desc" },
-    });
-    if (lastSent) {
-      await this.prisma.emailEvent.create({
-        data: { messageId: lastSent.id, eventType: "REPLIED" },
-      });
-    }
-
-    await this.sequencer.cancelWaitTimer(lead.id);
-    await this.prisma.pipelineState.update({
-      where: { leadId: lead.id },
-      data: { stage: PipelineStage.REPLIED, enteredStageAt: new Date() },
-    });
-    await this.sync.onStageChanged(lead.id, PipelineStage.REPLIED);
-
-    // A genuine reply is the one stage change worth a notification — every
-    // other automated hop (WAITING_EMAIL_N, EMAIL_N_SENT) is routine
-    // automation progress, not something a salesperson needs pinged about.
-    await this.notifications.notify(lead.orgId, {
-      category: NotificationCategory.LEADS,
-      type: "LEAD_REPLIED",
-      severity: "WARNING",
-      title: "Lead Replied",
-      message: `${lead.companyName ?? "A lead"} replied to your outreach.`,
-      leadId: lead.id,
-      actionUrl: `/leads/${lead.id}`,
-    });
-
-    return { ok: true };
   }
 
   private async addToSuppressionList(emailMessageId: string, reason: "BOUNCED" | "SPAM_COMPLAINT") {

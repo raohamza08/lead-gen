@@ -39,4 +39,11 @@ export const QUEUE_NAMES = {
   // RUNNING rows a crashed worker left stuck (Part: reliability overhaul,
   // 2026-08-31) — see agent-execution-sweep.worker.ts.
   AGENT_EXECUTION_SWEEP: "agent-execution-sweep",
+  // Centralized dispatch queue for every send in the 5-email sequence (Part:
+  // Preparation Pipeline / Sending Queue, 2026-09-01) — see sending.worker.ts.
+  SENDING_QUEUE: "sending-queue",
+  // Re-dispatches RETRY_SCHEDULED messages whose retry is due, and reclaims
+  // stale SENDING locks a crashed worker left stuck — same shape as
+  // AGENT_EXECUTION_SWEEP. See sending-sweep.worker.ts.
+  SENDING_SWEEP: "sending-sweep",
 } as const;

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue, Worker, Job } from "bullmq";
+import { NotificationCategory } from "@prisma/client";
 import { PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
@@ -7,6 +8,7 @@ import { SyncService } from "../sync/sync.service";
 import { OrganizationService } from "../organization/organization.service";
 import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
 import { EmailProviderService } from "../email/email-provider.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 //: 3 business days between every step of the 5-email sequence (Part: 5-email
 //: sequence, 2026-08-12). Weekends are skipped in the COUNT itself, not just
@@ -69,6 +71,7 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     private readonly organization: OrganizationService,
     private readonly agentDispatch: AgentDispatchQueue,
     private readonly emailProvider: EmailProviderService,
+    private readonly notifications: NotificationsService,
   ) {
     const connection = getRedisConnection();
     this.waitQueue = new Queue(QUEUE_NAMES.WAIT_TIMERS, { connection });
@@ -222,6 +225,18 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
       if (cs) caseStudy = { title: cs.title, summary: cs.summary, metrics: cs.metrics };
     }
 
+    // Marks this lead as actively preparing `step` (Part: Preparation
+    // Pipeline / Sending Queue, 2026-09-01) — the single dispatch point for
+    // every step's draft, so this is the one place that needs to reset a
+    // previous step's stale COMPLETE/FAILED status the moment the next
+    // step's preparation begins. PreparationPipelineService.evaluate() (fired
+    // once this agent actually succeeds/fails) is what moves it beyond
+    // IN_PROGRESS.
+    await this.prisma.pipelineState.updateMany({
+      where: { leadId },
+      data: { preparationStatus: "IN_PROGRESS", preparationStep: step, preparationCompletedAt: null },
+    });
+
     await this.agentDispatch.add({
       kind: "email_draft",
       leadId,
@@ -260,19 +275,75 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     await this.prisma.pipelineState.update({ where: { leadId }, data: { waitJobId: null } });
   }
 
-  /** Sends an approved draft immediately (Part E5, revised) — no queue: the
-   *  caller gets the real outcome (SENT or FAILED, with reason) in this same
-   *  call, not "queued" with the actual result arriving later somewhere else. */
-  async enqueueApprovedSend(emailMessageId: string) {
-    return this.emailProvider.sendMessageNow(emailMessageId);
+  /**
+   * Records a genuine reply from a lead: writes an EmailEvent{REPLIED}
+   * against their most-recently-SENT message, cancels any pending wait
+   * timer, advances the lead to the REPLIED stage, and notifies. Extracted
+   * (Part: Lead Upload Analytics / Email Performance / Ignore Groups,
+   * 2026-09-01) from EmailWebhookController, which only ever reached this
+   * via the Gmail-push/Graph-push webhook adapters — an unshipped Phase 2
+   * path. The live path, plain IMAP polling (EmailHubSyncWorker), never
+   * called it at all, so a real reply on any IMAP-only org produced zero
+   * REPLIED events and the lead silently never left its waiting stage.
+   * EmailHubSyncWorker now calls this too, for the exact same event, so
+   * reply rate is accurate regardless of which sync path an org uses.
+   *
+   * Without an EmailEvent{REPLIED} row, reply rate has no row to count —
+   * analytics reads REPLIED strictly from email_events, never from
+   * PipelineStage alone (Part: analytics accuracy — do not infer historical
+   * outcomes from current status).
+   *
+   * `orgId`, when the caller has one (EmailHubSyncWorker always does — it
+   * knows which account, and therefore which org, it's syncing), scopes the
+   * lookup so two orgs that happen to have a lead with the same email address
+   * can never cross-attribute a reply. The Gmail/Graph webhook adapters have
+   * no org context at all in their push payload (a separate, pre-existing
+   * gap in an unshipped path, not introduced here) and still call this
+   * without one — unchanged from before this method was extracted.
+   */
+  async recordReply(leadEmail: string, orgId?: string): Promise<{ ok: boolean; reason?: string }> {
+    const lead = await this.prisma.lead.findFirst({ where: { email: leadEmail, ...(orgId ? { orgId } : {}) } });
+    if (!lead) return { ok: false, reason: "unknown recipient" };
+
+    const lastSent = await this.prisma.emailMessage.findFirst({
+      where: { leadId: lead.id, status: "SENT" },
+      orderBy: { sentAt: "desc" },
+    });
+    if (lastSent) {
+      await this.prisma.emailEvent.create({ data: { messageId: lastSent.id, eventType: "REPLIED" } });
+    }
+
+    await this.cancelWaitTimer(lead.id);
+    await this.prisma.pipelineState.update({
+      where: { leadId: lead.id },
+      data: { stage: PipelineStage.REPLIED, enteredStageAt: new Date() },
+    });
+    await this.sync.onStageChanged(lead.id, PipelineStage.REPLIED);
+
+    // A genuine reply is the one stage change worth a notification — every
+    // other automated hop (WAITING_EMAIL_N, EMAIL_N_SENT) is routine
+    // automation progress, not something a salesperson needs pinged about.
+    await this.notifications.notify(lead.orgId, {
+      category: NotificationCategory.LEADS,
+      type: "LEAD_REPLIED",
+      severity: "WARNING",
+      title: "Lead Replied",
+      message: `${lead.companyName ?? "A lead"} replied to your outreach.`,
+      leadId: lead.id,
+      actionUrl: `/leads/${lead.id}`,
+    });
+
+    return { ok: true };
   }
 
   /**
    * Manual retry for a message that failed to send. Only FAILED is eligible:
    * resending an already-SENT message would email the same prospect twice.
    * Caller (LeadsService) verifies the message belongs to the org/lead before
-   * calling this. One direct attempt, same as enqueueApprovedSend — no queue,
-   * no automatic re-retry; if it fails again the row shows FAILED with the
+   * calling this. One direct attempt outside the normal Preparation Pipeline
+   * / Sending Queue flow (Part: 2026-09-01) — a human explicitly retrying a
+   * terminally-failed send wants an immediate, definite outcome, not to wait
+   * behind a schedule again; if it fails again the row shows FAILED with the
    * new reason immediately, and the operator decides whether to try again.
    */
   async resendFailedMessage(emailMessageId: string) {
@@ -280,6 +351,15 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     if (message.status !== "FAILED") {
       throw new BadRequestException(`Only a failed email can be resent (this one is ${message.status})`);
     }
-    return this.emailProvider.sendMessageNow(emailMessageId);
+    const result = await this.emailProvider.sendMessageNow(emailMessageId);
+    // No auto-retry follows a manual resend (see this method's docblock), so
+    // a failure here is always terminal — same EmailEvent{FAILED} write as
+    // SendingWorker's terminal branch, so a manually-retried-and-still-failed
+    // message isn't invisible to the failure trend just because it went
+    // through this path instead of the queue.
+    if (result.status === "FAILED") {
+      await this.prisma.emailEvent.create({ data: { messageId: emailMessageId, eventType: "FAILED" } });
+    }
+    return result;
   }
 }

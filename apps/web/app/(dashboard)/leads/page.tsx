@@ -12,6 +12,8 @@ import { LoadingRow, Spinner } from "../../../components/spinner";
 interface LeadRow extends Lead {
   score: LeadScore | null;
   pipelineState: { stage: string } | null;
+  // Part: Lead Upload Analytics, 2026-09-01 — absent for an AI-discovered lead.
+  uploadedByUser?: { id: string; name: string } | null;
 }
 
 /** Mirrors apps/api/src/leads/lead-import-mapping.ts's IMPORTABLE_FIELDS —
@@ -839,6 +841,11 @@ export default function LeadsPage() {
                   {lead.website && (
                     <div className="mt-0.5 truncate text-[11px] text-ink/45">
                       {lead.website.replace(/^https?:\/\//, "")}
+                    </div>
+                  )}
+                  {lead.uploadedByUser && (
+                    <div className="mt-0.5 truncate text-[11px] text-ink/40" title={`Uploaded by ${lead.uploadedByUser.name}`}>
+                      Uploaded by {lead.uploadedByUser.name}
                     </div>
                   )}
                 </td>

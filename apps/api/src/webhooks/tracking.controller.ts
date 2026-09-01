@@ -13,6 +13,13 @@ const TRACKING_PIXEL = Buffer.from(
   "base64",
 );
 
+/** A pixel fetch inside this window after sending is never a genuine open —
+ *  it's a proxy/scanner prefetch or the sender's own mail client rendering
+ *  a send-confirmation preview (Part: 3-minute open verification,
+ *  2026-09-01). Every fetch is still recorded as a raw event regardless;
+ *  this only gates whether it becomes a *verified* open. */
+const OPEN_VERIFICATION_WINDOW_MS = 180_000;
+
 /**
  * Open/click tracking + unsubscribe (Part C6/G1 CAN-SPAM requirement: the
  * unsubscribe link must actually work and be honored immediately, not just be
@@ -30,39 +37,58 @@ export class TrackingController {
   ) {}
 
   /**
-   * Fires ONLY on an actual pixel fetch — this is the one place an OPENED
-   * event is ever written (no send/queue/deliver path writes one), so there
-   * is no way for a false "opened" notification to occur. Notifies once per
-   * message (a mail client re-fetching the pixel on scroll/reopen must not
-   * re-notify) by checking whether this is the first OPENED row for it
-   * (Part: reliability overhaul, 2026-08-31 — previously no notification
-   * fired on a real open at all, only an EmailEvent row for analytics).
+   * Every real pixel fetch is recorded as a raw EmailEvent{OPENED} row
+   * unconditionally — this is the one place that event is ever written (no
+   * send/queue/deliver path writes one), so there is no way for a false
+   * "opened" signal to originate from anywhere else. But a raw fetch only
+   * becomes a *verified* open — the one thing the UI, notifications, and
+   * analytics actually read — if it happens at least
+   * OPEN_VERIFICATION_WINDOW_MS after the message's `sentAt` (Part: 3-minute
+   * open verification, 2026-09-01): an immediate hit is a proxy/scanner
+   * prefetch or a send-confirmation preview, not a person reading the email.
+   *
+   * The `updateMany` with `verifiedOpenedAt: null` in its WHERE clause is
+   * what makes "am I the first request to verify this" race-safe — two
+   * near-simultaneous valid fetches can't both fire the notification, only
+   * whichever one's UPDATE actually flips the row gets `count > 0`.
    */
   @Get("track/open/:emailMessageId.png")
   async trackOpen(@Param("emailMessageId") emailMessageId: string, @Res() res: Response) {
     try {
-      await this.prisma.emailEvent.create({ data: { messageId: emailMessageId, eventType: "OPENED" } });
-      const priorOpens = await this.prisma.emailEvent.count({
-        where: { messageId: emailMessageId, eventType: "OPENED" },
+      const message = await this.prisma.emailMessage.findUnique({
+        where: { id: emailMessageId },
+        include: { lead: { select: { orgId: true, companyName: true } } },
       });
-      if (priorOpens === 1) {
-        const message = await this.prisma.emailMessage.findUnique({
-          where: { id: emailMessageId },
-          include: { lead: { select: { orgId: true, companyName: true } } },
-        });
-        if (message) {
-          this.realtime.emitToOrg(message.lead.orgId, "email.opened", { leadId: message.leadId, emailMessageId });
-          await this.notifications.notify(message.lead.orgId, {
-            category: NotificationCategory.EMAIL,
-            type: "EMAIL_OPENED",
-            severity: "WARNING",
-            title: "Email Opened",
-            message: `${message.lead.companyName ?? "A lead"} opened email ${message.sequenceStep}`,
-            leadId: message.leadId,
-            entityType: "emailMessage",
-            entityId: message.id,
-            actionUrl: `/leads/${message.leadId}`,
+      if (message) {
+        const now = new Date();
+        await this.prisma.emailEvent.create({ data: { messageId: emailMessageId, eventType: "OPENED", occurredAt: now } });
+
+        const elapsedMs = message.sentAt ? now.getTime() - message.sentAt.getTime() : null;
+        const isValidOpen = elapsedMs !== null && elapsedMs >= OPEN_VERIFICATION_WINDOW_MS;
+
+        if (isValidOpen && !message.verifiedOpenedAt) {
+          const result = await this.prisma.emailMessage.updateMany({
+            where: { id: emailMessageId, verifiedOpenedAt: null },
+            data: { verifiedOpenedAt: now },
           });
+          if (result.count > 0) {
+            this.realtime.emitToOrg(message.lead.orgId, "email.opened", {
+              leadId: message.leadId,
+              emailMessageId,
+              openedAt: now.toISOString(),
+            });
+            await this.notifications.notify(message.lead.orgId, {
+              category: NotificationCategory.EMAIL,
+              type: "EMAIL_OPENED",
+              severity: "WARNING",
+              title: "Email Opened",
+              message: `${message.lead.companyName ?? "A lead"} opened email ${message.sequenceStep}`,
+              leadId: message.leadId,
+              entityType: "emailMessage",
+              entityId: message.id,
+              actionUrl: `/leads/${message.leadId}`,
+            });
+          }
         }
       }
     } catch {
@@ -74,24 +100,43 @@ export class TrackingController {
 
   /** Hub compose/reply's tracking counterpart — see HubEmailOpenTracking's
    *  schema docblock for why this is a separate, minimal mechanism instead
-   *  of reusing EmailMessage (which requires a Lead). */
+   *  of reusing EmailMessage (which requires a Lead). Same 3-minute
+   *  verification rule as trackOpen above; `rawOpenCount` stands in for the
+   *  EmailEvent log outreach tracking has (Hub tracking has no per-event
+   *  table), so "raw vs. verified" is still distinguishable here. */
   @Get("track/open/hub/:trackingId.png")
   async trackHubOpen(@Param("trackingId") trackingId: string, @Res() res: Response) {
     try {
       const row = await this.prisma.hubEmailOpenTracking.findUnique({ where: { id: trackingId } });
-      if (row && !row.openedAt) {
-        await this.prisma.hubEmailOpenTracking.update({ where: { id: trackingId }, data: { openedAt: new Date() } });
-        this.realtime.emitToOrg(row.orgId, "email.opened", { hubTrackingId: trackingId });
-        await this.notifications.notify(row.orgId, {
-          category: NotificationCategory.EMAIL,
-          type: "EMAIL_OPENED",
-          severity: "WARNING",
-          title: "Email Opened",
-          message: `${row.toAddress} opened "${row.subject}"`,
-          entityType: "hubEmailOpenTracking",
-          entityId: trackingId,
-          actionUrl: "/email-hub?view=sent",
+      if (row) {
+        const now = new Date();
+        await this.prisma.hubEmailOpenTracking.update({
+          where: { id: trackingId },
+          data: { rawOpenCount: { increment: 1 }, openedAt: row.openedAt ?? now },
         });
+
+        const elapsedMs = now.getTime() - row.sentAt.getTime();
+        const isValidOpen = elapsedMs >= OPEN_VERIFICATION_WINDOW_MS;
+
+        if (isValidOpen && !row.verifiedOpenedAt) {
+          const result = await this.prisma.hubEmailOpenTracking.updateMany({
+            where: { id: trackingId, verifiedOpenedAt: null },
+            data: { verifiedOpenedAt: now },
+          });
+          if (result.count > 0) {
+            this.realtime.emitToOrg(row.orgId, "email.opened", { hubTrackingId: trackingId, openedAt: now.toISOString() });
+            await this.notifications.notify(row.orgId, {
+              category: NotificationCategory.EMAIL,
+              type: "EMAIL_OPENED",
+              severity: "WARNING",
+              title: "Email Opened",
+              message: `${row.toAddress} opened "${row.subject}"`,
+              entityType: "hubEmailOpenTracking",
+              entityId: trackingId,
+              actionUrl: "/email-hub?view=sent",
+            });
+          }
+        }
       }
     } catch {
       // unknown tracking id — do not error the pixel response.

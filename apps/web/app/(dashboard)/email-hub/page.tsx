@@ -146,7 +146,7 @@ function EmailHubPageContent() {
   // Only meaningful (and only fetched) within the Ignored view.
   const ignoredSendersQuery = useQuery({
     queryKey: ["ignored-senders"],
-    queryFn: () => api.getIgnoredSenders() as Promise<{ fromEmail: string; count: number }[]>,
+    queryFn: () => api.getIgnoredSenders(),
     enabled: status === "IGNORED",
   });
   const statsQuery = useQuery({
@@ -204,8 +204,8 @@ function EmailHubPageContent() {
   }
 
   const bulkActionMutation = useMutation({
-    mutationFn: (input: { action: string; tagId?: string }) =>
-      api.bulkEmailAction({ messageIds: [...selected], action: input.action, tagId: input.tagId }),
+    mutationFn: (input: { action: string; tagId?: string; ignoreScope?: "SENDER" | "DOMAIN" }) =>
+      api.bulkEmailAction({ messageIds: [...selected], action: input.action, tagId: input.tagId, ignoreScope: input.ignoreScope }),
     onSuccess: () => {
       setSelected(new Set());
       invalidateMessages();
@@ -215,10 +215,20 @@ function EmailHubPageContent() {
     },
     onError: (err) => setActionError((err as Error).message),
   });
-  function bulkAction(action: string, tagId?: string) {
+  function bulkAction(action: string, tagId?: string, ignoreScope?: "SENDER" | "DOMAIN") {
     if (selected.size === 0) return;
-    bulkActionMutation.mutate({ action, tagId });
+    bulkActionMutation.mutate({ action, tagId, ignoreScope });
   }
+
+  const unignoreRuleMutation = useMutation({
+    mutationFn: (ruleId: string) => api.unignoreRule(ruleId),
+    onSuccess: () => {
+      invalidateMessages();
+      invalidateStats();
+      invalidateIgnoredSenders();
+    },
+    onError: (err) => setActionError((err as Error).message),
+  });
 
   const confirmLeadMutation = useMutation({
     mutationFn: (threadId: string) => api.addEmailThreadToLead(threadId),
@@ -323,18 +333,40 @@ function EmailHubPageContent() {
           >
             All ignored
           </button>
-          {ignoredSenders.map((s) => (
-            <button
-              key={s.fromEmail}
-              onClick={() => setSenderFilter(s.fromEmail)}
-              title={s.fromEmail}
-              className={`max-w-[220px] truncate rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                senderFilter === s.fromEmail ? "bg-accent text-white" : "bg-ink/8 text-ink/60 hover:bg-ink/12"
-              }`}
-            >
-              {s.fromEmail} ({s.count})
-            </button>
-          ))}
+          {ignoredSenders.map((s) => {
+            const label = s.ruleType === "DOMAIN" ? `@${s.senderDomain}` : (s.fromEmail ?? "");
+            const filterValue = s.ruleType === "DOMAIN" ? (s.senderDomain ?? "") : (s.fromEmail ?? "");
+            const detail = [
+              s.ruleType === "DOMAIN" ? "Entire domain" : "Sender",
+              `Ignored ${new Date(s.createdAt).toLocaleDateString()}`,
+              s.createdByName ? `Added by ${s.createdByName}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ");
+            return (
+              <span
+                key={s.id}
+                title={detail}
+                className={`flex max-w-[280px] items-center gap-1 rounded-full py-1 pl-3 pr-1 text-xs font-medium transition-colors ${
+                  senderFilter === filterValue ? "bg-accent text-white" : "bg-ink/8 text-ink/60 hover:bg-ink/12"
+                }`}
+              >
+                <button onClick={() => setSenderFilter(filterValue)} className="max-w-[190px] truncate">
+                  {label} ({s.count})
+                </button>
+                <button
+                  onClick={() => unignoreRuleMutation.mutate(s.id)}
+                  disabled={unignoreRuleMutation.isPending}
+                  title="Unignore"
+                  className={`shrink-0 rounded-full px-1.5 leading-none ${
+                    senderFilter === filterValue ? "hover:bg-white/20" : "hover:bg-ink/15"
+                  }`}
+                >
+                  ×
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -434,7 +466,15 @@ function EmailHubPageContent() {
           <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("READ")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark read</button>
           <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNREAD")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark unread</button>
           <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IMPORTANT")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Mark important</button>
-          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IGNORE")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Ignore</button>
+          <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IGNORE", undefined, "SENDER")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Ignore sender</button>
+          <button
+            disabled={bulkActionMutation.isPending}
+            onClick={() => bulkAction("IGNORE", undefined, "DOMAIN")}
+            title="Mutes every sender at the selected messages' domain(s), not just these exact addresses"
+            className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5"
+          >
+            Ignore domain
+          </button>
           <button disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNIGNORE")} className="rounded border border-[var(--line)] px-2 py-1 hover:bg-ink/5">Unignore</button>
           {tags.length > 0 && (
             <select

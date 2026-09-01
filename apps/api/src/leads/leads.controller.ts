@@ -50,7 +50,7 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   createManual(@CurrentUser() user: JwtClaims, @Body() dto: CreateManualLeadDto) {
-    return this.leadsService.createManual(user.orgId, dto);
+    return this.leadsService.createManual(user.orgId, dto, undefined, user.sub);
   }
 
   /** Lead Room's "Move to Pipeline" action — see LeadsService.promoteToPipeline. */
@@ -80,7 +80,7 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   importLeads(@CurrentUser() user: JwtClaims, @Body() dto: ImportLeadsDto) {
-    return this.leadsService.importLeads(user.orgId, dto.csv, dto.mapping);
+    return this.leadsService.importLeads(user.orgId, dto.csv, dto.mapping, user.sub);
   }
 
   @Get()
@@ -111,6 +111,22 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   sourceBreakdown(@CurrentUser() user: JwtClaims) {
     return this.leadsService.getSourceBreakdown(user.orgId);
+  }
+
+  // Must come before ":id" for the same reason "export"/"source-breakdown" do
+  // above — "imports" would otherwise be read as a lead id.
+  @Get("imports")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  listImports(@CurrentUser() user: JwtClaims, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
+    return this.leadsService.listImports(user.orgId, Number(page) || 1, Number(pageSize) || 20);
+  }
+
+  @Get("imports/:importId")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  getImport(@CurrentUser() user: JwtClaims, @Param("importId") importId: string) {
+    return this.leadsService.getImport(user.orgId, importId);
   }
 
   @Get(":id")

@@ -28,6 +28,7 @@ import { mapRowToDto, parseCsvHeaders, parseCsvRows, suggestMapping } from "./le
 import { EmailVerificationService } from "./email-verification.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ReportEmailDraftFailureDto } from "./dto/report-email-draft-failure.dto";
+import { PreparationPipelineService } from "../preparation/preparation-pipeline.service";
 
 export interface CreateLeadResult {
   status: "created" | "duplicate";
@@ -48,6 +49,7 @@ export class LeadsService {
     private readonly socialMedia: SocialMediaService,
     private readonly emailVerification: EmailVerificationService,
     private readonly notifications: NotificationsService,
+    private readonly preparationPipeline: PreparationPipelineService,
   ) {}
 
   /**
@@ -263,6 +265,9 @@ export class LeadsService {
           businessDescription: true, currentCrm: true, verifiedEmail: true,
           verifiedLinkedin: true, verifiedWebsite: true, possibleDuplicate: true,
           createdAt: true, lastActivityAt: true,
+          // "Uploaded by X" (Part: Lead Upload Analytics, 2026-09-01) — null
+          // for an AI-discovered lead.
+          uploadedByUser: { select: { id: true, name: true } },
           score: true,
           pipelineState: true,
           // Cheap summaries for the pipeline board: the single most recent
@@ -277,12 +282,19 @@ export class LeadsService {
           // email (every paragraph of real copy) and was going out for every
           // lead's most recent message on every list/board load; the list
           // view only ever reads the four fields below plus the open event.
+          // verifiedOpenedAt (Part: 3-minute open verification, 2026-09-01)
+          // is the one field to check for "opened" — the raw EmailEvent log
+          // can include prefetch hits inside the 3-minute window that never
+          // became a genuine open.
           emailMessages: {
             orderBy: { sequenceStep: "desc" },
             take: 1,
             select: {
-              subject: true, status: true, sequenceStep: true, sentAt: true,
-              events: { where: { eventType: "OPENED" }, orderBy: { occurredAt: "desc" }, take: 1, select: { occurredAt: true } },
+              subject: true, status: true, sequenceStep: true, sentAt: true, verifiedOpenedAt: true,
+              // WAITING_FOR_SCHEDULE's display-only countdown target (Part:
+              // Preparation Pipeline / Sending Queue, 2026-09-01) — null once
+              // the message leaves that status.
+              scheduledAt: true,
             },
           },
         },
@@ -313,6 +325,9 @@ export class LeadsService {
         // timeline of what the fleet actually did to this specific lead.
         agentRuns: { orderBy: { startedAt: "asc" } },
         agentExecutions: true,
+        // "Uploaded by X · date" (Part: Lead Upload Analytics, 2026-09-01) —
+        // null for an AI-discovered lead, which nobody uploaded.
+        uploadedByUser: { select: { id: true, name: true } },
       },
     });
     if (!lead) throw new NotFoundException("Lead not found");
@@ -544,6 +559,14 @@ export class LeadsService {
     if (result.valid) {
       this.sequencer.maybeEnterOutreach(id).catch((err) =>
         this.logger.warn(`Outreach entry failed for lead ${id}: ${(err as Error).message}`),
+      );
+      // Step 1's other required agents (enrich/company_intelligence) may
+      // already have succeeded before the email was verified — re-evaluate
+      // now rather than waiting for an agent event that may never come
+      // again, or the lead's already-drafted Email 1 could sit at QUEUED
+      // indefinitely.
+      this.preparationPipeline.evaluate(id, 1).catch((err) =>
+        this.logger.warn(`Preparation evaluation failed for lead ${id}: ${(err as Error).message}`),
       );
     }
 
@@ -862,11 +885,14 @@ export class LeadsService {
       },
     });
 
-    // Sends synchronously (Part E5, revised — no queue), so `approved` above
-    // is already stale by the time this resolves; re-read the row rather
-    // than return a response that still says "queued" after the real
-    // outcome (SENT or FAILED) is already sitting in the database.
-    await this.sequencer.enqueueApprovedSend(approved.id);
+    // A human approving a draft is one of the events that can complete
+    // preparation (Part: Preparation Pipeline / Sending Queue, 2026-09-01)
+    // — evaluate() re-reads every required agent's status and, since this
+    // approval is what just made the row QUEUED, releases it into the
+    // sending queue immediately if the rest of the manifest already
+    // succeeded (the normal case: drafting itself is what produced the
+    // PENDING_APPROVAL row in the first place).
+    await this.preparationPipeline.evaluate(leadId, approved.sequenceStep);
     return this.prisma.emailMessage.findUniqueOrThrow({ where: { id: approved.id } });
   }
 
@@ -929,14 +955,14 @@ export class LeadsService {
       await this.sync.onStageChanged(leadId, stage);
     }
 
-    if (status === "QUEUED") {
-      // Sends synchronously now -- re-read afterward so the caller (the
-      // ai-workers agent) sees the real SENT/FAILED outcome, not the
-      // pre-send snapshot from the create() above.
-      await this.sequencer.enqueueApprovedSend(message.id);
-      return this.prisma.emailMessage.findUniqueOrThrow({ where: { id: message.id } });
-    }
-
+    // No longer sends synchronously here (Part: Preparation Pipeline /
+    // Sending Queue, 2026-09-01) — a QUEUED row now waits for
+    // PreparationPipelineService.evaluate() to release it, which the
+    // ai-workers caller triggers itself right after this by reporting
+    // email_draft SUCCEEDED (see AgentExecutionService.succeed). Draft
+    // creation and "is this lead fully prepared" are deliberately decoupled:
+    // this message may still be blocked on enrich/company_intelligence
+    // (step 1) even though drafting itself just finished.
     return message;
   }
 
@@ -1095,6 +1121,7 @@ export class LeadsService {
     orgId: string,
     dto: CreateManualLeadDto,
     sourceLayer: LeadSourceLayer = LeadSourceLayer.MANUAL,
+    uploadedByUserId?: string,
   ): Promise<CreateLeadResult> {
     const websiteDomain = extractDomain(dto.website);
 
@@ -1109,7 +1136,7 @@ export class LeadsService {
       );
     }
 
-    const lead = await this.insertManualLead(orgId, dto, websiteDomain, sourceLayer);
+    const lead = await this.insertManualLead(orgId, dto, websiteDomain, sourceLayer, uploadedByUserId);
 
     this.sync.onLeadCreated(lead.id).catch((err) =>
       this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
@@ -1139,6 +1166,8 @@ export class LeadsService {
     dto: Partial<CreateManualLeadDto> & { companyName: string },
     websiteDomain?: string,
     sourceLayer: LeadSourceLayer = LeadSourceLayer.MANUAL,
+    uploadedByUserId?: string,
+    importId?: string,
   ): Promise<{ id: string }> {
     return this.prisma.$transaction(async (tx) => {
       const created = await tx.lead.create({
@@ -1146,6 +1175,12 @@ export class LeadsService {
           orgId,
           companyName: dto.companyName,
           sourceLayer,
+          // Part: Lead Upload Analytics, 2026-09-01 — every real caller
+          // (the "+Add lead" form, EmailHubService.addToLead's "Add to
+          // Lead" click) has a real user and passes it; undefined only for
+          // a fully internal/system-triggered insert, if one is ever added.
+          uploadedByUserId,
+          importId,
           companyNameKey: normaliseCompanyName(dto.companyName),
           linkedinSlug: normaliseLinkedin(dto.linkedinUrl),
           website: dto.website,
@@ -1251,13 +1286,23 @@ export class LeadsService {
     orgId: string,
     csv: string,
     mapping: Record<string, string | null>,
-  ): Promise<{ created: number; duplicates: number; failed: { row: number; reason: string }[] }> {
+    userId: string,
+  ): Promise<{ created: number; duplicates: number; failed: { row: number; reason: string }[]; importId: string }> {
     let rows: Record<string, string>[];
     try {
       rows = parseCsvRows(csv);
     } catch (err) {
       throw new BadRequestException(`Could not parse this file as CSV: ${(err as Error).message}`);
     }
+
+    // One durable record per upload (Part: Lead Upload Analytics,
+    // 2026-09-01) — created up front (before any row is even validated) so
+    // the import is visible immediately, then finalized with real counts
+    // once the batch finishes below. `totalRecords` is the CSV's raw row
+    // count; successful+duplicate+invalid always sums back to it.
+    const importRecord = await this.prisma.leadImport.create({
+      data: { orgId, uploadedByUserId: userId, sourceMethod: "CSV", totalRecords: rows.length },
+    });
 
     const [existingDomains, existingEmails, existingLinkedinSlugs, existingCompanyKeys] = await Promise.all([
       this.prisma.lead.findMany({ where: { orgId, websiteDomain: { not: null } }, select: { websiteDomain: true } }),
@@ -1325,6 +1370,8 @@ export class LeadsService {
             orgId,
             companyName: dto.companyName,
             sourceLayer: LeadSourceLayer.MANUAL,
+            uploadedByUserId: userId,
+            importId: importRecord.id,
             companyNameKey: normaliseCompanyName(dto.companyName),
             linkedinSlug: normaliseLinkedin(dto.linkedinUrl),
             website: dto.website,
@@ -1381,7 +1428,50 @@ export class LeadsService {
       );
     }
 
-    return { created: created.length, duplicates: duplicateCount, failed };
+    await this.prisma.leadImport.update({
+      where: { id: importRecord.id },
+      data: {
+        successfulRecords: created.length,
+        duplicateRecords: duplicateCount,
+        invalidRecords: failed.length,
+      },
+    });
+    this.realtime.emitToOrg(orgId, "lead.import.completed", {
+      importId: importRecord.id,
+      total: rows.length,
+      successful: created.length,
+      duplicates: duplicateCount,
+      invalid: failed.length,
+    });
+
+    return { created: created.length, duplicates: duplicateCount, failed, importId: importRecord.id };
+  }
+
+  /** Newest-first history of every CSV upload (Part: Lead Upload Analytics,
+   *  2026-09-01) — a single manual "+Add lead" never appears here, only
+   *  batches created by importLeads. */
+  async listImports(orgId: string, page: number, pageSize: number) {
+    const [items, total] = await Promise.all([
+      this.prisma.leadImport.findMany({
+        where: { orgId },
+        include: { uploadedByUser: { select: { id: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+      }),
+      this.prisma.leadImport.count({ where: { orgId } }),
+    ]);
+    return { items, total, page, pageSize };
+  }
+
+  async getImport(orgId: string, importId: string) {
+    const record = await this.prisma.leadImport.findFirst({
+      where: { id: importId, orgId },
+      include: { uploadedByUser: { select: { id: true, name: true } } },
+    });
+    if (!record) throw new NotFoundException("Import not found");
+    const leadCount = await this.prisma.lead.count({ where: { importId } });
+    return { ...record, leadCount };
   }
 
   /**

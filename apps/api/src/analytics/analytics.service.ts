@@ -11,7 +11,6 @@ import {
   CohortTrendsReport,
   EmailFunnelReport,
   EmailListItem,
-  EmailPerformance,
   EmailStepPerformance,
   FunnelStageCount,
   LinkedinFunnelReport,
@@ -160,7 +159,7 @@ export class AnalyticsService {
    * or open rate exceeds 100%.
    */
   async getEmailFunnel(orgId: string): Promise<EmailFunnelReport> {
-    const [statusRows, eventRows, outcomeRows] = await Promise.all([
+    const [statusRows, eventRows, verifiedOpenRows, outcomeRows] = await Promise.all([
       this.prisma.$queryRaw<{ step: number; status: string; count: number }[]>`
         SELECT m.sequence_step AS step, m.status::text AS status, COUNT(*)::int AS count
         FROM email_messages m
@@ -177,6 +176,18 @@ export class AnalyticsService {
         JOIN leads l ON l.id = m.lead_id
         WHERE l.org_id = ${orgId}
         GROUP BY m.sequence_step, e.event_type
+      `,
+      // Separate from eventRows above: "opened" must reflect verified opens
+      // only (Part: 3-minute open verification, 2026-09-01) — a raw
+      // EmailEvent{OPENED} count would include prefetch/scanner hits that
+      // happened inside the 3-minute window and were never actually shown
+      // to a person.
+      this.prisma.$queryRaw<{ step: number; count: number }[]>`
+        SELECT m.sequence_step AS step, COUNT(*)::int AS count
+        FROM email_messages m
+        JOIN leads l ON l.id = m.lead_id
+        WHERE l.org_id = ${orgId} AND m.verified_opened_at IS NOT NULL
+        GROUP BY m.sequence_step
       `,
       this.prisma.$queryRaw<{ step: number; meetings: number; won: number }[]>`
         SELECT m.sequence_step AS step,
@@ -196,6 +207,7 @@ export class AnalyticsService {
       ...new Set([
         ...statusRows.map((r) => r.step),
         ...eventRows.map((r) => r.step),
+        ...verifiedOpenRows.map((r) => r.step),
         ...outcomeRows.map((r) => r.step),
       ]),
     ].sort((a, b) => a - b);
@@ -216,7 +228,7 @@ export class AnalyticsService {
           failed: status("FAILED") + event("FAILED"),
           sent: event("SENT"),
           delivered: event("DELIVERED"),
-          opened: event("OPENED"),
+          opened: verifiedOpenRows.find((r) => r.step === step)?.count ?? 0,
           clicked: event("CLICKED"),
           replied: event("REPLIED"),
           bounced: event("BOUNCED"),
@@ -254,24 +266,40 @@ export class AnalyticsService {
   /**
    * Row-level backing for the Analytics page's Opened/Replied tabs — the
    * email-funnel above only ever returns counts, never which specific
-   * messages they're counts of. One row per message that has an event of
-   * the requested type, taking the *earliest* occurrence (a message opened
-   * five times is one row, not five, and shows when it was first opened).
+   * messages they're counts of.
+   *
+   * OPENED reads `verified_opened_at` directly rather than the raw
+   * EmailEvent log (Part: 3-minute open verification, 2026-09-01) — a
+   * message opened five times still shows once, at the moment it first
+   * became *verified*, not the moment of its first (possibly invalid) raw
+   * fetch. REPLIED has no such verification window, so it still reads the
+   * earliest matching EmailEvent as before.
    */
   async getEmailList(orgId: string, event: "OPENED" | "REPLIED"): Promise<EmailListItem[]> {
-    const rows = await this.prisma.$queryRaw<
-      {
-        id: string; leadId: string; companyName: string; contactName: string | null;
-        subject: string; sequenceStep: number; sentAt: Date | null; eventAt: Date;
-      }[]
-    >`
+    const rows =
+      event === "OPENED"
+        ? await this.prisma.$queryRaw<
+            { id: string; leadId: string; companyName: string; contactName: string | null; subject: string; sequenceStep: number; sentAt: Date | null; eventAt: Date }[]
+          >`
+      SELECT m.id, m.lead_id AS "leadId", l.company_name AS "companyName",
+             l.contact_name AS "contactName", m.subject, m.sequence_step AS "sequenceStep",
+             m.sent_at AS "sentAt", m.verified_opened_at AS "eventAt"
+      FROM email_messages m
+      JOIN leads l ON l.id = m.lead_id
+      WHERE l.org_id = ${orgId} AND m.verified_opened_at IS NOT NULL
+      ORDER BY m.verified_opened_at DESC
+      LIMIT 200
+    `
+        : await this.prisma.$queryRaw<
+            { id: string; leadId: string; companyName: string; contactName: string | null; subject: string; sequenceStep: number; sentAt: Date | null; eventAt: Date }[]
+          >`
       SELECT m.id, m.lead_id AS "leadId", l.company_name AS "companyName",
              l.contact_name AS "contactName", m.subject, m.sequence_step AS "sequenceStep",
              m.sent_at AS "sentAt", MIN(e.occurred_at) AS "eventAt"
       FROM email_events e
       JOIN email_messages m ON m.id = e.message_id
       JOIN leads l ON l.id = m.lead_id
-      WHERE l.org_id = ${orgId} AND e.event_type = ${event}::"EmailEventType"
+      WHERE l.org_id = ${orgId} AND e.event_type = 'REPLIED'
       GROUP BY m.id, l.company_name, l.contact_name
       ORDER BY MIN(e.occurred_at) DESC
       LIMIT 200
@@ -301,7 +329,7 @@ export class AnalyticsService {
         FROM email_messages m
         JOIN leads l ON l.id = m.lead_id
         WHERE l.org_id = ${orgId}
-          AND EXISTS (SELECT 1 FROM email_events e WHERE e.message_id = m.id AND e.event_type = 'OPENED')
+          AND m.verified_opened_at IS NOT NULL
           AND NOT EXISTS (SELECT 1 FROM email_events e WHERE e.message_id = m.id AND e.event_type = 'REPLIED')
         ORDER BY m.sent_at DESC
         LIMIT 15

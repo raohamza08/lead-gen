@@ -6,7 +6,7 @@ import { CacheService } from "../common/cache/cache.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { TransactionalEmailService } from "../email/transactional-email.service";
 import { LeadsService } from "../leads/leads.service";
-import { BulkAction, BulkActionDto } from "./dto/bulk-action.dto";
+import { BulkAction, BulkActionDto, IgnoreScope } from "./dto/bulk-action.dto";
 import { CreateTagDto, UpdateTagDto } from "./dto/create-tag.dto";
 import { ComposeEmailDto, ReplyMessageDto } from "./dto/reply-message.dto";
 import { ImapReaderProvider } from "./readers/imap-reader.provider";
@@ -67,30 +67,48 @@ export class EmailHubService {
     ]);
   }
 
-  /** Powers the Ignored view's per-sender sub-tabs (Part: Ignore/Noise
-   *  Management, extended) — every muted sender (bulkAction's IGNORE path)
-   *  alongside how many of their messages are actually sitting in Ignored
-   *  right now, so the UI can group them instead of one flat list. */
+  /** Powers the Ignored view's per-sender/per-domain sub-tabs and the rule
+   *  management list (Part: Ignore/Noise Management, extended; domain scope
+   *  + rule metadata added Part: Lead Upload Analytics / Email Performance /
+   *  Ignore Groups, 2026-09-01) — every muted sender/domain (EmailHubService.
+   *  ignoreSender's IGNORE path) alongside how many of their messages are
+   *  actually sitting in Ignored right now and who/when muted them, so the
+   *  UI can group and manage them instead of one flat list. */
   async listIgnoredSenders(user: JwtClaims) {
-    const senders = await this.prisma.ignoredSender.findMany({
+    const rules = await this.prisma.ignoredSender.findMany({
       where: { orgId: user.orgId },
-      orderBy: { fromEmail: "asc" },
+      include: { createdByUser: { select: { id: true, name: true } } },
+      orderBy: { createdAt: "desc" },
     });
-    if (senders.length === 0) return [];
+    if (rules.length === 0) return [];
 
-    const counts = await this.prisma.inboundEmailMessage.groupBy({
-      by: ["fromEmail"],
-      where: {
-        account: { orgId: user.orgId },
-        folder: "INBOX",
-        isIgnored: true,
-        fromEmail: { in: senders.map((s) => s.fromEmail) },
-      },
-      _count: true,
-    });
-    const countByEmail = new Map(counts.map((c) => [c.fromEmail, c._count]));
+    // One count query per rule rather than a single groupBy — a DOMAIN
+    // rule's count is a `contains`/suffix match, not an exact groupBy key,
+    // so the two rule types can't share one grouped query.
+    const counts = await Promise.all(
+      rules.map((r) =>
+        this.prisma.inboundEmailMessage.count({
+          where: {
+            account: { orgId: user.orgId },
+            folder: "INBOX",
+            isIgnored: true,
+            fromEmail:
+              r.ruleType === "DOMAIN" ? { endsWith: `@${r.senderDomain}`, mode: "insensitive" } : { equals: r.fromEmail ?? undefined, mode: "insensitive" },
+          },
+        }),
+      ),
+    );
 
-    return senders.map((s) => ({ fromEmail: s.fromEmail, count: countByEmail.get(s.fromEmail) ?? 0 }));
+    return rules.map((r, i) => ({
+      id: r.id,
+      ruleType: r.ruleType,
+      fromEmail: r.fromEmail,
+      senderDomain: r.senderDomain,
+      createdAt: r.createdAt,
+      createdByUserId: r.createdByUserId,
+      createdByName: r.createdByUser?.name ?? null,
+      count: counts[i],
+    }));
   }
 
   /** Null means "no restriction" (ADMIN) — every other role is scoped to
@@ -320,39 +338,19 @@ export class EmailHubService {
         // Filter view only — never touches the real mailbox (Part:
         // Ignore/Noise Management). No IMAP call happens here at all.
         await this.prisma.inboundEmailMessage.updateMany({ where: { id: { in: ids } }, data: { isIgnored: true } });
-        // Muting the sender, not just this one message (Part: Ignore/Noise
-        // Management, extended) — every other message already in the org
-        // from the same address gets swept into Ignored too, and
-        // EmailHubSyncWorker pre-ignores anything that arrives from them
-        // afterward. Scoped to the org, not the account: a promotional
-        // sender emailing one connected mailbox is noise for the whole
-        // team, not just that inbox.
         const senders = Array.from(new Set(allowed.map((m) => m.fromEmail)));
-        if (senders.length > 0) {
-          await this.prisma.ignoredSender.createMany({
-            data: senders.map((fromEmail) => ({ orgId: user.orgId, fromEmail })),
-            skipDuplicates: true,
-          });
-          await this.prisma.inboundEmailMessage.updateMany({
-            where: { account: { orgId: user.orgId }, fromEmail: { in: senders } },
-            data: { isIgnored: true },
-          });
-        }
+        await this.ignoreSenders(user.orgId, user.sub, senders, dto.ignoreScope ?? IgnoreScope.SENDER);
         break;
       }
       case BulkAction.UNIGNORE: {
         await this.prisma.inboundEmailMessage.updateMany({ where: { id: { in: ids } }, data: { isIgnored: false } });
-        // Symmetric with IGNORE above: un-ignoring un-mutes the sender
-        // entirely, so their next email doesn't just land back in Ignored
-        // via the sync worker's pre-ignore check a moment later.
+        // Symmetric with IGNORE above: un-ignoring un-mutes whatever rule(s)
+        // actually match the selected messages' senders — a SENDER rule on
+        // the exact address, or a DOMAIN rule covering it — regardless of
+        // which scope created them, so their next email doesn't just land
+        // back in Ignored via the sync worker's pre-ignore check a moment later.
         const senders = Array.from(new Set(allowed.map((m) => m.fromEmail)));
-        if (senders.length > 0) {
-          await this.prisma.ignoredSender.deleteMany({ where: { orgId: user.orgId, fromEmail: { in: senders } } });
-          await this.prisma.inboundEmailMessage.updateMany({
-            where: { account: { orgId: user.orgId }, fromEmail: { in: senders } },
-            data: { isIgnored: false },
-          });
-        }
+        await this.unignoreByFromEmails(user.orgId, senders);
         break;
       }
       case BulkAction.DELETE:
@@ -383,6 +381,92 @@ export class EmailHubService {
     this.realtime.emitToOrg(user.orgId, "emailHub.messagesUpdated", { messageIds: ids, action: dto.action });
     await this.invalidateStatsFor(user);
     return { updated: ids.length };
+  }
+
+  /**
+   * Mutes a sender or their whole domain (Part: Ignore/Noise Management,
+   * extended; domain scope added Part: Lead Upload Analytics / Email
+   * Performance / Ignore Groups, 2026-09-01) — creates the rule(s) and
+   * retroactively re-classifies every existing message that already matches
+   * into Ignored, same as the original sender-only behavior. Future mail is
+   * caught by EmailHubSyncWorker's pre-ignore check.
+   */
+  private async ignoreSenders(orgId: string, userId: string, fromEmails: string[], scope: IgnoreScope) {
+    if (fromEmails.length === 0) return;
+
+    if (scope === IgnoreScope.DOMAIN) {
+      const domains = Array.from(new Set(fromEmails.map((e) => e.split("@")[1]).filter((d): d is string => !!d)));
+      if (domains.length === 0) return;
+      await this.prisma.ignoredSender.createMany({
+        data: domains.map((senderDomain) => ({ orgId, ruleType: "DOMAIN", senderDomain, createdByUserId: userId })),
+        skipDuplicates: true,
+      });
+      await this.prisma.inboundEmailMessage.updateMany({
+        where: { account: { orgId }, OR: domains.map((d) => ({ fromEmail: { endsWith: `@${d}`, mode: "insensitive" as const } })) },
+        data: { isIgnored: true },
+      });
+      return;
+    }
+
+    await this.prisma.ignoredSender.createMany({
+      data: fromEmails.map((fromEmail) => ({ orgId, ruleType: "SENDER" as const, fromEmail, createdByUserId: userId })),
+      skipDuplicates: true,
+    });
+    await this.prisma.inboundEmailMessage.updateMany({
+      where: { account: { orgId }, fromEmail: { in: fromEmails } },
+      data: { isIgnored: true },
+    });
+  }
+
+  /** Finds every SENDER/DOMAIN rule that currently matches any of the given
+   *  addresses and reverses them all (Part: Ignore Groups, 2026-09-01). */
+  private async unignoreByFromEmails(orgId: string, fromEmails: string[]) {
+    if (fromEmails.length === 0) return;
+    const domains = Array.from(new Set(fromEmails.map((e) => e.split("@")[1]).filter((d): d is string => !!d)));
+    const rules = await this.prisma.ignoredSender.findMany({
+      where: {
+        orgId,
+        OR: [
+          { ruleType: "SENDER", fromEmail: { in: fromEmails } },
+          ...(domains.length > 0 ? [{ ruleType: "DOMAIN" as const, senderDomain: { in: domains } }] : []),
+        ],
+      },
+    });
+    await this.unignoreRules(orgId, rules);
+  }
+
+  /** Deletes the given rules and un-flags every message any of them
+   *  matched — never deletes the messages themselves (Part: Ignore Groups,
+   *  2026-09-01 — "do not delete historical emails, only reclassify"). */
+  private async unignoreRules(
+    orgId: string,
+    rules: { id: string; ruleType: string; fromEmail: string | null; senderDomain: string | null }[],
+  ) {
+    if (rules.length === 0) return;
+    await this.prisma.ignoredSender.deleteMany({ where: { id: { in: rules.map((r) => r.id) } } });
+
+    const senderEmails = rules.filter((r) => r.ruleType === "SENDER" && r.fromEmail).map((r) => r.fromEmail as string);
+    const domains = rules.filter((r) => r.ruleType === "DOMAIN" && r.senderDomain).map((r) => r.senderDomain as string);
+    const or: Prisma.InboundEmailMessageWhereInput[] = [];
+    if (senderEmails.length > 0) or.push({ fromEmail: { in: senderEmails } });
+    for (const domain of domains) or.push({ fromEmail: { endsWith: `@${domain}`, mode: "insensitive" } });
+    if (or.length === 0) return;
+
+    await this.prisma.inboundEmailMessage.updateMany({
+      where: { account: { orgId }, OR: or },
+      data: { isIgnored: false },
+    });
+  }
+
+  /** The Ignore rule-management row's "Unignore" button (Part: Ignore
+   *  Groups, 2026-09-01) — targets one specific rule by id, rather than
+   *  requiring the caller to reconstruct which messages belong to it. */
+  async unignoreRule(user: JwtClaims, ruleId: string) {
+    const rule = await this.prisma.ignoredSender.findFirst({ where: { id: ruleId, orgId: user.orgId } });
+    if (!rule) throw new NotFoundException("Ignore rule not found");
+    await this.unignoreRules(user.orgId, [rule]);
+    this.realtime.emitToOrg(user.orgId, "emailHub.messagesUpdated", { messageIds: [], action: "UNIGNORE" });
+    return { unignored: true };
   }
 
   async reply(user: JwtClaims, messageId: string, dto: ReplyMessageDto) {
@@ -506,6 +590,9 @@ export class EmailHubService {
           notes: `Added from Email Hub — first message: "${thread.subject}"`,
         },
         LeadSourceLayer.EMAIL,
+        // A real human click ("Add to Lead"), same attribution as the
+        // "+Add lead" form (Part: Lead Upload Analytics, 2026-09-01).
+        user.sub,
       );
       if (created.status === "duplicate" || !created.leadId) {
         throw new BadRequestException("Could not create lead — a matching lead already exists");

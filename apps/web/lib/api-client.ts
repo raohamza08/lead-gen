@@ -302,6 +302,17 @@ export const api = {
   getCohortTrends: (days = 30) => request(`/analytics/cohort-trends?days=${days}`),
   getAiInsights: () => request("/analytics/ai-insights", { method: "POST" }),
   getLatestAiInsights: () => request("/analytics/ai-insights/latest"),
+  // Part: Lead Upload Analytics / Email Performance / Ignore Groups, 2026-09-01.
+  getLeadUploadStats: (params: Record<string, string>) =>
+    request(`/analytics/lead-uploads?${new URLSearchParams(params).toString()}`),
+  getEmailPerformance: (params: Record<string, string>) =>
+    request(`/analytics/email-performance?${new URLSearchParams(params).toString()}`),
+  getFailureBreakdown: (params: Record<string, string>) =>
+    request(`/analytics/failure-breakdown?${new URLSearchParams(params).toString()}`),
+  getAnalyticsTrends: (params: Record<string, string>) =>
+    request(`/analytics/trends?${new URLSearchParams(params).toString()}`),
+  getUserBreakdown: (params: Record<string, string>) =>
+    request(`/analytics/user-breakdown?${new URLSearchParams(params).toString()}`),
   getAgentHealth: (hours = 24) => request(`/agent-runs/health?hours=${hours}`),
   getRecentAgentRuns: (limit = 50) => request(`/agent-runs/recent?limit=${limit}`),
   getAgentFleet: () => request("/agents/fleet"),
@@ -326,6 +337,11 @@ export const api = {
   getAutomationSettings: () => request("/settings/organization/automation"),
   updateAutomationSettings: (body: Record<string, unknown>) =>
     request("/settings/organization/automation", { method: "PATCH", body: JSON.stringify(body) }),
+  // Part: Preparation Pipeline / Sending Queue, 2026-09-01.
+  getSendingSchedule: () => request("/sending-schedule"),
+  updateSendingSchedule: (body: Record<string, unknown>) =>
+    request("/sending-schedule", { method: "PUT", body: JSON.stringify(body) }),
+  getSendingQueueDashboard: () => request("/sending-schedule/dashboard"),
   getOrgBranding: () => request("/settings/organization/branding"),
   updateOrgBranding: (body: Record<string, unknown>) =>
     request("/settings/organization/branding", { method: "PATCH", body: JSON.stringify(body) }),
@@ -373,7 +389,19 @@ export const api = {
   getEmailHubStats: () => request("/email-hub/stats"),
   getEmailTags: () => request("/email-hub/tags"),
   getIgnoredSenders: () =>
-    request<{ fromEmail: string; count: number }[]>("/email-hub/ignored-senders"),
+    request<
+      {
+        id: string;
+        ruleType: "SENDER" | "DOMAIN";
+        fromEmail: string | null;
+        senderDomain: string | null;
+        createdAt: string;
+        createdByUserId: string | null;
+        createdByName: string | null;
+        count: number;
+      }[]
+    >("/email-hub/ignored-senders"),
+  unignoreRule: (ruleId: string) => request(`/email-hub/ignored-senders/${ruleId}`, { method: "DELETE" }),
   createEmailTag: (body: { name: string; color?: string }) =>
     request("/email-hub/tags", { method: "POST", body: JSON.stringify(body) }),
   updateEmailTag: (id: string, body: { name?: string; color?: string }) =>
@@ -381,7 +409,7 @@ export const api = {
   deleteEmailTag: (id: string) => request(`/email-hub/tags/${id}`, { method: "DELETE" }),
   getEmailMessages: (params: Record<string, string> = {}) =>
     request(`/email-hub/messages?${new URLSearchParams(params).toString()}`),
-  bulkEmailAction: (body: { messageIds: string[]; action: string; tagId?: string }) =>
+  bulkEmailAction: (body: { messageIds: string[]; action: string; tagId?: string; ignoreScope?: "SENDER" | "DOMAIN" }) =>
     request("/email-hub/messages/bulk", { method: "POST", body: JSON.stringify(body) }),
   replyToEmail: (
     messageId: string,

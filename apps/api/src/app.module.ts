@@ -29,6 +29,8 @@ import { AuditLogModule } from "./audit-log/audit-log.module";
 import { CaseStudiesModule } from "./case-studies/case-studies.module";
 import { EmailHubModule } from "./email-hub/email-hub.module";
 import { SocialMediaModule } from "./social-media/social-media.module";
+import { SendingModule } from "./sending/sending.module";
+import { PreparationModule } from "./preparation/preparation.module";
 
 @Module({
   imports: [
@@ -61,6 +63,8 @@ import { SocialMediaModule } from "./social-media/social-media.module";
     CaseStudiesModule,
     EmailHubModule,
     SocialMediaModule,
+    SendingModule,
+    PreparationModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

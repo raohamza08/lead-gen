@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { EmailModule } from "../email/email.module";
 import { LeadsModule } from "../leads/leads.module";
+import { SequencerModule } from "../sequencer/sequencer.module";
 import { ImapReaderProvider } from "./readers/imap-reader.provider";
 import { EmailHubSyncQueue } from "./email-hub-sync.queue";
 import { EmailHubSyncWorker } from "./email-hub-sync.worker";
@@ -9,7 +10,7 @@ import { EmailHubController } from "./email-hub.controller";
 import { EmailLeadClassifierService } from "./email-lead-classifier.service";
 
 @Module({
-  imports: [EmailModule, LeadsModule],
+  imports: [EmailModule, LeadsModule, SequencerModule],
   controllers: [EmailHubController],
   providers: [
     ImapReaderProvider,

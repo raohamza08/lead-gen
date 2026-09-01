@@ -7,6 +7,7 @@ import { useRealtimeEvent } from "../../../../lib/realtime";
 import { RangeInput, TagInput, TaxonomyMultiSelect } from "../../../../components/filter-controls";
 import { SendingMailboxesSection } from "../../../../components/sending-mailboxes-section";
 import { AutomationSettingsSection } from "../../../../components/automation-settings-section";
+import { SendingScheduleSection } from "../../../../components/sending-schedule-section";
 import { AgentPromptsSection } from "../../../../components/agent-prompts-section";
 import { CaseStudiesSection } from "../../../../components/case-studies-section";
 import type { NicheFilter } from "@leadgen/types";
@@ -353,6 +354,7 @@ export default function LeadGenerationSettingsPage() {
       </div>
 
       <AutomationSettingsSection />
+      <SendingScheduleSection />
       <SendingMailboxesSection />
       <CaseStudiesSection />
       <AgentPromptsSection />

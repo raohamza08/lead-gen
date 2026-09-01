@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
+import { useRealtimeEvent } from "../../../lib/realtime";
 import { DataTable, SectionCard, StatTile } from "../../../components/chart-kit";
 
 /**
@@ -62,6 +63,22 @@ interface WaitingLead {
 
 interface SendQueue {
   waiting: WaitingLead[];
+}
+
+/** Part: Preparation Pipeline / Sending Queue, 2026-09-01. */
+interface ActiveSendingSession {
+  id: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED";
+  totalLeads: number;
+  successful: number;
+  failed: number;
+  createdAt: string;
+}
+
+interface PrepSendDashboard {
+  preparation: Partial<Record<"NOT_STARTED" | "IN_PROGRESS" | "COMPLETE" | "FAILED", number>>;
+  sending: Partial<Record<"WAITING_FOR_SCHEDULE" | "READY_TO_SEND" | "SENDING" | "RETRY_SCHEDULED", number>>;
+  activeSessions: ActiveSendingSession[];
 }
 
 /** Canonical 5-email sequence step names — matches agent-prompts-section.tsx
@@ -184,6 +201,18 @@ export default function AutomationPage() {
     queryFn: () => api.getSendQueue() as Promise<SendQueue>,
   });
 
+  // Preparation & Sending dashboard (Part: Preparation Pipeline / Sending
+  // Queue, 2026-09-01) — same "live queue state, not a historical stat"
+  // reasoning as Send queue above.
+  const queryClient = useQueryClient();
+  const prepSendQuery = useQuery({
+    queryKey: ["automation-prep-send"],
+    queryFn: () => api.getSendingQueueDashboard() as Promise<PrepSendDashboard>,
+  });
+  useRealtimeEvent("preparation.updated", () => queryClient.invalidateQueries({ queryKey: ["automation-prep-send"] }));
+  useRealtimeEvent("sendingQueue.updated", () => queryClient.invalidateQueries({ queryKey: ["automation-prep-send"] }));
+  useRealtimeEvent("sendingSession.updated", () => queryClient.invalidateQueries({ queryKey: ["automation-prep-send"] }));
+
   const fleet = fleetQuery.data ?? null;
   const fleetError = fleetQuery.error ? (fleetQuery.error as Error).message : null;
   const sendQueue = sendQueueQuery.data ?? null;
@@ -242,7 +271,7 @@ export default function AutomationPage() {
 
         <SectionCard
           title="Send queue"
-          subtitle="Leads counting down a real wait timer before their next sequence email drafts and sends — emails no longer sit queued between drafted and sent, they send the moment they're approved."
+          subtitle="Leads counting down a real wait timer before their next sequence email drafts — once drafted, it still has to clear preparation and the sending queue below before it actually sends."
         >
           {sendQueueError ? (
             <p className="py-8 text-center text-sm text-bad">{sendQueueError}</p>
@@ -290,6 +319,76 @@ export default function AutomationPage() {
                       },
                     ]}
                   />
+                )}
+              </div>
+            </div>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title="Preparation & Sending"
+          subtitle="Every drafted email clears required-agent preparation, then the sending queue (immediate, or held for a schedule — see Settings > Lead Generation) before it actually sends."
+        >
+          {prepSendQuery.error ? (
+            <p className="py-8 text-center text-sm text-bad">{(prepSendQuery.error as Error).message}</p>
+          ) : !prepSendQuery.data ? (
+            <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
+          ) : (
+            <div className="flex flex-col gap-5">
+              <div>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Preparation queue</h3>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatTile label="Preparing" value={prepSendQuery.data.preparation.IN_PROGRESS ?? 0} />
+                  <StatTile
+                    label="Blocked"
+                    value={prepSendQuery.data.preparation.FAILED ?? 0}
+                    tone={(prepSendQuery.data.preparation.FAILED ?? 0) > 0 ? "bad" : "good"}
+                  />
+                  <StatTile label="Complete" value={prepSendQuery.data.preparation.COMPLETE ?? 0} tone="good" />
+                  <StatTile label="Not started" value={prepSendQuery.data.preparation.NOT_STARTED ?? 0} />
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Sending queue</h3>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  <StatTile label="Waiting for schedule" value={prepSendQuery.data.sending.WAITING_FOR_SCHEDULE ?? 0} />
+                  <StatTile label="Ready to send" value={prepSendQuery.data.sending.READY_TO_SEND ?? 0} />
+                  <StatTile label="Sending" value={prepSendQuery.data.sending.SENDING ?? 0} />
+                  <StatTile
+                    label="Retrying"
+                    value={prepSendQuery.data.sending.RETRY_SCHEDULED ?? 0}
+                    tone={(prepSendQuery.data.sending.RETRY_SCHEDULED ?? 0) > 0 ? "gold" : "good"}
+                  />
+                </div>
+              </div>
+              <div>
+                <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">
+                  Active sending sessions ({prepSendQuery.data.activeSessions.length})
+                </h3>
+                {prepSendQuery.data.activeSessions.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink/50">No batch currently sending.</p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {prepSendQuery.data.activeSessions.map((s) => {
+                      const done = s.successful + s.failed;
+                      const pct = s.totalLeads > 0 ? Math.round((done / s.totalLeads) * 100) : 0;
+                      return (
+                        <div key={s.id} className="rounded-lg border border-[var(--line)] p-3">
+                          <div className="mb-1.5 flex items-center justify-between text-xs">
+                            <span className="text-ink/60">
+                              Started {new Date(s.createdAt).toLocaleString()} · {s.status}
+                            </span>
+                            <span className="tabular text-ink/60">
+                              {done}/{s.totalLeads} ({s.successful} sent, {s.failed} failed)
+                            </span>
+                          </div>
+                          <div className="h-1.5 overflow-hidden rounded-full bg-ink/8">
+                            <div className="h-full bg-accent" style={{ width: `${pct}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
             </div>

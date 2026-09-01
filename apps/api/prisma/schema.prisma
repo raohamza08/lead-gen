@@ -105,9 +105,31 @@ enum EmailMessageStatus {
   DRAFT
   PENDING_APPROVAL
   QUEUED
+  /// Preparation is complete and no send schedule is configured (or the
+  /// schedule window already passed) — the sending worker will pick this up
+  /// immediately (Part: Preparation Pipeline / Sending Queue, 2026-09-01).
+  READY_TO_SEND
+  /// Preparation is complete but the org's SendingSchedule is enabled and the
+  /// configured time hasn't arrived yet. `EmailMessage.scheduledAt` holds the
+  /// computed fire time.
+  WAITING_FOR_SCHEDULE
+  /// Claimed by a SendingWorker via an atomic compare-and-swap — the
+  /// duplicate-send guard. A row only leaves this state via that same
+  /// worker's success/failure branch, or a stale-lock sweep after a crash.
+  SENDING
+  /// A send attempt failed and is backing off before the sweep retries just
+  /// this message — never the whole SendingSession.
+  RETRY_SCHEDULED
   SENT
   FAILED
   CANCELLED
+}
+
+enum PreparationStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+  FAILED
 }
 
 enum GeneratedBy {
@@ -168,6 +190,9 @@ model Organization {
   socialAutomations SocialAutomation[]
   hubEmailOpenTracking HubEmailOpenTracking[]
   auditLogs    AuditLog[]
+  sendingSessions SendingSession[]
+  sendingSchedule SendingSchedule?
+  leadImports     LeadImport[]
 
   @@map("organizations")
 }
@@ -223,6 +248,13 @@ model User {
   socialInternalNotes   SocialInternalNote[]
   notificationStates    NotificationUserState[]
   notificationPreference NotificationPreference?
+  /// Part: Lead Upload Analytics / Email Performance / Ignore Groups,
+  /// 2026-09-01 — the attribution axis for per-user lead/email stats. Never
+  /// set for an AI-discovered lead (niche filter/extraction run); only a
+  /// human "+Add lead" or CSV import stamps this.
+  uploadedLeads         Lead[] @relation("UploadedByUser")
+  leadImports           LeadImport[]
+  ignoredSenderRules    IgnoredSender[]
 
   @@map("users")
 }
@@ -482,6 +514,37 @@ model AiInsightSnapshot {
   @@map("ai_insight_snapshots")
 }
 
+enum LeadImportSourceMethod {
+  CSV
+  MANUAL
+}
+
+/// One row per CSV upload (Part: Lead Upload Analytics, 2026-09-01) — a
+/// single "+Add lead" does NOT create one of these (not a batch); it just
+/// stamps `Lead.uploadedByUserId` directly. `totalRecords` is the CSV's raw
+/// row count; `successfulRecords + duplicateRecords + invalidRecords` should
+/// always sum to it. Kept even if every row in it later gets deleted — this
+/// is a historical record of the upload event itself, not a live join table.
+model LeadImport {
+  id                 String   @id @default(uuid())
+  orgId              String   @map("org_id")
+  org                Organization @relation(fields: [orgId], references: [id])
+  uploadedByUserId   String   @map("uploaded_by_user_id")
+  uploadedByUser     User     @relation(fields: [uploadedByUserId], references: [id])
+  sourceMethod       LeadImportSourceMethod @default(CSV) @map("source_method")
+  fileName           String?  @map("file_name")
+  totalRecords       Int      @map("total_records")
+  successfulRecords  Int      @default(0) @map("successful_records")
+  duplicateRecords   Int      @default(0) @map("duplicate_records")
+  invalidRecords     Int      @default(0) @map("invalid_records")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  leads              Lead[]
+
+  @@index([orgId, createdAt])
+  @@map("lead_imports")
+}
+
 model Lead {
   id                  String   @id @default(uuid())
   orgId               String   @map("org_id")
@@ -494,6 +557,15 @@ model Lead {
   campaign            Campaign? @relation(fields: [campaignId], references: [id])
   assignedUserId       String?  @map("assigned_user_id")
   assignedUser         User?    @relation("AssignedUser", fields: [assignedUserId], references: [id])
+  /// Who uploaded/imported this lead (Part: Lead Upload Analytics,
+  /// 2026-09-01) — null for an AI-discovered lead (niche filter/extraction
+  /// run); only a human "+Add lead" or CSV import sets this. This, not
+  /// `assignedUserId` (declared in the schema but never written by any
+  /// endpoint), is the attribution axis for per-user lead/email stats.
+  uploadedByUserId    String?  @map("uploaded_by_user_id")
+  uploadedByUser      User?    @relation("UploadedByUser", fields: [uploadedByUserId], references: [id])
+  importId            String?  @map("import_id")
+  leadImport          LeadImport? @relation(fields: [importId], references: [id])
 
   companyName         String   @map("company_name")
   /// Which method found this lead. Set once at creation, never changed after.
@@ -724,6 +796,17 @@ model PipelineState {
   // separate retry mechanism.
   previousStage   PipelineStage? @map("previous_stage")
 
+  /// Aggregate readiness of the CURRENT sequence step's required agents
+  /// (Part: Preparation Pipeline, 2026-09-01) — one lead only ever prepares
+  /// one step at a time, so this stays lead-level rather than per-message.
+  /// Driven entirely by PreparationPipelineService.evaluate(), called from
+  /// AgentExecutionService.succeed()/fail() and LeadsService.verifyEmail —
+  /// never set directly anywhere else.
+  preparationStatus      PreparationStatus @default(NOT_STARTED) @map("preparation_status")
+  /// Which sequence step (1-5) preparationStatus currently describes.
+  preparationStep        Int?     @map("preparation_step")
+  preparationCompletedAt DateTime? @map("preparation_completed_at")
+
   @@map("pipeline_states")
 }
 
@@ -815,6 +898,66 @@ model EmailAccount {
   @@map("email_accounts")
 }
 
+enum SendingSessionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+}
+
+/// A centralized batch of messages released to the sending worker together
+/// (Part: Preparation Pipeline / Sending Queue, 2026-09-01) — replaces the
+/// old one-send-per-request model. Created either by SendingSchedulerService
+/// when a schedule fires (sweeping up every WAITING_FOR_SCHEDULE message) or
+/// immediately by SendingQueueService when no schedule is configured.
+/// `successful`/`failed` are running counters updated per-message by
+/// SendingWorker so a partial failure never fails the batch as a whole.
+model SendingSession {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  org          Organization @relation(fields: [orgId], references: [id])
+  createdAt    DateTime @default(now()) @map("created_at")
+  scheduledAt  DateTime? @map("scheduled_at")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+  status       SendingSessionStatus @default(PENDING)
+  totalLeads   Int      @default(0) @map("total_leads")
+  successful   Int      @default(0)
+  failed       Int      @default(0)
+
+  messages     EmailMessage[]
+
+  @@map("sending_sessions")
+}
+
+enum SendingScheduleFrequency {
+  DAILY
+  ONE_TIME
+}
+
+/// One row per org (Part: Preparation Pipeline / Sending Queue, 2026-09-01).
+/// Dedicated model rather than another key in Organization.settings' JSON
+/// blob, matching NicheFilter's own dedicated scheduleCron/timezone fields —
+/// this drives a real CronJob (SendingSchedulerService), not just display.
+/// Disabled (the default) means "send immediately after preparation
+/// completes" — a schedule is opt-in, never required.
+model SendingSchedule {
+  id              String   @id @default(uuid())
+  orgId           String   @unique @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  enabled         Boolean  @default(false)
+  frequency       SendingScheduleFrequency @default(DAILY)
+  /// "HH:mm", interpreted in `timezone`.
+  sendTime        String   @default("09:00") @map("send_time")
+  timezone        String   @default("UTC")
+  /// Only set/read when frequency = ONE_TIME. "YYYY-MM-DD".
+  oneTimeDate     String?  @map("one_time_date")
+  lastTriggeredAt DateTime? @map("last_triggered_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("sending_schedules")
+}
+
 model EmailMessage {
   id            String   @id @default(uuid())
   leadId        String   @map("lead_id")
@@ -827,8 +970,24 @@ model EmailMessage {
   rationale     Json?
   generatedBy   GeneratedBy @map("generated_by")
   status        EmailMessageStatus @default(DRAFT)
+  /// Was always dead (never written) before Part: Preparation Pipeline /
+  /// Sending Queue, 2026-09-01 — repurposed rather than adding a duplicate
+  /// column. Now the computed fire time for WAITING_FOR_SCHEDULE rows (set
+  /// by SendingQueueService.enqueue from the org's SendingSchedule); null
+  /// once the row leaves WAITING_FOR_SCHEDULE.
   scheduledAt   DateTime? @map("scheduled_at")
   sentAt        DateTime? @map("sent_at")
+  sendingSessionId String? @map("sending_session_id")
+  sendingSession    SendingSession? @relation(fields: [sendingSessionId], references: [id])
+  /// Number of failed send attempts so far — drives the same capped
+  /// exponential backoff shape as AgentExecution.attempt.
+  sendRetryCount    Int       @default(0) @map("send_retry_count")
+  nextSendRetryAt   DateTime? @map("next_send_retry_at")
+  /// Set by the atomic compare-and-swap that claims this row into SENDING
+  /// (the duplicate-send guard) so a crashed worker's lock can be detected
+  /// and reclaimed by the sweep tick, same shape as AgentExecution's stale
+  /// RUNNING reclaim.
+  sendingLockedAt   DateTime? @map("sending_locked_at")
   /// When this row was drafted. `scheduledAt` above and EmailEventType.QUEUED
   /// both look like they'd answer "send order" but neither is ever written
   /// anywhere in the codebase.
@@ -846,6 +1005,15 @@ model EmailMessage {
   /// approving/sending the draft, rather than every outbound email silently
   /// carrying a pixel.
   trackEmailOpen Boolean @default(false) @map("track_email_open")
+  /// Set once, the first time a real pixel fetch (see EmailEvent, the raw
+  /// log) happens at least 180s after `sentAt` (Part: 3-minute open
+  /// verification, 2026-09-01). An immediate hit — a proxy/scanner
+  /// prefetch, or the sender's own mail client rendering a send-confirmation
+  /// preview — is NOT a genuine open; this is the one authoritative field
+  /// every consumer (UI, notifications, analytics, open-based automation)
+  /// should read instead of checking for EmailEvent{OPENED} existence
+  /// directly, which would count those false positives.
+  verifiedOpenedAt DateTime? @map("verified_opened_at")
 
   events        EmailEvent[]
 
@@ -867,7 +1035,17 @@ model HubEmailOpenTracking {
   toAddress String   @map("to_address")
   subject   String
   sentAt    DateTime @default(now()) @map("sent_at")
+  /// First raw pixel-fetch timestamp, regardless of validity — see
+  /// verifiedOpenedAt below (Part: 3-minute open verification, 2026-09-01).
   openedAt  DateTime? @map("opened_at")
+  /// Every raw pixel fetch, valid or not — Hub tracking has no separate
+  /// event-log table (unlike EmailEvent for outreach), so a simple counter
+  /// is the "raw tracking events" figure for this row.
+  rawOpenCount Int @default(0) @map("raw_open_count")
+  /// Set once, the first time a raw fetch happens at least 180s after
+  /// sentAt — the authoritative "genuinely opened" signal, same rule as
+  /// EmailMessage.verifiedOpenedAt.
+  verifiedOpenedAt DateTime? @map("verified_opened_at")
 
   @@index([orgId])
   @@map("hub_email_open_tracking")
@@ -1002,20 +1180,43 @@ model EmailTag {
   @@map("email_tags")
 }
 
-/// A muted sender (Part: Ignore/Noise Management, extended) -- created when
-/// a user Ignores a message and chooses to mute the whole sender rather than
-/// just that one email. EmailHubSyncWorker checks this on every newly
-/// synced message so future mail from the address lands pre-ignored, not
-/// just past mail. Org-scoped, not account-scoped: a promotional sender
-/// spamming one connected mailbox is spamming the org, not just one inbox.
+enum IgnoreRuleType {
+  SENDER
+  DOMAIN
+}
+
+/// A muted sender or domain (Part: Ignore/Noise Management, extended —
+/// domain scope + rule management added Part: Lead Upload Analytics / Email
+/// Performance / Ignore Groups, 2026-09-01) — created when a user Ignores a
+/// message and chooses to mute the whole sender (or every sender at their
+/// domain) rather than just that one email. EmailHubSyncWorker checks this
+/// on every newly synced message so future mail lands pre-ignored, not just
+/// past mail. Org-scoped, not account-scoped: a promotional sender spamming
+/// one connected mailbox is spamming the org, not just one inbox.
+///
+/// Exactly one of `fromEmail`/`senderDomain` is set, matching `ruleType` —
+/// enforced at the service layer (UsersService.transferPrimaryAdmin's "at
+/// most one" invariant is the precedent for this kind of app-layer
+/// enforcement over a DB constraint). Both are still declared `@@unique`
+/// with the other column always null on that row, which is enough for
+/// Postgres to prevent two rules for the very same address/domain (a null
+/// column never conflicts with another null under a multi-column unique
+/// index) without blocking the other rule type from using its own column.
 model IgnoredSender {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  fromEmail String   @map("from_email")
-  createdAt DateTime @default(now()) @map("created_at")
+  id              String   @id @default(uuid())
+  orgId           String   @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  ruleType        IgnoreRuleType @default(SENDER) @map("rule_type")
+  fromEmail       String?  @map("from_email")
+  senderDomain    String?  @map("sender_domain")
+  /// Who created this rule — null for rows that predate this field (existing
+  /// ignores from before Part: Ignore Groups, 2026-09-01), never for a new one.
+  createdByUserId String?  @map("created_by_user_id")
+  createdByUser   User?    @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime @default(now()) @map("created_at")
 
   @@unique([orgId, fromEmail])
+  @@unique([orgId, senderDomain])
   @@map("ignored_senders")
 }
 

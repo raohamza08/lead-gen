@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../../../lib/api-client";
+import { EmailAnalyticsSection } from "../../../components/email-analytics-section";
 import {
   AXIS_PROPS,
   ChartWithTable,
@@ -300,6 +301,8 @@ export default function AnalyticsPage() {
             />
           </div>
         </section>
+
+        <EmailAnalyticsSection />
 
         <ChartWithTable
           title="Daily emails sent"

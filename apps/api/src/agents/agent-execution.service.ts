@@ -4,6 +4,22 @@ import { Prisma, AgentExecutionStatus, NotificationCategory } from "@prisma/clie
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { NotificationsService } from "../notifications/notifications.service";
+import { PreparationPipelineService } from "../preparation/preparation-pipeline.service";
+
+/** Which sequence step a given agent's outcome should re-evaluate
+ *  preparation for (Part: Preparation Pipeline / Sending Queue,
+ *  2026-09-01). `email_draft` carries its own step in `payload` (it's a
+ *  single per-lead row reused across all 5 steps); enrich/company_intelligence
+ *  only ever run once, gating step 1. Any other agent (linkedin_draft,
+ *  extraction_run) isn't part of the preparation manifest and is skipped. */
+function preparationStepFor(agent: string, payload: Record<string, unknown> | null): number | undefined {
+  if (agent === "enrich" || agent === "company_intelligence") return 1;
+  if (agent === "email_draft") {
+    const step = payload?.step;
+    return typeof step === "number" ? step : undefined;
+  }
+  return undefined;
+}
 
 /** A RUNNING row older than this is treated as abandoned (worker crashed
  *  mid-run) rather than a real lock — see AgentExecutionSweepWorker. */
@@ -80,6 +96,7 @@ export class AgentExecutionService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
+    private readonly preparationPipeline: PreparationPipelineService,
   ) {}
 
   /**
@@ -164,6 +181,13 @@ export class AgentExecutionService {
     if (result.count === 0) return { updated: false };
     this.emitUpdate(orgId, leadId, agent);
 
+    const step = preparationStepFor(agent, existing?.payload as Record<string, unknown> | null);
+    if (step !== undefined) {
+      this.preparationPipeline
+        .evaluate(leadId, step)
+        .catch((err) => this.logger.warn(`Preparation evaluation failed for lead ${leadId}: ${(err as Error).message}`));
+    }
+
     if (wasRecovering) {
       const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { companyName: true } });
       await this.notifications.notify(orgId, {
@@ -204,6 +228,20 @@ export class AgentExecutionService {
       },
     });
     this.emitUpdate(orgId, leadId, agent);
+
+    if (status === AgentExecutionStatus.FAILED_TERMINAL) {
+      // Only a terminal failure (retries exhausted) should flip preparation
+      // to FAILED — a still-retrying FAILED_RETRY_SCHEDULED row leaves
+      // preparationStatus at IN_PROGRESS, since AgentExecution's own
+      // errorSummary/nextRetryAt already surfaces the transient failure on
+      // the lead card without blocking the eventual auto-recovery.
+      const step = preparationStepFor(agent, existing.payload as Record<string, unknown> | null);
+      if (step !== undefined) {
+        this.preparationPipeline
+          .evaluate(leadId, step)
+          .catch((err) => this.logger.warn(`Preparation evaluation failed for lead ${leadId}: ${(err as Error).message}`));
+      }
+    }
 
     if (!skipNotification) {
       const lead = await this.prisma.lead.findUnique({ where: { id: leadId }, select: { companyName: true } });
