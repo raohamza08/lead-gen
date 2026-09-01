@@ -238,6 +238,33 @@ select, option {
   }
 }
 
+/* Modal enter/exit (Part: UI/UX Redesign, 2026-09-01) — keyed off Radix
+   Dialog's own [data-state], same convention as .dropdown-content above.
+   The drawer variant reuses the existing slide-in feel (see .animate-slide-in
+   further up) rather than inventing a second right-edge motion. */
+.modal-overlay[data-state="open"] { animation: modal-overlay-in var(--duration-normal) var(--ease-decelerate); }
+.modal-overlay[data-state="closed"] { animation: modal-overlay-out var(--duration-fast) var(--ease-accelerate); }
+@keyframes modal-overlay-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes modal-overlay-out { from { opacity: 1; } to { opacity: 0; } }
+
+.modal-content-center[data-state="open"] { animation: modal-center-in var(--duration-normal) var(--ease-decelerate); }
+.modal-content-center[data-state="closed"] { animation: modal-center-out var(--duration-fast) var(--ease-accelerate); }
+@keyframes modal-center-in {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes modal-center-out {
+  from { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  to { opacity: 0; transform: translate(-50%, -50%) scale(0.96); }
+}
+
+.modal-content-drawer[data-state="open"] { animation: slide-in var(--duration-normal) var(--ease-decelerate); }
+.modal-content-drawer[data-state="closed"] { animation: modal-drawer-out var(--duration-fast) var(--ease-accelerate); }
+@keyframes modal-drawer-out {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(24px); opacity: 0; }
+}
+
 /* Skeleton shimmer (Part: UI/UX Redesign, 2026-09-01) — a horizontal sweep
    rather than the Orbit Ring loader above: a spinner per table/list row
    reads as slow or broken, while a shimmer reads as "rows incoming."
