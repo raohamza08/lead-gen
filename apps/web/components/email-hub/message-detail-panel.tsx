@@ -7,6 +7,12 @@ import { ReplyComposer } from "./reply-composer";
 import { Modal, ModalClose, ModalTitle } from "../ui/modal";
 import { Button } from "../ui/button";
 
+interface Account {
+  id: string;
+  address: string;
+  mailboxLabel: string | null;
+}
+
 interface ThreadMessage {
   id: string;
   fromName: string | null;
@@ -112,10 +118,12 @@ function autoSizeIframe(el: HTMLIFrameElement) {
  */
 export function MessageDetailPanel({
   threadId,
+  accounts,
   onClose,
   onChanged,
 }: {
   threadId: string;
+  accounts: Account[];
   onClose: () => void;
   onChanged: () => void;
 }) {
@@ -153,14 +161,14 @@ export function MessageDetailPanel({
   async function sendReply(
     messageId: string,
     replyAll: boolean,
-    input: { bodyHtml: string; cc: string[]; bcc: string[]; attachments: OutboundAttachmentInput[]; trackOpen: boolean },
+    input: { bodyHtml: string; cc: string[]; bcc: string[]; attachments: OutboundAttachmentInput[]; trackOpen: boolean; accountId: string },
   ) {
     setSending(true);
     setError(null);
     try {
       await api.replyToEmail(messageId, {
         bodyHtml: input.bodyHtml, replyAll, cc: input.cc, bcc: input.bcc,
-        attachments: input.attachments, trackOpen: input.trackOpen,
+        attachments: input.attachments, trackOpen: input.trackOpen, accountId: input.accountId,
       });
       setReplyMode(null);
       setNotice("Reply sent.");
@@ -206,21 +214,18 @@ export function MessageDetailPanel({
     }
   }
 
-  const replyingMessage = replyMode ? thread?.messages.find((m) => m.id === replyMode.messageId) : undefined;
-
   return (
-    <>
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
-      variant="drawer-right"
-      contentClassName="w-[94vw] max-w-[1200px] bg-paper"
+      variant="center"
+      contentClassName="w-full max-w-3xl bg-paper p-0"
       bodyClassName="contents"
     >
-      <div className="sticky top-0 z-10 border-b border-[var(--line)] bg-paper/95 px-6 py-5 backdrop-blur md:px-10">
-        <div className="mx-auto flex w-full max-w-3xl items-start justify-between gap-4">
+      <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper/95 px-6 py-5 backdrop-blur">
+        <div className="flex w-full items-start justify-between gap-4">
           <div className="min-w-0">
-            <ModalTitle className="truncate text-xl font-semibold tracking-tight text-ink md:text-2xl">
+            <ModalTitle className="truncate text-xl font-semibold tracking-tight text-ink">
               {thread?.subject ?? "Loading…"}
             </ModalTitle>
             {thread && (
@@ -238,7 +243,7 @@ export function MessageDetailPanel({
         </div>
 
         {thread && (
-          <div className="mx-auto mt-4 flex w-full max-w-3xl flex-wrap items-center gap-2">
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button
               variant={thread.messages[0]?.isImportant ? "primary" : "secondary"}
               size="sm"
@@ -285,7 +290,7 @@ export function MessageDetailPanel({
         )}
       </div>
 
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-6 py-6 md:px-10 md:py-8">
+      <div className="flex w-full flex-col gap-5 px-6 py-6">
         {error && (
           <div className="rounded-xl border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-4 py-2.5 text-sm text-error">
             {error}
@@ -385,46 +390,34 @@ export function MessageDetailPanel({
                 )}
 
                 <div className="border-t border-[var(--line)] bg-ink/[0.02] px-6 py-4">
-                  <div className="flex gap-2.5">
-                    <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: false })}>
-                      ↩ Reply
-                    </Button>
-                    {m.ccEmails.length > 0 && (
-                      <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: true })}>
-                        ↩↩ Reply All
+                  {replyMode?.messageId === m.id ? (
+                    <ReplyComposer
+                      key={m.id}
+                      toAddress={m.fromEmail}
+                      initialCc={replyMode.all ? m.ccEmails.join(", ") : undefined}
+                      accounts={accounts}
+                      defaultAccountId={thread?.account.id ?? accounts[0]?.id ?? ""}
+                      sending={sending}
+                      onSend={(input) => sendReply(m.id, replyMode.all, input)}
+                      onCancel={() => setReplyMode(null)}
+                    />
+                  ) : (
+                    <div className="flex gap-2.5">
+                      <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: false })}>
+                        ↩ Reply
                       </Button>
-                    )}
-                  </div>
+                      {m.ccEmails.length > 0 && (
+                        <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: true })}>
+                          ↩↩ Reply All
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
           })}
         </div>
     </Modal>
-
-    {/* Reply composer (Part: UI/UX Redesign, 2026-09-02) — a focused center
-        modal rather than an inline box in the thread drawer, so composing
-        a reply reads as its own deliberate action instead of one more
-        section scrolling past in a long thread. Nested inside the drawer
-        Modal's own Dialog — Radix manages the stack correctly (ESC closes
-        this one first, focus returns to the drawer on close). */}
-    <Modal
-      open={replyMode !== null}
-      onOpenChange={(o) => !o && setReplyMode(null)}
-      variant="center"
-      title={replyMode?.all ? "Reply All" : "Reply"}
-    >
-      {replyMode && replyingMessage && (
-        <ReplyComposer
-          key={replyMode.messageId}
-          toAddress={replyingMessage.fromEmail}
-          initialCc={replyMode.all ? replyingMessage.ccEmails.join(", ") : undefined}
-          sending={sending}
-          onSend={(input) => sendReply(replyMode.messageId, replyMode.all, input)}
-          onCancel={() => setReplyMode(null)}
-        />
-      )}
-    </Modal>
-    </>
   );
 }

@@ -29,25 +29,23 @@ export function Modal({
    *  — a real Radix-labeled title is still required for accessibility in
    *  that case, just rendered by the caller instead of here. */
   title?: string;
-  /** Overrides the default max-width — message-detail-panel's drawer is
-   *  much wider (94vw/1200px) than compose-modal's default. */
+  /** Replaces (not appends to) the default width classes — appending would
+   *  leave both `max-w-lg` and a caller's override present at once, and
+   *  which one wins depends on Tailwind's generated CSS order, not on
+   *  className string order. Defaults to `w-full max-w-lg` when omitted. */
   contentClassName?: string;
   bodyClassName?: string;
   children: ReactNode;
 }) {
   const isDrawer = variant === "drawer-right";
+  const structuralClasses = isDrawer
+    ? "modal-content-drawer fixed inset-y-0 right-0 z-50 flex flex-col overflow-y-auto border-l border-[var(--line)] bg-surface shadow-lg focus:outline-none"
+    : "modal-content-center fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none";
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>
         <DialogPrimitive.Overlay className="modal-overlay fixed inset-0 z-40 bg-ink/40 backdrop-blur-[1px]" />
-        <DialogPrimitive.Content
-          className={
-            (isDrawer
-              ? "modal-content-drawer fixed inset-y-0 right-0 z-50 flex w-full max-w-lg flex-col overflow-y-auto border-l border-[var(--line)] bg-surface shadow-lg focus:outline-none"
-              : "modal-content-center fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none") +
-            (contentClassName ? ` ${contentClassName}` : "")
-          }
-        >
+        <DialogPrimitive.Content className={`${structuralClasses} ${contentClassName ?? "w-full max-w-lg"}`}>
           {title && (
             <div className={`flex items-center justify-between ${isDrawer ? "border-b border-[var(--line)] px-5 py-4" : "mb-4"}`}>
               <DialogPrimitive.Title className="text-section-title text-ink">{title}</DialogPrimitive.Title>
