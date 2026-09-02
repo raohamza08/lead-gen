@@ -56,25 +56,38 @@
 
 /* The :not() guard lets an explicit light stamp beat OS-dark; the
    [data-theme="dark"] block below covers the toggle in the other direction. */
+/* Dark palette v2 (Part: premium dark theme pass, 2026-09-02) — the previous
+   dark theme used a flat, hue-less mid-gray paper (#14171c) and a border
+   that was just ink-at-12%, which reads as "default shadcn dark mode" rather
+   than a deliberate theme. This pass: (1) deepens paper to a near-black with
+   a barely-there cool undertone instead of neutral gray, (2) decouples
+   --line from ink into its own low-alpha white hairline (a flat 12%-of-ink
+   border was too loud against the new deeper paper), (3) richens the accent
+   into a more saturated jewel teal so primary actions/focus rings read as
+   intentional rather than muted, and (4) is layered with the elevation
+   changes further down (surface luminance steps + inset highlight shadows)
+   — the two sections together are what produce the "premium" read, neither
+   does it alone. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper-rgb: 20 23 28;
-    --ink-rgb: 232 233 234;
-    --accent-rgb: 79 189 182;
-    --gold-rgb: 209 165 92;
-    --good-rgb: 87 178 128;
-    --bad-rgb: 216 116 105;
+    --paper-rgb: 11 13 17;
+    --ink-rgb: 237 238 240;
+    --accent-rgb: 56 199 179;
+    --gold-rgb: 217 174 99;
+    --good-rgb: 74 191 124;
+    --bad-rgb: 224 112 101;
     --secondary-rgb: 148 163 184;
     --info-rgb: 96 165 250;
+    --line: rgb(255 255 255 / 0.08);
 
-    --chart-grid: #24272c;
-    --chart-axis: #383c42;
-    --ink-muted: #9a9ea5;
+    --chart-grid: #1c1f26;
+    --chart-axis: #33373f;
+    --ink-muted: #9fa4ac;
 
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
+    --series-1: #4a97ea;
+    --series-2: #e06730;
+    --series-3: #23b17d;
+    --series-4: #d69200;
 
     color-scheme: dark;
   }
@@ -86,23 +99,24 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper-rgb: 20 23 28;
-  --ink-rgb: 232 233 234;
-  --accent-rgb: 79 189 182;
-  --gold-rgb: 209 165 92;
-  --good-rgb: 87 178 128;
-  --bad-rgb: 216 116 105;
+  --paper-rgb: 11 13 17;
+  --ink-rgb: 237 238 240;
+  --accent-rgb: 56 199 179;
+  --gold-rgb: 217 174 99;
+  --good-rgb: 74 191 124;
+  --bad-rgb: 224 112 101;
   --secondary-rgb: 148 163 184;
   --info-rgb: 96 165 250;
+  --line: rgb(255 255 255 / 0.08);
 
-  --chart-grid: #24272c;
-  --chart-axis: #383c42;
-  --ink-muted: #9a9ea5;
+  --chart-grid: #1c1f26;
+  --chart-axis: #33373f;
+  --ink-muted: #9fa4ac;
 
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
+  --series-1: #4a97ea;
+  --series-2: #e06730;
+  --series-3: #23b17d;
+  --series-4: #d69200;
 }
 
 /* Elevation. Two levels only — a card and a lifted card. More steps make a
@@ -137,25 +151,32 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     /* Dark surfaces are LIGHTER than the page, not darker: shadow barely reads
-       on a dark background, so elevation has to come from luminance instead. */
-    --surface-rgb: 26 30 37;
-    --surface-raised-rgb: 33 38 48;
+       on a dark background, so elevation has to come from luminance instead.
+       Each shadow also carries a hairline inset highlight (Part: premium dark
+       theme pass, 2026-09-02) — a faint top edge of "caught light" is what
+       separates a glass-like elevated panel from a flat gray rectangle; this
+       is the elevation half of the deeper-paper change above, and reads as
+       muddy without it. shadow-lg additionally picks up a wide, very-low-
+       opacity accent bloom so modals/popovers float rather than just sitting
+       on a black drop shadow. */
+    --surface-rgb: 20 23 29;
+    --surface-raised-rgb: 27 31 39;
     --surface: rgb(var(--surface-rgb));
     --surface-raised: rgb(var(--surface-raised-rgb));
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-    --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
-    --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.03);
+    --shadow-md: 0 6px 16px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.04);
+    --shadow-lg: 0 24px 60px rgb(0 0 0 / 0.6), 0 12px 40px rgb(var(--accent-rgb) / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.05);
   }
 }
 
 :root[data-theme="dark"] {
-  --surface-rgb: 26 30 37;
-  --surface-raised-rgb: 33 38 48;
+  --surface-rgb: 20 23 29;
+  --surface-raised-rgb: 27 31 39;
   --surface: rgb(var(--surface-rgb));
   --surface-raised: rgb(var(--surface-raised-rgb));
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.03);
+  --shadow-md: 0 6px 16px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --shadow-lg: 0 24px 60px rgb(0 0 0 / 0.6), 0 12px 40px rgb(var(--accent-rgb) / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.05);
 }
 
 body {
@@ -163,6 +184,58 @@ body {
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* A barely-there accent bloom in the top-left of the viewport (Part: premium
+   dark theme pass, 2026-09-02) — at 5% opacity it's below the threshold of
+   "visible gradient," but it's what keeps a large expanse of near-black from
+   reading as flat/dead the way pure --paper does on its own. Light mode is
+   untouched; a bloom this subtle only survives against a dark surface. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body {
+    background: radial-gradient(1200px 640px at 12% -8%, rgb(var(--accent-rgb) / 0.05), transparent 60%), var(--paper);
+  }
+}
+:root[data-theme="dark"] body {
+  background: radial-gradient(1200px 640px at 12% -8%, rgb(var(--accent-rgb) / 0.05), transparent 60%), var(--paper);
+}
+
+/* Minimal scrollbar (Part: premium dark theme pass, 2026-09-02) — the OS
+   default scrollbar is opaque and theme-unaware, and stands out as an
+   obviously-unstyled control against a custom-themed dark app. Driven by
+   --ink-rgb so it's correct in both themes without a separate dark rule. */
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--ink-rgb) / 0.2) transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--ink-rgb) / 0.16);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--ink-rgb) / 0.28);
+}
+
+/* Accent-colored selection and focus ring (Part: premium dark theme pass,
+   2026-09-02) — both previously fell back to the browser default (system
+   blue), which clashes against a teal-accented dark UI and is another
+   obvious "unstyled" tell. */
+::selection {
+  background: rgb(var(--accent-rgb) / 0.3);
+  color: var(--ink);
+}
+:focus-visible {
+  outline: 2px solid rgb(var(--accent-rgb) / 0.6);
+  outline-offset: 2px;
 }
 
 /* `color-scheme` (set above) is not enough by itself: confirmed live on
