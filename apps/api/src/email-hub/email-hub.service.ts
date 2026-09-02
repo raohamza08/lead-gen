@@ -11,6 +11,7 @@ import { BulkAction, BulkActionDto, IgnoreScope } from "./dto/bulk-action.dto";
 import { CreateTagDto, UpdateTagDto } from "./dto/create-tag.dto";
 import { ComposeEmailDto, ReplyMessageDto } from "./dto/reply-message.dto";
 import { ImapReaderProvider } from "./readers/imap-reader.provider";
+import { normalizeSubject } from "./email-hub-sync.worker";
 import { apiPublicUrl } from "../common/api-url";
 
 export interface ListMessagesQuery {
@@ -673,6 +674,21 @@ export class EmailHubService {
       attachments: dto.attachments,
     });
 
+    await this.recordSentMessage({
+      orgId: user.orgId,
+      accountId: sendingAccount.id,
+      threadId: original.threadId,
+      fromEmail: sendingAccount.address,
+      fromName: sendingAccount.displayName,
+      toEmails: [to],
+      ccEmails: cc,
+      bccEmails: dto.bcc ?? [],
+      subject,
+      bodyHtml,
+      messageIdHeader: result.providerMessageId,
+      attachments: dto.attachments,
+    });
+
     return { sent: true, providerMessageId: result.providerMessageId };
   }
 
@@ -696,6 +712,21 @@ export class EmailHubService {
       headers: messageId ? { "Message-ID": messageId } : undefined,
       attachments: dto.attachments,
     });
+
+    await this.recordSentMessage({
+      orgId: user.orgId,
+      accountId: account.id,
+      fromEmail: account.address,
+      fromName: account.displayName,
+      toEmails: dto.to,
+      ccEmails: dto.cc ?? [],
+      bccEmails: dto.bcc ?? [],
+      subject: dto.subject,
+      bodyHtml,
+      messageIdHeader: result.providerMessageId,
+      attachments: dto.attachments,
+    });
+
     return { sent: true, providerMessageId: result.providerMessageId };
   }
 
@@ -727,6 +758,103 @@ export class EmailHubService {
     const row = await this.prisma.hubEmailOpenTracking.create({ data: { orgId, toAddress, subject, messageIdHeader: messageId } });
     const pixel = `<img src="${apiPublicUrl()}/track/open/hub/${row.id}.png" width="1" height="1" alt="" style="display:none" />`;
     return { bodyHtml: `${bodyHtml}${pixel}`, messageId };
+  }
+
+  /**
+   * Writes this org's own outgoing message into the Sent view the instant it
+   * sends (Part: Email Hub instant Sent view, 2026-09-02) — previously reply()
+   * and compose() only called TransactionalEmailService and returned, so a
+   * just-sent email was invisible in the Sent view until the next
+   * EmailHubSyncWorker poll (every few minutes) discovered it in the real
+   * mailbox, which is what made a manual page refresh sometimes "fix" it
+   * (refreshing later happened to land after a sync tick, not because
+   * refreshing itself did anything). `threadId` is passed through directly
+   * for a reply (the thread is already known); compose() omits it and this
+   * falls back to the same subject-based thread lookup/creation
+   * EmailHubSyncWorker.findOrCreateThreadId uses for a message with no
+   * Message-ID chain to follow.
+   *
+   * `messageIdHeader` must be the exact value actually sent (nodemailer's
+   * returned providerMessageId — see TransactionalEmailService.sendFromAccount)
+   * — reused as this row's `providerMessageId` too, since there's no real IMAP
+   * UID yet. That's what lets EmailHubSyncWorker.persistMessage recognize this
+   * same row later (by messageIdHeader) when the real Sent-folder copy syncs,
+   * and promote it in place instead of inserting a duplicate.
+   */
+  private async recordSentMessage(params: {
+    orgId: string;
+    accountId: string;
+    threadId?: string;
+    fromEmail: string;
+    fromName: string | null;
+    toEmails: string[];
+    ccEmails: string[];
+    bccEmails: string[];
+    subject: string;
+    bodyHtml: string;
+    messageIdHeader: string;
+    attachments?: { filename: string; contentBase64: string }[];
+  }) {
+    const bodyText = params.bodyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const attachments = (params.attachments ?? []).map((a) => ({
+      filename: a.filename,
+      size: Buffer.byteLength(a.contentBase64, "base64"),
+    }));
+
+    let threadId = params.threadId;
+    if (!threadId) {
+      const subject = normalizeSubject(params.subject);
+      const existingThread = await this.prisma.inboundEmailThread.findFirst({
+        where: { accountId: params.accountId, subject },
+        orderBy: { lastMessageAt: "desc" },
+      });
+      threadId = existingThread
+        ? existingThread.id
+        : (
+            await this.prisma.inboundEmailThread.create({
+              data: {
+                orgId: params.orgId,
+                accountId: params.accountId,
+                subject,
+                participants: [{ name: params.fromName, email: params.fromEmail }] as unknown as Prisma.InputJsonValue,
+                lastMessageAt: new Date(),
+              },
+            })
+          ).id;
+    }
+
+    try {
+      await this.prisma.inboundEmailMessage.create({
+        data: {
+          threadId,
+          accountId: params.accountId,
+          providerMessageId: params.messageIdHeader,
+          messageIdHeader: params.messageIdHeader,
+          fromName: params.fromName,
+          fromEmail: params.fromEmail,
+          toEmails: params.toEmails,
+          ccEmails: params.ccEmails,
+          bccEmails: params.bccEmails,
+          subject: params.subject,
+          bodyText,
+          bodyHtml: params.bodyHtml,
+          receivedAt: new Date(),
+          folder: "SENT",
+          hasAttachments: attachments.length > 0,
+          attachments: attachments as unknown as Prisma.InputJsonValue,
+        },
+      });
+    } catch (err) {
+      // P2002 = already recorded (accountId+providerMessageId collision) —
+      // shouldn't happen in practice (messageIdHeader is a fresh UUID/
+      // nodemailer id per send) but never worth failing an otherwise-successful
+      // send over.
+      if (!(err instanceof Prisma.PrismaClientKnownRequestError) || err.code !== "P2002") throw err;
+      return;
+    }
+
+    await this.prisma.inboundEmailThread.update({ where: { id: threadId }, data: { lastMessageAt: new Date() } });
+    this.realtime.emitToOrg(params.orgId, "emailHub.messagesUpdated", { messageIds: [], action: "SENT" });
   }
 
   /** Attachments travel as base64 in the JSON body (never persisted — see

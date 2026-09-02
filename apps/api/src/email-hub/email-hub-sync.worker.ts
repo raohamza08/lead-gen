@@ -16,7 +16,7 @@ import { SequencerService } from "../sequencer/sequencer.service";
  *  on forwarded/older mail). Not perfect — a genuinely new message that
  *  happens to share a subject with an old thread will merge into it — but
  *  the same trade-off every email client's fallback threading makes. */
-function normalizeSubject(subject: string): string {
+export function normalizeSubject(subject: string): string {
   return subject.replace(/^\s*(re|fwd?|fw)\s*:\s*/i, "").trim() || "(no subject)";
 }
 
@@ -185,6 +185,40 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
    *  muted sender's mail lands already filed into Ignored, not one poll
    *  cycle behind the mute. */
   private async persistMessage(account: EmailAccount, message: FetchedMessage, preIgnored: boolean) {
+    // A SENT-folder message may already exist as the instant row
+    // EmailHubService.recordSentMessage wrote synchronously the moment the
+    // user hit Send (Part: Email Hub instant Sent view, 2026-09-02) — this
+    // sync pass discovering the same email later in the real mailbox must
+    // promote that row (fill in the real providerMessageId/attachments) in
+    // place rather than insert a second one, or it'd show the same sent
+    // email twice. messageIdHeader is the one value guaranteed identical
+    // between the instant row and this synced copy — see
+    // EmailHubService.withTrackingPixel's docblock for why. The instant
+    // row's providerMessageId is that same Message-ID string (there's no
+    // real IMAP UID yet at send time), so it never collides with this
+    // synced message's actual numeric UID, which is what makes the
+    // [accountId, providerMessageId] check below distinguish "still the
+    // placeholder" from "already promoted, this is a genuine re-poll."
+    if (message.folder === "SENT" && message.messageIdHeader) {
+      const existing = await this.prisma.inboundEmailMessage.findFirst({
+        where: { accountId: account.id, folder: "SENT", messageIdHeader: message.messageIdHeader },
+        select: { id: true, providerMessageId: true },
+      });
+      if (existing) {
+        if (existing.providerMessageId !== message.providerMessageId) {
+          await this.prisma.inboundEmailMessage.update({
+            where: { id: existing.id },
+            data: {
+              providerMessageId: message.providerMessageId,
+              hasAttachments: message.hasAttachments,
+              attachments: message.attachments as unknown as Prisma.InputJsonValue,
+            },
+          });
+        }
+        return;
+      }
+    }
+
     const { threadId, isNewThread } = await this.findOrCreateThreadId(account, message);
 
     let created: { id: string };
