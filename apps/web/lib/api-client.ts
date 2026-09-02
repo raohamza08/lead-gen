@@ -391,6 +391,7 @@ export const api = {
   getEmailHubAccounts: () => request("/email-hub/accounts"),
   getEmailHubStats: () => request("/email-hub/stats"),
   getEmailTags: () => request("/email-hub/tags"),
+  getTrackedEmails: () => request("/email-hub/tracked-emails"),
   getIgnoredSenders: () =>
     request<
       {
@@ -423,6 +424,9 @@ export const api = {
       bcc?: string[];
       attachments?: OutboundAttachmentInput[];
       trackOpen?: boolean;
+      /** Send-from override — omit to send from the account that received
+       *  the original message (the previous, only behavior). */
+      accountId?: string;
     },
   ) => request(`/email-hub/messages/${messageId}/reply`, { method: "POST", body: JSON.stringify(body) }),
   composeEmail: (body: {

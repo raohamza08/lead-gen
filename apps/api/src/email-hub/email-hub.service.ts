@@ -174,6 +174,30 @@ export class EmailHubService {
     return this.prisma.emailTag.findMany({ where: { orgId }, orderBy: { name: "asc" } });
   }
 
+  /** "Track email" results (Part: Email Hub open-tracking visibility,
+   *  2026-09-02) — HubEmailOpenTracking rows were written on every send with
+   *  trackOpen checked (see withTrackingPixel below) and updated by
+   *  TrackingController.trackHubOpen on every pixel fetch, but nothing ever
+   *  read them back — a user who checked "Track email" had no way to see
+   *  the result short of the real-time "Email Opened" notification, which
+   *  only fires for a *verified* open (past the 3-minute anti-prefetch
+   *  window). `openedAt` (set on the very first raw pixel fetch, verified
+   *  or not) is returned too, since for a Gmail recipient specifically the
+   *  raw signal is often the only one that will ever exist — Gmail proxies
+   *  and caches images server-side, typically fetching the pixel once,
+   *  near-instantly, regardless of whether a human ever opens the message,
+   *  and a genuine later human open is then served from that cache without
+   *  hitting this pixel again. That's a real, structural limit of pixel
+   *  tracking against Gmail, not a bug — surfacing the raw timestamp
+   *  honestly (labeled as such) is more useful than staying silent. */
+  async listTrackedEmails(orgId: string) {
+    return this.prisma.hubEmailOpenTracking.findMany({
+      where: { orgId },
+      orderBy: { sentAt: "desc" },
+      take: 100,
+    });
+  }
+
   async createTag(orgId: string, dto: CreateTagDto) {
     return this.prisma.emailTag.create({ data: { orgId, name: dto.name, color: dto.color ?? undefined } });
   }
@@ -505,8 +529,22 @@ export class EmailHubService {
       include: { account: true },
     });
     if (!original) throw new NotFoundException("Message not found");
-    await this.assertAccountAccess(user, original.accountId, true);
+    // Reading the thread only ever required view access to the account it
+    // arrived in — that's unaffected by which account actually sends below.
+    await this.assertAccountAccess(user, original.accountId, false);
     this.assertAttachmentsWithinLimit(dto.attachments);
+
+    // Send-from override (Part: UI/UX Redesign, 2026-09-02) — defaults to
+    // the receiving account, same as before this existed. Threading
+    // (In-Reply-To/References below) keys off Message-ID, not sender
+    // identity, so sending from a different connected mailbox still
+    // threads correctly for the recipient.
+    const sendingAccount =
+      dto.accountId && dto.accountId !== original.accountId
+        ? await this.prisma.emailAccount.findFirst({ where: { id: dto.accountId, orgId: user.orgId } })
+        : original.account;
+    if (!sendingAccount) throw new NotFoundException("Sending account not found");
+    await this.assertAccountAccess(user, sendingAccount.id, true);
 
     const to = original.fromEmail;
     // Reply-all's auto-CC (everyone else on the original) and any CC the
@@ -517,7 +555,7 @@ export class EmailHubService {
     const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
     const bodyHtml = await this.withTrackingPixel(user.orgId, to, subject, dto.bodyHtml, dto.trackOpen);
 
-    const result = await this.transactionalEmail.sendFromAccount(original.account, {
+    const result = await this.transactionalEmail.sendFromAccount(sendingAccount, {
       toAddress: to,
       cc: cc.length > 0 ? cc : undefined,
       bcc: dto.bcc,

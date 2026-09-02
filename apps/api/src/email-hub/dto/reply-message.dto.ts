@@ -10,6 +10,12 @@ export class OutboundAttachmentDto {
 export class ReplyMessageDto {
   @IsString() @MinLength(1) bodyHtml!: string;
   @IsOptional() @IsBoolean() replyAll?: boolean;
+  /** Send-from override (Part: UI/UX Redesign, 2026-09-02) — defaults to the
+   *  account that received the original message when omitted, matching the
+   *  previous (only) behavior. Threading headers (In-Reply-To/References)
+   *  work regardless of which account actually sends, since they key off
+   *  Message-ID, not sender identity. */
+  @IsOptional() @IsString() accountId?: string;
   @IsOptional() @IsArray() @IsString({ each: true }) cc?: string[];
   @IsOptional() @IsArray() @IsString({ each: true }) bcc?: string[];
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => OutboundAttachmentDto)

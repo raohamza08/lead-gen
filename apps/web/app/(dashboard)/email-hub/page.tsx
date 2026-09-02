@@ -37,6 +37,16 @@ interface Stats {
   possibleLeads: number;
 }
 
+interface TrackedEmail {
+  id: string;
+  toAddress: string;
+  subject: string;
+  sentAt: string;
+  openedAt: string | null;
+  verifiedOpenedAt: string | null;
+  rawOpenCount: number;
+}
+
 interface Message {
   id: string;
   threadId: string;
@@ -114,6 +124,15 @@ function EmailHubPageContent() {
   const [confirmingLeadId, setConfirmingLeadId] = useState<string | null>(null);
 
   const status = statusForView(view);
+  // "Tracked" isn't a message-list status at all (it's HubEmailOpenTracking
+  // rows, a different shape entirely) — handled as its own early-return
+  // branch below rather than folded into the message-status union.
+  const isTrackedView = view === "tracked";
+  const trackedQuery = useQuery({
+    queryKey: ["tracked-emails"],
+    queryFn: () => api.getTrackedEmails() as Promise<TrackedEmail[]>,
+    enabled: isTrackedView,
+  });
 
   // The sidebar's view links are plain navigation (query-string change, no
   // state setter), so this is the one filter change resetPage can't cover.
@@ -286,10 +305,13 @@ function EmailHubPageContent() {
     if (view === "leads") return "Leads";
     if (view === "followups") return "Follow-ups";
     if (view === "sent") return "Sent";
+    if (view === "tracked") return "Tracked";
     return "Unified Inbox";
   }, [view]);
 
   const error = actionError ?? (messagesQuery.error as Error | null)?.message ?? null;
+
+  if (isTrackedView) return <TrackedEmailsView query={trackedQuery} />;
 
   return (
     <div className="flex flex-col gap-4">
@@ -619,6 +641,7 @@ function EmailHubPageContent() {
       {openThreadId && (
         <MessageDetailPanel
           threadId={openThreadId}
+          accounts={accounts}
           onClose={() => setOpenThreadId(null)}
           onChanged={() => {
             invalidateMessages();
@@ -634,6 +657,77 @@ function EmailHubPageContent() {
           onClose={() => setShowCompose(false)}
           onSent={invalidateMessages}
         />
+      )}
+    </div>
+  );
+}
+
+/**
+ * "Track email" results (Part: Email Hub open-tracking visibility,
+ * 2026-09-02) — every HubEmailOpenTracking row for the org. Distinguishes
+ * three real states rather than a single "opened" boolean: a *verified*
+ * open (past the 3-minute anti-prefetch window — the same signal that
+ * fires the real-time "Email Opened" notification), a *raw* open (the
+ * pixel fired, but too soon to rule out prefetching — for a Gmail
+ * recipient this is often the only signal that will ever exist at all,
+ * since Gmail proxies/caches images and typically won't fetch the pixel a
+ * second time for a genuine later human open), and not opened yet.
+ */
+function TrackedEmailsView({ query }: { query: { data?: TrackedEmail[]; isLoading: boolean; error: unknown } }) {
+  const rows = query.data ?? [];
+  return (
+    <div className="flex flex-col gap-4">
+      <div>
+        <h1 className="text-lg font-semibold tracking-tight">Tracked</h1>
+        <p className="mt-0.5 text-xs text-ink/55">
+          Every email sent with &quot;Track email&quot; checked. A verified open also sends you a real-time
+          notification; a raw-only open (common for Gmail recipients — see below) does not.
+        </p>
+      </div>
+      {query.isLoading ? (
+        <div className="card">
+          <LoadingRow label="Loading tracked emails…" />
+        </div>
+      ) : query.error ? (
+        <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-error">
+          {(query.error as Error).message}
+        </div>
+      ) : (
+        <Table>
+          <TableHead>
+            <TableHeadRow>
+              <Th>To</Th>
+              <Th>Subject</Th>
+              <Th>Sent</Th>
+              <Th>Status</Th>
+            </TableHeadRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((r) => (
+              <Tr key={r.id}>
+                <Td className="text-ink/70">{r.toAddress}</Td>
+                <Td className="font-medium">{r.subject}</Td>
+                <Td className="text-xs text-ink/50">{timeAgo(r.sentAt)}</Td>
+                <Td>
+                  {r.verifiedOpenedAt ? (
+                    <StatusBadge tone="success" label={`Opened ${timeAgo(r.verifiedOpenedAt)}`} />
+                  ) : r.openedAt ? (
+                    <span title="Pixel fired too soon after sending to rule out prefetching (common for Gmail, which proxies images server-side) — likely not a confirmed human open">
+                      <StatusBadge tone="warning" label={`Possibly opened ${timeAgo(r.openedAt)}`} />
+                    </span>
+                  ) : (
+                    <StatusBadge tone="neutral" label="Not opened yet" />
+                  )}
+                </Td>
+              </Tr>
+            ))}
+            {rows.length === 0 && (
+              <TableEmptyRow colSpan={4}>
+                No tracked emails yet — check &quot;Track email&quot; when composing or replying to start tracking one.
+              </TableEmptyRow>
+            )}
+          </TableBody>
+        </Table>
       )}
     </div>
   );
