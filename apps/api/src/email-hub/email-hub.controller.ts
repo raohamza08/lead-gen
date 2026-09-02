@@ -39,6 +39,15 @@ export class EmailHubController {
     return this.emailHub.listTags(user.orgId);
   }
 
+  /** "Track email" results (Part: Email Hub open-tracking visibility,
+   *  2026-09-02) — the pixel already records opens (see
+   *  EmailHubService.withTrackingPixel/TrackingController.trackHubOpen);
+   *  nothing previously read HubEmailOpenTracking back out anywhere. */
+  @Get("tracked-emails")
+  listTrackedEmails(@CurrentUser() user: JwtClaims) {
+    return this.emailHub.listTrackedEmails(user.orgId);
+  }
+
   /** Sub-tabs under the Ignored view — one per muted sender, see
    *  EmailHubService.listIgnoredSenders. */
   @Get("ignored-senders")

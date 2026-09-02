@@ -65,6 +65,7 @@ const NAV: NavItem[] = [
       { href: "/email-hub?view=followups", label: "Follow-ups", matchSearch: "view=followups" },
       { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored", countKey: "ignored" },
       { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent" },
+      { href: "/email-hub?view=tracked", label: "Tracked", matchSearch: "view=tracked" },
       { href: "/settings/email-hub", label: "Settings" },
     ],
   },
