@@ -261,7 +261,13 @@ export function MessageDetailPanel({
       contentClassName="w-full max-w-5xl h-[calc(100vh-96px)] bg-paper p-0"
       bodyClassName="contents"
     >
-      <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper/95 px-5 py-3 backdrop-blur">
+      {/* will-change-transform + translateZ(0) (Part: email reader header
+       *  stacking fix) — without a forced compositor layer, Chrome/Edge
+       *  paint each message body's iframe on its own GPU layer that ignores
+       *  this header's z-index once the panel scrolls, so the email content
+       *  renders on top of the sticky header and covers the close button.
+       *  Promoting the header to its own layer restores normal stacking. */}
+      <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper/95 px-5 py-3 backdrop-blur will-change-transform [transform:translateZ(0)]">
         <div className="flex w-full items-start justify-between gap-4">
           <div className="min-w-0">
             <ModalTitle className="truncate text-base font-semibold tracking-tight text-ink">
@@ -344,7 +350,7 @@ export function MessageDetailPanel({
           {thread?.messages.map((m) => {
             const { relative, absolute } = formatTimestamp(m.receivedAt);
             return (
-              <div key={m.id} className="card overflow-hidden">
+              <div key={m.id} className="card relative z-0 overflow-hidden">
                 <div className="flex items-start gap-3 px-5 pt-4">
                   <div
                     className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
