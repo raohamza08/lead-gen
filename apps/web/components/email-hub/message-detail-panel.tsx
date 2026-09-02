@@ -206,7 +206,10 @@ export function MessageDetailPanel({
     }
   }
 
+  const replyingMessage = replyMode ? thread?.messages.find((m) => m.id === replyMode.messageId) : undefined;
+
   return (
+    <>
     <Modal
       open
       onOpenChange={(o) => !o && onClose()}
@@ -382,32 +385,46 @@ export function MessageDetailPanel({
                 )}
 
                 <div className="border-t border-[var(--line)] bg-ink/[0.02] px-6 py-4">
-                  {replyMode?.messageId === m.id ? (
-                    <ReplyComposer
-                      key={m.id}
-                      toAddress={m.fromEmail}
-                      initialCc={replyMode.all ? m.ccEmails.join(", ") : undefined}
-                      sending={sending}
-                      onSend={(input) => sendReply(m.id, replyMode.all, input)}
-                      onCancel={() => setReplyMode(null)}
-                    />
-                  ) : (
-                    <div className="flex gap-2.5">
-                      <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: false })}>
-                        ↩ Reply
+                  <div className="flex gap-2.5">
+                    <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: false })}>
+                      ↩ Reply
+                    </Button>
+                    {m.ccEmails.length > 0 && (
+                      <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: true })}>
+                        ↩↩ Reply All
                       </Button>
-                      {m.ccEmails.length > 0 && (
-                        <Button variant="secondary" className="rounded-full" onClick={() => setReplyMode({ messageId: m.id, all: true })}>
-                          ↩↩ Reply All
-                        </Button>
-                      )}
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
             );
           })}
         </div>
     </Modal>
+
+    {/* Reply composer (Part: UI/UX Redesign, 2026-09-02) — a focused center
+        modal rather than an inline box in the thread drawer, so composing
+        a reply reads as its own deliberate action instead of one more
+        section scrolling past in a long thread. Nested inside the drawer
+        Modal's own Dialog — Radix manages the stack correctly (ESC closes
+        this one first, focus returns to the drawer on close). */}
+    <Modal
+      open={replyMode !== null}
+      onOpenChange={(o) => !o && setReplyMode(null)}
+      variant="center"
+      title={replyMode?.all ? "Reply All" : "Reply"}
+    >
+      {replyMode && replyingMessage && (
+        <ReplyComposer
+          key={replyMode.messageId}
+          toAddress={replyingMessage.fromEmail}
+          initialCc={replyMode.all ? replyingMessage.ccEmails.join(", ") : undefined}
+          sending={sending}
+          onSend={(input) => sendReply(replyMode.messageId, replyMode.all, input)}
+          onCancel={() => setReplyMode(null)}
+        />
+      )}
+    </Modal>
+    </>
   );
 }
