@@ -111,32 +111,26 @@ function formatTimestamp(iso: string): { relative: string; absolute: string } {
 
 /** Sent → Viewed → Replied timeline (Part: Email Hub sent-status timeline,
  *  2026-09-02) — replaces the plain static "Sent" badge with the actual
- *  progression, each stage's real timestamp shown on hover. "Viewed" only
- *  ever appears for a message sent with "Track email" checked (no tracking
- *  row exists otherwise); a raw-only (unverified) view is labeled as such
- *  rather than presented as a confirmed open — see EmailHubService.
- *  withSentStatus's docblock for why a raw signal can't always be verified,
- *  particularly for Gmail recipients. */
+ *  progression, each stage labeled with its exact timestamp (down to the
+ *  minute) rather than a relative "1h ago" that goes stale the moment you
+ *  glance away. "Viewed" only ever appears for a message sent with "Track
+ *  email" checked (no tracking row exists otherwise); a raw-only
+ *  (unverified) view is labeled as such rather than presented as a
+ *  confirmed open — see EmailHubService.withSentStatus's docblock for why a
+ *  raw signal can't always be verified, particularly for Gmail recipients. */
 function SentStatusRow({ status }: { status: SentStatus }) {
-  const { absolute: sentAbs } = formatTimestamp(status.sentAt);
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <span title={sentAbs}>
-        <StatusBadge tone="neutral" label={`Sent · ${formatTimestamp(status.sentAt).relative}`} />
-      </span>
+      <StatusBadge tone="neutral" label={`Sent · ${formatTimestamp(status.sentAt).absolute}`} />
       {status.verifiedViewedAt ? (
-        <span title={formatTimestamp(status.verifiedViewedAt).absolute}>
-          <StatusBadge tone="success" label={`Viewed · ${formatTimestamp(status.verifiedViewedAt).relative}`} />
-        </span>
+        <StatusBadge tone="success" label={`Viewed · ${formatTimestamp(status.verifiedViewedAt).absolute}`} />
       ) : status.viewedAt ? (
-        <span title={`${formatTimestamp(status.viewedAt).absolute} — pixel fired too soon after sending to rule out prefetching (common for Gmail, which proxies images server-side); likely not a confirmed human view`}>
-          <StatusBadge tone="warning" label={`Possibly viewed · ${formatTimestamp(status.viewedAt).relative}`} />
+        <span title="Pixel fired too soon after sending to rule out prefetching (common for Gmail, which proxies images server-side) — likely not a confirmed human view">
+          <StatusBadge tone="warning" label={`Possibly viewed · ${formatTimestamp(status.viewedAt).absolute}`} />
         </span>
       ) : null}
       {status.repliedAt && (
-        <span title={formatTimestamp(status.repliedAt).absolute}>
-          <StatusBadge tone="accent" label={`Replied · ${formatTimestamp(status.repliedAt).relative}`} />
-        </span>
+        <StatusBadge tone="accent" label={`Replied · ${formatTimestamp(status.repliedAt).absolute}`} />
       )}
     </div>
   );

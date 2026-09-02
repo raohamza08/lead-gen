@@ -101,22 +101,29 @@ function timeAgo(iso: string): string {
   return `${Math.round(hours / 24)}d ago`;
 }
 
+/** Exact, not relative — down to the minute, since "1h ago" goes stale the
+ *  moment you glance away and the whole point of this timeline is knowing
+ *  precisely when each stage happened. */
+function exactTime(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
 /** Compact single-badge summary of a sent message's furthest-reached stage
  *  (Part: Email Hub sent-status timeline, 2026-09-02) — the full Sent/
- *  Viewed/Replied breakdown with real timestamps lives in the thread detail
- *  view (message-detail-panel.tsx's SentStatusRow); a list row only has
- *  room for the headline, available on hover via the title tooltip. */
+ *  Viewed/Replied breakdown lives in the thread detail view
+ *  (message-detail-panel.tsx's SentStatusRow); a list row only has room for
+ *  the headline. */
 function SentStatusChip({ status }: { status: SentStatus }) {
-  if (status.repliedAt) return <StatusBadge tone="accent" label={`Replied ${timeAgo(status.repliedAt)}`} />;
-  if (status.verifiedViewedAt) return <StatusBadge tone="success" label={`Viewed ${timeAgo(status.verifiedViewedAt)}`} />;
+  if (status.repliedAt) return <StatusBadge tone="accent" label={`Replied · ${exactTime(status.repliedAt)}`} />;
+  if (status.verifiedViewedAt) return <StatusBadge tone="success" label={`Viewed · ${exactTime(status.verifiedViewedAt)}`} />;
   if (status.viewedAt) {
     return (
       <span title="Pixel fired too soon after sending to rule out prefetching (common for Gmail) — likely not a confirmed view">
-        <StatusBadge tone="warning" label={`Possibly viewed ${timeAgo(status.viewedAt)}`} />
+        <StatusBadge tone="warning" label={`Possibly viewed · ${exactTime(status.viewedAt)}`} />
       </span>
     );
   }
-  return <StatusBadge tone="neutral" label={`Sent ${timeAgo(status.sentAt)}`} />;
+  return <StatusBadge tone="neutral" label={`Sent · ${exactTime(status.sentAt)}`} />;
 }
 
 export default function EmailHubPage() {
@@ -734,13 +741,13 @@ function TrackedEmailsView({ query }: { query: { data?: TrackedEmail[]; isLoadin
               <Tr key={r.id}>
                 <Td className="text-ink/70">{r.toAddress}</Td>
                 <Td className="font-medium">{r.subject}</Td>
-                <Td className="text-xs text-ink/50">{timeAgo(r.sentAt)}</Td>
+                <Td className="text-xs text-ink/50">{exactTime(r.sentAt)}</Td>
                 <Td>
                   {r.verifiedOpenedAt ? (
-                    <StatusBadge tone="success" label={`Opened ${timeAgo(r.verifiedOpenedAt)}`} />
+                    <StatusBadge tone="success" label={`Opened · ${exactTime(r.verifiedOpenedAt)}`} />
                   ) : r.openedAt ? (
                     <span title="Pixel fired too soon after sending to rule out prefetching (common for Gmail, which proxies images server-side) — likely not a confirmed human open">
-                      <StatusBadge tone="warning" label={`Possibly opened ${timeAgo(r.openedAt)}`} />
+                      <StatusBadge tone="warning" label={`Possibly opened · ${exactTime(r.openedAt)}`} />
                     </span>
                   ) : (
                     <StatusBadge tone="neutral" label="Not opened yet" />
