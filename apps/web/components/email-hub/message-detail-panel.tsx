@@ -138,7 +138,10 @@ function SentStatusRow({ status }: { status: SentStatus }) {
 
 /** Grows the sandboxed iframe to fit its content instead of a fixed height
  *  with an inner scrollbar — a message reads like part of the page, not
- *  like an embedded widget. */
+ *  like an embedded widget. Requires the iframe's `sandbox` to include
+ *  `allow-same-origin` — without it the srcDoc content gets an opaque
+ *  cross-origin, `el.contentDocument` is null, and this silently no-ops,
+ *  leaving the iframe stuck at its fallback height with its own scrollbar. */
 function autoSizeIframe(el: HTMLIFrameElement) {
   const doc = el.contentDocument;
   if (!doc?.body) return;
@@ -390,7 +393,7 @@ export function MessageDetailPanel({
                 <div className="px-5 py-3">
                   {m.bodyHtml ? (
                     <iframe
-                      sandbox=""
+                      sandbox="allow-same-origin"
                       className="w-full rounded-lg border-0"
                       style={{ height: 120 }}
                       srcDoc={`<style>body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15.5px;line-height:1.65;color:#1a1a1a;margin:0;word-wrap:break-word}</style>${m.bodyHtml}`}
