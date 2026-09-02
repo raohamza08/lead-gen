@@ -1,4 +1,5 @@
 import "reflect-metadata";
+import compression from "compression";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { IoAdapter } from "@nestjs/platform-socket.io";
@@ -13,6 +14,19 @@ async function bootstrap() {
   // signed, not a re-serialized JSON.stringify(body) that can differ in key
   // order/whitespace (see webhooks/signature.util.ts's own docblock on this).
   const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+
+  // No response compression existed at all (Part: Email Hub reading-pane
+  // performance, 2026-09-02) — confirmed live: a 7-message thread with
+  // ~450KB of HTML per message (a real, legitimately large quoted-reply
+  // chain, not a bug) served a 3.4MB uncompressed JSON response. The raw
+  // DB query and NestJS response pipeline together took ~300ms measured
+  // locally on the VPS — the actual slowness a user sees opening that
+  // email is almost entirely the 3.4MB download itself. Email HTML is
+  // highly repetitive text (the same CSS/tags/quoted-history over and
+  // over), so gzip routinely cuts a payload like this by 80-90%; this is
+  // a transparent, zero-risk win every JSON response gets, not just this
+  // one endpoint.
+  app.use(compression());
 
   // Default Express JSON limit (100kb) is well under a single email
   // attachment's base64 size (~33% larger than the raw file) — raised via

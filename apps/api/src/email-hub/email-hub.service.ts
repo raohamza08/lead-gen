@@ -313,9 +313,26 @@ export class EmailHubService {
       include: {
         account: { select: { id: true, address: true, mailboxLabel: true } },
         lead: { select: { id: true, companyName: true } },
+        // `select`, not `include` (Part: Email Hub reading-pane performance,
+        // 2026-09-02) — the same over-fetch pattern already fixed on
+        // listMessages, just never applied here: `include` pulled every
+        // scalar column of every message in the thread, notably
+        // `attachments`/`ccEmails`/`bccEmails`/`messageIdHeader`/
+        // `providerMessageId`/`inReplyTo`/`references`, none of which
+        // message-detail-panel.tsx's own ThreadMessage interface reads — for
+        // a long thread this meant a genuinely large, slow payload just to
+        // open a single email. Full body (`bodyHtml`/`bodyText`) stays,
+        // since the reading pane does render it, for every message, unlike
+        // the list view.
         messages: {
           orderBy: { receivedAt: "asc" },
-          include: { tags: { include: { tag: true } } },
+          select: {
+            id: true, fromName: true, fromEmail: true, toEmails: true, ccEmails: true,
+            subject: true, bodyHtml: true, bodyText: true, receivedAt: true,
+            isImportant: true, isIgnored: true, hasAttachments: true, attachments: true,
+            suggestedCategory: true, aiSuggestedAction: true, folder: true,
+            tags: { include: { tag: true } },
+          },
         },
       },
     });
