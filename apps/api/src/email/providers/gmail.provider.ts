@@ -7,7 +7,7 @@ import { google } from "googleapis";
 // transport involved; the built message is handed to the Gmail API instead.
 import MailComposer from "nodemailer/lib/mail-composer";
 import { EncryptionService } from "../../common/crypto/encryption.service";
-import { EmailProvider, formatFrom, OutboundEmail } from "../email-provider.interface";
+import { EmailProvider, ensureMessageId, formatFrom, OutboundEmail } from "../email-provider.interface";
 
 /**
  * Sends via the Gmail API (`users.messages.send`) using a per-mailbox OAuth2
@@ -35,13 +35,22 @@ export class GmailProvider implements EmailProvider {
       throw new Error(`${account.address} has no Gmail OAuth refresh token configured — cannot send`);
     }
 
-    const raw = await this.buildRawMessage(email);
-    const res = await gmail.users.messages.send({
+    // ensureMessageId (Part: Email Hub Sent-view duplicate fix, 2026-09-02) —
+    // res.data.id below is Gmail's own internal API message id, not the
+    // RFC 5322 "Message-ID:" header actually embedded in the sent MIME (the
+    // two are unrelated values). Reporting that back as providerMessageId
+    // (as this used to) meant it never matched what IMAP sync later parses
+    // out of the same message's real header, so EmailHubSyncWorker never
+    // recognized it as "the same email already recorded" — see
+    // ensureMessageId's docblock for what that broke.
+    const { email: emailWithId, messageId } = ensureMessageId(email);
+    const raw = await this.buildRawMessage(emailWithId);
+    await gmail.users.messages.send({
       userId: "me",
       requestBody: { raw },
     });
 
-    return { providerMessageId: res.data.id ?? `gmail-${Date.now()}` };
+    return { providerMessageId: messageId };
   }
 
   /** Exposed for the Gmail push-notification adapter (`history.list`/`messages.get`), not just sending. */

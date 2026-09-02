@@ -4,7 +4,7 @@ import nodemailer from "nodemailer";
 import MailComposer from "nodemailer/lib/mail-composer";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import { createImapClient, findSentMailbox } from "../../email-hub/readers/imap-connection.util";
-import { EmailProvider, formatFrom, OutboundEmail } from "../email-provider.interface";
+import { EmailProvider, ensureMessageId, formatFrom, OutboundEmail } from "../email-provider.interface";
 
 const PROVIDER_DEFAULTS: Record<string, { host: string; port: number }> = {
   MICROSOFT_365: { host: "smtp.office365.com", port: 587 },
@@ -61,13 +61,23 @@ export class SmtpProvider implements EmailProvider {
     // to nodemailer via `raw` for transmission and (b) IMAP-appended to the
     // account's own Sent folder below — byte-identical, not reconstructed
     // twice and risking drift.
-    const raw = await buildRawMessage(email);
+    //
+    // ensureMessageId (Part: Email Hub Sent-view duplicate fix, 2026-09-02)
+    // — sendMail is called with a pre-built `raw` buffer, so nodemailer's own
+    // returned info.messageId is a value it fabricates independently of
+    // whatever "Message-ID:" header actually ended up inside `raw`; using
+    // that (as this used to) meant the id this method reported back never
+    // matched the header IMAP would later parse back out of the real
+    // Sent-folder copy, so it never appeared to be "the same email" — see
+    // ensureMessageId's docblock for what that broke.
+    const { email: emailWithId, messageId } = ensureMessageId(email);
+    const raw = await buildRawMessage(emailWithId);
 
-    const info = await transport.sendMail({ envelope: buildEnvelope(email), raw });
+    await transport.sendMail({ envelope: buildEnvelope(emailWithId), raw });
 
     await this.appendToSent(account, raw);
 
-    return { providerMessageId: info.messageId };
+    return { providerMessageId: messageId };
   }
 
   /** Best-effort — the email already sent successfully by the time this

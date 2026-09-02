@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { EmailAccount } from "@prisma/client";
 
 /**
@@ -37,6 +38,29 @@ export interface OutboundEmail {
 export function formatFrom(address: string, name?: string): string {
   if (!name) return address;
   return `"${name.replace(/["\\]/g, "")}" <${address}>`;
+}
+
+/**
+ * Ensures the outbound email carries an explicit RFC 5322 Message-ID header
+ * rather than leaving each provider's own MailComposer to fabricate one
+ * internally (Part: Email Hub Sent-view duplicate fix, 2026-09-02) — both
+ * SmtpProvider and GmailProvider build the raw MIME separately from
+ * whatever id their transport/API call happens to report back, so without
+ * this the returned providerMessageId can silently be a completely
+ * different value than the "Message-ID:" header actually embedded in the
+ * sent message. That mismatch mattered once EmailHubService.recordSentMessage
+ * started storing providerMessageId as messageIdHeader on the instantly-
+ * written Sent-view row: EmailHubSyncWorker.persistMessage needs the exact
+ * same value to recognize that row again once the real Sent-folder copy
+ * syncs back in and promote it in place — a mismatch meant every sent email
+ * silently duplicated in the Sent view the moment the next sync tick ran.
+ */
+export function ensureMessageId(email: OutboundEmail): { email: OutboundEmail; messageId: string } {
+  const existing = email.headers?.["Message-ID"];
+  if (existing) return { email, messageId: existing };
+  const domain = email.fromAddress.split("@")[1] ?? email.fromAddress;
+  const messageId = `<${randomUUID()}@${domain}>`;
+  return { email: { ...email, headers: { ...email.headers, "Message-ID": messageId } }, messageId };
 }
 
 export interface EmailProvider {
