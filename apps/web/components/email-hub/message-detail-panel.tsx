@@ -255,7 +255,7 @@ export function MessageDetailPanel({
       open
       onOpenChange={(o) => !o && onClose()}
       variant="center"
-      contentClassName="w-full max-w-5xl min-h-[85vh] bg-paper p-0"
+      contentClassName="w-full max-w-5xl h-[calc(100vh-96px)] bg-paper p-0"
       bodyClassName="contents"
     >
       <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper/95 px-5 py-3 backdrop-blur">
