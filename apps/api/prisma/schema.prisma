@@ -1046,6 +1046,16 @@ model HubEmailOpenTracking {
   /// sentAt — the authoritative "genuinely opened" signal, same rule as
   /// EmailMessage.verifiedOpenedAt.
   verifiedOpenedAt DateTime? @map("verified_opened_at")
+  /// Correlates this tracking row back to the actual sent InboundEmailMessage
+  /// once it syncs in from the account's Sent folder (Part: Email Hub
+  /// sent-status timeline, 2026-09-02) — set to an explicitly-generated
+  /// Message-ID (not left to nodemailer's auto-generation) at send time, so
+  /// the exact same value is guaranteed to reappear as
+  /// InboundEmailMessage.messageIdHeader when the Sent-folder sync later
+  /// parses that same raw message back out. Nullable because a send can
+  /// fail after this row is created but before the message actually exists
+  /// anywhere to match against.
+  messageIdHeader String? @unique @map("message_id_header")
 
   @@index([orgId])
   @@map("hub_email_open_tracking")

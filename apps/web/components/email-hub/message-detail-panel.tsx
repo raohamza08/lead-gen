@@ -6,11 +6,19 @@ import { api, OutboundAttachmentInput, viewEmailAttachment } from "../../lib/api
 import { ReplyComposer } from "./reply-composer";
 import { Modal, ModalClose, ModalTitle } from "../ui/modal";
 import { Button } from "../ui/button";
+import { StatusBadge } from "../ui/status-badge";
 
 interface Account {
   id: string;
   address: string;
   mailboxLabel: string | null;
+}
+
+interface SentStatus {
+  sentAt: string;
+  viewedAt: string | null;
+  verifiedViewedAt: string | null;
+  repliedAt: string | null;
 }
 
 interface ThreadMessage {
@@ -31,6 +39,7 @@ interface ThreadMessage {
   attachments: { filename: string; size: number }[];
   tags: { tag: { id: string; name: string; color: string } }[];
   folder: string;
+  sentStatus: SentStatus | null;
 }
 
 interface Thread {
@@ -98,6 +107,39 @@ function formatTimestamp(iso: string): { relative: string; absolute: string } {
     minute: "2-digit",
   });
   return { relative, absolute };
+}
+
+/** Sent → Viewed → Replied timeline (Part: Email Hub sent-status timeline,
+ *  2026-09-02) — replaces the plain static "Sent" badge with the actual
+ *  progression, each stage's real timestamp shown on hover. "Viewed" only
+ *  ever appears for a message sent with "Track email" checked (no tracking
+ *  row exists otherwise); a raw-only (unverified) view is labeled as such
+ *  rather than presented as a confirmed open — see EmailHubService.
+ *  withSentStatus's docblock for why a raw signal can't always be verified,
+ *  particularly for Gmail recipients. */
+function SentStatusRow({ status }: { status: SentStatus }) {
+  const { absolute: sentAbs } = formatTimestamp(status.sentAt);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span title={sentAbs}>
+        <StatusBadge tone="neutral" label={`Sent · ${formatTimestamp(status.sentAt).relative}`} />
+      </span>
+      {status.verifiedViewedAt ? (
+        <span title={formatTimestamp(status.verifiedViewedAt).absolute}>
+          <StatusBadge tone="success" label={`Viewed · ${formatTimestamp(status.verifiedViewedAt).relative}`} />
+        </span>
+      ) : status.viewedAt ? (
+        <span title={`${formatTimestamp(status.viewedAt).absolute} — pixel fired too soon after sending to rule out prefetching (common for Gmail, which proxies images server-side); likely not a confirmed human view`}>
+          <StatusBadge tone="warning" label={`Possibly viewed · ${formatTimestamp(status.viewedAt).relative}`} />
+        </span>
+      ) : null}
+      {status.repliedAt && (
+        <span title={formatTimestamp(status.repliedAt).absolute}>
+          <StatusBadge tone="accent" label={`Replied · ${formatTimestamp(status.repliedAt).relative}`} />
+        </span>
+      )}
+    </div>
+  );
 }
 
 /** Grows the sandboxed iframe to fit its content instead of a fixed height
@@ -219,23 +261,23 @@ export function MessageDetailPanel({
       open
       onOpenChange={(o) => !o && onClose()}
       variant="center"
-      contentClassName="w-full max-w-3xl bg-paper p-0"
+      contentClassName="w-full max-w-5xl bg-paper p-0"
       bodyClassName="contents"
     >
-      <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper/95 px-6 py-5 backdrop-blur">
+      <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper/95 px-5 py-3 backdrop-blur">
         <div className="flex w-full items-start justify-between gap-4">
           <div className="min-w-0">
-            <ModalTitle className="truncate text-xl font-semibold tracking-tight text-ink">
+            <ModalTitle className="truncate text-base font-semibold tracking-tight text-ink">
               {thread?.subject ?? "Loading…"}
             </ModalTitle>
             {thread && (
-              <p className="mt-1 text-sm text-ink/50">
+              <p className="mt-0.5 text-xs text-ink/50">
                 {thread.messages.length} message{thread.messages.length === 1 ? "" : "s"} · {thread.account.mailboxLabel || thread.account.address}
               </p>
             )}
           </div>
           <ModalClose
-            className="flex shrink-0 h-9 w-9 items-center justify-center rounded-full text-lg text-ink/40 transition-colors duration-fast hover:bg-ink/10 hover:text-ink"
+            className="flex shrink-0 h-8 w-8 items-center justify-center rounded-full text-base text-ink/40 transition-colors duration-fast hover:bg-ink/10 hover:text-ink"
             aria-label="Close"
           >
             ✕
@@ -243,7 +285,7 @@ export function MessageDetailPanel({
         </div>
 
         {thread && (
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
             <Button
               variant={thread.messages[0]?.isImportant ? "primary" : "secondary"}
               size="sm"
@@ -267,7 +309,7 @@ export function MessageDetailPanel({
             {thread.lead ? (
               <Link
                 href={`/leads/${thread.lead.id}`}
-                className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary transition-colors duration-fast hover:bg-primary/15"
+                className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary transition-colors duration-fast hover:bg-primary/15"
               >
                 Lead: {thread.lead.companyName}
               </Link>
@@ -275,7 +317,7 @@ export function MessageDetailPanel({
               <>
                 {thread.messages[0]?.suggestedCategory === "POSSIBLE_LEAD" && (
                   <span
-                    className="rounded-full bg-warning/15 px-3 py-1.5 text-sm text-warning"
+                    className="rounded-full bg-warning/15 px-2.5 py-1 text-xs text-warning"
                     title={thread.messages[0]?.aiSuggestedAction ?? undefined}
                   >
                     AI flagged this as a possible lead
@@ -290,54 +332,53 @@ export function MessageDetailPanel({
         )}
       </div>
 
-      <div className="flex w-full flex-col gap-5 px-6 py-6">
+      <div className="flex w-full flex-col gap-4 px-5 py-4">
         {error && (
-          <div className="rounded-xl border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-4 py-2.5 text-sm text-error">
+          <div className="rounded-xl border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-4 py-2 text-xs text-error">
             {error}
           </div>
         )}
         {notice && (
-          <div className="rounded-xl border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-4 py-2.5 text-sm text-good">
+          <div className="rounded-xl border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-4 py-2 text-xs text-good">
             {notice}
           </div>
         )}
 
           {thread?.messages.map((m) => {
             const { relative, absolute } = formatTimestamp(m.receivedAt);
-            const sentByUs = m.folder === "SENT";
             return (
               <div key={m.id} className="card overflow-hidden">
-                <div className="flex items-start gap-4 px-6 pt-6">
+                <div className="flex items-start gap-3 px-5 pt-4">
                   <div
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white"
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
                     style={{ backgroundColor: avatarColor(m.fromEmail) }}
                   >
                     {initials(m.fromName, m.fromEmail)}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-base font-semibold text-ink">{m.fromName || m.fromEmail}</span>
-                        {sentByUs && (
-                          <span className="rounded bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-accent">
-                            Sent
-                          </span>
-                        )}
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-sm font-semibold text-ink">{m.fromName || m.fromEmail}</span>
                         {m.isImportant && <span className="text-gold" title="Important">★</span>}
                       </div>
-                      <span className="shrink-0 text-sm text-ink/40" title={absolute}>
+                      <span className="shrink-0 text-xs text-ink/40" title={absolute}>
                         {relative}
                       </span>
                     </div>
-                    <p className="mt-0.5 truncate text-sm text-ink/50">
+                    <p className="mt-0.5 truncate text-xs text-ink/50">
                       To: {m.toEmails.join(", ") || "—"}
                       {m.ccEmails.length > 0 && <span> · Cc: {m.ccEmails.join(", ")}</span>}
                     </p>
+                    {m.sentStatus && (
+                      <div className="mt-1.5">
+                        <SentStatusRow status={m.sentStatus} />
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {m.tags.length > 0 && (
-                  <div className="mt-3 flex flex-wrap gap-1.5 px-6">
+                  <div className="mt-2 flex flex-wrap gap-1.5 px-5">
                     {m.tags.map(({ tag }) => (
                       <span
                         key={tag.id}
@@ -350,9 +391,9 @@ export function MessageDetailPanel({
                   </div>
                 )}
 
-                <div className="mx-6 mt-4 border-t border-[var(--line)]/70" />
+                <div className="mx-5 mt-3 border-t border-[var(--line)]/70" />
 
-                <div className="px-6 py-4">
+                <div className="px-5 py-3">
                   {m.bodyHtml ? (
                     <iframe
                       sandbox=""
@@ -367,7 +408,7 @@ export function MessageDetailPanel({
                 </div>
 
                 {m.hasAttachments && (
-                  <div className="flex flex-wrap gap-2 px-6 pb-4">
+                  <div className="flex flex-wrap gap-2 px-5 pb-3">
                     {m.attachments.map((a, i) => {
                       const key = `${m.id}:${i}`;
                       const isOpening = openingAttachment === key;
@@ -389,7 +430,7 @@ export function MessageDetailPanel({
                   </div>
                 )}
 
-                <div className="border-t border-[var(--line)] bg-ink/[0.02] px-6 py-4">
+                <div className="border-t border-[var(--line)] bg-ink/[0.02] px-5 py-3">
                   {replyMode?.messageId === m.id ? (
                     <ReplyComposer
                       key={m.id}

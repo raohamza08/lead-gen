@@ -40,7 +40,7 @@ export function Modal({
   const isDrawer = variant === "drawer-right";
   const structuralClasses = isDrawer
     ? "modal-content-drawer fixed inset-y-0 right-0 z-50 flex flex-col overflow-y-auto border-l border-[var(--line)] bg-surface shadow-lg focus:outline-none"
-    : "modal-content-center fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none";
+    : "modal-content-center fixed left-1/2 top-1/2 z-50 flex max-h-[92vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none";
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>

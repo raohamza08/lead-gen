@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { JwtClaims, LeadSourceLayer, Role } from "@leadgen/types";
 import { Prisma } from "@prisma/client";
@@ -287,7 +288,7 @@ export class EmailHubService {
           fromName: true, fromEmail: true, toEmails: true,
           folder: true, subject: true, bodyText: true, receivedAt: true,
           isRead: true, isImportant: true, isIgnored: true, hasAttachments: true,
-          suggestedCategory: true, aiSuggestedAction: true,
+          suggestedCategory: true, aiSuggestedAction: true, messageIdHeader: true,
           account: { select: { id: true, address: true, mailboxLabel: true } },
           thread: { select: { id: true, leadId: true } },
           tags: { include: { tag: true } },
@@ -304,7 +305,68 @@ export class EmailHubService {
       messages.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
     }
 
-    return { messages, total, page, pageSize };
+    // Sent → Viewed → Replied timeline (Part: Email Hub sent-status
+    // timeline, 2026-09-02) — only the Sent view ever has SENT-folder rows
+    // to annotate, so the extra queries below are skipped entirely for
+    // every other status.
+    const withStatus = query.status === "SENT" ? await this.attachSentStatusToList(messages) : messages.map((m) => ({ ...m, sentStatus: null }));
+
+    return { messages: withStatus, total, page, pageSize };
+  }
+
+  /** listMessages' version of withSentStatus (getThread's own copy, above) —
+   *  a paginated list mixes messages from many different threads, so unlike
+   *  getThread (one thread, already loaded, already sorted) this needs its
+   *  own small batch of context: every message in the threads represented
+   *  on this page, just enough (`threadId`/`folder`/`receivedAt`) to find
+   *  "the next non-SENT message after this one" per thread. */
+  private async attachSentStatusToList<
+    T extends { id: string; threadId: string; folder: string; receivedAt: Date; messageIdHeader: string | null },
+  >(messages: T[]): Promise<(T & { sentStatus: { sentAt: Date; viewedAt: Date | null; verifiedViewedAt: Date | null; repliedAt: Date | null } | null })[]> {
+    const sentMessages = messages.filter((m) => m.folder === "SENT");
+    if (sentMessages.length === 0) return messages.map((m) => ({ ...m, sentStatus: null }));
+
+    const threadIds = [...new Set(sentMessages.map((m) => m.threadId))];
+    const messageIdHeaders = sentMessages.map((m) => m.messageIdHeader).filter((id): id is string => !!id);
+
+    const [trackingRows, threadMessages] = await Promise.all([
+      messageIdHeaders.length
+        ? this.prisma.hubEmailOpenTracking.findMany({
+            where: { messageIdHeader: { in: messageIdHeaders } },
+            select: { messageIdHeader: true, openedAt: true, verifiedOpenedAt: true },
+          })
+        : [],
+      this.prisma.inboundEmailMessage.findMany({
+        where: { threadId: { in: threadIds } },
+        select: { threadId: true, folder: true, receivedAt: true },
+        orderBy: { receivedAt: "asc" },
+      }),
+    ]);
+
+    const trackingByMessageId = new Map(trackingRows.map((r) => [r.messageIdHeader as string, r]));
+    const messagesByThread = new Map<string, { folder: string; receivedAt: Date }[]>();
+    for (const m of threadMessages) {
+      const list = messagesByThread.get(m.threadId) ?? [];
+      list.push(m);
+      messagesByThread.set(m.threadId, list);
+    }
+
+    return messages.map((m) => {
+      if (m.folder !== "SENT") return { ...m, sentStatus: null };
+      const reply = (messagesByThread.get(m.threadId) ?? []).find(
+        (later) => later.folder !== "SENT" && later.receivedAt > m.receivedAt,
+      );
+      const tracking = m.messageIdHeader ? trackingByMessageId.get(m.messageIdHeader) : undefined;
+      return {
+        ...m,
+        sentStatus: {
+          sentAt: m.receivedAt,
+          viewedAt: tracking?.openedAt ?? null,
+          verifiedViewedAt: tracking?.verifiedOpenedAt ?? null,
+          repliedAt: reply?.receivedAt ?? null,
+        },
+      };
+    });
   }
 
   /** On-demand attachment view/download (Part: Email Detail View) — bytes
@@ -354,7 +416,7 @@ export class EmailHubService {
             id: true, fromName: true, fromEmail: true, toEmails: true, ccEmails: true,
             subject: true, bodyHtml: true, bodyText: true, receivedAt: true,
             isImportant: true, isIgnored: true, hasAttachments: true, attachments: true,
-            suggestedCategory: true, aiSuggestedAction: true, folder: true,
+            suggestedCategory: true, aiSuggestedAction: true, folder: true, messageIdHeader: true,
             tags: { include: { tag: true } },
           },
         },
@@ -362,7 +424,48 @@ export class EmailHubService {
     });
     if (!thread) throw new NotFoundException("Thread not found");
     await this.assertAccountAccess(user, thread.accountId);
-    return thread;
+    return { ...thread, messages: await this.withSentStatus(thread.messages) };
+  }
+
+  /**
+   * Sent → Viewed → Replied timeline (Part: Email Hub sent-status timeline,
+   * 2026-09-02) — attaches `sentStatus` to every SENT-folder message in an
+   * already-loaded, already-time-sorted thread (non-SENT messages get
+   * `sentStatus: null`, since the concept only applies to what we sent).
+   * "Viewed" comes from a batched HubEmailOpenTracking lookup keyed on
+   * messageIdHeader (see withTrackingPixel's docblock for how that value is
+   * guaranteed to match) — only ever populated for a message that was sent
+   * with "Track email" checked, since that's the only case a tracking row
+   * exists at all. "Replied" needs no extra query at all: with the thread
+   * already sorted by receivedAt, it's just "the next non-SENT message
+   * after this one in the same array."
+   */
+  private async withSentStatus<
+    T extends { id: string; folder: string; receivedAt: Date; messageIdHeader: string | null },
+  >(messages: T[]): Promise<(T & { sentStatus: { sentAt: Date; viewedAt: Date | null; verifiedViewedAt: Date | null; repliedAt: Date | null } | null })[]> {
+    const sentMessageIds = messages.filter((m) => m.folder === "SENT").map((m) => m.messageIdHeader).filter((id): id is string => !!id);
+    const trackingRows = sentMessageIds.length
+      ? await this.prisma.hubEmailOpenTracking.findMany({
+          where: { messageIdHeader: { in: sentMessageIds } },
+          select: { messageIdHeader: true, openedAt: true, verifiedOpenedAt: true },
+        })
+      : [];
+    const trackingByMessageId = new Map(trackingRows.map((r) => [r.messageIdHeader as string, r]));
+
+    return messages.map((m, i) => {
+      if (m.folder !== "SENT") return { ...m, sentStatus: null };
+      const reply = messages.slice(i + 1).find((later) => later.folder !== "SENT");
+      const tracking = m.messageIdHeader ? trackingByMessageId.get(m.messageIdHeader) : undefined;
+      return {
+        ...m,
+        sentStatus: {
+          sentAt: m.receivedAt,
+          viewedAt: tracking?.openedAt ?? null,
+          verifiedViewedAt: tracking?.verifiedOpenedAt ?? null,
+          repliedAt: reply?.receivedAt ?? null,
+        },
+      };
+    });
   }
 
   async bulkAction(user: JwtClaims, dto: BulkActionDto) {
@@ -553,7 +656,9 @@ export class EmailHubService {
     const autoCc = dto.replyAll ? original.ccEmails.filter((e) => e !== original.account.address) : [];
     const cc = Array.from(new Set([...autoCc, ...(dto.cc ?? [])]));
     const subject = /^re:/i.test(original.subject) ? original.subject : `Re: ${original.subject}`;
-    const bodyHtml = await this.withTrackingPixel(user.orgId, to, subject, dto.bodyHtml, dto.trackOpen);
+    const { bodyHtml, messageId: trackingMessageId } = await this.withTrackingPixel(
+      user.orgId, to, subject, dto.bodyHtml, dto.trackOpen, sendingAccount.address,
+    );
 
     const result = await this.transactionalEmail.sendFromAccount(sendingAccount, {
       toAddress: to,
@@ -561,9 +666,10 @@ export class EmailHubService {
       bcc: dto.bcc,
       subject,
       bodyHtml,
-      headers: original.messageIdHeader
-        ? { "In-Reply-To": original.messageIdHeader, References: original.messageIdHeader }
-        : undefined,
+      headers: {
+        ...(original.messageIdHeader ? { "In-Reply-To": original.messageIdHeader, References: original.messageIdHeader } : {}),
+        ...(trackingMessageId ? { "Message-ID": trackingMessageId } : {}),
+      },
       attachments: dto.attachments,
     });
 
@@ -577,7 +683,9 @@ export class EmailHubService {
     if (!account) throw new NotFoundException("Account not found");
     await this.assertAccountAccess(user, account.id, true);
     this.assertAttachmentsWithinLimit(dto.attachments);
-    const bodyHtml = await this.withTrackingPixel(user.orgId, dto.to.join(", "), dto.subject, dto.bodyHtml, dto.trackOpen);
+    const { bodyHtml, messageId } = await this.withTrackingPixel(
+      user.orgId, dto.to.join(", "), dto.subject, dto.bodyHtml, dto.trackOpen, account.address,
+    );
 
     const result = await this.transactionalEmail.sendFromAccount(account, {
       toAddress: dto.to.join(", "),
@@ -585,6 +693,7 @@ export class EmailHubService {
       bcc: dto.bcc,
       subject: dto.subject,
       bodyHtml,
+      headers: messageId ? { "Message-ID": messageId } : undefined,
       attachments: dto.attachments,
     });
     return { sent: true, providerMessageId: result.providerMessageId };
@@ -599,14 +708,25 @@ export class EmailHubService {
    * The tracking row is created before the send attempt so its id is ready
    * to embed; if the send then fails, the row is simply never opened —
    * inert, no notification, no cleanup needed.
+   *
+   * Also generates and returns an explicit Message-ID (Part: Email Hub
+   * sent-status timeline, 2026-09-02) rather than leaving nodemailer to
+   * auto-generate one — the caller must pass this back through as a
+   * "Message-ID" header on the actual send, so the exact same value
+   * reappears as InboundEmailMessage.messageIdHeader once the Sent-folder
+   * sync parses that same raw message back out later. That's what lets
+   * listMessages/getThread correlate a synced Sent message back to this
+   * tracking row (join on messageIdHeader) to show viewed-at status.
    */
   private async withTrackingPixel(
-    orgId: string, toAddress: string, subject: string, bodyHtml: string, trackOpen?: boolean,
-  ): Promise<string> {
-    if (!trackOpen) return bodyHtml;
-    const row = await this.prisma.hubEmailOpenTracking.create({ data: { orgId, toAddress, subject } });
+    orgId: string, toAddress: string, subject: string, bodyHtml: string, trackOpen: boolean | undefined, senderDomainSource: string,
+  ): Promise<{ bodyHtml: string; messageId?: string }> {
+    if (!trackOpen) return { bodyHtml };
+    const domain = senderDomainSource.split("@")[1] ?? senderDomainSource;
+    const messageId = `<${randomUUID()}@${domain}>`;
+    const row = await this.prisma.hubEmailOpenTracking.create({ data: { orgId, toAddress, subject, messageIdHeader: messageId } });
     const pixel = `<img src="${apiPublicUrl()}/track/open/hub/${row.id}.png" width="1" height="1" alt="" style="display:none" />`;
-    return `${bodyHtml}${pixel}`;
+    return { bodyHtml: `${bodyHtml}${pixel}`, messageId };
   }
 
   /** Attachments travel as base64 in the JSON body (never persisted — see

@@ -47,6 +47,13 @@ interface TrackedEmail {
   rawOpenCount: number;
 }
 
+interface SentStatus {
+  sentAt: string;
+  viewedAt: string | null;
+  verifiedViewedAt: string | null;
+  repliedAt: string | null;
+}
+
 interface Message {
   id: string;
   threadId: string;
@@ -67,6 +74,7 @@ interface Message {
   account: { id: string; address: string; mailboxLabel: string | null };
   thread: { id: string; leadId: string | null };
   tags: { tag: Tag }[];
+  sentStatus: SentStatus | null;
 }
 
 /** Maps the sidebar's `?view=` sub-items onto the API's status filter — the
@@ -91,6 +99,24 @@ function timeAgo(iso: string): string {
   const hours = Math.round(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.round(hours / 24)}d ago`;
+}
+
+/** Compact single-badge summary of a sent message's furthest-reached stage
+ *  (Part: Email Hub sent-status timeline, 2026-09-02) — the full Sent/
+ *  Viewed/Replied breakdown with real timestamps lives in the thread detail
+ *  view (message-detail-panel.tsx's SentStatusRow); a list row only has
+ *  room for the headline, available on hover via the title tooltip. */
+function SentStatusChip({ status }: { status: SentStatus }) {
+  if (status.repliedAt) return <StatusBadge tone="accent" label={`Replied ${timeAgo(status.repliedAt)}`} />;
+  if (status.verifiedViewedAt) return <StatusBadge tone="success" label={`Viewed ${timeAgo(status.verifiedViewedAt)}`} />;
+  if (status.viewedAt) {
+    return (
+      <span title="Pixel fired too soon after sending to rule out prefetching (common for Gmail) — likely not a confirmed view">
+        <StatusBadge tone="warning" label={`Possibly viewed ${timeAgo(status.viewedAt)}`} />
+      </span>
+    );
+  }
+  return <StatusBadge tone="neutral" label={`Sent ${timeAgo(status.sentAt)}`} />;
 }
 
 export default function EmailHubPage() {
@@ -562,6 +588,7 @@ function EmailHubPageContent() {
                 </Td>
                 <Td>
                   <div className="flex flex-wrap items-center gap-1">
+                    {m.sentStatus && <SentStatusChip status={m.sentStatus} />}
                     {m.thread.leadId && <StatusBadge tone="accent" label="Lead" />}
                     {!m.thread.leadId && m.suggestedCategory === "POSSIBLE_LEAD" && (
                       <span
