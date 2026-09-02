@@ -266,8 +266,13 @@ export function MessageDetailPanel({
        *  paint each message body's iframe on its own GPU layer that ignores
        *  this header's z-index once the panel scrolls, so the email content
        *  renders on top of the sticky header and covers the close button.
-       *  Promoting the header to its own layer restores normal stacking. */}
-      <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper/95 px-5 py-3 backdrop-blur will-change-transform [transform:translateZ(0)]">
+       *  Promoting the header to its own layer restores normal stacking.
+       *  Solid bg-paper (not bg-paper/95 + backdrop-blur) is deliberate too —
+       *  a translucent header lets scrolled-under email content show through
+       *  it, which reads as a floating banner rather than a fixed header
+       *  bar; shadow-sm gives it the same separation a border alone can't
+       *  once it's fully opaque. */}
+      <div className="sticky top-0 z-10 rounded-t-[var(--radius)] border-b border-[var(--line)] bg-paper px-5 py-3 shadow-sm will-change-transform [transform:translateZ(0)]">
         <div className="flex w-full items-start justify-between gap-4">
           <div className="min-w-0">
             <ModalTitle className="truncate text-base font-semibold tracking-tight text-ink">
