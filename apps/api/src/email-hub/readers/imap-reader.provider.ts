@@ -1,17 +1,10 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EmailAccount } from "@prisma/client";
-import { ImapFlow } from "imapflow";
+import type { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import { FetchedAttachmentContent, FetchedMessage, MailboxReader, SyncResult } from "../mailbox-reader.interface";
-
-/** Common non-Gmail Sent-folder names, tried in order when a server doesn't
- *  advertise the IMAP SPECIAL-USE (RFC 6154) \Sent flag — most servers that
- *  lack SPECIAL-USE still use one of these verbatim. Gmail (both consumer
- *  and Workspace) always advertises SPECIAL-USE, so "[Gmail]/Sent Mail"
- *  isn't needed here as a fallback, only as a real-world example of why
- *  fallback-by-guessing alone would be wrong. */
-const SENT_FOLDER_FALLBACKS = ["Sent", "Sent Items", "Sent Messages", "INBOX.Sent"];
+import { createImapClient, findSentMailbox } from "./imap-connection.util";
 
 /** How far back to look on an account's very first sync — enough to make
  *  the unified inbox useful immediately without risking an unbounded
@@ -40,54 +33,16 @@ export class ImapReaderProvider implements MailboxReader {
 
   constructor(private readonly encryption: EncryptionService) {}
 
-  /** Shared connection setup — used by both sync() and fetchAttachment(),
-   *  which each need their own independent IMAP session (a single shared
-   *  connection across a poll tick and an on-demand attachment fetch would
-   *  serialize unrelated requests behind whichever happened to hold it). */
-  private createClient(account: EmailAccount): ImapFlow {
-    if (!account.imapHost || !account.imapUsername || !account.imapPasswordEnc) {
-      throw new Error(`Account ${account.address} has no IMAP credentials configured`);
-    }
-
-    const password = this.encryption.looksEncrypted(account.imapPasswordEnc)
-      ? this.encryption.decrypt(account.imapPasswordEnc)
-      : account.imapPasswordEnc; // legacy/manually-entered plaintext, tolerated on read only
-
-    const secure = account.imapEncryption === "SSL";
-    const client = new ImapFlow({
-      host: account.imapHost,
-      port: account.imapPort ?? (secure ? 993 : 143),
-      secure,
-      auth: { user: account.imapUsername, pass: password },
-      logger: false, // imapflow's own pino logger is far too verbose for a per-account poll worker
-    });
-
-    // ImapFlow emits 'error' on socket-level failures (e.g. a timeout on the
-    // underlying TLSSocket) independently of connect()/fetch()'s own promise
-    // rejections — a well-known Node EventEmitter trap: an 'error' event with
-    // no listener throws and crashes the whole process, not just this call.
-    // Confirmed live: a bad password left a socket that later hit ETIMEOUT
-    // during cleanup and took the entire API down, not just this account's
-    // sync. The real failure (auth, connect, fetch) is still surfaced
-    // normally via the rejected promises below — this only stops a stray
-    // async error from being fatal.
-    client.on("error", (err) => {
-      this.logger.warn(`IMAP socket error for ${account.address} (non-fatal): ${(err as Error).message}`);
-    });
-
-    return client;
-  }
-
   async sync(
     account: EmailAccount,
     cursors: { inbox: string | null; sent: string | null },
   ): Promise<{ inbox: SyncResult; sent: SyncResult }> {
-    const client = this.createClient(account);
+    const client = createImapClient(this.encryption, account);
     await client.connect();
     try {
       const inbox = await this.syncMailbox(client, "INBOX", cursors.inbox, "INBOX");
 
-      const sentMailbox = await this.findSentMailbox(client);
+      const sentMailbox = await findSentMailbox(client);
       const sent = sentMailbox
         ? await this.syncMailbox(client, sentMailbox, cursors.sent, "SENT")
         : { messages: [], newCursor: cursors.sent };
@@ -107,13 +62,13 @@ export class ImapReaderProvider implements MailboxReader {
     providerMessageId: string,
     attachmentIndex: number,
   ): Promise<FetchedAttachmentContent | null> {
-    const client = this.createClient(account);
+    const client = createImapClient(this.encryption, account);
     await client.connect();
     try {
       // "SENT" is a label this app assigns (see ImapReaderProvider.sync),
       // not a literal mailbox path — resolve it back to whatever the
       // server actually calls it. "INBOX" is always literal.
-      const mailboxPath = folder === "SENT" ? await this.findSentMailbox(client) : "INBOX";
+      const mailboxPath = folder === "SENT" ? await findSentMailbox(client) : "INBOX";
       if (!mailboxPath) return null;
 
       const lock = await client.getMailboxLock(mailboxPath);
@@ -137,23 +92,6 @@ export class ImapReaderProvider implements MailboxReader {
     } finally {
       await client.logout().catch(() => client.close());
     }
-  }
-
-  /** SPECIAL-USE (RFC 6154) is the reliable signal — every major provider
-   *  that supports it (Gmail, Fastmail, Outlook.com, iCloud) tags the real
-   *  Sent folder with `\Sent` regardless of its display name in whatever
-   *  language the account is set to, which a hardcoded name list can't
-   *  match. Servers without SPECIAL-USE fall back to trying common literal
-   *  names. Returns null (not a default guess) when neither finds anything
-   *  — an account with no Sent folder should sync zero Sent messages, not
-   *  silently point at the wrong mailbox. */
-  private async findSentMailbox(client: ImapFlow): Promise<string | null> {
-    const mailboxes = await client.list();
-    const bySpecialUse = mailboxes.find((m) => m.specialUse === "\\Sent");
-    if (bySpecialUse) return bySpecialUse.path;
-
-    const byName = mailboxes.find((m) => SENT_FOLDER_FALLBACKS.includes(m.path));
-    return byName?.path ?? null;
   }
 
   private async syncMailbox(
