@@ -9,7 +9,12 @@ type Variant = "primary" | "secondary" | "ghost" | "danger" | "success";
 type Size = "sm" | "md" | "lg" | "icon";
 
 const VARIANT_CLASSES: Record<Variant, string> = {
-  primary: "bg-primary text-white hover:opacity-90 active:opacity-80",
+  // bg-[image:var(--btn-primary-bg)] (Part: premium dark theme pass v2,
+  // 2026-09-02) rather than bg-primary — --btn-primary-bg is a flat color in
+  // light mode and a real teal-to-violet gradient in dark (see globals.css),
+  // so this one class carries both without a variant branch here.
+  // btn-primary-glow hooks the dark-only hover glow defined alongside it.
+  primary: "bg-[image:var(--btn-primary-bg)] btn-primary-glow text-white active:opacity-85",
   secondary: "border border-[var(--line)] text-ink/75 hover:bg-ink/5 active:bg-ink/10",
   ghost: "text-ink/65 hover:bg-ink/5 active:bg-ink/10",
   danger: "border border-[rgb(var(--bad-rgb)/0.4)] text-error hover:bg-[rgb(var(--bad-rgb)/0.08)] active:bg-[rgb(var(--bad-rgb)/0.14)]",
@@ -46,7 +51,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ variant = "primary", size = "md", loading = false, asChild = false, disabled, className = "", children, ...props }, ref) => {
-    const classes = `relative inline-flex shrink-0 items-center justify-center rounded-lg font-medium transition-colors duration-fast ease-standard disabled:cursor-not-allowed disabled:opacity-50 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`;
+    // transition-all (not transition-colors) + hover/active scale (Part:
+    // premium dark theme pass v2, 2026-09-02) — a tiny press/lift is what
+    // makes primary's new glow (see VARIANT_CLASSES) and card-interactive's
+    // lift feel like one consistent motion language instead of one-off
+    // flourishes; subtle enough (1.5%) that it doesn't read as bouncy on
+    // dense UI like table-row action buttons.
+    const classes = `relative inline-flex shrink-0 items-center justify-center rounded-lg font-medium transition-all duration-fast ease-standard hover:scale-[1.015] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 disabled:active:scale-100 ${VARIANT_CLASSES[variant]} ${SIZE_CLASSES[size]} ${className}`;
 
     if (asChild) {
       // Radix Slot requires exactly one child element with nothing wrapped

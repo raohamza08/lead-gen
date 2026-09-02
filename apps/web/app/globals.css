@@ -28,11 +28,20 @@
      gold/good/bad rather than introducing a parallel palette. */
   --secondary-rgb: 71 85 105;
   --info-rgb: 37 99 235;
+  /* Second accent, for the primary-button gradient below only (Part: premium
+     dark theme pass v2, 2026-09-02) — not used elsewhere in light mode, kept
+     defined here for parity so no var ever resolves empty if something new
+     reaches for it. */
+  --accent-2-rgb: 91 87 214;
 
   --paper: rgb(var(--paper-rgb));
   --ink: rgb(var(--ink-rgb));
   --accent: rgb(var(--accent-rgb));
   --line: rgb(var(--ink-rgb) / 0.12);
+  /* A flat color in light mode, a real two-tone gradient in dark (see the
+     dark blocks below) — always a gradient *function* so button.tsx's
+     `background-image: var(--btn-primary-bg)` never has to branch per theme. */
+  --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-rgb)));
 
   --chart-grid: #e1e2e5;
   --chart-axis: #c3c5c9;
@@ -73,12 +82,19 @@
     --paper-rgb: 11 13 17;
     --ink-rgb: 237 238 240;
     --accent-rgb: 56 199 179;
+    --accent-2-rgb: 139 124 246;
     --gold-rgb: 217 174 99;
     --good-rgb: 74 191 124;
     --bad-rgb: 224 112 101;
     --secondary-rgb: 148 163 184;
     --info-rgb: 96 165 250;
     --line: rgb(255 255 255 / 0.08);
+    /* A real teal-to-violet gradient in dark mode (Part: premium dark theme
+       pass v2, 2026-09-02) — the flat single-hue accent read as safe/generic
+       on its own; pairing it with --accent-2 on every primary button (see
+       .btn-primary-glow below) is what gives the theme a second color
+       family instead of one teal doing all the work. */
+    --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-2-rgb)));
 
     --chart-grid: #1c1f26;
     --chart-axis: #33373f;
@@ -102,12 +118,14 @@
   --paper-rgb: 11 13 17;
   --ink-rgb: 237 238 240;
   --accent-rgb: 56 199 179;
+  --accent-2-rgb: 139 124 246;
   --gold-rgb: 217 174 99;
   --good-rgb: 74 191 124;
   --bad-rgb: 224 112 101;
   --secondary-rgb: 148 163 184;
   --info-rgb: 96 165 250;
   --line: rgb(255 255 255 / 0.08);
+  --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-2-rgb)));
 
   --chart-grid: #1c1f26;
   --chart-axis: #33373f;
@@ -186,18 +204,41 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* A barely-there accent bloom in the top-left of the viewport (Part: premium
-   dark theme pass, 2026-09-02) — at 5% opacity it's below the threshold of
-   "visible gradient," but it's what keeps a large expanse of near-black from
-   reading as flat/dead the way pure --paper does on its own. Light mode is
-   untouched; a bloom this subtle only survives against a dark surface. */
+/* A barely-there two-tone aurora in dark mode (Part: premium dark theme pass
+   v2, 2026-09-02) — the v1 pass used one static teal bloom top-left; this
+   pairs it with a second, violet bloom (--accent-2) bottom-right and lets
+   both drift very slowly, which is what keeps a large expanse of near-black
+   from reading as flat/dead the way pure --paper does on its own. Both
+   blooms stay under 6% opacity — the point is an ambient sense of depth and
+   color, never a visible moving gradient competing with foreground content.
+   `background-attachment: fixed` keeps it anchored to the viewport rather
+   than scrolling with the page (a `body`-sized element is already as tall as
+   the content, so without this the aurora would just scroll away with a
+   long page instead of staying put like a backdrop). Respects the app-wide
+   prefers-reduced-motion override further down, which zeroes every
+   animation-duration globally. Light mode is untouched — a bloom this
+   subtle only survives against a dark surface. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) body {
-    background: radial-gradient(1200px 640px at 12% -8%, rgb(var(--accent-rgb) / 0.05), transparent 60%), var(--paper);
+    background:
+      radial-gradient(1100px 600px at 15% -10%, rgb(var(--accent-rgb) / 0.06), transparent 60%),
+      radial-gradient(900px 560px at 100% 110%, rgb(var(--accent-2-rgb) / 0.05), transparent 60%),
+      var(--paper);
+    background-attachment: fixed;
+    animation: aurora-drift 30s ease-in-out infinite alternate;
   }
 }
 :root[data-theme="dark"] body {
-  background: radial-gradient(1200px 640px at 12% -8%, rgb(var(--accent-rgb) / 0.05), transparent 60%), var(--paper);
+  background:
+    radial-gradient(1100px 600px at 15% -10%, rgb(var(--accent-rgb) / 0.06), transparent 60%),
+    radial-gradient(900px 560px at 100% 110%, rgb(var(--accent-2-rgb) / 0.05), transparent 60%),
+    var(--paper);
+  background-attachment: fixed;
+  animation: aurora-drift 30s ease-in-out infinite alternate;
+}
+@keyframes aurora-drift {
+  from { background-position: 0% 0%, 0% 0%, 0 0; }
+  to { background-position: 4% 3%, -4% -3%, 0 0; }
 }
 
 /* Minimal scrollbar (Part: premium dark theme pass, 2026-09-02) — the OS
@@ -268,6 +309,27 @@ select, option {
 .card-interactive:hover {
   box-shadow: var(--shadow-md);
   border-color: rgb(var(--accent-rgb) / 0.35);
+  /* A real lift, not just a shadow swap (Part: premium dark theme pass v2,
+     2026-09-02) — transform was already in the transition list above but
+     nothing ever set a hover value, so it was dead weight. -2px is enough to
+     read as "this card responded to you" without the janky floaty feel a
+     bigger offset gives. */
+  transform: translateY(-2px);
+}
+
+/* Primary-button glow (Part: premium dark theme pass v2, 2026-09-02) —
+   dark-only: a colored glow under a flat teal button reads as noise against
+   a light page, but against near-black paper it's what sells the button as
+   the one deliberately-lit thing on screen. Paired with --btn-primary-bg's
+   teal-to-violet gradient (see the palette blocks above), so the glow picks
+   up both hues rather than just the single accent color. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .btn-primary-glow:hover {
+    box-shadow: 0 6px 20px rgb(var(--accent-rgb) / 0.35), 0 2px 10px rgb(var(--accent-2-rgb) / 0.25);
+  }
+}
+:root[data-theme="dark"] .btn-primary-glow:hover {
+  box-shadow: 0 6px 20px rgb(var(--accent-rgb) / 0.35), 0 2px 10px rgb(var(--accent-2-rgb) / 0.25);
 }
 
 /* Drag affordances for the pipeline board. */

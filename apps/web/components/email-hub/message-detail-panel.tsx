@@ -258,7 +258,15 @@ export function MessageDetailPanel({
       open
       onOpenChange={(o) => !o && onClose()}
       variant="center"
-      contentClassName="w-full max-w-5xl h-[calc(100vh-96px)] bg-paper p-0"
+      // The Modal's structural classes always include `p-5` (see modal.tsx) —
+      // this content's own `p-0` has the same specificity, so which one
+      // "wins" depends on Tailwind's generated CSS order, not source order
+      // (documented in modal.tsx's own contentClassName comment). That was
+      // leaving a ~20px unpadded gap above the sticky header on this modal
+      // specifically, where scrolled message content was visible sliding
+      // up past the header's actual top edge. `!p-0` forces the override
+      // unconditionally instead of depending on build-order luck.
+      contentClassName="w-full max-w-5xl h-[calc(100vh-96px)] bg-paper !p-0"
       bodyClassName="contents"
     >
       {/* will-change-transform + translateZ(0) (Part: email reader header
