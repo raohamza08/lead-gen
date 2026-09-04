@@ -51,6 +51,15 @@ function businessDaysAfter(start: Date, days: number): Date {
 }
 
 async function main() {
+  // Module-level, not function-local (Part: pipeline countdown fix,
+  // 2026-09-04) -- an open Redis connection keeps the event loop alive, so
+  // an error thrown before reaching connection.quit() below used to leave
+  // the process running forever instead of exiting on the catch handler's
+  // error (confirmed live: this is exactly what made the pre-fix jobId bug
+  // look like a silent hang rather than the immediate, loud rejection it
+  // actually was). The explicit process.exit(1) in the catch handler below
+  // is the real fix; closing the connection here is just cleanliness for
+  // the success path.
   const connection = new IORedis(process.env.REDIS_URL ?? "redis://localhost:6379", { maxRetriesPerRequest: null });
   const waitQueue = new Queue("wait-timers", { connection });
 
@@ -80,7 +89,9 @@ async function main() {
     const job = await waitQueue.add(
       "advance",
       { leadId: state.leadId, nextStage },
-      { delay: delayMs, jobId: `wait:${state.leadId}:${nextStage}:${Date.now()}` },
+      // `-`, not `:` -- see sequencer.service.ts's scheduleWait docblock for
+      // why a colon-separated jobId with 4 parts throws every time.
+      { delay: delayMs, jobId: `wait-${state.leadId}-${nextStage}-${Date.now()}` },
     );
     await prisma.pipelineState.update({
       where: { leadId: state.leadId },
@@ -95,6 +106,6 @@ async function main() {
 main()
   .catch((err) => {
     console.error(err);
-    process.exitCode = 1;
+    process.exit(1);
   })
   .finally(() => prisma.$disconnect());

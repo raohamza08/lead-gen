@@ -247,13 +247,24 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /** Schedules the next automated step after a wait, storing the job id for cancellation. */
+  /** Schedules the next automated step after a wait, storing the job id for
+   *  cancellation.
+   *
+   *  jobId uses `-`, never `:` (Part: pipeline countdown fix, 2026-09-04) --
+   *  BullMQ's Job.validateOptions rejects any custom jobId containing a
+   *  colon UNLESS it splits into exactly 3 parts (a backward-compat carve-out
+   *  for old repeatable-job ids). `wait:${leadId}:${nextStage}:${Date.now()}`
+   *  splits into 4 and throws "Custom Id cannot contain :" on every single
+   *  call -- this had been silently breaking scheduleWait since it was
+   *  written: confirmed live, all ~150 promoted leads sitting at EMAIL_1_SENT
+   *  forever, zero ever reaching WAITING_EMAIL_2, because this line always
+   *  threw before nextActionAt/waitJobId could ever be set. */
   private async scheduleWait(leadId: string, nextStage: PipelineStage): Promise<void> {
     const delayMs = businessDaysDelayMs(SEQUENCE_WAIT_BUSINESS_DAYS);
     const job = await this.waitQueue.add(
       "advance",
       { leadId, nextStage },
-      { delay: delayMs, jobId: `wait:${leadId}:${nextStage}:${Date.now()}` },
+      { delay: delayMs, jobId: `wait-${leadId}-${nextStage}-${Date.now()}` },
     );
     await this.prisma.pipelineState.update({
       where: { leadId },
