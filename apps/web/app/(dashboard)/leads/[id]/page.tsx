@@ -69,6 +69,7 @@ export default function LeadDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [retryingDraft, setRetryingDraft] = useState(false);
   const [editingContact, setEditingContact] = useState(false);
   const [contactDraft, setContactDraft] = useState({
     email: "", contactName: "", jobTitle: "", phone: "", verifiedEmail: false,
@@ -263,6 +264,29 @@ export default function LeadDetailPage() {
       setError((err as Error).message);
     } finally {
       setResendingId(null);
+    }
+  }
+
+  // Retries the DRAFT, not the send (Part: lead detail "retry" fix,
+  // 2026-09-04) — a FAILED EmailMessage with an empty subject/bodyHtml means
+  // the AI draft attempt itself never produced content (receiveEmailDraftFailure
+  // in leads.service.ts creates exactly this row), so resend() above would
+  // just try to send an empty email. The backend endpoint this calls already
+  // existed (LeadsController.generatePitchDraft) but had no UI control
+  // anywhere calling it — this was the actual reason "retry" did nothing for
+  // a lead stuck at READY_FOR_OUTREACH with a failed draft.
+  async function retryDraft() {
+    setRetryingDraft(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await api.retryPitchDraft(params.id);
+      setNotice("Retrying the draft…");
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setRetryingDraft(false);
     }
   }
 
@@ -625,7 +649,9 @@ export default function LeadDetailPage() {
                           {m.sentAt
                             ? `Sent ${new Date(m.sentAt).toLocaleString()}`
                             : m.status === "FAILED"
-                              ? "Failed to send"
+                              ? !m.subject && !m.bodyHtml
+                                ? "Draft failed"
+                                : "Failed to send"
                               : m.status === "WAITING_FOR_SCHEDULE" && m.scheduledAt
                                 ? `Scheduled for ${new Date(m.scheduledAt).toLocaleString()}`
                                 : m.status === "SENDING"
@@ -678,7 +704,19 @@ export default function LeadDetailPage() {
                       >
                         {openEmailId === m.id ? "Hide" : "View email"}
                       </button>
-                      {m.status === "FAILED" && (
+                      {/* An empty subject+bodyHtml on a FAILED row means the draft
+                          attempt itself never produced content (see retryDraft's
+                          docblock) -- Resend would just send that empty email, so
+                          it only applies once a real draft exists to resend. */}
+                      {m.status === "FAILED" && !m.subject && !m.bodyHtml ? (
+                        <button
+                          onClick={retryDraft}
+                          disabled={retryingDraft}
+                          className="rounded-md bg-accent px-2.5 py-1 text-xs text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          {retryingDraft ? "Retrying…" : "Retry draft"}
+                        </button>
+                      ) : m.status === "FAILED" ? (
                         <button
                           onClick={() => resend(m.id)}
                           disabled={resendingId === m.id}
@@ -686,7 +724,7 @@ export default function LeadDetailPage() {
                         >
                           {resendingId === m.id ? "Resending…" : "Resend"}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                     {openEmailId === m.id && (
                       // Sandboxed with no allow-scripts/allow-same-origin: bodyHtml can

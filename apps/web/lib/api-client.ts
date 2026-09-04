@@ -252,6 +252,12 @@ export const api = {
     request(`/leads/verify-emails`, { method: "POST", body: JSON.stringify({ leadIds }) }),
   resendEmail: (id: string, emailMessageId: string) =>
     request(`/leads/${id}/emails/${emailMessageId}/resend`, { method: "POST" }),
+  // Distinct from resendEmail above: that retries SENDING an email that was
+  // already drafted; this retries the DRAFTING itself (e.g. a FAILED
+  // EmailMessage with an empty subject/bodyHtml — the draft attempt never
+  // produced content in the first place, so there is nothing for resendEmail
+  // to send). Backend: LeadsController.generatePitchDraft.
+  retryPitchDraft: (id: string) => request(`/leads/${id}/pitch-draft/generate`, { method: "POST" }),
   approveEmail: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/approve-email`, { method: "POST", body: JSON.stringify(body) }),
   createManualLead: (body: Record<string, unknown>) =>

@@ -220,7 +220,7 @@ function AgentActivity({ lead, running, now }: { lead: LeadRow; running?: Runnin
 
     if (!relevant && minutesInStage >= 2) {
       return (
-        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gold" title="Open the lead and use &quot;Generate pitch draft&quot; to retry.">
+        <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gold" title="Open the lead and use &quot;Retry draft&quot; to retry.">
           <span className="h-1.5 w-1.5 rounded-full bg-gold" />
           Not started · {minutesInStage}m
         </div>
