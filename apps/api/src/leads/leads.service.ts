@@ -1007,6 +1007,23 @@ export class LeadsService {
     if (stage) {
       await this.prisma.pipelineState.update({ where: { leadId }, data: { stage, enteredStageAt: new Date() } });
       await this.sync.onStageChanged(leadId, stage);
+      // Missing before this fix (Part: pipeline countdown fix, 2026-09-04) --
+      // sync.onStageChanged only pushes to ClickUp/Sheets and emits a
+      // realtime event, it never drives the sequence itself. Nothing else
+      // ever called onStageEntered for an EMAIL_N_SENT transition (the other
+      // three call sites are advanceStage, maybeEnterOutreach, and
+      // handleWaitJob's own completion -- none of which fire when a lead
+      // reaches EMAIL_N_SENT through the normal autonomous drafting path),
+      // so SequencerService.scheduleWait's 3-business-day wait timer (and
+      // the PipelineState.nextActionAt it sets, which is the only thing the
+      // pipeline board's "Next stage in: Xd Xh" countdown ever renders) had
+      // never actually been reached by a single lead going through this
+      // path -- confirmed live: all 150 promoted leads sitting at
+      // EMAIL_1_SENT with pipelineState.nextActionAt null, none ever having
+      // advanced to WAITING_EMAIL_2. This one call is what starts that
+      // timer and keeps the sequence itself moving, not just the ClickUp
+      // mirror of it.
+      await this.sequencer.onStageEntered(leadId, stage);
     }
 
     // No longer sends synchronously here (Part: Preparation Pipeline /
