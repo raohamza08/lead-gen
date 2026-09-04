@@ -1,11 +1,24 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Worker } from "bullmq";
 import { AgentExecutionStatus } from "@prisma/client";
+import { PipelineStage } from "@leadgen/types";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { AgentDispatchQueue, AgentDispatchJob } from "../common/queue/agent-dispatch.queue";
 import { SequencerService } from "../sequencer/sequencer.service";
 import { STALE_RUNNING_MS } from "./agent-execution.service";
+
+/** Mirrors LeadsService's private STEP_FOR_WAITING_STAGE (duplicated rather
+ *  than imported to avoid an agents-module -> leads-module dependency for a
+ *  5-entry map that changes about as often as the sequence length itself) —
+ *  which step a lead waiting at a given stage needs drafted. */
+const STEP_FOR_WAITING_STAGE: Partial<Record<PipelineStage, number>> = {
+  [PipelineStage.READY_FOR_OUTREACH]: 1,
+  [PipelineStage.WAITING_EMAIL_2]: 2,
+  [PipelineStage.WAITING_EMAIL_3]: 3,
+  [PipelineStage.WAITING_EMAIL_4]: 4,
+  [PipelineStage.WAITING_EMAIL_5]: 5,
+};
 
 /** Grace window after a redispatch before this row is eligible to be swept
  *  again — long enough for the ai-workers process to receive the dispatch
@@ -94,6 +107,58 @@ export class AgentExecutionSweepWorker implements OnModuleInit, OnModuleDestroy 
         });
       } catch (err) {
         this.logger.error(`could not redispatch ${row.agent} for lead ${row.leadId}: ${(err as Error).message}`);
+      }
+    }
+
+    await this.recoverOrphanedDrafts();
+  }
+
+  /**
+   * Catches leads stuck at a waiting stage with a FAILED, contentless
+   * step draft that has NO AgentExecution row at all (Part: lead retry
+   * automation, 2026-09-04) — the loop above only ever finds rows already
+   * *inside* the tracked FAILED_RETRY_SCHEDULED system, so a lead whose
+   * draft attempt never registered one in the first place (confirmed live:
+   * pre-dating this tracking existing at all, or a dispatch where
+   * ai-workers' own start_execution call never landed) was invisible to it
+   * forever — no button existed either, so these leads had no path back to
+   * automation short of a human manually re-triggering them one at a time.
+   *
+   * Only fires once per orphaned lead: redispatching goes through the same
+   * sequencer.dispatchEmailDraft path requestEmailDraft uses, which this
+   * time DOES get picked up by ai-workers' normal start_execution call, so
+   * a further failure lands a real AgentExecution row and from then on is
+   * handled by the loop above (including NOTIFY_AFTER_ATTEMPTS) like any
+   * other agent — this is a one-time "adopt into tracking," not a parallel
+   * retry system.
+   */
+  private async recoverOrphanedDrafts() {
+    const waitingStages = Object.keys(STEP_FOR_WAITING_STAGE) as PipelineStage[];
+    const states = await this.prisma.pipelineState.findMany({
+      where: { stage: { in: waitingStages }, preparationStatus: { in: ["NOT_STARTED", "FAILED"] } },
+      select: { leadId: true, stage: true },
+      take: 200,
+    });
+
+    for (const state of states) {
+      const step = STEP_FOR_WAITING_STAGE[state.stage];
+      if (!step) continue;
+
+      const [message, execution] = await Promise.all([
+        this.prisma.emailMessage.findFirst({
+          where: { leadId: state.leadId, sequenceStep: step },
+          select: { status: true, subject: true, bodyHtml: true },
+        }),
+        this.prisma.agentExecution.findUnique({ where: { leadId_agent: { leadId: state.leadId, agent: "email_draft" } } }),
+      ]);
+      const isOrphanedFailure = message?.status === "FAILED" && !message.subject && !message.bodyHtml && !execution;
+      if (!isOrphanedFailure) continue;
+
+      try {
+        await this.sequencer.dispatchEmailDraft(state.leadId, step);
+        this.logger.warn(`Recovered orphaned failed draft for lead ${state.leadId} (step ${step}, no prior AgentExecution tracking)`);
+      } catch (err) {
+        this.logger.error(`could not recover orphaned draft for lead ${state.leadId}: ${(err as Error).message}`);
       }
     }
   }
