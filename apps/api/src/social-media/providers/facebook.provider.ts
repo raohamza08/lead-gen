@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
@@ -26,6 +26,7 @@ import { resolveOAuthCredentials } from "./oauth-credentials.util";
 @Injectable()
 export class FacebookProvider implements SocialPlatformProvider {
   readonly platform = "FACEBOOK";
+  private readonly logger = new Logger(FacebookProvider.name);
 
   readonly capabilities: SocialPlatformCapabilities = {
     publish: true,
@@ -145,6 +146,27 @@ export class FacebookProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+
+    // Temporary diagnostic (Part: isolating Facebook error #10 despite
+    // pages_read_engagement being present + connecting account already an
+    // app Administrator, 2026-09-07) -- fires three narrower variants of
+    // the same /posts call to find exactly which field the 400 traces to,
+    // since the full query's error alone doesn't say. Remove once resolved.
+    const variants: [string, string][] = [
+      ["bare", "id,message,created_time,permalink_url"],
+      ["with_full_picture", "id,full_picture"],
+      ["with_likes_summary", "id,likes.summary(true)"],
+      ["with_comments_summary", "id,comments.summary(true)"],
+      ["with_attachments", "id,attachments{media_type,media}"],
+    ];
+    for (const [label, fields] of variants) {
+      const diagRes = await fetch(
+        `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/posts?fields=${fields}&limit=1&access_token=${accessToken}`,
+      );
+      const diagBody = await diagRes.text();
+      this.logger.log(`listFeed diagnostic [${label}]: status=${diagRes.status} body=${diagBody.slice(0, 300)}`);
+    }
+
     // attachments{media_type,media} added (Part: feed video rendering fix,
     // 2026-09-07) -- full_picture alone is always a static thumbnail (safe
     // for <img>) even on a video post, but there was no way to get the
