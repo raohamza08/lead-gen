@@ -17,11 +17,26 @@ interface SocialAccountItem {
 
 interface PostGroup {
   accountId: string;
-  account: { id: string; platform: string; username: string; displayName: string | null } | null;
+  account: { id: string; platform: string; username: string; displayName: string | null; profileImageUrl: string | null } | null;
   externalPostId: string;
   commentCount: number;
   unansweredCount: number;
   lastCommentAt: string;
+}
+
+function RowAvatar({ account }: { account: PostGroup["account"] }) {
+  const label = account?.displayName || account?.username || account?.platform || "?";
+  if (account?.profileImageUrl) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img src={account.profileImageUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-[var(--line)]" />
+    );
+  }
+  return (
+    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
+      {label.replace(/^@/, "").slice(0, 1).toUpperCase()}
+    </div>
+  );
 }
 
 interface Capabilities {
@@ -177,21 +192,25 @@ function SocialEngagementPageContent() {
                 <button
                   key={`${p.accountId}:${p.externalPostId}`}
                   onClick={() => setSelected({ accountId: p.accountId, postId: p.externalPostId })}
-                  className={`flex w-full flex-col gap-1 border-b border-[var(--line)] px-3 py-2.5 text-left last:border-0 hover:bg-ink/5 ${
+                  className={`flex w-full items-start gap-2.5 border-b border-[var(--line)] px-3 py-3 text-left last:border-0 hover:bg-ink/5 ${
                     selected?.accountId === p.accountId && selected?.postId === p.externalPostId ? "bg-accent/10" : ""
-                  } ${p.unansweredCount > 0 ? "font-medium" : ""}`}
+                  }`}
                 >
-                  <div className="flex items-center justify-between gap-2 text-xs">
-                    <span>
-                      {p.account?.platform} · @{p.account?.username}
-                    </span>
-                    <span className="shrink-0 text-[10px] font-normal text-ink/40">{timeAgo(p.lastCommentAt)}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-[11px] font-normal text-ink/55">
-                    <span>{p.commentCount} comment{p.commentCount === 1 ? "" : "s"}</span>
-                    {p.unansweredCount > 0 && (
-                      <span className="rounded-full bg-bad px-1.5 py-0 text-[10px] text-white">{p.unansweredCount} unanswered</span>
-                    )}
+                  <RowAvatar account={p.account} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className={`truncate text-xs ${p.unansweredCount > 0 ? "font-semibold" : "font-medium"}`}>
+                        {p.account?.displayName || p.account?.username}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-ink/40">{timeAgo(p.lastCommentAt)}</span>
+                    </div>
+                    <div className="mt-0.5 text-[10px] uppercase tracking-wide text-ink/40">{p.account?.platform}</div>
+                    <div className="mt-1 flex items-center gap-2 text-[11px] text-ink/55">
+                      <span>{p.commentCount} comment{p.commentCount === 1 ? "" : "s"}</span>
+                      {p.unansweredCount > 0 && (
+                        <span className="rounded-full bg-bad px-1.5 py-0 text-[10px] font-medium text-white">{p.unansweredCount} unanswered</span>
+                      )}
+                    </div>
                   </div>
                 </button>
               ))

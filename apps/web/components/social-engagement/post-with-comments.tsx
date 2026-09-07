@@ -9,6 +9,8 @@ interface Post {
   externalPostId: string;
   content: string;
   mediaUrl?: string;
+  videoUrl?: string;
+  mediaType?: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM" | "OTHER";
   permalink?: string;
   postedAt: string;
   likeCount: number;
@@ -97,12 +99,12 @@ function CommentRow({ comment, canReply, canLike, platformNote, onReplied }: { c
   }
 
   return (
-    <div className="flex items-start gap-2 border-b border-[var(--line)]/60 py-3 last:border-0">
+    <div className="flex items-start gap-2.5 border-b border-[var(--line)]/60 px-1 py-3 transition-colors last:border-0 hover:bg-ink/[0.03]">
       {comment.authorProfileImageUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={comment.authorProfileImageUrl} alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" />
+        <img src={comment.authorProfileImageUrl} alt="" className="h-8 w-8 shrink-0 rounded-full object-cover ring-1 ring-[var(--line)]" />
       ) : (
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink/10 text-[10px] text-ink/50">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-ink/10 text-[11px] font-medium text-ink/50">
           {(comment.authorName || "?").slice(0, 1).toUpperCase()}
         </div>
       )}
@@ -238,34 +240,38 @@ export function PostWithComments({
   return (
     <div className={`flex h-full flex-col overflow-hidden ${hidePostPreview ? "" : "card"}`}>
       {!hidePostPreview && (
-      <div className="border-b border-[var(--line)] px-4 py-3">
-        <div className="text-xs text-ink/50">
+      <div className="border-b border-[var(--line)] px-4 py-3.5">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-ink/45">
           {account.platform} · @{account.username}
         </div>
 
         {post ? (
-          <div className="mt-2 flex gap-3">
-            {post.mediaUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={post.mediaUrl} alt="" className="h-20 w-20 shrink-0 rounded-md object-cover" />
-            )}
-            <div className="min-w-0">
-              <p className="line-clamp-3 whitespace-pre-wrap text-sm">{post.content || <span className="text-ink/40">(no caption)</span>}</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink/45">
+          <div className="mt-2.5 flex gap-3.5">
+            {(post.mediaUrl || post.videoUrl) &&
+              (post.mediaType === "VIDEO" && post.videoUrl ? (
+                <video src={post.videoUrl} poster={post.mediaUrl} controls className="h-28 w-28 shrink-0 rounded-lg bg-black object-cover" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={post.mediaUrl} alt="" className="h-28 w-28 shrink-0 rounded-lg object-cover" />
+              ))}
+            <div className="min-w-0 flex-1">
+              <p className="line-clamp-4 whitespace-pre-wrap text-sm">{post.content || <span className="text-ink/40">(no caption)</span>}</p>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] text-ink/45">
                 <span>{new Date(post.postedAt).toLocaleDateString()}</span>
-                <span>♥ {post.likeCount} · 💬 {post.commentCount}</span>
+                <span>{post.likeCount} {post.likeCount === 1 ? "like" : "likes"}</span>
+                <span>{post.commentCount} {post.commentCount === 1 ? "comment" : "comments"}</span>
                 {canLike && (
                   <button
                     onClick={() => likePostMutation.mutate()}
                     disabled={likePostMutation.isPending || postLiked}
-                    className={`inline-flex items-center gap-1 hover:underline disabled:no-underline ${postLiked ? "text-accent" : "text-ink/45"}`}
+                    className={`inline-flex items-center gap-1 font-medium hover:underline disabled:no-underline ${postLiked ? "text-accent" : "text-ink/60"}`}
                   >
                     {likePostMutation.isPending && <Spinner className="h-3 w-3" />}
                     {postLiked ? "Liked" : "Like"}
                   </button>
                 )}
                 {post.permalink && (
-                  <a href={post.permalink} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
+                  <a href={post.permalink} target="_blank" rel="noopener noreferrer" className="font-medium text-accent hover:underline">
                     View on {account.platform.toLowerCase()}
                   </a>
                 )}
