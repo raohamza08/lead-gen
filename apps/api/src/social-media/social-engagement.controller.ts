@@ -11,12 +11,13 @@ import { UpdateCommentDto, ReplyToCommentDto } from "./dto/social-engagement.dto
 /**
  * Engagement Center (Part: Social Hub Engagement, 2026-09-07) — comments on
  * our own posts, reads/writes the persisted SocialComment store. Same
- * shape and same SOCIAL_MEDIA module gate as SocialInboxController, just a
- * different surface (comments, not DMs).
+ * shape and same SOCIAL_MEDIA-or-SOCIAL_ENGAGEMENT module gate as
+ * SocialInboxController (Part: narrow Social Inbox + Engagement-only
+ * access, 2026-09-07), just a different surface (comments, not DMs).
  */
 @Controller("social-engagement")
 @UseGuards(JwtAuthGuard, ModuleAccessGuard)
-@RequiresModule("SOCIAL_MEDIA")
+@RequiresModule(["SOCIAL_MEDIA", "SOCIAL_ENGAGEMENT"])
 export class SocialEngagementController {
   constructor(private readonly service: SocialEngagementService) {}
 

@@ -5,10 +5,11 @@ import { UserAccessCacheService } from "../access/user-access-cache.service";
 import { AccessModule, MODULE_ACCESS_KEY } from "../decorators/requires-module.decorator";
 import { PermissionDenialLogger } from "./permission-denial-logger.service";
 
-const FIELD_BY_MODULE: Record<AccessModule, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess"> = {
+const FIELD_BY_MODULE: Record<AccessModule, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess"> = {
   LEAD_GENERATION: "leadGenAccess",
   EMAIL_HUB: "emailHubAccess",
   SOCIAL_MEDIA: "socialMediaAccess",
+  SOCIAL_ENGAGEMENT: "socialEngagementAccess",
 };
 
 /**
@@ -40,7 +41,7 @@ export class ModuleAccessGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const requiredModule = this.reflector.getAllAndOverride<AccessModule | undefined>(MODULE_ACCESS_KEY, [
+    const requiredModule = this.reflector.getAllAndOverride<AccessModule | AccessModule[] | undefined>(MODULE_ACCESS_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
@@ -51,10 +52,14 @@ export class ModuleAccessGuard implements CanActivate {
     if (!user) return false;
     if (user.role === Role.ADMIN) return true;
 
-    const field = FIELD_BY_MODULE[requiredModule];
+    // Array means OR: any one of the listed modules' flags being true is
+    // enough (see RequiresModule's own docblock for why this exists).
+    const modules = Array.isArray(requiredModule) ? requiredModule : [requiredModule];
+    const fields = modules.map((m) => FIELD_BY_MODULE[m]);
     const record = await this.userAccess.get(user.sub);
-    if (!record?.[field]) {
-      this.denialLogger.log(user, `missing ${field}`, context.switchToHttp().getRequest().route?.path);
+    const granted = fields.some((field) => record?.[field]);
+    if (!granted) {
+      this.denialLogger.log(user, `missing ${fields.join(" or ")}`, context.switchToHttp().getRequest().route?.path);
       throw new ForbiddenException("You don't have access to this module — ask an admin to grant it in Settings > Team.");
     }
     return true;

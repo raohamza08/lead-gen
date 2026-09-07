@@ -7,6 +7,7 @@ interface ModuleFlags {
   leadGenAccess: boolean;
   emailHubAccess: boolean;
   socialMediaAccess: boolean;
+  socialEngagementAccess: boolean;
 }
 
 interface EmailAccountRow {
@@ -34,10 +35,15 @@ interface AccessData {
   socialAccounts: SocialAccountRow[];
 }
 
-const MODULE_LABELS: { key: keyof ModuleFlags; label: string }[] = [
+const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] = [
   { key: "leadGenAccess", label: "Lead Generation" },
   { key: "emailHubAccess", label: "Email Hub" },
   { key: "socialMediaAccess", label: "Social Media" },
+  {
+    key: "socialEngagementAccess",
+    label: "Social Inbox + Engagement",
+    hint: "Narrower than Social Media — only DMs and comments, not Create Post/Calendar/Analytics/Automations/Accounts. Redundant if Social Media is already checked.",
+  },
 ];
 
 /**
@@ -137,8 +143,8 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
           <p className="text-xs text-ink/50">Admins always have access to every module — this can&apos;t be restricted here.</p>
         ) : (
           <div className="flex flex-wrap gap-3">
-            {MODULE_LABELS.map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-1.5 text-sm">
+            {MODULE_LABELS.map(({ key, label, hint }) => (
+              <label key={key} className="flex items-center gap-1.5 text-sm" title={hint}>
                 <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
                 {label}
               </label>

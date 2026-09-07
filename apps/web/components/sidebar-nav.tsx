@@ -21,10 +21,15 @@ interface NavLink {
   countKey?: "unread" | "important" | "ignored";
 }
 
-type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess";
+type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess";
 
 type NavItem =
-  | { type: "link"; href: string; label: string; moduleFlag?: ModuleFlag; requiresPrimaryAdmin?: boolean }
+  // moduleFlag accepts an array for OR semantics (Part: narrow Social Inbox
+  // + Engagement-only access, 2026-09-07) -- Social Inbox/Engagement show
+  // for someone with EITHER the broad Social Media grant or just the narrow
+  // Engagement-only one, matching ModuleAccessGuard's own OR handling for
+  // an array passed to @RequiresModule.
+  | { type: "link"; href: string; label: string; moduleFlag?: ModuleFlag | ModuleFlag[]; requiresPrimaryAdmin?: boolean }
   | { type: "group"; label: string; links: NavLink[] };
 
 /**
@@ -69,8 +74,8 @@ const NAV: NavItem[] = [
       { href: "/settings/email-hub", label: "Settings" },
     ],
   },
-  { type: "link", href: "/social-inbox", label: "Social Inbox", moduleFlag: "socialMediaAccess" },
-  { type: "link", href: "/social-engagement", label: "Engagement", moduleFlag: "socialMediaAccess" },
+  { type: "link", href: "/social-inbox", label: "Social Inbox", moduleFlag: ["socialMediaAccess", "socialEngagementAccess"] },
+  { type: "link", href: "/social-engagement", label: "Engagement", moduleFlag: ["socialMediaAccess", "socialEngagementAccess"] },
   {
     type: "group",
     label: "Social Media",
@@ -142,8 +147,19 @@ export function SidebarNav({
     api
       .getMe()
       .then((me) => {
-        const m = me as { leadGenAccess: boolean; emailHubAccess: boolean; socialMediaAccess: boolean; isPrimaryAdmin: boolean };
-        setModuleAccess({ leadGenAccess: m.leadGenAccess, emailHubAccess: m.emailHubAccess, socialMediaAccess: m.socialMediaAccess });
+        const m = me as {
+          leadGenAccess: boolean;
+          emailHubAccess: boolean;
+          socialMediaAccess: boolean;
+          socialEngagementAccess: boolean;
+          isPrimaryAdmin: boolean;
+        };
+        setModuleAccess({
+          leadGenAccess: m.leadGenAccess,
+          emailHubAccess: m.emailHubAccess,
+          socialMediaAccess: m.socialMediaAccess,
+          socialEngagementAccess: m.socialEngagementAccess,
+        });
         setIsPrimaryAdmin(m.isPrimaryAdmin);
       })
       .catch(() => {});
@@ -169,7 +185,9 @@ export function SidebarNav({
     if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
     const flag = item.type === "group" ? MODULE_FLAG_BY_GROUP[item.label] : item.moduleFlag;
     if (!flag || !moduleAccess) return true;
-    return moduleAccess[flag];
+    // Array means OR: any one of the listed flags being granted is enough
+    // (mirrors ModuleAccessGuard's own array handling on the backend).
+    return Array.isArray(flag) ? flag.some((f) => moduleAccess[f]) : moduleAccess[flag];
   });
 
   // Auto-expand whichever group contains the current page, so a direct link

@@ -214,6 +214,16 @@ model User {
   leadGenAccess     Boolean @default(true) @map("lead_gen_access")
   emailHubAccess    Boolean @default(true) @map("email_hub_access")
   socialMediaAccess Boolean @default(true) @map("social_media_access")
+  /// Narrower than socialMediaAccess (Part: narrow Social Inbox +
+  /// Engagement-only access, 2026-09-07) — grants ONLY Social Inbox +
+  /// Engagement Center (comments/DMs), not the rest of the Social Media Hub
+  /// (Create Post, Calendar, Analytics, Automations, Accounts settings).
+  /// Checked via OR alongside socialMediaAccess on those two controllers
+  /// (ModuleAccessGuard) -- someone with the broad flag doesn't need this
+  /// one too. Defaults false, unlike the other three: this is a deliberate,
+  /// narrower grant an admin turns on for a specific person (e.g. a
+  /// community manager), not an inherited default like the others.
+  socialEngagementAccess Boolean @default(false) @map("social_engagement_access")
   /// The org's single authorized administrator (Part: Notification Center &
   /// Admin/Audit, 2026-08-31) — distinct from Role.ADMIN, which any admin can
   /// already grant to any other user. This flag gates System Logs and

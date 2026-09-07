@@ -12,12 +12,15 @@ import { UpdateConversationDto, ReplyDto, CreateNoteDto, UpdateNoteDto } from ".
  * Unified Social Media DM Monitoring (Part: Unified Social Media DM
  * Monitoring Module) — reads/writes the persisted SocialConversation store,
  * never talks to a platform API directly except via reply() -> provider.
- * Gated by the same SOCIAL_MEDIA module flag as SocialMediaController since
- * this is still the social media feature area, just a different surface.
+ * Gated by SOCIAL_MEDIA (the broad grant) OR SOCIAL_ENGAGEMENT (Part:
+ * narrow Social Inbox + Engagement-only access, 2026-09-07) — someone with
+ * either flag can reach this, unlike the rest of the Social Media Hub
+ * (SocialMediaController, SocialMediaSettingsController), which stays on
+ * SOCIAL_MEDIA alone.
  */
 @Controller("social-inbox")
 @UseGuards(JwtAuthGuard, ModuleAccessGuard)
-@RequiresModule("SOCIAL_MEDIA")
+@RequiresModule(["SOCIAL_MEDIA", "SOCIAL_ENGAGEMENT"])
 export class SocialInboxController {
   constructor(private readonly service: SocialInboxService) {}
 

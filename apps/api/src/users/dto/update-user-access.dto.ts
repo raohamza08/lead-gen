@@ -5,6 +5,7 @@ export class UpdateUserModulesDto {
   @IsOptional() @IsBoolean() leadGenAccess?: boolean;
   @IsOptional() @IsBoolean() emailHubAccess?: boolean;
   @IsOptional() @IsBoolean() socialMediaAccess?: boolean;
+  @IsOptional() @IsBoolean() socialEngagementAccess?: boolean;
 }
 
 export class UpdateUserEmailAccountAccessDto {

@@ -9,6 +9,7 @@ export interface UserAccessSnapshot {
   leadGenAccess: boolean;
   emailHubAccess: boolean;
   socialMediaAccess: boolean;
+  socialEngagementAccess: boolean;
   isPrimaryAdmin: boolean;
 }
 
@@ -55,6 +56,7 @@ export class UserAccessCacheService {
           leadGenAccess: true,
           emailHubAccess: true,
           socialMediaAccess: true,
+          socialEngagementAccess: true,
           isPrimaryAdmin: true,
         },
       });
