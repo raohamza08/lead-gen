@@ -9,12 +9,14 @@ import {
   Conversation,
   ConversationMessage,
   FeedItem,
+  OAuthCredentials,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
   SocialPlatformCapabilities,
   SocialPlatformProvider,
 } from "./social-platform-provider.interface";
+import { resolveOAuthCredentials } from "./oauth-credentials.util";
 
 /**
  * X API v2, OAuth 2.0 with PKCE. Important cost caveat, surfaced here and
@@ -61,8 +63,8 @@ export class XProvider implements SocialPlatformProvider {
     return { verifier, challenge };
   }
 
-  getOAuthUrl(state: string, redirectUri: string): string {
-    const clientId = this.config.get<string>("X_OAUTH_CLIENT_ID");
+  getOAuthUrl(state: string, redirectUri: string, credentials?: OAuthCredentials): string {
+    const { clientId } = resolveOAuthCredentials(credentials, this.config, "X_OAUTH_CLIENT_ID", "X_OAUTH_CLIENT_SECRET");
     if (!clientId) throw new PlatformNotConfiguredError("X", "X_OAUTH_CLIENT_ID is not set");
     // Caller must append `code_challenge` from generatePkce() — kept out of
     // this method's signature so the interface stays uniform across
@@ -78,8 +80,8 @@ export class XProvider implements SocialPlatformProvider {
     return `https://twitter.com/i/oauth2/authorize?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string, codeVerifier?: string): Promise<ConnectedAccountProfile[]> {
-    const clientId = this.config.get<string>("X_OAUTH_CLIENT_ID");
+  async exchangeCodeForToken(code: string, redirectUri: string, codeVerifier?: string, credentials?: OAuthCredentials): Promise<ConnectedAccountProfile[]> {
+    const { clientId } = resolveOAuthCredentials(credentials, this.config, "X_OAUTH_CLIENT_ID", "X_OAUTH_CLIENT_SECRET");
     if (!clientId) throw new PlatformNotConfiguredError("X", "X_OAUTH_CLIENT_ID is not set");
     if (!codeVerifier) throw new Error("Missing PKCE code_verifier for X token exchange");
     const tokenRes = await fetch("https://api.twitter.com/2/oauth2/token", {
@@ -116,8 +118,8 @@ export class XProvider implements SocialPlatformProvider {
     }];
   }
 
-  async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {
-    const clientId = this.config.get<string>("X_OAUTH_CLIENT_ID");
+  async refreshAccessToken(account: SocialAccount, credentials?: OAuthCredentials): Promise<{ accessToken: string; expiresAt?: Date }> {
+    const { clientId } = resolveOAuthCredentials(credentials, this.config, "X_OAUTH_CLIENT_ID", "X_OAUTH_CLIENT_SECRET");
     if (!clientId || !account.refreshTokenEnc) throw new PlatformNotConfiguredError("X", "no stored refresh token");
     const res = await fetch("https://api.twitter.com/2/oauth2/token", {
       method: "POST",

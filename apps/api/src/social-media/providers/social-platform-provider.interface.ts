@@ -45,6 +45,18 @@ export interface SocialPlatformCapabilities {
   notes: string;
 }
 
+/** An OAuth app's own client id/secret, resolved by the caller (Part:
+ *  per-account OAuth app credentials, 2026-09-07) before it ever reaches a
+ *  provider -- providers don't look these up themselves anymore. Omitted
+ *  (undefined) means "use this platform's env-var default app," the same
+ *  behavior every provider had before this existed; every method below
+ *  that accepts this falls back to its own internal default when it's not
+ *  passed, so a deployment with no custom apps configured is unaffected. */
+export interface OAuthCredentials {
+  clientId: string;
+  clientSecret: string;
+}
+
 export interface ConnectedAccountProfile {
   externalAccountId: string;
   username: string;
@@ -156,8 +168,10 @@ export interface SocialPlatformProvider {
   readonly capabilities: SocialPlatformCapabilities;
 
   /** Builds the authorization redirect URL. Throws PlatformNotConfiguredError
-   *  if this platform's OAuth client id isn't set in env. */
-  getOAuthUrl(state: string, redirectUri: string): string;
+   *  if this platform's OAuth client id isn't set in env AND no `credentials`
+   *  override was passed (Part: per-account OAuth app credentials,
+   *  2026-09-07 — see OAuthCredentials' own docblock). */
+  getOAuthUrl(state: string, redirectUri: string, credentials?: OAuthCredentials): string;
 
   /** Exchanges the callback `code` for tokens + the connected account's
    *  own profile info, used to populate/refresh a SocialAccount row. Returns
@@ -169,10 +183,16 @@ export interface SocialPlatformProvider {
    *  `codeVerifier` is only meaningful for providers whose getOAuthUrl sent a
    *  PKCE `code_challenge` (X, today) — the caller looks it up from the same
    *  OAuthStateStore entry `state` round-tripped through, and every other
-   *  provider just ignores it. */
-  exchangeCodeForToken(code: string, redirectUri: string, codeVerifier?: string): Promise<ConnectedAccountProfile[]>;
+   *  provider just ignores it. `credentials` must be the exact same value
+   *  (or absence of one) passed to the getOAuthUrl call that started this
+   *  flow — a mismatched app can't exchange another app's authorization code. */
+  exchangeCodeForToken(code: string, redirectUri: string, codeVerifier?: string, credentials?: OAuthCredentials): Promise<ConnectedAccountProfile[]>;
 
-  refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }>;
+  /** `credentials` here must resolve from the SAME app the account was
+   *  originally connected with (SocialAccount.oauthAppId) -- refreshing
+   *  against a different app's client id/secret than issued the original
+   *  token fails outright on every platform that supports refresh at all. */
+  refreshAccessToken(account: SocialAccount, credentials?: OAuthCredentials): Promise<{ accessToken: string; expiresAt?: Date }>;
 
   publish(account: SocialAccount, input: PublishInput): Promise<PublishResult>;
 

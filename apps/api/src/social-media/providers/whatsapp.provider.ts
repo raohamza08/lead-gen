@@ -2,17 +2,20 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
+import { PrismaService } from "../../common/prisma/prisma.service";
 import {
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
   FeedItem,
+  OAuthCredentials,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
   SocialPlatformCapabilities,
   SocialPlatformProvider,
 } from "./social-platform-provider.interface";
+import { resolveOAuthCredentials } from "./oauth-credentials.util";
 
 /**
  * WhatsApp Business (Cloud API), via the same Meta Developer app/OAuth
@@ -59,22 +62,26 @@ export class WhatsAppProvider implements SocialPlatformProvider {
   constructor(
     private readonly config: ConfigService,
     private readonly encryption: EncryptionService,
+    private readonly prisma: PrismaService,
   ) {}
 
   private graphVersion(): string {
     return this.config.get<string>("META_GRAPH_API_VERSION", "v21.0");
   }
 
-  private clientId(): string | undefined {
-    return this.config.get<string>("META_OAUTH_CLIENT_ID");
+  /** Same reasoning as InstagramProvider.resolveCredentialsForAccount (Part:
+   *  per-account OAuth app credentials, 2026-09-07) -- listOwnedPhoneNumbers/
+   *  subscribeWebhook take an `account`, not an explicit `credentials` param,
+   *  yet still need app-level client id/secret for the debug_token call. */
+  private async resolveCredentialsForAccount(account: SocialAccount): Promise<OAuthCredentials | undefined> {
+    if (!account.oauthAppId) return undefined;
+    const app = await this.prisma.socialOAuthApp.findUnique({ where: { id: account.oauthAppId } });
+    if (!app) return undefined;
+    return { clientId: app.clientId, clientSecret: this.encryption.decrypt(app.clientSecretEnc) };
   }
 
-  private clientSecret(): string | undefined {
-    return this.config.get<string>("META_OAUTH_CLIENT_SECRET");
-  }
-
-  getOAuthUrl(state: string, redirectUri: string): string {
-    const clientId = this.clientId();
+  getOAuthUrl(state: string, redirectUri: string, credentials?: OAuthCredentials): string {
+    const { clientId } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId) throw new PlatformNotConfiguredError("WhatsApp", "META_OAUTH_CLIENT_ID is not set");
     const params = new URLSearchParams({
       client_id: clientId,
@@ -116,9 +123,9 @@ export class WhatsAppProvider implements SocialPlatformProvider {
 
   private async listOwnedPhoneNumbers(
     userToken: string,
+    credentials?: OAuthCredentials,
   ): Promise<{ wabaId: string; phoneNumberId: string; displayPhoneNumber: string; verifiedName: string }[]> {
-    const clientId = this.clientId();
-    const clientSecret = this.clientSecret();
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     const wabaIds = new Set<string>();
 
     if (clientId && clientSecret) {
@@ -184,9 +191,8 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     this.logger.log(`Phone number ${phoneNumberId} registered for Cloud API messaging: ${body}`);
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
-    const clientId = this.clientId();
-    const clientSecret = this.clientSecret();
+  async exchangeCodeForToken(code: string, redirectUri: string, _codeVerifier?: string, credentials?: OAuthCredentials): Promise<ConnectedAccountProfile[]> {
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
       throw new PlatformNotConfiguredError("WhatsApp", "META_OAUTH_CLIENT_ID/SECRET is not set");
     }
@@ -195,7 +201,7 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     if (!tokenRes.ok) throw new Error(`WhatsApp token exchange failed: ${tokenRes.status} ${await tokenRes.text()}`);
     const { access_token: userToken } = (await tokenRes.json()) as { access_token: string };
 
-    const numbers = await this.listOwnedPhoneNumbers(userToken);
+    const numbers = await this.listOwnedPhoneNumbers(userToken, credentials);
     if (numbers.length === 0) {
       throw new Error("No WhatsApp Business phone number found in any Business Manager this login can access.");
     }
@@ -234,9 +240,8 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     }));
   }
 
-  async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {
-    const clientId = this.clientId();
-    const clientSecret = this.clientSecret();
+  async refreshAccessToken(account: SocialAccount, credentials?: OAuthCredentials): Promise<{ accessToken: string; expiresAt?: Date }> {
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret || !account.accessTokenEnc) {
       throw new PlatformNotConfiguredError("WhatsApp", "no stored access token to refresh");
     }
@@ -306,7 +311,7 @@ export class WhatsAppProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("WhatsApp", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
-    const numbers = await this.listOwnedPhoneNumbers(accessToken);
+    const numbers = await this.listOwnedPhoneNumbers(accessToken, await this.resolveCredentialsForAccount(account));
     const match = numbers.find((n) => n.phoneNumberId === account.externalAccountId);
     if (!match) throw new Error("Could not find this phone number's WhatsApp Business Account to subscribe.");
     await this.registerPhoneNumber(account.externalAccountId, accessToken);

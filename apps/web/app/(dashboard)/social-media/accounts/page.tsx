@@ -40,6 +40,13 @@ interface PendingCandidate {
   accountType: string | null;
 }
 
+interface OAuthApp {
+  id: string;
+  platform: Platform;
+  name: string;
+  clientId: string;
+}
+
 function StatusBadge({ status }: { status: Account["status"] }) {
   const tone =
     status === "CONNECTED" ? "bg-good/15 text-good" : status === "EXPIRED" || status === "ERROR" ? "bg-bad/15 text-bad" : "bg-ink/8 text-ink/50";
@@ -64,12 +71,18 @@ export default function SocialAccountsPage() {
   function refresh() {
     queryClient.invalidateQueries({ queryKey: ["social-media-accounts"] });
   }
+  const oauthAppsQuery = useQuery({
+    queryKey: ["social-oauth-apps"],
+    queryFn: () => api.getSocialOAuthApps() as Promise<OAuthApp[]>,
+  });
+  const oauthApps = oauthAppsQuery.data ?? [];
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedAppByAccountId, setSelectedAppByAccountId] = useState<Record<string, string>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [pendingPlatform, setPendingPlatform] = useState<Platform | null>(null);
   const [pendingCandidates, setPendingCandidates] = useState<PendingCandidate[] | null>(null);
@@ -143,7 +156,8 @@ export default function SocialAccountsPage() {
     setBusyId(account.id);
     setError(null);
     try {
-      const { url } = await api.connectSocialAccount(account.platform);
+      const oauthAppId = selectedAppByAccountId[account.id] || undefined;
+      const { url } = await api.connectSocialAccount(account.platform, oauthAppId);
       window.location.href = url;
     } catch (err) {
       setError((err as Error).message);
@@ -329,13 +343,32 @@ export default function SocialAccountsPage() {
                   Disconnect
                 </button>
               ) : (
-                <button
-                  disabled={busyId === a.id}
-                  onClick={() => connect(a)}
-                  className="rounded-md bg-accent px-2.5 py-1 text-xs text-white disabled:opacity-50"
-                >
-                  {busyId === a.id ? "Redirecting…" : "Connect"}
-                </button>
+                <>
+                  {oauthApps.some((app) => app.platform === a.platform) && (
+                    <select
+                      value={selectedAppByAccountId[a.id] ?? ""}
+                      onChange={(e) => setSelectedAppByAccountId((m) => ({ ...m, [a.id]: e.target.value }))}
+                      className="rounded border border-[var(--line)] bg-transparent px-1.5 py-1 text-[11px]"
+                      title="Which OAuth app to connect this account through"
+                    >
+                      <option value="">Platform default app</option>
+                      {oauthApps
+                        .filter((app) => app.platform === a.platform)
+                        .map((app) => (
+                          <option key={app.id} value={app.id}>
+                            {app.name}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+                  <button
+                    disabled={busyId === a.id}
+                    onClick={() => connect(a)}
+                    className="rounded-md bg-accent px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                  >
+                    {busyId === a.id ? "Redirecting…" : "Connect"}
+                  </button>
+                </>
               )}
             </div>
           </div>

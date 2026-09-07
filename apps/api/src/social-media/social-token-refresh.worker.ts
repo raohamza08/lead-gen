@@ -83,9 +83,18 @@ export class SocialTokenRefreshWorker implements OnModuleInit, OnModuleDestroy {
 
   private async refreshOne(account: SocialAccount) {
     const provider = this.registry.for(account.platform);
+    // Same app that issued the original token, if a custom one was used
+    // (Part: per-account OAuth app credentials, 2026-09-07) -- refreshing
+    // against a different app's credentials than issued the token fails
+    // outright on every platform that supports refresh at all.
+    const credentials = account.oauthAppId
+      ? await this.prisma.socialOAuthApp.findUnique({ where: { id: account.oauthAppId } }).then((app) =>
+          app ? { clientId: app.clientId, clientSecret: this.encryption.decrypt(app.clientSecretEnc) } : undefined,
+        )
+      : undefined;
     let result: { accessToken: string; expiresAt?: Date };
     try {
-      result = await provider.refreshAccessToken(account);
+      result = await provider.refreshAccessToken(account, credentials);
     } catch (err) {
       // A refresh failure this early (the token hasn't expired yet -- this
       // runs REFRESH_LOOKAHEAD_MS ahead of that) means the *refresh* token

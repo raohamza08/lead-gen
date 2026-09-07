@@ -38,6 +38,19 @@ interface Grant {
   user: { id: string; name: string; email: string; role: string };
 }
 
+const OAUTH_APP_PLATFORMS = ["FACEBOOK", "INSTAGRAM", "LINKEDIN", "X", "TIKTOK", "YOUTUBE", "WHATSAPP"] as const;
+
+interface OAuthApp {
+  id: string;
+  platform: (typeof OAUTH_APP_PLATFORMS)[number];
+  name: string;
+  clientId: string;
+  createdAt: string;
+  _count: { accounts: number };
+}
+
+const EMPTY_APP_DRAFT = { platform: OAUTH_APP_PLATFORMS[0] as string, name: "", clientId: "", clientSecret: "" };
+
 function formatDate(iso: string | null): string {
   return iso ? new Date(iso).toLocaleDateString() : "—";
 }
@@ -74,14 +87,55 @@ export default function SocialMediaSettingsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [oauthApps, setOAuthApps] = useState<OAuthApp[]>([]);
+  const [showAppForm, setShowAppForm] = useState(false);
+  const [appDraft, setAppDraft] = useState(EMPTY_APP_DRAFT);
+  const [savingApp, setSavingApp] = useState(false);
+
   function refresh() {
     api.getSocialSettingsAccounts().then((a) => setAccounts(a as Account[])).catch((err) => setError((err as Error).message));
   }
 
+  function refreshOAuthApps() {
+    api.getSocialOAuthApps().then((a) => setOAuthApps(a as OAuthApp[])).catch((err) => setError((err as Error).message));
+  }
+
   useEffect(() => {
     refresh();
+    refreshOAuthApps();
     api.getUsers().then((u) => setMembers(u as TeamMember[])).catch(() => {});
   }, []);
+
+  async function createOAuthApp(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingApp(true);
+    setError(null);
+    try {
+      await api.createSocialOAuthApp(appDraft);
+      setAppDraft(EMPTY_APP_DRAFT);
+      setShowAppForm(false);
+      setNotice("OAuth app added — it's now selectable from the Accounts page when connecting a matching platform.");
+      refreshOAuthApps();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingApp(false);
+    }
+  }
+
+  async function deleteOAuthApp(app: OAuthApp) {
+    if (!confirm(`Delete OAuth app "${app.name}"? Accounts still connected through it will need to be reconnected first.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.deleteSocialOAuthApp(app.id);
+      refreshOAuthApps();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function toggleExpand(account: Account) {
     if (expandedId === account.id) {
@@ -228,6 +282,101 @@ export default function SocialMediaSettingsPage() {
           {notice}
         </div>
       )}
+
+      <div className="rounded-xl border border-[var(--line)] p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-semibold tracking-tight">OAuth apps</h2>
+            <p className="mt-0.5 text-xs text-ink/50">
+              Optional per-platform developer app credentials. An account picks one of these at connect time instead of
+              the shared platform-wide app — useful when different accounts (or clients) need to be kept on separate
+              Meta/LinkedIn/etc. apps. Leave unused and every account keeps using the platform-wide default.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowAppForm((v) => !v)}
+            className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+          >
+            {showAppForm ? "Cancel" : "Add app"}
+          </button>
+        </div>
+
+        {showAppForm && (
+          <form onSubmit={createOAuthApp} className="mt-3 flex flex-col gap-3 rounded-lg border border-[var(--line)] p-3 sm:flex-row sm:items-end sm:flex-wrap">
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Platform</span>
+              <select
+                value={appDraft.platform}
+                onChange={(e) => setAppDraft((d) => ({ ...d, platform: e.target.value }))}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              >
+                {OAUTH_APP_PLATFORMS.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Label *</span>
+              <input
+                required
+                value={appDraft.name}
+                onChange={(e) => setAppDraft((d) => ({ ...d, name: e.target.value }))}
+                placeholder="e.g. Client Brand X's Meta app"
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Client ID *</span>
+              <input
+                required
+                value={appDraft.clientId}
+                onChange={(e) => setAppDraft((d) => ({ ...d, clientId: e.target.value }))}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Client secret *</span>
+              <input
+                required
+                type="password"
+                value={appDraft.clientSecret}
+                onChange={(e) => setAppDraft((d) => ({ ...d, clientSecret: e.target.value }))}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              />
+            </label>
+            <button
+              type="submit"
+              disabled={savingApp || !appDraft.name.trim() || !appDraft.clientId.trim() || !appDraft.clientSecret.trim()}
+              className="rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
+            >
+              {savingApp ? "Adding…" : "Add"}
+            </button>
+          </form>
+        )}
+
+        <div className="mt-3 flex flex-col gap-1.5">
+          {oauthApps.length === 0 && <p className="text-xs text-ink/50">No custom OAuth apps — every account uses the platform-wide default.</p>}
+          {oauthApps.map((app) => (
+            <div key={app.id} className="flex items-center justify-between rounded border border-[var(--line)] px-3 py-2 text-xs">
+              <span>
+                <span className="text-ink/45">{app.platform}</span> — {app.name}{" "}
+                <span className="text-ink/45">(client id {app.clientId})</span>
+                {app._count.accounts > 0 && (
+                  <span className="ml-2 text-ink/45">
+                    · {app._count.accounts} account{app._count.accounts > 1 ? "s" : ""} using it
+                  </span>
+                )}
+              </span>
+              <button disabled={busy} onClick={() => deleteOAuthApp(app)} className="text-bad hover:underline disabled:opacity-50">
+                Delete
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="flex flex-col gap-2">
         {accounts.map((a) => (

@@ -182,6 +182,7 @@ model Organization {
   emailTags    EmailTag[]
   ignoredSenders IgnoredSender[]
   socialAccounts   SocialAccount[]
+  socialOAuthApps  SocialOAuthApp[]
   socialPosts      SocialPost[]
   mediaAssets      MediaAsset[]
   mediaFolders     MediaFolder[]
@@ -1550,6 +1551,14 @@ model SocialAccount {
   /// it can be scheduled — Part: Approval Workflow, per-account since
   /// different brands/accounts may need different rigor.
   approvalRequired  Boolean  @default(true) @map("approval_required")
+  /// Which OAuth app this account was connected through (Part: per-account
+  /// OAuth app credentials, 2026-09-07) — null means the platform-wide
+  /// default app (env vars), the only option that existed before this was
+  /// added, so every pre-existing row stays null and keeps working as-is.
+  /// Must be reused (not re-picked) on reconnect/refresh: an app can only
+  /// exchange/refresh a code or token it originally issued.
+  oauthAppId        String?  @map("oauth_app_id")
+  oauthApp          SocialOAuthApp? @relation(fields: [oauthAppId], references: [id], onDelete: SetNull)
   createdAt         DateTime @default(now()) @map("created_at")
 
   accessGrants  SocialAccountAccess[]
@@ -1562,6 +1571,33 @@ model SocialAccount {
   /// account edits this row rather than creating a duplicate.
   @@unique([orgId, platform, username])
   @@map("social_accounts")
+}
+
+/// A custom OAuth app's own client credentials (Part: per-account OAuth app
+/// credentials, 2026-09-07) — lets an org register its own Meta/LinkedIn/
+/// etc. developer app per account instead of sharing one platform-wide app
+/// (env vars) across every connected account on that platform. Purely
+/// additive: an org that never creates one of these keeps using the
+/// platform-wide default, unchanged.
+model SocialOAuthApp {
+  id              String   @id @default(uuid())
+  orgId           String   @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  platform        SocialPlatform
+  /// Operator-facing label only ("Client Brand X's Meta app") — never sent
+  /// to the platform.
+  name            String
+  clientId        String   @map("client_id")
+  /// Encrypted at rest (EncryptionService) — same convention as
+  /// SocialAccount's own token columns, never plaintext, never returned to
+  /// the frontend once saved.
+  clientSecretEnc String   @map("client_secret_enc")
+  createdByUserId String?  @map("created_by_user_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  accounts SocialAccount[]
+
+  @@map("social_oauth_apps")
 }
 
 /// Account-level permission grant — same shape and same "absence means no

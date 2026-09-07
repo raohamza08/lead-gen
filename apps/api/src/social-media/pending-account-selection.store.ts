@@ -8,6 +8,12 @@ export interface PendingAccountSelection {
   userId: string;
   platform: SocialPlatform;
   profiles: ConnectedAccountProfile[];
+  /** Which SocialOAuthApp (Part: per-account OAuth app credentials,
+   *  2026-09-07) the operator picked at "Connect" time, if any -- carried
+   *  through so whichever profile gets picked in the UI is connected with
+   *  the SAME app that issued its token, same reasoning as
+   *  PendingOAuthConnection.oauthAppId. */
+  oauthAppId?: string;
 }
 
 const TTL_MS = 10 * 60 * 1000; // same window as OAuthStateStore — plenty to read a short list and click one

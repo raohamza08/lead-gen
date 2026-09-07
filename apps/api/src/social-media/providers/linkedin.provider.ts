@@ -7,12 +7,14 @@ import {
   Conversation,
   ConversationMessage,
   FeedItem,
+  OAuthCredentials,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
   SocialPlatformCapabilities,
   SocialPlatformProvider,
 } from "./social-platform-provider.interface";
+import { resolveOAuthCredentials } from "./oauth-credentials.util";
 
 /**
  * LinkedIn's posting API sits behind the Marketing Developer Platform for
@@ -46,8 +48,8 @@ export class LinkedInProvider implements SocialPlatformProvider {
     private readonly encryption: EncryptionService,
   ) {}
 
-  getOAuthUrl(state: string, redirectUri: string): string {
-    const clientId = this.config.get<string>("LINKEDIN_OAUTH_CLIENT_ID");
+  getOAuthUrl(state: string, redirectUri: string, credentials?: OAuthCredentials): string {
+    const { clientId } = resolveOAuthCredentials(credentials, this.config, "LINKEDIN_OAUTH_CLIENT_ID", "LINKEDIN_OAUTH_CLIENT_SECRET");
     if (!clientId) throw new PlatformNotConfiguredError("LinkedIn", "LINKEDIN_OAUTH_CLIENT_ID is not set");
     const params = new URLSearchParams({
       response_type: "code",
@@ -64,9 +66,8 @@ export class LinkedInProvider implements SocialPlatformProvider {
     return `https://www.linkedin.com/oauth/v2/authorization?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
-    const clientId = this.config.get<string>("LINKEDIN_OAUTH_CLIENT_ID");
-    const clientSecret = this.config.get<string>("LINKEDIN_OAUTH_CLIENT_SECRET");
+  async exchangeCodeForToken(code: string, redirectUri: string, _codeVerifier?: string, credentials?: OAuthCredentials): Promise<ConnectedAccountProfile[]> {
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "LINKEDIN_OAUTH_CLIENT_ID", "LINKEDIN_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
       throw new PlatformNotConfiguredError("LinkedIn", "LINKEDIN_OAUTH_CLIENT_ID/SECRET is not set");
     }
@@ -109,9 +110,8 @@ export class LinkedInProvider implements SocialPlatformProvider {
     }];
   }
 
-  async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {
-    const clientId = this.config.get<string>("LINKEDIN_OAUTH_CLIENT_ID");
-    const clientSecret = this.config.get<string>("LINKEDIN_OAUTH_CLIENT_SECRET");
+  async refreshAccessToken(account: SocialAccount, credentials?: OAuthCredentials): Promise<{ accessToken: string; expiresAt?: Date }> {
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "LINKEDIN_OAUTH_CLIENT_ID", "LINKEDIN_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret || !account.refreshTokenEnc) {
       throw new PlatformNotConfiguredError("LinkedIn", "no stored refresh token");
     }

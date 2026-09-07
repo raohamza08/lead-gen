@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
+import { PrismaService } from "../../common/prisma/prisma.service";
 import {
   AccountInsights,
   ConnectedAccountProfile,
@@ -9,12 +10,14 @@ import {
   ConversationMessage,
   EngagementComment,
   FeedItem,
+  OAuthCredentials,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
   SocialPlatformCapabilities,
   SocialPlatformProvider,
 } from "./social-platform-provider.interface";
+import { resolveOAuthCredentials } from "./oauth-credentials.util";
 
 /**
  * Instagram publishing goes through the Instagram Graph API, reached via a
@@ -51,18 +54,27 @@ export class InstagramProvider implements SocialPlatformProvider {
   constructor(
     private readonly config: ConfigService,
     private readonly encryption: EncryptionService,
+    private readonly prisma: PrismaService,
   ) {}
 
   private graphVersion(): string {
     return this.config.get<string>("META_GRAPH_API_VERSION", "v21.0");
   }
 
-  private clientId(): string | undefined {
-    return this.config.get<string>("META_OAUTH_CLIENT_ID");
-  }
-
-  private clientSecret(): string | undefined {
-    return this.config.get<string>("META_OAUTH_CLIENT_SECRET");
+  /** resolvePageId/listConversations/sendMessage/subscribeWebhook below take
+   *  an `account`, not an explicit `credentials` param -- they aren't part
+   *  of the getOAuthUrl/exchangeCodeForToken/refreshAccessToken trio the
+   *  interface threads credentials through (Part: per-account OAuth app
+   *  credentials, 2026-09-07), yet resolvePageId still needs app-level
+   *  client id/secret for its debug_token call. Resolving it here, from the
+   *  account's own oauthAppId, is simpler than growing the interface --
+   *  falls back to undefined (env default) for every pre-existing account
+   *  that has no oauthAppId. */
+  private async resolveCredentialsForAccount(account: SocialAccount): Promise<{ clientId: string; clientSecret: string } | undefined> {
+    if (!account.oauthAppId) return undefined;
+    const app = await this.prisma.socialOAuthApp.findUnique({ where: { id: account.oauthAppId } });
+    if (!app) return undefined;
+    return { clientId: app.clientId, clientSecret: this.encryption.decrypt(app.clientSecretEnc) };
   }
 
   /** The Instagram Messaging endpoints (conversations/subscribed_apps/
@@ -76,9 +88,8 @@ export class InstagramProvider implements SocialPlatformProvider {
    *  from debug_token rather than storing it avoids a schema migration --
    *  it's one extra call, not on a hot path (feed/DM sync run every few
    *  minutes at most). */
-  private async resolvePageId(token: string): Promise<string> {
-    const clientId = this.clientId();
-    const clientSecret = this.clientSecret();
+  private async resolvePageId(token: string, credentials?: OAuthCredentials): Promise<string> {
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID/SECRET is not set");
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/debug_token?input_token=${token}&access_token=${clientId}|${clientSecret}`,
@@ -91,8 +102,8 @@ export class InstagramProvider implements SocialPlatformProvider {
     return body.data.profile_id;
   }
 
-  getOAuthUrl(state: string, redirectUri: string): string {
-    const clientId = this.clientId();
+  getOAuthUrl(state: string, redirectUri: string, credentials?: OAuthCredentials): string {
+    const { clientId } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId) throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID is not set");
     // pages_read_engagement was dropped earlier (2026-08-27) believing it was
     // unapproved -- it wasn't; the app's own "API setup with Facebook login"
@@ -137,9 +148,8 @@ export class InstagramProvider implements SocialPlatformProvider {
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
-    const clientId = this.clientId();
-    const clientSecret = this.clientSecret();
+  async exchangeCodeForToken(code: string, redirectUri: string, _codeVerifier?: string, credentials?: OAuthCredentials): Promise<ConnectedAccountProfile[]> {
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
       throw new PlatformNotConfiguredError("Instagram", "META_OAUTH_CLIENT_ID/SECRET is not set");
     }
@@ -369,7 +379,7 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
-    const pageId = await this.resolvePageId(accessToken);
+    const pageId = await this.resolvePageId(accessToken, await this.resolveCredentialsForAccount(account));
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${pageId}/conversations` +
         `?platform=instagram&fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
@@ -426,7 +436,7 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
-    const pageId = await this.resolvePageId(accessToken);
+    const pageId = await this.resolvePageId(accessToken, await this.resolveCredentialsForAccount(account));
     const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${pageId}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -440,7 +450,7 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
-    const pageId = await this.resolvePageId(accessToken);
+    const pageId = await this.resolvePageId(accessToken, await this.resolveCredentialsForAccount(account));
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${pageId}/subscribed_apps?subscribed_fields=messages&access_token=${accessToken}`,
       { method: "POST" },

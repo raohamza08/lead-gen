@@ -9,12 +9,14 @@ import {
   ConversationMessage,
   EngagementComment,
   FeedItem,
+  OAuthCredentials,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
   SocialPlatformCapabilities,
   SocialPlatformProvider,
 } from "./social-platform-provider.interface";
+import { resolveOAuthCredentials } from "./oauth-credentials.util";
 
 /** Facebook Page publishing via the Graph API — same Meta Developer app and
  *  OAuth flow as Instagram (Part: API & Provider Architecture reuses the
@@ -48,8 +50,8 @@ export class FacebookProvider implements SocialPlatformProvider {
     return this.config.get<string>("META_GRAPH_API_VERSION", "v21.0");
   }
 
-  getOAuthUrl(state: string, redirectUri: string): string {
-    const clientId = this.config.get<string>("META_OAUTH_CLIENT_ID");
+  getOAuthUrl(state: string, redirectUri: string, credentials?: OAuthCredentials): string {
+    const { clientId } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId) throw new PlatformNotConfiguredError("Facebook", "META_OAUTH_CLIENT_ID is not set");
     const params = new URLSearchParams({
       client_id: clientId,
@@ -66,9 +68,8 @@ export class FacebookProvider implements SocialPlatformProvider {
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
-    const clientId = this.config.get<string>("META_OAUTH_CLIENT_ID");
-    const clientSecret = this.config.get<string>("META_OAUTH_CLIENT_SECRET");
+  async exchangeCodeForToken(code: string, redirectUri: string, _codeVerifier?: string, credentials?: OAuthCredentials): Promise<ConnectedAccountProfile[]> {
+    const { clientId, clientSecret } = resolveOAuthCredentials(credentials, this.config, "META_OAUTH_CLIENT_ID", "META_OAUTH_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
       throw new PlatformNotConfiguredError("Facebook", "META_OAUTH_CLIENT_ID/SECRET is not set");
     }

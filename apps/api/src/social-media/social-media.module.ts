@@ -33,6 +33,7 @@ import { SocialEngagementSyncQueue } from "./social-engagement-sync.queue";
 import { SocialEngagementSyncWorker } from "./social-engagement-sync.worker";
 import { SocialEngagementService } from "./social-engagement.service";
 import { SocialEngagementController } from "./social-engagement.controller";
+import { SocialOAuthAppService } from "./social-oauth-app.service";
 
 @Module({
   controllers: [SocialMediaController, SocialMediaSettingsController, SocialOAuthCallbackController, MediaFileController, SocialInboxController, SocialEngagementController],
@@ -64,6 +65,7 @@ import { SocialEngagementController } from "./social-engagement.controller";
     SocialEngagementSyncQueue,
     SocialEngagementSyncWorker,
     SocialEngagementService,
+    SocialOAuthAppService,
   ],
   exports: [SocialMediaService, SocialInboxIngestService, SocialProviderRegistryService],
 })

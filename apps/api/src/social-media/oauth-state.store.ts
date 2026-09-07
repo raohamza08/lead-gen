@@ -7,6 +7,13 @@ export interface PendingOAuthConnection {
   platform: string;
   accountId?: string; // set when connecting a pre-created placeholder row rather than creating fresh
   pkceVerifier?: string;
+  /** Which SocialOAuthApp (Part: per-account OAuth app credentials,
+   *  2026-09-07) the admin picked at "Connect" time, if any -- undefined
+   *  means "use the platform-wide default app" (existing behavior,
+   *  unchanged). Round-tripped the same way accountId/pkceVerifier are:
+   *  the callback needs it again to exchange the code with the SAME app
+   *  that issued the authorization request. */
+  oauthAppId?: string;
 }
 
 const TTL_MS = 10 * 60 * 1000; // an operator needs long enough to actually complete the platform's consent screen

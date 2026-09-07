@@ -7,12 +7,14 @@ import {
   Conversation,
   ConversationMessage,
   FeedItem,
+  OAuthCredentials,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
   SocialPlatformCapabilities,
   SocialPlatformProvider,
 } from "./social-platform-provider.interface";
+import { resolveOAuthCredentials } from "./oauth-credentials.util";
 
 /**
  * TikTok's Content Posting API requires its own developer app approval,
@@ -45,8 +47,8 @@ export class TikTokProvider implements SocialPlatformProvider {
     private readonly encryption: EncryptionService,
   ) {}
 
-  getOAuthUrl(state: string, redirectUri: string): string {
-    const clientKey = this.config.get<string>("TIKTOK_CLIENT_KEY");
+  getOAuthUrl(state: string, redirectUri: string, credentials?: OAuthCredentials): string {
+    const { clientId: clientKey } = resolveOAuthCredentials(credentials, this.config, "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET");
     if (!clientKey) throw new PlatformNotConfiguredError("TikTok", "TIKTOK_CLIENT_KEY is not set");
     const params = new URLSearchParams({
       client_key: clientKey, // TikTok's own naming — "client_key," not "client_id"
@@ -58,9 +60,8 @@ export class TikTokProvider implements SocialPlatformProvider {
     return `https://www.tiktok.com/v2/auth/authorize/?${params.toString()}`;
   }
 
-  async exchangeCodeForToken(code: string, redirectUri: string): Promise<ConnectedAccountProfile[]> {
-    const clientKey = this.config.get<string>("TIKTOK_CLIENT_KEY");
-    const clientSecret = this.config.get<string>("TIKTOK_CLIENT_SECRET");
+  async exchangeCodeForToken(code: string, redirectUri: string, _codeVerifier?: string, credentials?: OAuthCredentials): Promise<ConnectedAccountProfile[]> {
+    const { clientId: clientKey, clientSecret } = resolveOAuthCredentials(credentials, this.config, "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET");
     if (!clientKey || !clientSecret) throw new PlatformNotConfiguredError("TikTok", "TIKTOK_CLIENT_KEY/SECRET is not set");
 
     const tokenRes = await fetch("https://open.tiktokapis.com/v2/oauth/token/", {
@@ -94,9 +95,8 @@ export class TikTokProvider implements SocialPlatformProvider {
     }];
   }
 
-  async refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }> {
-    const clientKey = this.config.get<string>("TIKTOK_CLIENT_KEY");
-    const clientSecret = this.config.get<string>("TIKTOK_CLIENT_SECRET");
+  async refreshAccessToken(account: SocialAccount, credentials?: OAuthCredentials): Promise<{ accessToken: string; expiresAt?: Date }> {
+    const { clientId: clientKey, clientSecret } = resolveOAuthCredentials(credentials, this.config, "TIKTOK_CLIENT_KEY", "TIKTOK_CLIENT_SECRET");
     if (!clientKey || !clientSecret || !account.refreshTokenEnc) {
       throw new PlatformNotConfiguredError("TikTok", "no stored refresh token");
     }

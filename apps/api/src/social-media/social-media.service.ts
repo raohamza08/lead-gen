@@ -12,7 +12,7 @@ import { SocialProviderRegistryService } from "./providers/social-provider-regis
 import { XProvider } from "./providers/x.provider";
 import { OAuthStateStore, PendingOAuthConnection } from "./oauth-state.store";
 import { PendingAccountSelectionStore } from "./pending-account-selection.store";
-import { ConnectedAccountProfile } from "./providers/social-platform-provider.interface";
+import { ConnectedAccountProfile, OAuthCredentials } from "./providers/social-platform-provider.interface";
 import { MEDIA_STORAGE_SERVICE, MediaStorageService } from "./media/media-storage.interface";
 import { mediaPublicUrl } from "./media/media-url";
 import { CreateSocialAccountDto, GrantSocialAccountAccessDto, UpdateSocialAccountSettingsDto } from "./dto/social-account.dto";
@@ -310,12 +310,28 @@ export class SocialMediaService {
     return `${apiPublicUrl()}/social-oauth/callback/${platform}`;
   }
 
-  async initiateConnect(user: JwtClaims, platform: SocialPlatform, accountId?: string) {
+  /** Resolves a chosen SocialOAuthApp id to real credentials (Part:
+   *  per-account OAuth app credentials, 2026-09-07) — `undefined` (no app
+   *  chosen) means "let the provider fall back to its own env-var default,"
+   *  the same behavior every connection had before this existed. */
+  private async resolveOAuthAppCredentials(orgId: string, oauthAppId: string | undefined): Promise<OAuthCredentials | undefined> {
+    if (!oauthAppId) return undefined;
+    const app = await this.prisma.socialOAuthApp.findFirst({ where: { id: oauthAppId, orgId } });
+    if (!app) throw new BadRequestException("Selected OAuth app not found");
+    return { clientId: app.clientId, clientSecret: this.encryption.decrypt(app.clientSecretEnc) };
+  }
+
+  /** `oauthAppId`, if given, must be one of this org's own SocialOAuthApp
+   *  rows for `platform` (Part: per-account OAuth app credentials,
+   *  2026-09-07) — omitted means "use the platform-wide default app",
+   *  unchanged from before this existed. */
+  async initiateConnect(user: JwtClaims, platform: SocialPlatform, accountId?: string, oauthAppId?: string) {
     const provider = this.registry.for(platform);
+    const credentials = await this.resolveOAuthAppCredentials(user.orgId, oauthAppId);
     const pkce = platform === "X" ? XProvider.generatePkce() : undefined;
-    const state = this.oauthState.create({ orgId: user.orgId, userId: user.sub, platform, accountId, pkceVerifier: pkce?.verifier });
+    const state = this.oauthState.create({ orgId: user.orgId, userId: user.sub, platform, accountId, pkceVerifier: pkce?.verifier, oauthAppId });
     try {
-      let url = provider.getOAuthUrl(state, this.callbackRedirectUri(platform));
+      let url = provider.getOAuthUrl(state, this.callbackRedirectUri(platform), credentials);
       if (pkce) url += `&code_challenge=${pkce.challenge}`;
       return { url };
     } catch (err) {
@@ -337,6 +353,7 @@ export class SocialMediaService {
     pending: Pick<PendingOAuthConnection, "orgId" | "userId">,
     platform: SocialPlatform,
     profile: ConnectedAccountProfile,
+    oauthAppId?: string,
   ) {
     const account = await this.prisma.socialAccount.upsert({
       where: { orgId_platform_username: { orgId: pending.orgId, platform, username: profile.username } },
@@ -354,6 +371,13 @@ export class SocialMediaService {
         tokenExpiresAt: profile.expiresAt,
         connectedByUserId: pending.userId,
         connectedAt: new Date(),
+        // Explicit null, not undefined, on both branches -- undefined would
+        // make Prisma's update skip the column entirely, leaving a
+        // reconnect-without-picking-an-app silently stuck on whichever app
+        // connected it LAST time even though this token was just exchanged
+        // against a different app (or the default). oauthAppId must always
+        // reflect the app that issued THIS token.
+        oauthAppId: oauthAppId ?? null,
       },
       update: {
         displayName: profile.displayName,
@@ -366,6 +390,13 @@ export class SocialMediaService {
         tokenExpiresAt: profile.expiresAt,
         connectedByUserId: pending.userId,
         connectedAt: new Date(),
+        // Explicit null, not undefined, on both branches -- undefined would
+        // make Prisma's update skip the column entirely, leaving a
+        // reconnect-without-picking-an-app silently stuck on whichever app
+        // connected it LAST time even though this token was just exchanged
+        // against a different app (or the default). oauthAppId must always
+        // reflect the app that issued THIS token.
+        oauthAppId: oauthAppId ?? null,
       },
     });
 
@@ -420,7 +451,8 @@ export class SocialMediaService {
 
     try {
       const provider = this.registry.for(platform);
-      const profiles = await provider.exchangeCodeForToken(code, this.callbackRedirectUri(platform), pending.pkceVerifier);
+      const credentials = await this.resolveOAuthAppCredentials(pending.orgId, pending.oauthAppId);
+      const profiles = await provider.exchangeCodeForToken(code, this.callbackRedirectUri(platform), pending.pkceVerifier, credentials);
 
       if (profiles.length === 0) {
         return `${accountsUrl}?social_connect_error=${encodeURIComponent("No account was found to connect")}`;
@@ -430,11 +462,11 @@ export class SocialMediaService {
       // when it does, don't guess which one the operator meant; hand the
       // list to the picker instead (Part: multi-account OAuth picker).
       if (profiles.length > 1) {
-        const pendingId = this.pendingSelection.create({ orgId: pending.orgId, userId: pending.userId, platform, profiles });
+        const pendingId = this.pendingSelection.create({ orgId: pending.orgId, userId: pending.userId, platform, profiles, oauthAppId: pending.oauthAppId });
         return `${accountsUrl}?social_pending=${pendingId}`;
       }
 
-      await this.connectProfile(pending, platform, profiles[0]);
+      await this.connectProfile(pending, platform, profiles[0], pending.oauthAppId);
       return `${accountsUrl}?social_connected=${platform}`;
     } catch (err) {
       this.logger.warn(`OAuth callback failed for ${platform}: ${(err as Error).message}`);
@@ -464,7 +496,7 @@ export class SocialMediaService {
     if (!pending || pending.orgId !== user.orgId) throw new NotFoundException("This selection has expired — please reconnect.");
     const profile = pending.profiles.find((p) => p.externalAccountId === externalAccountId);
     if (!profile) throw new NotFoundException("That account was not part of this selection.");
-    return this.connectProfile({ orgId: pending.orgId, userId: pending.userId }, pending.platform, profile);
+    return this.connectProfile({ orgId: pending.orgId, userId: pending.userId }, pending.platform, profile, pending.oauthAppId);
   }
 
   // ---------------------------------------------------------------------

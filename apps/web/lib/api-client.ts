@@ -534,8 +534,16 @@ export const api = {
   deleteSocialAccount: (id: string) => request(`/settings/social-media/accounts/${id}`, { method: "DELETE" }),
   subscribeSocialAccountWebhook: (id: string) => request(`/settings/social-media/accounts/${id}/subscribe-webhook`, { method: "POST" }),
   syncSocialInboxAccountNow: (id: string) => request(`/social-inbox/accounts/${id}/sync`, { method: "POST" }),
-  connectSocialAccount: (platform: string) =>
-    request<{ url: string }>(`/settings/social-media/accounts/${platform}/connect`, { method: "POST" }),
+  connectSocialAccount: (platform: string, oauthAppId?: string) =>
+    request<{ url: string }>(`/settings/social-media/accounts/${platform}/connect`, {
+      method: "POST",
+      body: JSON.stringify({ oauthAppId }),
+    }),
+  getSocialOAuthApps: (platform?: string) =>
+    request(`/settings/social-media/oauth-apps${platform ? `?platform=${platform}` : ""}`),
+  createSocialOAuthApp: (body: { platform: string; name: string; clientId: string; clientSecret: string }) =>
+    request("/settings/social-media/oauth-apps", { method: "POST", body: JSON.stringify(body) }),
+  deleteSocialOAuthApp: (id: string) => request(`/settings/social-media/oauth-apps/${id}`, { method: "DELETE" }),
   getPendingSocialSelection: (pendingId: string) => request(`/settings/social-media/accounts/pending/${pendingId}`),
   selectPendingSocialAccount: (pendingId: string, externalAccountId: string) =>
     request(`/settings/social-media/accounts/pending/${pendingId}/select`, {
