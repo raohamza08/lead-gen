@@ -181,7 +181,21 @@ function CommentRow({ comment, canReply, canLike, platformNote, onReplied }: { c
  * account feed page — one component, one behavior, everywhere a post's
  * comments are shown.
  */
-export function PostWithComments({ accountId, externalPostId, capabilitiesByPlatform }: { accountId: string; externalPostId: string; capabilitiesByPlatform: Record<string, Capabilities> }) {
+export function PostWithComments({
+  accountId,
+  externalPostId,
+  capabilitiesByPlatform,
+  hidePostPreview,
+}: {
+  accountId: string;
+  externalPostId: string;
+  capabilitiesByPlatform: Record<string, Capabilities>;
+  /** True when the caller already shows the post's own header/media/caption/
+   *  like-button above this component (Part: account feed page's Instagram-
+   *  style PostCard, 2026-09-07) -- repeating it here would just duplicate
+   *  the same header and a second Like button right underneath the first. */
+  hidePostPreview?: boolean;
+}) {
   const queryClient = useQueryClient();
   const [postLiked, setPostLiked] = useState(false);
   const [postLikeError, setPostLikeError] = useState<string | null>(null);
@@ -222,7 +236,8 @@ export function PostWithComments({ accountId, externalPostId, capabilitiesByPlat
   const canLike = platformCaps?.likes ?? false;
 
   return (
-    <div className="card flex h-full flex-col overflow-hidden">
+    <div className={`flex h-full flex-col overflow-hidden ${hidePostPreview ? "" : "card"}`}>
+      {!hidePostPreview && (
       <div className="border-b border-[var(--line)] px-4 py-3">
         <div className="text-xs text-ink/50">
           {account.platform} · @{account.username}
@@ -264,6 +279,7 @@ export function PostWithComments({ accountId, externalPostId, capabilitiesByPlat
           </p>
         )}
       </div>
+      )}
 
       <div className="flex-1 overflow-y-auto px-4 py-1">
         {comments.length === 0 ? (
