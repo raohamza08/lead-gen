@@ -217,14 +217,14 @@ export class SocialMediaService {
     });
   }
 
-  async grantAccess(orgId: string, accountId: string, dto: GrantSocialAccountAccessDto) {
+  async grantAccess(actorId: string, orgId: string, accountId: string, dto: GrantSocialAccountAccessDto) {
     const [account, targetUser] = await Promise.all([
       this.prisma.socialAccount.findFirst({ where: { id: accountId, orgId } }),
       this.prisma.user.findFirst({ where: { id: dto.userId, orgId } }),
     ]);
     if (!account) throw new NotFoundException("Social account not found");
     if (!targetUser) throw new NotFoundException("User not found");
-    return this.prisma.socialAccountAccess.upsert({
+    const grant = await this.prisma.socialAccountAccess.upsert({
       where: { userId_accountId: { userId: dto.userId, accountId } },
       create: {
         userId: dto.userId,
@@ -235,12 +235,26 @@ export class SocialMediaService {
       },
       update: { canView: dto.canView, canPublish: dto.canPublish, canApprove: dto.canApprove },
     });
+    // Access-grant changes were the one social action never audited (Part:
+    // Connected Social Accounts token vault, 2026-09-07) -- every other
+    // account/post action already writes here (see connectProfile/
+    // disconnectAccount/deleteAccount above), but who-can-touch-this-account
+    // is exactly the kind of change "who did what, on which account, and
+    // when" needs to cover.
+    await this.writeAudit(orgId, actorId, "ACCESS_GRANTED", {
+      accountId,
+      diff: { targetUserId: dto.userId, canView: grant.canView, canPublish: grant.canPublish, canApprove: grant.canApprove },
+    });
+    return grant;
   }
 
-  async revokeAccess(orgId: string, accountId: string, userId: string) {
+  async revokeAccess(actorId: string, orgId: string, accountId: string, userId: string) {
     const account = await this.prisma.socialAccount.findFirst({ where: { id: accountId, orgId } });
     if (!account) throw new NotFoundException("Social account not found");
     const res = await this.prisma.socialAccountAccess.deleteMany({ where: { accountId, userId } });
+    if (res.count > 0) {
+      await this.writeAudit(orgId, actorId, "ACCESS_REVOKED", { accountId, diff: { targetUserId: userId } });
+    }
     return { revoked: res.count };
   }
 
@@ -389,6 +403,19 @@ export class SocialMediaService {
     const pending = this.oauthState.consume(state);
     if (!pending || pending.platform !== platform) {
       return `${accountsUrl}?social_connect_error=${encodeURIComponent("This connection request expired or is invalid — please try again")}`;
+    }
+
+    // initiateConnect is @Roles(ADMIN)-gated, but that only proves the
+    // caller was ADMIN at the moment they clicked Connect -- state can sit
+    // unconsumed for up to its full TTL (OAuthStateStore) while the browser
+    // is off on the provider's consent screen. Re-checking here closes that
+    // window (Part: Connected Social Accounts token vault, 2026-09-07): if
+    // the connecting user was demoted or deactivated in the interim, this
+    // callback must not still be able to complete a privileged connect on
+    // their stale authority.
+    const connectingUser = await this.prisma.user.findFirst({ where: { id: pending.userId, orgId: pending.orgId } });
+    if (!connectingUser?.active || connectingUser.role !== Role.ADMIN) {
+      return `${accountsUrl}?social_connect_error=${encodeURIComponent("Your admin session is no longer valid for this action — please sign in again and retry.")}`;
     }
 
     try {

@@ -42,6 +42,11 @@ export const QUEUE_NAMES = {
   // Centralized dispatch queue for every send in the 5-email sequence (Part:
   // Preparation Pipeline / Sending Queue, 2026-09-01) — see sending.worker.ts.
   SENDING_QUEUE: "sending-queue",
+  // Proactively refreshes any connected social account's access token before
+  // it expires (Part: Connected Social Accounts token vault, 2026-09-07) —
+  // see social-token-refresh.worker.ts. Separate queue from SOCIAL_PUBLISH
+  // since this runs on its own, much longer cadence.
+  SOCIAL_TOKEN_REFRESH: "social-token-refresh",
   // Re-dispatches RETRY_SCHEDULED messages whose retry is due, and reclaims
   // stale SENDING locks a crashed worker left stuck — same shape as
   // AGENT_EXECUTION_SWEEP. See sending-sweep.worker.ts.

@@ -14,6 +14,8 @@ import { OAuthStateStore } from "./oauth-state.store";
 import { PendingAccountSelectionStore } from "./pending-account-selection.store";
 import { SocialPublishQueue } from "./social-publish.queue";
 import { SocialPublishWorker } from "./social-publish.worker";
+import { SocialTokenRefreshQueue } from "./social-token-refresh.queue";
+import { SocialTokenRefreshWorker } from "./social-token-refresh.worker";
 import { SocialMediaService } from "./social-media.service";
 import { SocialMediaController } from "./social-media.controller";
 import { SocialMediaSettingsController } from "./social-media-settings.controller";
@@ -40,6 +42,8 @@ import { SocialInboxController } from "./social-inbox.controller";
     PendingAccountSelectionStore,
     SocialPublishQueue,
     SocialPublishWorker,
+    SocialTokenRefreshQueue,
+    SocialTokenRefreshWorker,
     SocialMediaService,
     SocialInboxIngestService,
     SocialInboxSyncQueue,

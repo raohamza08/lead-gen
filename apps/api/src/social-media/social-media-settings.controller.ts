@@ -83,12 +83,12 @@ export class SocialMediaSettingsController {
   @Post("accounts/:id/access")
   @Roles(Role.ADMIN)
   grantAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: GrantSocialAccountAccessDto) {
-    return this.service.grantAccess(user.orgId, id, dto);
+    return this.service.grantAccess(user.sub, user.orgId, id, dto);
   }
 
   @Delete("accounts/:id/access/:userId")
   @Roles(Role.ADMIN)
   revokeAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Param("userId") userId: string) {
-    return this.service.revokeAccess(user.orgId, id, userId);
+    return this.service.revokeAccess(user.sub, user.orgId, id, userId);
   }
 }
