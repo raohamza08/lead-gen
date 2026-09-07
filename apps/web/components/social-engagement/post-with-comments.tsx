@@ -35,6 +35,7 @@ interface PostDetail {
 
 interface Capabilities {
   comments: boolean;
+  likes: boolean;
   notes: string;
 }
 
@@ -56,10 +57,11 @@ const STATUS_TONE: Record<string, string> = {
 /** One inbound comment row + its own reply box, expanded in place -- not a
  *  separate page, since answering one comment out of a post's several is
  *  the common case and shouldn't require navigating away and back. */
-function CommentRow({ comment, canReply, platformNote, onReplied }: { comment: Comment; canReply: boolean; platformNote?: string; onReplied: () => void }) {
+function CommentRow({ comment, canReply, canLike, platformNote, onReplied }: { comment: Comment; canReply: boolean; canLike: boolean; platformNote?: string; onReplied: () => void }) {
   const [replying, setReplying] = useState(false);
   const [text, setText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [liked, setLiked] = useState(false);
 
   const replyMutation = useMutation({
     mutationFn: (t: string) => api.replySocialEngagementComment(comment.id, t),
@@ -68,6 +70,12 @@ function CommentRow({ comment, canReply, platformNote, onReplied }: { comment: C
       setReplying(false);
       onReplied();
     },
+    onError: (err) => setError((err as Error).message),
+  });
+
+  const likeMutation = useMutation({
+    mutationFn: () => api.likeSocialEngagementComment(comment.id),
+    onSuccess: () => setLiked(true),
     onError: (err) => setError((err as Error).message),
   });
 
@@ -108,6 +116,17 @@ function CommentRow({ comment, canReply, platformNote, onReplied }: { comment: C
         <p className="mt-0.5 whitespace-pre-wrap text-sm">{comment.text || <span className="text-ink/40">(no text)</span>}</p>
 
         {error && <p className="mt-1 text-xs text-bad">{error}</p>}
+
+        {canLike && (
+          <button
+            onClick={() => likeMutation.mutate()}
+            disabled={likeMutation.isPending || liked}
+            className={`mt-1 mr-3 inline-flex items-center gap-1 text-xs hover:underline disabled:no-underline ${liked ? "text-accent" : "text-ink/50"}`}
+          >
+            {likeMutation.isPending && <Spinner className="h-3 w-3" />}
+            {liked ? "Liked" : "Like"}
+          </button>
+        )}
 
         {canReply ? (
           replying ? (
@@ -164,10 +183,18 @@ function CommentRow({ comment, canReply, platformNote, onReplied }: { comment: C
  */
 export function PostWithComments({ accountId, externalPostId, capabilitiesByPlatform }: { accountId: string; externalPostId: string; capabilitiesByPlatform: Record<string, Capabilities> }) {
   const queryClient = useQueryClient();
+  const [postLiked, setPostLiked] = useState(false);
+  const [postLikeError, setPostLikeError] = useState<string | null>(null);
 
   const detailQuery = useQuery({
     queryKey: ["social-engagement-post", accountId, externalPostId],
     queryFn: () => api.getSocialEngagementPost(accountId, externalPostId) as Promise<PostDetail>,
+  });
+
+  const likePostMutation = useMutation({
+    mutationFn: () => api.likeSocialFeedPost(accountId, externalPostId),
+    onSuccess: () => setPostLiked(true),
+    onError: (err) => setPostLikeError((err as Error).message),
   });
 
   function invalidate() {
@@ -192,6 +219,7 @@ export function PostWithComments({ accountId, externalPostId, capabilitiesByPlat
   const { account, post, comments } = detail;
   const platformCaps = capabilitiesByPlatform[account.platform];
   const canReply = platformCaps?.comments ?? false;
+  const canLike = platformCaps?.likes ?? false;
 
   return (
     <div className="card flex h-full flex-col overflow-hidden">
@@ -211,12 +239,23 @@ export function PostWithComments({ accountId, externalPostId, capabilitiesByPlat
               <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-ink/45">
                 <span>{new Date(post.postedAt).toLocaleDateString()}</span>
                 <span>♥ {post.likeCount} · 💬 {post.commentCount}</span>
+                {canLike && (
+                  <button
+                    onClick={() => likePostMutation.mutate()}
+                    disabled={likePostMutation.isPending || postLiked}
+                    className={`inline-flex items-center gap-1 hover:underline disabled:no-underline ${postLiked ? "text-accent" : "text-ink/45"}`}
+                  >
+                    {likePostMutation.isPending && <Spinner className="h-3 w-3" />}
+                    {postLiked ? "Liked" : "Like"}
+                  </button>
+                )}
                 {post.permalink && (
                   <a href={post.permalink} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
                     View on {account.platform.toLowerCase()}
                   </a>
                 )}
               </div>
+              {postLikeError && <p className="mt-1 text-[11px] text-bad">{postLikeError}</p>}
             </div>
           </div>
         ) : (
@@ -231,7 +270,7 @@ export function PostWithComments({ accountId, externalPostId, capabilitiesByPlat
           <p className="py-8 text-center text-xs text-ink/40">No comments on this post.</p>
         ) : (
           comments.map((c) => (
-            <CommentRow key={c.id} comment={c} canReply={canReply} platformNote={platformCaps?.notes} onReplied={invalidate} />
+            <CommentRow key={c.id} comment={c} canReply={canReply} canLike={canLike} platformNote={platformCaps?.notes} onReplied={invalidate} />
           ))
         )}
       </div>

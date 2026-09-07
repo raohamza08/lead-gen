@@ -40,6 +40,7 @@ export class YouTubeProvider implements SocialPlatformProvider {
     analytics: true,
     comments: true,
     dms: false,
+    likes: false,
     mediaTypes: ["video"],
     notes:
       "Google's default daily quota allows roughly 6 video uploads/day (videos.insert costs 1600 of a 10,000-unit " +

@@ -42,6 +42,7 @@ export class XProvider implements SocialPlatformProvider {
     // this was never actually available on the free tier this app runs on.
     comments: false,
     dms: false, // Direct Message API access is a separate, more restricted permission tier
+    likes: false,
     mediaTypes: ["image", "video", "gif"],
     notes:
       "X's free API tier cannot post meaningfully — real write access requires a paid API tier (Basic or above, " +

@@ -3,9 +3,10 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api } from "../../../../../lib/api-client";
 import { PostWithComments } from "../../../../../components/social-engagement/post-with-comments";
+import { Spinner } from "../../../../../components/spinner";
 
 interface Account {
   id: string;
@@ -27,6 +28,7 @@ interface FeedItem {
 
 interface Capabilities {
   comments: boolean;
+  likes: boolean;
   notes: string;
 }
 
@@ -77,7 +79,16 @@ function UnavailableFallback({ account, message }: { account: Account; message: 
  */
 function PostCard({ account, item, capabilitiesByPlatform }: { account: Account; item: FeedItem; capabilitiesByPlatform: Record<string, Capabilities> }) {
   const [expanded, setExpanded] = useState(false);
+  const [liked, setLiked] = useState(false);
+  const [likeError, setLikeError] = useState<string | null>(null);
   const canShowComments = capabilitiesByPlatform[account.platform]?.comments ?? false;
+  const canLike = capabilitiesByPlatform[account.platform]?.likes ?? false;
+
+  const likeMutation = useMutation({
+    mutationFn: () => api.likeSocialFeedPost(account.id, item.externalPostId),
+    onSuccess: () => setLiked(true),
+    onError: (err) => setLikeError((err as Error).message),
+  });
 
   return (
     <div className="card overflow-hidden">
@@ -91,6 +102,16 @@ function PostCard({ account, item, capabilitiesByPlatform }: { account: Account;
           <div className="mt-auto flex flex-wrap items-center gap-3 text-xs text-ink/50">
             <span>{new Date(item.postedAt).toLocaleDateString()}</span>
             <span>♥ {item.likeCount} · 💬 {item.commentCount}</span>
+            {canLike && (
+              <button
+                onClick={() => likeMutation.mutate()}
+                disabled={likeMutation.isPending || liked}
+                className={`inline-flex items-center gap-1 hover:underline disabled:no-underline ${liked ? "text-accent" : "text-ink/50"}`}
+              >
+                {likeMutation.isPending && <Spinner className="h-3 w-3" />}
+                {liked ? "Liked" : "Like"}
+              </button>
+            )}
             {item.isOwnPost && <span className="rounded-full bg-accent/15 px-2 py-0.5 text-[10px] text-accent">Published here</span>}
             {item.permalink && (
               <a href={item.permalink} target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">
@@ -103,6 +124,7 @@ function PostCard({ account, item, capabilitiesByPlatform }: { account: Account;
               </button>
             )}
           </div>
+          {likeError && <p className="text-xs text-bad">{likeError}</p>}
         </div>
       </div>
       {expanded && (

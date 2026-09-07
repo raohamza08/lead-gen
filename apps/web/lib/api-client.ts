@@ -461,6 +461,8 @@ export const api = {
     request(`/social-media/analytics?${new URLSearchParams(params).toString()}`),
   getSocialAnalyticsHistory: (accountId: string) => request(`/social-media/analytics/accounts/${accountId}/history`),
   getAccountFeed: (accountId: string) => request(`/social-media/accounts/${accountId}/feed`),
+  likeSocialFeedPost: (accountId: string, externalPostId: string) =>
+    request(`/social-media/accounts/${accountId}/feed/${encodeURIComponent(externalPostId)}/like`, { method: "POST" }),
   getSocialPosts: (params: Record<string, string> = {}) =>
     request(`/social-media/posts?${new URLSearchParams(params).toString()}`),
   getSocialPost: (id: string) => request(`/social-media/posts/${id}`),
@@ -591,4 +593,5 @@ export const api = {
     request(`/social-engagement/comments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   replySocialEngagementComment: (id: string, text: string) =>
     request(`/social-engagement/comments/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  likeSocialEngagementComment: (id: string) => request(`/social-engagement/comments/${id}/like`, { method: "POST" }),
 };

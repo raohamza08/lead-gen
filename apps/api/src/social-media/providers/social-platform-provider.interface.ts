@@ -55,6 +55,12 @@ export interface SocialPlatformCapabilities {
   analytics: boolean;
   comments: boolean;
   dms: boolean;
+  /** Whether provider.likePost/likeComment are actually implemented (Part:
+   *  Social Hub Engagement — like posts and comments, 2026-09-07). Kept
+   *  separate from `comments` since a platform can support reading/replying
+   *  to comments without exposing a like endpoint at all (true of every
+   *  platform here except Facebook today). */
+  likes: boolean;
   mediaTypes: string[];
   notes: string;
 }
@@ -227,6 +233,17 @@ export interface SocialPlatformProvider {
   /** Posts a reply to one comment. Returns the reply's own new comment id
    *  so the caller can record it as `fromUs` without a second fetch. */
   replyToComment?(account: SocialAccount, externalCommentId: string, text: string): Promise<{ externalCommentId: string }>;
+
+  /** Optional: only present where a platform's public API actually exposes
+   *  a write "like" endpoint (Part: Social Hub Engagement — like posts and
+   *  comments, 2026-09-07). Idempotent per the underlying platform API's own
+   *  contract — calling it on an already-liked object is a harmless no-op,
+   *  not an error, so callers don't need to check "already liked" first. */
+  likePost?(account: SocialAccount, externalPostId: string): Promise<void>;
+
+  /** Same idempotency contract as likePost above, addressed at a comment
+   *  instead of a post. */
+  likeComment?(account: SocialAccount, externalCommentId: string): Promise<void>;
 
   /** Recent posts on this account with current engagement counts (Part:
    *  Social Media Hub). Throws PlatformNotConfiguredError with a real

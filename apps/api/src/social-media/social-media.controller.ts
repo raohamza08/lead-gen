@@ -78,6 +78,11 @@ export class SocialMediaController {
     return this.service.getFeed(user, id);
   }
 
+  @Post("accounts/:id/feed/:externalPostId/like")
+  likeFeedPost(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Param("externalPostId") externalPostId: string) {
+    return this.service.likeFeedPost(user, id, externalPostId);
+  }
+
   // ---- Posts ----
 
   @Get("posts")

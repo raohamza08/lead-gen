@@ -83,4 +83,9 @@ export class SocialEngagementController {
   reply(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: ReplyToCommentDto) {
     return this.service.reply(user, id, dto);
   }
+
+  @Post("comments/:id/like")
+  like(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.service.like(user, id);
+  }
 }

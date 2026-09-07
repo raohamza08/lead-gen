@@ -42,6 +42,13 @@ export class InstagramProvider implements SocialPlatformProvider {
     analytics: true,
     comments: true,
     dms: true,
+    // The Instagram Graph API has no like/unlike endpoint for a Business
+    // account to call on a post or comment -- unlike Facebook's generic
+    // /likes edge, this was never exposed for third-party apps (Meta
+    // restricts programmatic engagement on Instagram more tightly than on
+    // Facebook Pages). Not a missing scope to chase -- there is no scope
+    // that grants this.
+    likes: false,
     mediaTypes: ["image", "video", "carousel", "reel"],
     notes:
       "Requires a Business/Creator Instagram account linked to a Facebook Page, connected through a Meta Developer app. " +
@@ -116,23 +123,19 @@ export class InstagramProvider implements SocialPlatformProvider {
     // granted: that permission alone isn't sufficient without this pair.
     // pages_manage_metadata added -- needed by subscribeWebhook below.
     //
-    // instagram_manage_comments is deliberately NOT requested here (Part:
-    // Social Hub Engagement, 2026-09-07), even though listComments/
-    // replyToComment below need it -- Meta rejects the ENTIRE OAuth request
-    // with "Invalid Scopes" if even one requested scope isn't approved for
-    // this app's use case (confirmed live, 2026-08-27, the reason
-    // pages_manage_posts/pages_read_engagement were dropped from
-    // facebook.provider.ts below). Whether instagram_manage_comments is
-    // approved for this app hasn't been verified, and guessing wrong here
-    // would break Instagram's entire connect flow, not just comments. If
-    // listComments/replyToComment fail with a Meta permissions error,
-    // that's the fix: verify the permission in Meta App Review, add it
-    // here, and reconnect affected accounts -- not something this code
-    // should silently assume.
+    // instagram_manage_comments added 2026-09-07 -- previously withheld since
+    // Meta rejects the ENTIRE OAuth request with "Invalid Scopes" if even one
+    // requested scope isn't approved for this app's use case (confirmed live,
+    // 2026-08-27), and this specific permission's approval status hadn't been
+    // verified. Added now alongside facebook.provider.ts's equivalent
+    // pages_manage_engagement addition -- if either turns out not to be
+    // approved, Meta rejects the whole request again and this needs to drop
+    // back out until verified in App Review.
     const scopes = [
       "instagram_basic",
       "instagram_content_publish",
       "instagram_manage_messages",
+      "instagram_manage_comments",
       "pages_show_list",
       "pages_manage_metadata",
       "pages_read_engagement",
@@ -380,9 +383,13 @@ export class InstagramProvider implements SocialPlatformProvider {
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
     const pageId = await this.resolvePageId(accessToken, await this.resolveCredentialsForAccount(account));
+    // `limit=25` is required, not optional -- Meta's default page size on
+    // this edge is large enough that an account with many long-lived threads
+    // trips error #1 ("Please reduce the amount of data you're asking for")
+    // outright with no `limit` set at all, confirmed live 2026-09-07.
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${pageId}/conversations` +
-        `?platform=instagram&fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
+        `?platform=instagram&fields=participants,updated_time,snippet,unread_count&limit=25&access_token=${accessToken}`,
     );
     if (!res.ok) throw new Error(`Instagram conversations fetch failed: ${res.status} ${await res.text()}`);
     const rawText = await res.text();

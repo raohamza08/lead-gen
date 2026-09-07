@@ -297,6 +297,26 @@ export class SocialMediaService {
     }
   }
 
+  /** A human clicked Like on a feed post (Part: Social Hub Engagement — like
+   *  posts and comments, 2026-09-07) — same "explicit, one direct API call"
+   *  shape as sendMessage/replyToComment elsewhere in this file, never
+   *  automatic. Only present on platforms whose provider actually
+   *  implements likePost (Facebook today); every other platform's provider
+   *  simply omits the method, so its absence is visible in the type. */
+  async likeFeedPost(user: JwtClaims, accountId: string, externalPostId: string) {
+    const account = await this.getOwnedAccount(user, accountId);
+    const provider = this.registry.for(account.platform);
+    if (!provider.likePost) {
+      throw new BadRequestException(`${account.platform} doesn't support liking posts via its official API.`);
+    }
+    try {
+      await provider.likePost(account, externalPostId);
+    } catch (err) {
+      this.asBadRequest(err);
+    }
+    return { liked: true };
+  }
+
   // Conversations/messages/reply moved to SocialInboxService (Part: Unified
   // Social Media DM Monitoring) -- the persisted inbox replaces this
   // module's old live-fetch-only DM tab, which is why there's no

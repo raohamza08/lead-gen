@@ -15,6 +15,7 @@ interface Capabilities {
   analytics: boolean;
   comments: boolean;
   dms: boolean;
+  likes: boolean;
   mediaTypes: string[];
   notes: string;
 }
@@ -323,6 +324,7 @@ export default function SocialAccountsPage() {
                 ["Analytics", a.capabilities.analytics],
                 ["Comments", a.capabilities.comments],
                 ["DMs", a.capabilities.dms],
+                ["Likes", a.capabilities.likes],
               ].map(([label, on]) => (
                 <span
                   key={label as string}

@@ -36,6 +36,7 @@ export class LinkedInProvider implements SocialPlatformProvider {
     analytics: false, // Organization analytics require additional Marketing Developer Platform approval beyond posting
     comments: false,
     dms: false,
+    likes: false,
     mediaTypes: ["image", "video", "article-link"],
     notes:
       "Company Page posting requires approval for LinkedIn's Marketing Developer Platform (partner-gated, apply " +

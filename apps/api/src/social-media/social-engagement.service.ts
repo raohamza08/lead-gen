@@ -182,6 +182,20 @@ export class SocialEngagementService {
     return { sent: true, commentId };
   }
 
+  async like(user: JwtClaims, id: string) {
+    const comment = await this.assertCommentAccess(user, id);
+    const provider = this.registry.for(comment.socialAccount.platform);
+    if (!provider.likeComment) {
+      throw new BadRequestException(`${comment.socialAccount.platform} doesn't support liking comments via its official API.`);
+    }
+    try {
+      await provider.likeComment(comment.socialAccount, comment.externalCommentId);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+    return { liked: true };
+  }
+
   /**
    * Posts that have at least one comment, one row per post (Part: Social
    * Hub Engagement post-centric redesign, 2026-09-07) -- the Engagement

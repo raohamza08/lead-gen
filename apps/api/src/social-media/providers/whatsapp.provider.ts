@@ -51,6 +51,7 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     analytics: false,
     comments: false,
     dms: true,
+    likes: false,
     mediaTypes: ["image", "video", "document", "audio"],
     notes:
       "Messaging only — WhatsApp has no public feed or post concept, so publishing/scheduling isn't offered here. " +

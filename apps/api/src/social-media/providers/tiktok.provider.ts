@@ -35,6 +35,7 @@ export class TikTokProvider implements SocialPlatformProvider {
     analytics: false,
     comments: false,
     dms: false,
+    likes: false,
     mediaTypes: ["video"],
     notes:
       "Requires a TikTok developer app approved for the Content Posting API. Until that app passes TikTok's own " +

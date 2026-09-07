@@ -33,6 +33,7 @@ export class FacebookProvider implements SocialPlatformProvider {
     analytics: true,
     comments: true,
     dms: true,
+    likes: true,
     mediaTypes: ["image", "video", "link"],
     notes:
       "Publishes to a Facebook Page (not a personal profile — the Graph API does not support posting to personal " +
@@ -57,12 +58,22 @@ export class FacebookProvider implements SocialPlatformProvider {
       client_id: clientId,
       redirect_uri: redirectUri,
       state,
-      // pages_manage_posts/pages_read_engagement dropped -- not approved for
-      // this app (Meta returns "Invalid Scopes" and rejects the whole OAuth
-      // request if even one requested scope isn't available, confirmed
-      // 2026-08-27). pages_manage_metadata is what /subscribed_apps (webhook
-      // subscription) actually needs and is available, so requested instead.
-      scope: ["pages_show_list", "pages_messaging", "pages_manage_metadata"].join(","),
+      // pages_manage_posts dropped -- not approved for this app (Meta returns
+      // "Invalid Scopes" and rejects the whole OAuth request if even one
+      // requested scope isn't available, confirmed 2026-08-27).
+      // pages_manage_metadata is what /subscribed_apps (webhook subscription)
+      // actually needs and is available, so requested instead.
+      //
+      // pages_read_engagement/pages_manage_engagement re-added 2026-09-07 --
+      // pages_read_engagement was wrongly assumed unapproved here even though
+      // instagram.provider.ts's identical Meta app already requests and uses
+      // it successfully (confirmed via live logs: Facebook feed/comment sync
+      // failing with Meta error #10 asking for exactly this permission, while
+      // Instagram's own sync succeeds). pages_manage_engagement (comment
+      // replies) hasn't been separately confirmed approved -- if it turns out
+      // not to be, Meta rejects the WHOLE request again, same failure mode as
+      // before, and this needs to drop back out until verified in App Review.
+      scope: ["pages_show_list", "pages_messaging", "pages_manage_metadata", "pages_read_engagement", "pages_manage_engagement"].join(","),
       response_type: "code",
     });
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
@@ -253,14 +264,42 @@ export class FacebookProvider implements SocialPlatformProvider {
     return { externalCommentId: result.id };
   }
 
+  /** Graph API's /likes edge is generic -- the same POST shape works whether
+   *  `objectId` is a post or a comment id, addressed as the Page (not a
+   *  person), which is what pages_manage_engagement grants. Real, honest
+   *  call: if this permission turns out not to actually be approved for
+   *  this app despite requesting it in getOAuthUrl above, this throws
+   *  Meta's real error rather than pretending to succeed. */
+  private async like(objectId: string, accessToken: string): Promise<void> {
+    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${objectId}/likes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    if (!res.ok) throw new Error(`Facebook like failed: ${res.status} ${await res.text()}`);
+  }
+
+  async likePost(account: SocialAccount, externalPostId: string): Promise<void> {
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    await this.like(externalPostId, this.encryption.decrypt(account.accessTokenEnc));
+  }
+
+  async likeComment(account: SocialAccount, externalCommentId: string): Promise<void> {
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    await this.like(externalCommentId, this.encryption.decrypt(account.accessTokenEnc));
+  }
+
   async listConversations(account: SocialAccount): Promise<Conversation[]> {
     if (!account.accessTokenEnc || !account.externalAccountId) {
       throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    // limit=25: same "Please reduce the amount of data you're asking for"
+    // (Meta error #1) risk this hit for Instagram's identical query on an
+    // account with many long-lived threads -- bounded proactively here too.
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/conversations` +
-        `?fields=participants,updated_time,snippet,unread_count&access_token=${accessToken}`,
+        `?fields=participants,updated_time,snippet,unread_count&limit=25&access_token=${accessToken}`,
     );
     if (!res.ok) throw new Error(`Facebook conversations fetch failed: ${res.status} ${await res.text()}`);
     const body = (await res.json()) as {

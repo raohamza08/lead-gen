@@ -26,6 +26,7 @@ interface PostGroup {
 
 interface Capabilities {
   comments: boolean;
+  likes: boolean;
   notes: string;
 }
 
