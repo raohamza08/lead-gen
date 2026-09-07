@@ -1,4 +1,4 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
@@ -26,7 +26,6 @@ import { resolveOAuthCredentials } from "./oauth-credentials.util";
 @Injectable()
 export class FacebookProvider implements SocialPlatformProvider {
   readonly platform = "FACEBOOK";
-  private readonly logger = new Logger(FacebookProvider.name);
 
   readonly capabilities: SocialPlatformCapabilities = {
     publish: true,
@@ -147,26 +146,6 @@ export class FacebookProvider implements SocialPlatformProvider {
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
 
-    // Temporary diagnostic (Part: isolating Facebook error #10 despite
-    // pages_read_engagement being present + connecting account already an
-    // app Administrator, 2026-09-07) -- fires three narrower variants of
-    // the same /posts call to find exactly which field the 400 traces to,
-    // since the full query's error alone doesn't say. Remove once resolved.
-    const variants: [string, string][] = [
-      ["bare", "id,message,created_time,permalink_url"],
-      ["with_full_picture", "id,full_picture"],
-      ["with_likes_summary", "id,likes.summary(true)"],
-      ["with_comments_summary", "id,comments.summary(true)"],
-      ["with_attachments", "id,attachments{media_type,media}"],
-    ];
-    for (const [label, fields] of variants) {
-      const diagRes = await fetch(
-        `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/posts?fields=${fields}&limit=1&access_token=${accessToken}`,
-      );
-      const diagBody = await diagRes.text();
-      this.logger.log(`listFeed diagnostic [${label}]: status=${diagRes.status} body=${diagBody.slice(0, 300)}`);
-    }
-
     // attachments{media_type,media} added (Part: feed video rendering fix,
     // 2026-09-07) -- full_picture alone is always a static thumbnail (safe
     // for <img>) even on a video post, but there was no way to get the
@@ -174,9 +153,22 @@ export class FacebookProvider implements SocialPlatformProvider {
     // media.source is the real .mp4 URL; a photo/album attachment has no
     // `source`, only media.image, so `source`'s presence is what a video
     // post is actually detected by here.
+    //
+    // likes.summary(true)/comments.summary(true) deliberately NOT requested
+    // (Part: Facebook error #10 root-caused, 2026-09-07) -- confirmed live,
+    // isolated field-by-field, that these two specific aggregate fields are
+    // the ONLY part of this query Meta rejects with "requires
+    // pages_read_engagement/pages_read_user_content" even though the
+    // connecting account is already an app Administrator and the token
+    // already carries pages_read_engagement. Meta gates the summary
+    // aggregation sub-feature behind Advanced Access review specifically,
+    // separately from base post content/media, which all return fine
+    // without it. Until that Advanced Access request clears, likeCount/
+    // commentCount below are honestly 0 (unavailable), not fabricated --
+    // re-add these fields once Advanced Access is approved.
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/posts` +
-        `?fields=id,message,created_time,permalink_url,full_picture,attachments{media_type,media},likes.summary(true),comments.summary(true)` +
+        `?fields=id,message,created_time,permalink_url,full_picture,attachments{media_type,media}` +
         `&access_token=${accessToken}`,
     );
     if (!res.ok) throw new Error(`Facebook feed fetch failed: ${res.status} ${await res.text()}`);
@@ -188,8 +180,6 @@ export class FacebookProvider implements SocialPlatformProvider {
         permalink_url?: string;
         full_picture?: string;
         attachments?: { data: { media_type?: string; media?: { source?: string } }[] };
-        likes?: { summary?: { total_count?: number } };
-        comments?: { summary?: { total_count?: number } };
       }[];
     };
     return (body.data ?? []).map((p) => {
@@ -202,8 +192,10 @@ export class FacebookProvider implements SocialPlatformProvider {
         mediaType: videoSource ? ("VIDEO" as const) : p.full_picture ? ("IMAGE" as const) : undefined,
         permalink: p.permalink_url,
         postedAt: new Date(p.created_time),
-        likeCount: p.likes?.summary?.total_count ?? 0,
-        commentCount: p.comments?.summary?.total_count ?? 0,
+        // Genuinely unavailable, not fabricated -- see this method's own
+        // docblock on why likes.summary/comments.summary aren't requested.
+        likeCount: 0,
+        commentCount: 0,
       };
     });
   }
