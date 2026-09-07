@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
@@ -26,6 +26,7 @@ import { resolveOAuthCredentials } from "./oauth-credentials.util";
 @Injectable()
 export class FacebookProvider implements SocialPlatformProvider {
   readonly platform = "FACEBOOK";
+  private readonly logger = new Logger(FacebookProvider.name);
 
   readonly capabilities: SocialPlatformCapabilities = {
     publish: true,
@@ -95,11 +96,35 @@ export class FacebookProvider implements SocialPlatformProvider {
     if (!tokenRes.ok) throw new Error(`Facebook token exchange failed: ${tokenRes.status}`);
     const { access_token: userToken } = (await tokenRes.json()) as { access_token: string };
 
+    // Temporary diagnostic (Part: Facebook pages_read_engagement 400 despite
+    // requesting the scope, 2026-09-07) -- mirrors instagram/whatsapp
+    // provider's own debug_token logging, to see the ACTUAL granted scopes
+    // on this token rather than assume the requested scope list was honored
+    // as-is. Remove once the pages_read_engagement 400 is root-caused.
+    if (clientId && clientSecret) {
+      const debugRes = await fetch(
+        `https://graph.facebook.com/${this.graphVersion()}/debug_token?input_token=${userToken}&access_token=${clientId}|${clientSecret}`,
+      );
+      const debugBody = await debugRes.text();
+      this.logger.log(`exchangeCodeForToken debug_token: ${debugBody}`);
+    }
+
     const pagesRes = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/me/accounts?fields=id,name,access_token,picture&access_token=${userToken}`,
     );
     const pages = (await pagesRes.json()) as { data: { id: string; name: string; access_token: string; picture?: { data: { url: string } } }[] };
     if (!pages.data?.length) throw new Error("No Facebook Page found that this account can manage.");
+
+    // Also debug the resulting PAGE token specifically -- a Page token's own
+    // granted scopes can differ from the user token's (this is the token
+    // listFeed/listComments actually use).
+    if (clientId && clientSecret && pages.data[0]) {
+      const pageDebugRes = await fetch(
+        `https://graph.facebook.com/${this.graphVersion()}/debug_token?input_token=${pages.data[0].access_token}&access_token=${clientId}|${clientSecret}`,
+      );
+      const pageDebugBody = await pageDebugRes.text();
+      this.logger.log(`exchangeCodeForToken PAGE token debug_token for ${pages.data[0].name}: ${pageDebugBody}`);
+    }
 
     // Every Page this login manages, not just the first — a Business
     // Manager admin or an agency login can see several at once, and each
