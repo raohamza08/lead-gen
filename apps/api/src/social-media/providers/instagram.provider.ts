@@ -123,19 +123,20 @@ export class InstagramProvider implements SocialPlatformProvider {
     // granted: that permission alone isn't sufficient without this pair.
     // pages_manage_metadata added -- needed by subscribeWebhook below.
     //
-    // instagram_manage_comments added 2026-09-07 -- previously withheld since
-    // Meta rejects the ENTIRE OAuth request with "Invalid Scopes" if even one
-    // requested scope isn't approved for this app's use case (confirmed live,
-    // 2026-08-27), and this specific permission's approval status hadn't been
-    // verified. Added now alongside facebook.provider.ts's equivalent
-    // pages_manage_engagement addition -- if either turns out not to be
-    // approved, Meta rejects the whole request again and this needs to drop
-    // back out until verified in App Review.
+    // instagram_manage_comments was tried here alongside this same
+    // Meta app's equivalent pages_manage_engagement scope on
+    // facebook.provider.ts, 2026-09-07 -- that one came back confirmed live
+    // as "Invalid Scopes" (rejects the ENTIRE OAuth request, not just the
+    // one feature needing it), the same failure mode this file already
+    // warned about. Rather than risk breaking Instagram's whole connect
+    // flow on the same unconfirmed assumption, this was pulled back out too
+    // pending actual verification in Meta App Review -- reading comments
+    // still works via pages_read_engagement above; replying to Instagram
+    // comments stays unavailable until this is confirmed approved.
     const scopes = [
       "instagram_basic",
       "instagram_content_publish",
       "instagram_manage_messages",
-      "instagram_manage_comments",
       "pages_show_list",
       "pages_manage_metadata",
       "pages_read_engagement",
@@ -262,9 +263,18 @@ export class InstagramProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    // media_type/thumbnail_url added (Part: feed video rendering fix,
+    // 2026-09-07) -- for a VIDEO media item, `media_url` IS the raw playable
+    // video file, not a thumbnail; `thumbnail_url` is the separate field
+    // that actually returns a static image, confirmed via Instagram Graph
+    // API's own docs. Blindly putting media_url in an <img> for a video post
+    // rendered as a broken image. CAROUSEL_ALBUM items have no top-level
+    // media_url/thumbnail_url at all (only per-child via the `children`
+    // edge, not fetched here) -- mediaUrl comes back undefined for those,
+    // same "don't fabricate" handling as everything else in this file.
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/media` +
-        `?fields=id,caption,timestamp,permalink,media_url,like_count,comments_count&access_token=${accessToken}`,
+        `?fields=id,caption,timestamp,permalink,media_type,media_url,thumbnail_url,like_count,comments_count&access_token=${accessToken}`,
     );
     if (!res.ok) throw new Error(`Instagram feed fetch failed: ${res.status} ${await res.text()}`);
     const body = (await res.json()) as {
@@ -273,7 +283,9 @@ export class InstagramProvider implements SocialPlatformProvider {
         caption?: string;
         timestamp: string;
         permalink?: string;
+        media_type?: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM";
         media_url?: string;
+        thumbnail_url?: string;
         like_count?: number;
         comments_count?: number;
       }[];
@@ -281,7 +293,9 @@ export class InstagramProvider implements SocialPlatformProvider {
     return (body.data ?? []).map((p) => ({
       externalPostId: p.id,
       content: p.caption ?? "",
-      mediaUrl: p.media_url,
+      mediaUrl: p.media_type === "VIDEO" ? (p.thumbnail_url ?? undefined) : p.media_url,
+      videoUrl: p.media_type === "VIDEO" ? p.media_url : undefined,
+      mediaType: p.media_type,
       permalink: p.permalink,
       postedAt: new Date(p.timestamp),
       likeCount: p.like_count ?? 0,

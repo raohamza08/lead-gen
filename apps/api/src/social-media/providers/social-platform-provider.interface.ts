@@ -124,11 +124,21 @@ export interface AccountInsights {
 /** One item in an account's own feed (Part: Social Media Hub — feed tab).
  *  `isOwnPost` is set by the caller (SocialMediaService), matched against
  *  our own SocialPostVersion.externalPostId — the provider itself has no
- *  concept of "ours", it just reports what the platform returns. */
+ *  concept of "ours", it just reports what the platform returns.
+ *
+ *  `mediaUrl`/`videoUrl` are deliberately separate fields, not one URL the
+ *  frontend has to sniff (Part: feed video rendering fix, 2026-09-07) —
+ *  Instagram's Graph API `media_url` field returns the raw playable video
+ *  FILE for a VIDEO post, not a thumbnail, which silently rendered as a
+ *  broken image when treated the same as a photo post's URL. `mediaUrl` is
+ *  always safe to put in an <img>; `videoUrl`, only set when `mediaType` is
+ *  "VIDEO", is the real playable file for a <video> element. */
 export interface FeedItem {
   externalPostId: string;
   content: string;
   mediaUrl?: string;
+  videoUrl?: string;
+  mediaType?: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM" | "OTHER";
   permalink?: string;
   postedAt: Date;
   likeCount: number;

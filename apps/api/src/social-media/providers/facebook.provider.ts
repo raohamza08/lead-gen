@@ -64,16 +64,22 @@ export class FacebookProvider implements SocialPlatformProvider {
       // pages_manage_metadata is what /subscribed_apps (webhook subscription)
       // actually needs and is available, so requested instead.
       //
-      // pages_read_engagement/pages_manage_engagement re-added 2026-09-07 --
-      // pages_read_engagement was wrongly assumed unapproved here even though
-      // instagram.provider.ts's identical Meta app already requests and uses
-      // it successfully (confirmed via live logs: Facebook feed/comment sync
-      // failing with Meta error #10 asking for exactly this permission, while
-      // Instagram's own sync succeeds). pages_manage_engagement (comment
-      // replies) hasn't been separately confirmed approved -- if it turns out
-      // not to be, Meta rejects the WHOLE request again, same failure mode as
-      // before, and this needs to drop back out until verified in App Review.
-      scope: ["pages_show_list", "pages_messaging", "pages_manage_metadata", "pages_read_engagement", "pages_manage_engagement"].join(","),
+      // pages_read_engagement re-added 2026-09-07 -- was wrongly assumed
+      // unapproved here even though instagram.provider.ts's identical Meta
+      // app already requests and uses it successfully (confirmed via live
+      // logs: Facebook feed/comment sync failing with Meta error #10 asking
+      // for exactly this permission, while Instagram's own sync succeeds).
+      //
+      // pages_manage_engagement (comment replies) was tried alongside it and
+      // confirmed live, same day, NOT approved for this app -- Meta rejected
+      // the entire OAuth request with "Invalid Scopes: pages_manage_engagement"
+      // (the whole connect flow breaks, not just replying, exactly the
+      // failure mode this file already warned about). Dropped back out.
+      // Reading comments/feed still works via pages_read_engagement alone;
+      // replying to Facebook comments stays unavailable until this
+      // permission is actually added to the app's Use Case in Meta's
+      // dashboard and reconfirmed here.
+      scope: ["pages_show_list", "pages_messaging", "pages_manage_metadata", "pages_read_engagement"].join(","),
       response_type: "code",
     });
     return `https://www.facebook.com/${this.graphVersion()}/dialog/oauth?${params.toString()}`;
@@ -139,9 +145,16 @@ export class FacebookProvider implements SocialPlatformProvider {
       throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
     }
     const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    // attachments{media_type,media} added (Part: feed video rendering fix,
+    // 2026-09-07) -- full_picture alone is always a static thumbnail (safe
+    // for <img>) even on a video post, but there was no way to get the
+    // actual playable video file without it. A video attachment's
+    // media.source is the real .mp4 URL; a photo/album attachment has no
+    // `source`, only media.image, so `source`'s presence is what a video
+    // post is actually detected by here.
     const res = await fetch(
       `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/posts` +
-        `?fields=id,message,created_time,permalink_url,full_picture,likes.summary(true),comments.summary(true)` +
+        `?fields=id,message,created_time,permalink_url,full_picture,attachments{media_type,media},likes.summary(true),comments.summary(true)` +
         `&access_token=${accessToken}`,
     );
     if (!res.ok) throw new Error(`Facebook feed fetch failed: ${res.status} ${await res.text()}`);
@@ -152,19 +165,25 @@ export class FacebookProvider implements SocialPlatformProvider {
         created_time: string;
         permalink_url?: string;
         full_picture?: string;
+        attachments?: { data: { media_type?: string; media?: { source?: string } }[] };
         likes?: { summary?: { total_count?: number } };
         comments?: { summary?: { total_count?: number } };
       }[];
     };
-    return (body.data ?? []).map((p) => ({
-      externalPostId: p.id,
-      content: p.message ?? "",
-      mediaUrl: p.full_picture,
-      permalink: p.permalink_url,
-      postedAt: new Date(p.created_time),
-      likeCount: p.likes?.summary?.total_count ?? 0,
-      commentCount: p.comments?.summary?.total_count ?? 0,
-    }));
+    return (body.data ?? []).map((p) => {
+      const videoSource = p.attachments?.data?.[0]?.media?.source;
+      return {
+        externalPostId: p.id,
+        content: p.message ?? "",
+        mediaUrl: p.full_picture,
+        videoUrl: videoSource,
+        mediaType: videoSource ? ("VIDEO" as const) : p.full_picture ? ("IMAGE" as const) : undefined,
+        permalink: p.permalink_url,
+        postedAt: new Date(p.created_time),
+        likeCount: p.likes?.summary?.total_count ?? 0,
+        commentCount: p.comments?.summary?.total_count ?? 0,
+      };
+    });
   }
 
   /** `followers_count` is a direct Page field, not an Insights metric --
