@@ -245,6 +245,7 @@ model User {
   emailAccountAccess EmailAccountAccess[]
   socialAccountAccess SocialAccountAccess[]
   assignedConversations SocialConversation[]
+  assignedComments      SocialComment[]
   socialInternalNotes   SocialInternalNote[]
   notificationStates    NotificationUserState[]
   notificationPreference NotificationPreference?
@@ -1555,6 +1556,7 @@ model SocialAccount {
   postVersions  SocialPostVersion[]
   conversations SocialConversation[]
   analyticsSnapshots SocialAccountAnalyticsSnapshot[]
+  comments      SocialComment[]
 
   /// One row per (platform, handle) per org — reconnecting the same
   /// account edits this row rather than creating a duplicate.
@@ -1701,6 +1703,59 @@ model SocialInternalNote {
 
   @@index([conversationId])
   @@map("social_internal_notes")
+}
+
+// ----------------------------------------------------------------------
+// Engagement Center (Part: Social Hub Engagement, 2026-09-07) — comments on
+// OUR OWN published posts, distinct from the DM conversations above (a
+// comment is attached to a post, has no "thread" concept, and doesn't need
+// unreadCount/lastMessage rollups the way a conversation does). Deliberately
+// scoped to comments only for this version, not @mentions elsewhere on the
+// platform: reading arbitrary mentions requires elevated
+// permissions/App Review beyond what this app's OAuth scopes request today
+// (see facebook.provider.ts/instagram.provider.ts's own scope comments) on
+// every platform that supports it at all — a genuine platform/permission
+// limitation, not an oversight, so it's left out rather than faked.
+// ----------------------------------------------------------------------
+
+enum EngagementStatus {
+  NEW
+  RESPONDED
+  IGNORED
+}
+
+model SocialComment {
+  id                    String   @id @default(uuid())
+  socialAccountId       String   @map("social_account_id")
+  socialAccount         SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  /// The platform's own post/media id this comment was left on — not a
+  /// foreign key to SocialPostVersion, since a comment can land on a post
+  /// that was published before this feature existed (no local row to link
+  /// to) or one published directly on the platform, outside this app.
+  externalPostId        String   @map("external_post_id")
+  externalCommentId     String   @map("external_comment_id")
+  /// Set when this comment is itself a reply to another comment (a nested
+  /// thread) — null for a top-level comment.
+  parentCommentId       String?  @map("parent_comment_id")
+  authorExternalId      String?  @map("author_external_id")
+  authorName            String?  @map("author_name")
+  authorProfileImageUrl String?  @map("author_profile_image_url")
+  text                  String?
+  postedAt              DateTime @map("posted_at")
+  /// True for a reply *we* posted through this system (SocialEngagementService.reply)
+  /// — never true for an inbound comment, same "ours vs theirs" split
+  /// SocialMessage.fromUs already uses for DMs.
+  fromUs                Boolean  @default(false) @map("from_us")
+  status                EngagementStatus @default(NEW)
+  assignedToUserId      String?  @map("assigned_to_user_id")
+  assignedToUser        User?    @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@unique([socialAccountId, externalCommentId])
+  @@index([socialAccountId, postedAt])
+  @@index([status])
+  @@index([assignedToUserId])
+  @@map("social_comments")
 }
 
 /// The logical post — one row regardless of how many accounts/platforms

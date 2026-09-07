@@ -7,6 +7,7 @@ import {
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
+  EngagementComment,
   FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
@@ -193,6 +194,62 @@ export class FacebookProvider implements SocialPlatformProvider {
     }
 
     return insights;
+  }
+
+  /** Field-expansion in one call (`posts?fields=...,comments{...}`) rather
+   *  than a posts call followed by N per-post comment calls -- the same
+   *  "one call, not one per item" reasoning listFeed already follows.
+   *  `comments{...}` only returns top-level comments' own direct replies
+   *  nested under them by default; deeper nesting isn't fetched in V1.
+   *
+   *  Reading/replying to Page comments needs pages_read_engagement (read)
+   *  and pages_manage_engagement (reply) -- neither is currently requested
+   *  in getOAuthUrl above, which already explains why: this app previously
+   *  had pages_manage_posts/pages_read_engagement rejected outright by Meta
+   *  ("Invalid Scopes", confirmed 2026-08-27), which breaks the ENTIRE OAuth
+   *  request, not just the one feature needing it. Same caution applies here
+   *  as instagram.provider.ts's identical situation -- this will throw a
+   *  real Meta permissions error until that's verified/approved and added. */
+  async listComments(account: SocialAccount): Promise<EngagementComment[]> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/posts` +
+        `?fields=id,comments.summary(false){id,message,from,created_time,parent}&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Facebook comments fetch failed: ${res.status} ${await res.text()}`);
+    type RawComment = { id: string; message?: string; from?: { id: string; name?: string }; created_time: string; parent?: { id: string } };
+    const body = (await res.json()) as { data: { id: string; comments?: { data: RawComment[] } }[] };
+    return (body.data ?? []).flatMap((post) =>
+      (post.comments?.data ?? []).map((c) => ({
+        externalCommentId: c.id,
+        externalPostId: post.id,
+        parentCommentId: c.parent?.id,
+        authorExternalId: c.from?.id,
+        authorName: c.from?.name,
+        text: c.message,
+        postedAt: new Date(c.created_time),
+        fromUs: c.from?.id === account.externalAccountId,
+      })),
+    );
+  }
+
+  /** Replying to a Facebook comment is POSTing to /{comment-id}/comments --
+   *  the same endpoint shape as a top-level comment, just addressed at the
+   *  comment instead of the post, which is what makes it nest as a reply. */
+  async replyToComment(account: SocialAccount, externalCommentId: string, text: string): Promise<{ externalCommentId: string }> {
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${externalCommentId}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, access_token: accessToken }),
+    });
+    if (!res.ok) throw new Error(`Facebook comment reply failed: ${res.status} ${await res.text()}`);
+    const result = (await res.json()) as { id: string };
+    return { externalCommentId: result.id };
   }
 
   async listConversations(account: SocialAccount): Promise<Conversation[]> {

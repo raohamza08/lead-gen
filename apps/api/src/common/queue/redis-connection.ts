@@ -50,6 +50,11 @@ export const QUEUE_NAMES = {
   // Periodic account-level analytics snapshot (Part: Social Hub Analytics,
   // 2026-09-07) -- see social-analytics-sync.worker.ts.
   SOCIAL_ANALYTICS_SYNC: "social-analytics-sync",
+  // Reconciliation pass over every connected account's comments (Part:
+  // Social Hub Engagement, 2026-09-07) -- see
+  // social-engagement-sync.worker.ts. Poll-only in this version, same
+  // reasoning SOCIAL_INBOX_SYNC's own docblock gives for DMs.
+  SOCIAL_ENGAGEMENT_SYNC: "social-engagement-sync",
   // Re-dispatches RETRY_SCHEDULED messages whose retry is due, and reclaims
   // stale SENDING locks a crashed worker left stuck — same shape as
   // AGENT_EXECUTION_SWEEP. See sending-sweep.worker.ts.

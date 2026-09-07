@@ -563,4 +563,15 @@ export const api = {
     request(`/social-inbox/conversations/${id}/notes/${noteId}`, { method: "PATCH", body: JSON.stringify({ note }) }),
   deleteSocialInboxNote: (id: string, noteId: string) =>
     request(`/social-inbox/conversations/${id}/notes/${noteId}`, { method: "DELETE" }),
+
+  // ---- Social Engagement Center (comments on our own posts) ----
+  getSocialEngagementStats: () => request("/social-engagement/stats"),
+  syncSocialEngagementAccountNow: (accountId: string) => request(`/social-engagement/accounts/${accountId}/sync`, { method: "POST" }),
+  getSocialEngagementComments: (params: Record<string, string> = {}) =>
+    request(`/social-engagement/comments?${new URLSearchParams(params).toString()}`),
+  getSocialEngagementComment: (id: string) => request(`/social-engagement/comments/${id}`),
+  updateSocialEngagementComment: (id: string, body: { status?: string; assignedToUserId?: string }) =>
+    request(`/social-engagement/comments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  replySocialEngagementComment: (id: string, text: string) =>
+    request(`/social-engagement/comments/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
 };

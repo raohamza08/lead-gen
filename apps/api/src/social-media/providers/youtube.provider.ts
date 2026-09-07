@@ -9,6 +9,7 @@ import {
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
+  EngagementComment,
   FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
@@ -149,6 +150,56 @@ export class YouTubeProvider implements SocialPlatformProvider {
       postsCount: stats?.videoCount ? Number(stats.videoCount) : undefined,
       impressions: stats?.viewCount ? Number(stats.viewCount) : undefined,
     };
+  }
+
+  /** `allThreadsRelatedToChannelId` gets every top-level comment across the
+   *  whole channel's videos in one call, rather than listing videos first
+   *  and paging commentThreads per video -- covered by the already-granted
+   *  youtube.readonly scope, unlike replyToComment below. */
+  async listComments(account: SocialAccount): Promise<EngagementComment[]> {
+    if (!account.refreshTokenEnc) throw new PlatformNotConfiguredError("YouTube", "no stored refresh token");
+    const client = this.oauthClient();
+    client.setCredentials({ refresh_token: this.encryption.decrypt(account.refreshTokenEnc) });
+    const youtube = google.youtube({ version: "v3", auth: client });
+    const res = await youtube.commentThreads.list({
+      part: ["snippet"],
+      allThreadsRelatedToChannelId: account.externalAccountId ?? undefined,
+      maxResults: 50,
+    });
+    return (res.data.items ?? []).flatMap((thread) => {
+      const top = thread.snippet?.topLevelComment?.snippet;
+      if (!top) return [];
+      return [{
+        externalCommentId: thread.snippet?.topLevelComment?.id ?? "",
+        externalPostId: thread.snippet?.videoId ?? "",
+        authorExternalId: top.authorChannelId?.value ?? undefined,
+        authorName: top.authorDisplayName ?? undefined,
+        authorProfileImageUrl: top.authorProfileImageUrl ?? undefined,
+        text: top.textDisplay ?? undefined,
+        postedAt: new Date(top.publishedAt ?? Date.now()),
+        fromUs: top.authorChannelId?.value === account.externalAccountId,
+      }];
+    });
+  }
+
+  /** comments.insert needs the youtube.force-ssl scope, not requested in
+   *  getOAuthUrl above (youtube.upload/youtube.readonly/yt-analytics.readonly
+   *  don't cover writing a comment) -- same "don't guess at an unverified
+   *  scope" caution as facebook.provider.ts/instagram.provider.ts's
+   *  identical situation, compounded here by Google's own app-verification
+   *  review for any new sensitive scope. Will throw a real Google
+   *  permissions error until that's added and accounts reconnect. */
+  async replyToComment(account: SocialAccount, externalCommentId: string, text: string): Promise<{ externalCommentId: string }> {
+    if (!account.refreshTokenEnc) throw new PlatformNotConfiguredError("YouTube", "no stored refresh token");
+    const client = this.oauthClient();
+    client.setCredentials({ refresh_token: this.encryption.decrypt(account.refreshTokenEnc) });
+    const youtube = google.youtube({ version: "v3", auth: client });
+    const res = await youtube.comments.insert({
+      part: ["snippet"],
+      requestBody: { snippet: { parentId: externalCommentId, textOriginal: text } },
+    });
+    if (!res.data.id) throw new Error("YouTube comment reply did not return a comment id");
+    return { externalCommentId: res.data.id };
   }
 
   async listFeed(): Promise<FeedItem[]> {

@@ -104,6 +104,26 @@ export interface FeedItem {
   isOwnPost?: boolean;
 }
 
+/** A comment on one of OUR OWN published posts (Part: Social Hub
+ *  Engagement, 2026-09-07) — distinct from a DM Conversation/
+ *  ConversationMessage below: a comment is attached to a post, not a
+ *  thread with one other party, and platforms don't distinguish "read"
+ *  state on comments the way they do for messages. */
+export interface EngagementComment {
+  externalCommentId: string;
+  externalPostId: string;
+  parentCommentId?: string;
+  authorExternalId?: string;
+  authorName?: string;
+  authorProfileImageUrl?: string;
+  text?: string;
+  postedAt: Date;
+  /** True for a reply we already posted through this system on a prior
+   *  sync/webhook — lets the ingest layer mark a comment RESPONDED without
+   *  guessing from timing alone. */
+  fromUs: boolean;
+}
+
 export interface Conversation {
   /// The platform's own thread id -- needed to call listMessages() on this
   /// same conversation. NOT stable enough to use as a storage/dedup key on
@@ -162,6 +182,17 @@ export interface SocialPlatformProvider {
    *  convention as subscribeWebhook above). Called by
    *  SocialAnalyticsSyncWorker on its own schedule, never on a request path. */
   getAccountInsights?(account: SocialAccount): Promise<AccountInsights>;
+
+  /** Optional: only present where `capabilities.comments` is true and
+   *  reading comments doesn't require a permission this app's OAuth scope
+   *  doesn't request (Facebook, Instagram, YouTube today). Returns comments
+   *  across the account's recent posts, not paginated exhaustively in V1 --
+   *  same scope as listFeed's own recency limit. */
+  listComments?(account: SocialAccount): Promise<EngagementComment[]>;
+
+  /** Posts a reply to one comment. Returns the reply's own new comment id
+   *  so the caller can record it as `fromUs` without a second fetch. */
+  replyToComment?(account: SocialAccount, externalCommentId: string, text: string): Promise<{ externalCommentId: string }>;
 
   /** Recent posts on this account with current engagement counts (Part:
    *  Social Media Hub). Throws PlatformNotConfiguredError with a real

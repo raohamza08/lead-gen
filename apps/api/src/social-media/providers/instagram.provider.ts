@@ -7,6 +7,7 @@ import {
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
+  EngagementComment,
   FeedItem,
   PlatformNotConfiguredError,
   PublishInput,
@@ -103,6 +104,20 @@ export class InstagramProvider implements SocialPlatformProvider {
     // capability to make this API call") even with instagram_manage_messages
     // granted: that permission alone isn't sufficient without this pair.
     // pages_manage_metadata added -- needed by subscribeWebhook below.
+    //
+    // instagram_manage_comments is deliberately NOT requested here (Part:
+    // Social Hub Engagement, 2026-09-07), even though listComments/
+    // replyToComment below need it -- Meta rejects the ENTIRE OAuth request
+    // with "Invalid Scopes" if even one requested scope isn't approved for
+    // this app's use case (confirmed live, 2026-08-27, the reason
+    // pages_manage_posts/pages_read_engagement were dropped from
+    // facebook.provider.ts below). Whether instagram_manage_comments is
+    // approved for this app hasn't been verified, and guessing wrong here
+    // would break Instagram's entire connect flow, not just comments. If
+    // listComments/replyToComment fail with a Meta permissions error,
+    // that's the fix: verify the permission in Meta App Review, add it
+    // here, and reconnect affected accounts -- not something this code
+    // should silently assume.
     const scopes = [
       "instagram_basic",
       "instagram_content_publish",
@@ -298,6 +313,55 @@ export class InstagramProvider implements SocialPlatformProvider {
     }
 
     return insights;
+  }
+
+  /** Field-expansion in one call, same shape as facebook.provider.ts's
+   *  listComments. Requires instagram_manage_comments -- see getOAuthUrl's
+   *  docblock for why that scope isn't requested yet; this will throw a
+   *  Meta permissions error until it is and affected accounts reconnect. */
+  async listComments(account: SocialAccount): Promise<EngagementComment[]> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/media` +
+        `?fields=id,comments{id,text,username,timestamp}&access_token=${accessToken}`,
+    );
+    if (!res.ok) throw new Error(`Instagram comments fetch failed: ${res.status} ${await res.text()}`);
+    type RawComment = { id: string; text?: string; username?: string; timestamp: string };
+    const body = (await res.json()) as { data: { id: string; comments?: { data: RawComment[] } }[] };
+    return (body.data ?? []).flatMap((media) =>
+      (media.comments?.data ?? []).map((c) => ({
+        externalCommentId: c.id,
+        externalPostId: media.id,
+        authorName: c.username,
+        text: c.text,
+        postedAt: new Date(c.timestamp),
+        // The Instagram Graph API doesn't return a stable "is this us"
+        // field on a comment the way Facebook's `from.id` does -- our own
+        // replies are matched by username instead, since account.username
+        // is stored as "@handle" (see exchangeCodeForToken above) and c.username
+        // is the bare handle.
+        fromUs: c.username === account.username.replace(/^@/, ""),
+      })),
+    );
+  }
+
+  /** IG's reply endpoint is /{comment-id}/replies, not /comments (Facebook's
+   *  shape) -- a real API difference between the two Meta platforms, not a
+   *  typo. */
+  async replyToComment(account: SocialAccount, externalCommentId: string, text: string): Promise<{ externalCommentId: string }> {
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${externalCommentId}/replies`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: text, access_token: accessToken }),
+    });
+    if (!res.ok) throw new Error(`Instagram comment reply failed: ${res.status} ${await res.text()}`);
+    const result = (await res.json()) as { id: string };
+    return { externalCommentId: result.id };
   }
 
   async listConversations(account: SocialAccount): Promise<Conversation[]> {

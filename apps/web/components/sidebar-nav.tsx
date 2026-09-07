@@ -70,6 +70,7 @@ const NAV: NavItem[] = [
     ],
   },
   { type: "link", href: "/social-inbox", label: "Social Inbox", moduleFlag: "socialMediaAccess" },
+  { type: "link", href: "/social-engagement", label: "Engagement", moduleFlag: "socialMediaAccess" },
   {
     type: "group",
     label: "Social Media",

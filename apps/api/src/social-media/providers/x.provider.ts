@@ -32,7 +32,12 @@ export class XProvider implements SocialPlatformProvider {
     publish: true,
     nativeScheduling: false,
     analytics: true,
-    comments: true,
+    // Corrected false (Part: Social Hub Engagement, 2026-09-07) -- was
+    // declared true with no implementation behind it. Reading replies/
+    // mentions is a timeline read, gated behind the same paid API tier as
+    // listFeed()/listConversations() below (see their own comments) --
+    // this was never actually available on the free tier this app runs on.
+    comments: false,
     dms: false, // Direct Message API access is a separate, more restricted permission tier
     mediaTypes: ["image", "video", "gif"],
     notes:
