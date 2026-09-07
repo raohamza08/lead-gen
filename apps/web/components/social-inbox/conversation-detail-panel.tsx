@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
 import { LoadingRow, Spinner } from "../spinner";
@@ -65,6 +66,7 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
 
   const detailQuery = useQuery({
     queryKey: ["social-inbox-conversation", conversationId],
@@ -118,6 +120,35 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
   const deleteNoteMutation = useMutation({
     mutationFn: (noteId: string) => api.deleteSocialInboxNote(conversationId, noteId),
     onSuccess: invalidate,
+    onError: (err) => setError((err as Error).message),
+  });
+
+  // Deliberately calls the existing, unmodified POST /leads/manual and the
+  // existing internal-notes endpoint rather than adding any new backend
+  // coupling between the Social Inbox and Leads modules -- social-inbox.
+  // service.ts's own docblock says it never imports the leads module, and
+  // LeadsService already depends on SocialMediaService the other way
+  // (runAutomationsForNewLead), so a direct backend call here would create
+  // a circular module dependency. Orchestrating the two existing endpoints
+  // from the client is what keeps both modules exactly as they were.
+  const convertToLeadMutation = useMutation({
+    mutationFn: async () => {
+      if (!conversation) throw new Error("Conversation not loaded");
+      const name = conversation.contactName || conversation.contactUsername || "Unknown contact";
+      const result = (await api.createManualLead({
+        companyName: name,
+        contactName: conversation.contactName || undefined,
+        notes: `Converted from a ${conversation.socialAccount.platform} conversation with @${conversation.contactUsername ?? name} on account @${conversation.socialAccount.username}.`,
+      })) as { status: "created" | "duplicate"; leadId?: string };
+      if (result.status === "duplicate" || !result.leadId) {
+        throw new Error("A lead for this contact already exists.");
+      }
+      return result.leadId;
+    },
+    onSuccess: (leadId) => {
+      setCreatedLeadId(leadId);
+      createNoteMutation.mutate(`Converted to a lead (${leadId}).`);
+    },
     onError: (err) => setError((err as Error).message),
   });
 
@@ -182,6 +213,24 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
               </option>
             ))}
           </select>
+          {createdLeadId ? (
+            <Link
+              href={`/leads/${createdLeadId}`}
+              className="rounded-md border border-good/40 bg-good/10 px-2.5 py-1 text-xs font-medium text-good hover:bg-good/15"
+            >
+              View Lead →
+            </Link>
+          ) : (
+            <button
+              onClick={() => convertToLeadMutation.mutate()}
+              disabled={convertToLeadMutation.isPending}
+              title="Create a Lead from this conversation's contact"
+              className="flex items-center gap-1.5 rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 hover:bg-ink/5 disabled:opacity-50"
+            >
+              {convertToLeadMutation.isPending && <Spinner className="h-3 w-3" />}
+              Convert to Lead
+            </button>
+          )}
         </div>
       </div>
 
