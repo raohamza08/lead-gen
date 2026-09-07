@@ -69,6 +69,26 @@ export interface PublishResult {
   externalPostId: string;
 }
 
+/** Account-level metrics from a platform's official insights/analytics
+ *  endpoint (Part: Social Hub Analytics, 2026-09-07). Every field is
+ *  optional and independent — a provider only fills in what its own API
+ *  actually returns for that account right now, never a placeholder or a
+ *  derived guess for a field the platform doesn't expose (same "do not
+ *  fabricate" rule FeedItem/SocialPlatformCapabilities already follow).
+ *  Only implemented where `capabilities.analytics` is true. */
+export interface AccountInsights {
+  followerCount?: number;
+  followingCount?: number;
+  postsCount?: number;
+  reach?: number;
+  impressions?: number;
+  engagementRate?: number;
+  likeCount?: number;
+  commentCount?: number;
+  shareCount?: number;
+  saveCount?: number;
+}
+
 /** One item in an account's own feed (Part: Social Media Hub — feed tab).
  *  `isOwnPost` is set by the caller (SocialMediaService), matched against
  *  our own SocialPostVersion.externalPostId — the provider itself has no
@@ -135,6 +155,13 @@ export interface SocialPlatformProvider {
   refreshAccessToken(account: SocialAccount): Promise<{ accessToken: string; expiresAt?: Date }>;
 
   publish(account: SocialAccount, input: PublishInput): Promise<PublishResult>;
+
+  /** Optional: only present on a provider whose `capabilities.analytics` is
+   *  true (Facebook, Instagram, X, YouTube today — LinkedIn/TikTok/WhatsApp
+   *  omit this entirely rather than implementing a fake empty version, same
+   *  convention as subscribeWebhook above). Called by
+   *  SocialAnalyticsSyncWorker on its own schedule, never on a request path. */
+  getAccountInsights?(account: SocialAccount): Promise<AccountInsights>;
 
   /** Recent posts on this account with current engagement counts (Part:
    *  Social Media Hub). Throws PlatformNotConfiguredError with a real

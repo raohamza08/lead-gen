@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
+  AccountInsights,
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
@@ -258,6 +259,45 @@ export class InstagramProvider implements SocialPlatformProvider {
       likeCount: p.like_count ?? 0,
       commentCount: p.comments_count ?? 0,
     }));
+  }
+
+  /** followers_count/follows_count/media_count are direct fields on the IG
+   *  Business Account node — reliable, no Insights metric-name deprecation
+   *  risk. Reach/profile views come from the separate Insights endpoint,
+   *  requested independently and swallowed on failure so a metric-name
+   *  change there never costs the (much more stable) account fields above. */
+  async getAccountInsights(account: SocialAccount): Promise<AccountInsights> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Instagram", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const insights: AccountInsights = {};
+
+    const accountRes = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}?fields=followers_count,follows_count,media_count&access_token=${accessToken}`,
+    );
+    if (accountRes.ok) {
+      const body = (await accountRes.json()) as { followers_count?: number; follows_count?: number; media_count?: number };
+      insights.followerCount = body.followers_count;
+      insights.followingCount = body.follows_count;
+      insights.postsCount = body.media_count;
+    }
+
+    try {
+      const insightsRes = await fetch(
+        `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/insights` +
+          `?metric=reach&period=day&metric_type=total_value&access_token=${accessToken}`,
+      );
+      if (insightsRes.ok) {
+        const body = (await insightsRes.json()) as { data: { name: string; total_value?: { value: number } }[] };
+        insights.reach = body.data?.find((m) => m.name === "reach")?.total_value?.value;
+      }
+    } catch {
+      // Same reasoning as facebook.provider.ts: Insights metric names churn,
+      // the account fields above must not depend on this call succeeding.
+    }
+
+    return insights;
   }
 
   async listConversations(account: SocialAccount): Promise<Conversation[]> {

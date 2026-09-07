@@ -4,6 +4,7 @@ import { randomBytes, createHash } from "crypto";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
+  AccountInsights,
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
@@ -142,6 +143,30 @@ export class XProvider implements SocialPlatformProvider {
     if (!res.ok) throw new Error(`X publish failed: ${res.status} ${await res.text()}`);
     const body = (await res.json()) as { data: { id: string } };
     return { externalPostId: body.data.id };
+  }
+
+  /** `GET /2/users/me` is a user-lookup call, not a timeline/DM read — the
+   *  free tier restriction that makes listFeed()/listConversations() throw
+   *  above doesn't apply here, so follower/following/post counts are real
+   *  and available. Reach/impressions/engagement rate genuinely aren't:
+   *  those live behind X's paid-tier analytics endpoints, so they're left
+   *  undefined rather than guessed at (same "do not fabricate" rule the
+   *  other providers follow). */
+  async getAccountInsights(account: SocialAccount): Promise<AccountInsights> {
+    if (!account.accessTokenEnc) throw new PlatformNotConfiguredError("X", `account ${account.username} has no stored connection`);
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const res = await fetch("https://api.twitter.com/2/users/me?user.fields=public_metrics", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (!res.ok) throw new Error(`X insights fetch failed: ${res.status} ${await res.text()}`);
+    const body = (await res.json()) as {
+      data: { public_metrics?: { followers_count?: number; following_count?: number; tweet_count?: number } };
+    };
+    return {
+      followerCount: body.data.public_metrics?.followers_count,
+      followingCount: body.data.public_metrics?.following_count,
+      postsCount: body.data.public_metrics?.tweet_count,
+    };
   }
 
   // Reading a timeline or DMs, and sending DMs, requires X's paid API tiers

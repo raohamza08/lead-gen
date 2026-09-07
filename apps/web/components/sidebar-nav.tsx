@@ -81,6 +81,7 @@ const NAV: NavItem[] = [
       { href: "/social-media/whatsapp", label: "WhatsApp" },
       { href: "/social-media/x", label: "X" },
       { href: "/social-media/calendar", label: "Calendar" },
+      { href: "/social-media/analytics", label: "Analytics" },
       { href: "/social-media/automations", label: "Automations" },
       { href: "/settings/social-media", label: "Settings" },
     ],

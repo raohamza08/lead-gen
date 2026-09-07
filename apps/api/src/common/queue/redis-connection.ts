@@ -47,6 +47,9 @@ export const QUEUE_NAMES = {
   // see social-token-refresh.worker.ts. Separate queue from SOCIAL_PUBLISH
   // since this runs on its own, much longer cadence.
   SOCIAL_TOKEN_REFRESH: "social-token-refresh",
+  // Periodic account-level analytics snapshot (Part: Social Hub Analytics,
+  // 2026-09-07) -- see social-analytics-sync.worker.ts.
+  SOCIAL_ANALYTICS_SYNC: "social-analytics-sync",
   // Re-dispatches RETRY_SCHEDULED messages whose retry is due, and reclaims
   // stale SENDING locks a crashed worker left stuck — same shape as
   // AGENT_EXECUTION_SWEEP. See sending-sweep.worker.ts.

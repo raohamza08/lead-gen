@@ -20,6 +20,7 @@ import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
 import { SocialMediaService } from "./social-media.service";
+import { SocialAnalyticsService } from "./social-analytics.service";
 import { CreatePostDto, RejectPostDto, UpdatePostDto } from "./dto/social-post.dto";
 import { CreateContentTemplateDto, CreateHashtagGroupDto, CreateMediaFolderDto, UpdateContentTemplateDto, UpdateHashtagGroupDto } from "./dto/content-library.dto";
 import { CreateSocialAutomationDto, GenerateContentDto, UpdateSocialAutomationDto } from "./dto/social-automation.dto";
@@ -37,11 +38,26 @@ const ALLOWED_MIME_PREFIXES = ["image/", "video/"];
 @UseGuards(JwtAuthGuard, ModuleAccessGuard)
 @RequiresModule("SOCIAL_MEDIA")
 export class SocialMediaController {
-  constructor(private readonly service: SocialMediaService) {}
+  constructor(
+    private readonly service: SocialMediaService,
+    private readonly analytics: SocialAnalyticsService,
+  ) {}
 
   @Get("capabilities")
   capabilities() {
     return this.service.getCapabilityRegistry();
+  }
+
+  // ---- Analytics ----
+
+  @Get("analytics")
+  getAnalytics(@CurrentUser() user: JwtClaims, @Query("accountId") accountId?: string, @Query("platform") platform?: SocialPlatform) {
+    return this.analytics.getAnalytics(user, { accountId, platform });
+  }
+
+  @Get("analytics/accounts/:id/history")
+  getAnalyticsHistory(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.analytics.getAccountHistory(user, id);
   }
 
   @Get("accounts")

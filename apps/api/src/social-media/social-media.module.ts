@@ -16,6 +16,9 @@ import { SocialPublishQueue } from "./social-publish.queue";
 import { SocialPublishWorker } from "./social-publish.worker";
 import { SocialTokenRefreshQueue } from "./social-token-refresh.queue";
 import { SocialTokenRefreshWorker } from "./social-token-refresh.worker";
+import { SocialAnalyticsSyncQueue } from "./social-analytics-sync.queue";
+import { SocialAnalyticsSyncWorker } from "./social-analytics-sync.worker";
+import { SocialAnalyticsService } from "./social-analytics.service";
 import { SocialMediaService } from "./social-media.service";
 import { SocialMediaController } from "./social-media.controller";
 import { SocialMediaSettingsController } from "./social-media-settings.controller";
@@ -44,6 +47,9 @@ import { SocialInboxController } from "./social-inbox.controller";
     SocialPublishWorker,
     SocialTokenRefreshQueue,
     SocialTokenRefreshWorker,
+    SocialAnalyticsSyncQueue,
+    SocialAnalyticsSyncWorker,
+    SocialAnalyticsService,
     SocialMediaService,
     SocialInboxIngestService,
     SocialInboxSyncQueue,

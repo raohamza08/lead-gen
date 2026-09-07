@@ -1554,6 +1554,7 @@ model SocialAccount {
   accessGrants  SocialAccountAccess[]
   postVersions  SocialPostVersion[]
   conversations SocialConversation[]
+  analyticsSnapshots SocialAccountAnalyticsSnapshot[]
 
   /// One row per (platform, handle) per org — reconnecting the same
   /// account edits this row rather than creating a duplicate.
@@ -1582,6 +1583,35 @@ model SocialAccountAccess {
 
   @@id([userId, accountId])
   @@map("social_account_access")
+}
+
+/// Periodic account-level metrics snapshot (Part: Social Hub Analytics,
+/// 2026-09-07) — written by SocialAnalyticsSyncWorker, never fetched live
+/// on page load: platform insight endpoints are rate-limited and this way
+/// the Analytics page just reads the latest row (fast, cached) while the
+/// history of rows is what makes a trend/growth chart possible at all,
+/// which a live-only fetch could never provide. Every metric is nullable —
+/// a provider only fills in what its own API actually returns for that
+/// account at that time (see SocialPlatformProvider.getAccountInsights);
+/// a platform with capabilities.analytics === false never gets a row.
+model SocialAccountAnalyticsSnapshot {
+  id             String   @id @default(uuid())
+  accountId      String   @map("account_id")
+  account        SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  capturedAt     DateTime @default(now()) @map("captured_at")
+  followerCount  Int?     @map("follower_count")
+  followingCount Int?     @map("following_count")
+  postsCount     Int?     @map("posts_count")
+  reach          Int?
+  impressions    Int?
+  engagementRate Float?   @map("engagement_rate")
+  likeCount      Int?     @map("like_count")
+  commentCount   Int?     @map("comment_count")
+  shareCount     Int?     @map("share_count")
+  saveCount      Int?     @map("save_count")
+
+  @@index([accountId, capturedAt])
+  @@map("social_account_analytics_snapshots")
 }
 
 // ----------------------------------------------------------------------

@@ -457,6 +457,9 @@ export const api = {
   getSocialCapabilities: () => request("/social-media/capabilities"),
   getSocialAccounts: () => request("/social-media/accounts"),
   getSocialStats: () => request("/social-media/stats"),
+  getSocialAnalytics: (params: Record<string, string> = {}) =>
+    request(`/social-media/analytics?${new URLSearchParams(params).toString()}`),
+  getSocialAnalyticsHistory: (accountId: string) => request(`/social-media/analytics/accounts/${accountId}/history`),
   getAccountFeed: (accountId: string) => request(`/social-media/accounts/${accountId}/feed`),
   getSocialPosts: (params: Record<string, string> = {}) =>
     request(`/social-media/posts?${new URLSearchParams(params).toString()}`),

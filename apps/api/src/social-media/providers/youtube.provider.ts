@@ -5,6 +5,7 @@ import { google } from "googleapis";
 import { Readable } from "stream";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
+  AccountInsights,
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
@@ -127,6 +128,27 @@ export class YouTubeProvider implements SocialPlatformProvider {
     });
     if (!res.data.id) throw new Error("YouTube upload did not return a video id");
     return { externalPostId: res.data.id };
+  }
+
+  /** `channels.list({part:["statistics"]})` is the Data API's own channel
+   *  stats, not the separate YouTube Analytics API this provider also
+   *  requests yt-analytics.readonly for — simpler and sufficient for
+   *  account-level totals; per-video/date-range breakdowns would need the
+   *  Analytics API proper and aren't implemented in this version. `viewCount`
+   *  is a lifetime total, not a per-period reach/impressions figure, but
+   *  it's the closest honest equivalent this endpoint actually returns. */
+  async getAccountInsights(account: SocialAccount): Promise<AccountInsights> {
+    if (!account.refreshTokenEnc) throw new PlatformNotConfiguredError("YouTube", "no stored refresh token");
+    const client = this.oauthClient();
+    client.setCredentials({ refresh_token: this.encryption.decrypt(account.refreshTokenEnc) });
+    const youtube = google.youtube({ version: "v3", auth: client });
+    const res = await youtube.channels.list({ part: ["statistics"], mine: true });
+    const stats = res.data.items?.[0]?.statistics;
+    return {
+      followerCount: stats?.subscriberCount ? Number(stats.subscriberCount) : undefined,
+      postsCount: stats?.videoCount ? Number(stats.videoCount) : undefined,
+      impressions: stats?.viewCount ? Number(stats.viewCount) : undefined,
+    };
   }
 
   async listFeed(): Promise<FeedItem[]> {

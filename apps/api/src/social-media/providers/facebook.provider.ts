@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import {
+  AccountInsights,
   ConnectedAccountProfile,
   Conversation,
   ConversationMessage,
@@ -151,6 +152,47 @@ export class FacebookProvider implements SocialPlatformProvider {
       likeCount: p.likes?.summary?.total_count ?? 0,
       commentCount: p.comments?.summary?.total_count ?? 0,
     }));
+  }
+
+  /** `followers_count` is a direct Page field, not an Insights metric --
+   *  deliberately not using the legacy `page_fans` Insights metric, which
+   *  Meta deprecated in Graph API v10.0. Engagement/reach come from the
+   *  Insights endpoint proper, requested independently and swallowed on
+   *  failure per-metric rather than all-or-nothing: Meta periodically
+   *  deprecates individual page_* metrics, and one metric going stale must
+   *  never take the follower count (the one field with no substitute) down
+   *  with it. */
+  async getAccountInsights(account: SocialAccount): Promise<AccountInsights> {
+    if (!account.accessTokenEnc || !account.externalAccountId) {
+      throw new PlatformNotConfiguredError("Facebook", `account ${account.username} has no stored connection`);
+    }
+    const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+    const insights: AccountInsights = {};
+
+    const pageRes = await fetch(
+      `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}?fields=followers_count&access_token=${accessToken}`,
+    );
+    if (pageRes.ok) {
+      const page = (await pageRes.json()) as { followers_count?: number };
+      insights.followerCount = page.followers_count;
+    }
+
+    try {
+      const insightsRes = await fetch(
+        `https://graph.facebook.com/${this.graphVersion()}/${account.externalAccountId}/insights` +
+          `?metric=page_impressions_unique&period=days_28&access_token=${accessToken}`,
+      );
+      if (insightsRes.ok) {
+        const body = (await insightsRes.json()) as { data: { name: string; values: { value: number }[] }[] };
+        const reach = body.data?.find((m) => m.name === "page_impressions_unique");
+        insights.reach = reach?.values[reach.values.length - 1]?.value;
+      }
+    } catch {
+      // Metric names on this endpoint are the part of Meta's API most prone
+      // to deprecation — a failure here must not cost us followerCount above.
+    }
+
+    return insights;
   }
 
   async listConversations(account: SocialAccount): Promise<Conversation[]> {
