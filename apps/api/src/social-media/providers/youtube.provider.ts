@@ -202,8 +202,37 @@ export class YouTubeProvider implements SocialPlatformProvider {
     return { externalCommentId: res.data.id };
   }
 
-  async listFeed(): Promise<FeedItem[]> {
-    throw new PlatformNotConfiguredError("YouTube", "feed reading is not implemented");
+  /** Standard efficient pattern for "this channel's own videos" -- resolve
+   *  the uploads playlist id once (1 quota unit), page its items (1 unit),
+   *  then batch-fetch stats for every video in a single videos.list call
+   *  (1 unit for up to 50 ids) rather than N individual lookups. Far
+   *  cheaper than search.list({forMine:true}), which costs 100 units per
+   *  call against the same 10,000-unit default daily quota
+   *  publish()'s docblock already flags as tight. */
+  async listFeed(account: SocialAccount): Promise<FeedItem[]> {
+    if (!account.refreshTokenEnc) throw new PlatformNotConfiguredError("YouTube", "no stored refresh token");
+    const client = this.oauthClient();
+    client.setCredentials({ refresh_token: this.encryption.decrypt(account.refreshTokenEnc) });
+    const youtube = google.youtube({ version: "v3", auth: client });
+
+    const channelRes = await youtube.channels.list({ part: ["contentDetails"], mine: true });
+    const uploadsPlaylistId = channelRes.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
+    if (!uploadsPlaylistId) return [];
+
+    const itemsRes = await youtube.playlistItems.list({ part: ["snippet"], playlistId: uploadsPlaylistId, maxResults: 25 });
+    const videoIds = (itemsRes.data.items ?? []).map((i) => i.snippet?.resourceId?.videoId).filter((id): id is string => !!id);
+    if (videoIds.length === 0) return [];
+
+    const videosRes = await youtube.videos.list({ part: ["snippet", "statistics"], id: videoIds });
+    return (videosRes.data.items ?? []).map((v) => ({
+      externalPostId: v.id!,
+      content: v.snippet?.title ?? "",
+      mediaUrl: v.snippet?.thumbnails?.medium?.url ?? undefined,
+      permalink: `https://www.youtube.com/watch?v=${v.id}`,
+      postedAt: new Date(v.snippet?.publishedAt ?? Date.now()),
+      likeCount: v.statistics?.likeCount ? Number(v.statistics.likeCount) : 0,
+      commentCount: v.statistics?.commentCount ? Number(v.statistics.commentCount) : 0,
+    }));
   }
 
   async listConversations(): Promise<Conversation[]> {

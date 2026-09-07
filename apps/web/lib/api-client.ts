@@ -567,6 +567,15 @@ export const api = {
   // ---- Social Engagement Center (comments on our own posts) ----
   getSocialEngagementStats: () => request("/social-engagement/stats"),
   syncSocialEngagementAccountNow: (accountId: string) => request(`/social-engagement/accounts/${accountId}/sync`, { method: "POST" }),
+  // Post-centric (Part: Social Hub Engagement post-centric redesign,
+  // 2026-09-07) -- one row per post with comments, real post content
+  // fetched only when a specific post is opened. Preferred over the flat
+  // comments/comment-detail pair below, which stay for other uses
+  // (assignment queries, stats) rather than as the primary browsing UI.
+  getSocialEngagementPosts: (params: Record<string, string> = {}) =>
+    request(`/social-engagement/posts?${new URLSearchParams(params).toString()}`),
+  getSocialEngagementPost: (accountId: string, postId: string) =>
+    request(`/social-engagement/accounts/${accountId}/posts/${encodeURIComponent(postId)}`),
   getSocialEngagementComments: (params: Record<string, string> = {}) =>
     request(`/social-engagement/comments?${new URLSearchParams(params).toString()}`),
   getSocialEngagementComment: (id: string) => request(`/social-engagement/comments/${id}`),

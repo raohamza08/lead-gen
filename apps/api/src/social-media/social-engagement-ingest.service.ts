@@ -69,7 +69,11 @@ export class SocialEngagementIngestService {
         message: `New ${socialAccount.platform} comment on @${socialAccount.username}${input.authorName ? ` from ${input.authorName}` : ""}.`,
         entityType: "socialComment",
         entityId: created.id,
-        actionUrl: `/social-engagement?commentId=${created.id}`,
+        // accountId+postId, not commentId (Part: Social Hub Engagement
+        // post-centric redesign, 2026-09-07) -- the page opens straight to
+        // this comment's post (and every other comment on it), matching
+        // what the page itself now reads from the URL.
+        actionUrl: `/social-engagement?accountId=${socialAccount.id}&postId=${encodeURIComponent(input.externalPostId)}`,
       });
     }
 

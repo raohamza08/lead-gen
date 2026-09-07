@@ -30,6 +30,21 @@ export class SocialEngagementController {
     return this.service.syncAccountNow(user, accountId);
   }
 
+  @Get("posts")
+  listPosts(
+    @CurrentUser() user: JwtClaims,
+    @Query("platform") platform?: SocialPlatform,
+    @Query("accountId") accountId?: string,
+    @Query("unansweredOnly") unansweredOnly?: string,
+  ) {
+    return this.service.listPostsWithComments(user, { platform, accountId, unansweredOnly: unansweredOnly === "true" });
+  }
+
+  @Get("accounts/:accountId/posts/:postId")
+  getPost(@CurrentUser() user: JwtClaims, @Param("accountId") accountId: string, @Param("postId") postId: string) {
+    return this.service.getPostWithComments(user, accountId, postId);
+  }
+
   @Get("comments")
   listComments(
     @CurrentUser() user: JwtClaims,
