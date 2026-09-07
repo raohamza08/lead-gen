@@ -97,7 +97,13 @@ function SocialInboxPageContent() {
   }
   useRealtimeRefetch(["socialInbox.messageReceived", "socialInbox.conversationUpdated"], invalidateAll);
 
-  const accounts = accountsQuery.data ?? [];
+  const capabilities = capabilitiesQuery.data ?? {};
+  // Only platforms/accounts that can actually have a DM conversation belong
+  // in these filters (Part: "no extra options for what a platform doesn't
+  // support", 2026-09-07) — a connected LINKEDIN/X/TIKTOK account (dms=false,
+  // listConversations always throws) would otherwise be offered as a filter
+  // that can never match anything.
+  const accounts = accountsQuery.data?.filter((a) => capabilities[a.platform]?.dms !== false) ?? [];
   const conversations = conversationsQuery.data?.conversations ?? [];
   const total = conversationsQuery.data?.total ?? 0;
   const platforms = Array.from(new Set(accounts.map((a) => a.platform)));

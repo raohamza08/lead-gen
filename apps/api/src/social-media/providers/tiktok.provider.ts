@@ -8,6 +8,7 @@ import {
   ConversationMessage,
   FeedItem,
   OAuthCredentials,
+  PlatformCapabilityUnavailableError,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -136,18 +137,18 @@ export class TikTokProvider implements SocialPlatformProvider {
   }
 
   async listFeed(): Promise<FeedItem[]> {
-    throw new PlatformNotConfiguredError("TikTok", "feed reading is not implemented");
+    throw new PlatformCapabilityUnavailableError("TikTok", "reading a feed is not available through TikTok's public API");
   }
 
   async listConversations(): Promise<Conversation[]> {
-    throw new PlatformNotConfiguredError("TikTok", "messaging is not available through TikTok's public API");
+    throw new PlatformCapabilityUnavailableError("TikTok", "messaging is not available through TikTok's public API");
   }
 
   async listMessages(): Promise<ConversationMessage[]> {
-    throw new PlatformNotConfiguredError("TikTok", "messaging is not available through TikTok's public API");
+    throw new PlatformCapabilityUnavailableError("TikTok", "messaging is not available through TikTok's public API");
   }
 
   async sendMessage(): Promise<void> {
-    throw new PlatformNotConfiguredError("TikTok", "messaging is not available through TikTok's public API");
+    throw new PlatformCapabilityUnavailableError("TikTok", "messaging is not available through TikTok's public API");
   }
 }

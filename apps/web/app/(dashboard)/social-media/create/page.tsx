@@ -16,6 +16,25 @@ interface Account {
   defaultHashtags: string[];
 }
 
+interface Capabilities {
+  publish: boolean;
+  mediaTypes: string[];
+  notes: string;
+}
+
+/** Only the two unambiguous, real upload-time failure modes this app can
+ *  actually predict client-side (Part: "no extra options for what a
+ *  platform doesn't support", 2026-09-07): a platform whose `mediaTypes`
+ *  is video-only (TikTok, YouTube) rejects a non-video attachment outright.
+ *  Deliberately doesn't try to enforce the format-descriptor entries
+ *  (carousel/reel/link/article-link/gif) — those aren't file-type
+ *  constraints a MIME type alone can validate, unlike image/video. */
+function mediaAllowedForPlatform(mediaTypes: string[], mimeType: string): boolean {
+  if (mimeType.startsWith("video/")) return mediaTypes.includes("video");
+  if (mimeType.startsWith("image/")) return mediaTypes.includes("image") || mediaTypes.includes("gif");
+  return true;
+}
+
 interface MediaAsset {
   id: string;
   filename: string;
@@ -69,10 +88,15 @@ export default function CreatePostPage() {
     queryKey: ["social-media-templates"],
     queryFn: () => api.getSocialTemplates() as Promise<ContentTemplate[]>,
   });
+  const capabilitiesQuery = useQuery({
+    queryKey: ["social-media-capabilities"],
+    queryFn: () => api.getSocialCapabilities() as Promise<Record<string, Capabilities>>,
+  });
   const accounts = accountsQuery.data ?? [];
   const media = mediaQuery.data ?? [];
   const hashtagGroups = hashtagGroupsQuery.data ?? [];
   const templates = templatesQuery.data ?? [];
+  const capabilities = capabilitiesQuery.data ?? {};
   const loadError = [accountsQuery.error, mediaQuery.error, hashtagGroupsQuery.error, templatesQuery.error].find(Boolean);
   const isFetchingReference =
     accountsQuery.isFetching || mediaQuery.isFetching || hashtagGroupsQuery.isFetching || templatesQuery.isFetching;
@@ -91,6 +115,7 @@ export default function CreatePostPage() {
   const [error, setError] = useState<string | null>(null);
 
   function toggleAccount(account: Account) {
+    if (!selected.includes(account.id) && capabilities[account.platform]?.publish === false) return;
     setSelected((prev) => {
       if (prev.includes(account.id)) {
         const next = prev.filter((id) => id !== account.id);
@@ -110,6 +135,14 @@ export default function CreatePostPage() {
   }
 
   function toggleMedia(id: string) {
+    const asset = media.find((m) => m.id === id);
+    const isBlocked =
+      asset &&
+      selected
+        .map((accId) => accounts.find((a) => a.id === accId))
+        .filter((a): a is Account => Boolean(a))
+        .some((a) => capabilities[a.platform] && !mediaAllowedForPlatform(capabilities[a.platform].mediaTypes, asset.mimeType));
+    if (isBlocked && !mediaAssetIds.includes(id)) return;
     setMediaAssetIds((prev) => (prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]));
   }
 
@@ -189,19 +222,29 @@ export default function CreatePostPage() {
 
       <SectionCard title="1. Target accounts">
         <div className="flex flex-wrap gap-2">
-          {accounts.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => toggleAccount(a)}
-              className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                selected.includes(a.id) ? "border-accent bg-accent text-white" : "border-[var(--line)] text-ink/70 hover:bg-ink/5"
-              }`}
-            >
-              {a.platform} — {a.displayName || a.username}
-              {!a.connected && <span className="ml-1 opacity-60">(not connected)</span>}
-            </button>
-          ))}
+          {accounts.map((a) => {
+            const canPublish = capabilities[a.platform]?.publish !== false;
+            return (
+              <button
+                key={a.id}
+                type="button"
+                disabled={!canPublish}
+                title={canPublish ? undefined : capabilities[a.platform]?.notes}
+                onClick={() => toggleAccount(a)}
+                className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
+                  !canPublish
+                    ? "cursor-not-allowed border-[var(--line)] text-ink/30 line-through"
+                    : selected.includes(a.id)
+                      ? "border-accent bg-accent text-white"
+                      : "border-[var(--line)] text-ink/70 hover:bg-ink/5"
+                }`}
+              >
+                {a.platform} — {a.displayName || a.username}
+                {!canPublish && <span className="ml-1 opacity-70">(publishing not supported)</span>}
+                {canPublish && !a.connected && <span className="ml-1 opacity-60">(not connected)</span>}
+              </button>
+            );
+          })}
           {accounts.length === 0 && <p className="text-sm text-ink/50">No accounts yet — add one on the Accounts page.</p>}
         </div>
       </SectionCard>
@@ -283,21 +326,37 @@ export default function CreatePostPage() {
 
       <SectionCard title="4. Media" subtitle="Reused from the Media Library — upload more there.">
         <div className="flex flex-wrap gap-2">
-          {media.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => toggleMedia(m.id)}
-              className={`overflow-hidden rounded-lg border text-left ${mediaAssetIds.includes(m.id) ? "border-accent ring-2 ring-accent/40" : "border-[var(--line)]"}`}
-            >
-              {m.mimeType.startsWith("image/") ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={m.url} alt={m.filename} className="h-20 w-20 object-cover" />
-              ) : (
-                <div className="flex h-20 w-20 items-center justify-center bg-ink/5 text-[10px] text-ink/50">{m.filename}</div>
-              )}
-            </button>
-          ))}
+          {media.map((m) => {
+            const blockingPlatforms = selected
+              .map((id) => accounts.find((a) => a.id === id))
+              .filter((a): a is Account => Boolean(a))
+              .filter((a) => capabilities[a.platform] && !mediaAllowedForPlatform(capabilities[a.platform].mediaTypes, m.mimeType))
+              .map((a) => a.platform);
+            const blocked = blockingPlatforms.length > 0;
+            return (
+              <button
+                key={m.id}
+                type="button"
+                disabled={blocked}
+                title={blocked ? `Not supported by: ${blockingPlatforms.join(", ")}` : undefined}
+                onClick={() => toggleMedia(m.id)}
+                className={`overflow-hidden rounded-lg border text-left ${
+                  blocked
+                    ? "cursor-not-allowed border-[var(--line)] opacity-35"
+                    : mediaAssetIds.includes(m.id)
+                      ? "border-accent ring-2 ring-accent/40"
+                      : "border-[var(--line)]"
+                }`}
+              >
+                {m.mimeType.startsWith("image/") ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={m.url} alt={m.filename} className="h-20 w-20 object-cover" />
+                ) : (
+                  <div className="flex h-20 w-20 items-center justify-center bg-ink/5 text-[10px] text-ink/50">{m.filename}</div>
+                )}
+              </button>
+            );
+          })}
           {media.length === 0 && <p className="text-sm text-ink/50">No media uploaded yet.</p>}
         </div>
       </SectionCard>

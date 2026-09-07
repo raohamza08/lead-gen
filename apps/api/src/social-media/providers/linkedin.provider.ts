@@ -8,6 +8,7 @@ import {
   ConversationMessage,
   FeedItem,
   OAuthCredentials,
+  PlatformCapabilityUnavailableError,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -166,18 +167,18 @@ export class LinkedInProvider implements SocialPlatformProvider {
   // here at all, not just a permissions gate. Same reasoning this codebase
   // already applies to LinkedIn outreach elsewhere (kept human-driven).
   async listFeed(): Promise<FeedItem[]> {
-    throw new PlatformNotConfiguredError("LinkedIn", "reading a feed is not available through LinkedIn's public API");
+    throw new PlatformCapabilityUnavailableError("LinkedIn", "reading a feed is not available through LinkedIn's public API");
   }
 
   async listConversations(): Promise<Conversation[]> {
-    throw new PlatformNotConfiguredError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
+    throw new PlatformCapabilityUnavailableError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
   }
 
   async listMessages(): Promise<ConversationMessage[]> {
-    throw new PlatformNotConfiguredError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
+    throw new PlatformCapabilityUnavailableError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
   }
 
   async sendMessage(): Promise<void> {
-    throw new PlatformNotConfiguredError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
+    throw new PlatformCapabilityUnavailableError("LinkedIn", "messaging is not available through LinkedIn's public API for third-party apps");
   }
 }

@@ -27,6 +27,20 @@ export class PlatformNotConfiguredError extends Error {
   }
 }
 
+/** Thrown instead of PlatformNotConfiguredError when a feature is
+ *  permanently unavailable on this platform's public API — not a
+ *  credentials/setup problem an operator could fix by reconnecting (Part:
+ *  "no extra options for what a platform doesn't support", 2026-09-07).
+ *  A connected LinkedIn/X/TikTok/WhatsApp account hitting listFeed() or
+ *  listConversations() is the common case: PlatformNotConfiguredError's
+ *  "is not connected" wording was actively misleading there, since the
+ *  account IS connected and reconnecting changes nothing. */
+export class PlatformCapabilityUnavailableError extends Error {
+  constructor(platform: string, detail: string) {
+    super(`${platform}: ${detail}`);
+  }
+}
+
 /** What a platform's official API actually supports, declared honestly per
  *  platform rather than assumed uniform (Part: Platform API Limitations).
  *  The UI reads this to grey out / explain unavailable actions instead of

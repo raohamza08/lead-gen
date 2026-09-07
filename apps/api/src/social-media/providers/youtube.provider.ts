@@ -13,6 +13,7 @@ import {
   EngagementComment,
   FeedItem,
   OAuthCredentials,
+  PlatformCapabilityUnavailableError,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -256,14 +257,14 @@ export class YouTubeProvider implements SocialPlatformProvider {
   }
 
   async listConversations(): Promise<Conversation[]> {
-    throw new PlatformNotConfiguredError("YouTube", "YouTube has no direct-message concept for channels");
+    throw new PlatformCapabilityUnavailableError("YouTube", "YouTube has no direct-message concept for channels");
   }
 
   async listMessages(): Promise<ConversationMessage[]> {
-    throw new PlatformNotConfiguredError("YouTube", "YouTube has no direct-message concept for channels");
+    throw new PlatformCapabilityUnavailableError("YouTube", "YouTube has no direct-message concept for channels");
   }
 
   async sendMessage(): Promise<void> {
-    throw new PlatformNotConfiguredError("YouTube", "YouTube has no direct-message concept for channels");
+    throw new PlatformCapabilityUnavailableError("YouTube", "YouTube has no direct-message concept for channels");
   }
 }

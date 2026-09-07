@@ -13,6 +13,11 @@ interface Account {
   displayName: string | null;
 }
 
+interface Capabilities {
+  publish: boolean;
+  notes: string;
+}
+
 interface Automation {
   id: string;
   name: string;
@@ -48,8 +53,13 @@ export default function AutomationsPage() {
     queryKey: ["social-media-automations"],
     queryFn: () => api.getSocialAutomations() as Promise<Automation[]>,
   });
+  const capabilitiesQuery = useQuery({
+    queryKey: ["social-media-capabilities"],
+    queryFn: () => api.getSocialCapabilities() as Promise<Record<string, Capabilities>>,
+  });
   const accounts = accountsQuery.data ?? [];
   const automations = automationsQuery.data ?? [];
+  const capabilities = capabilitiesQuery.data ?? {};
   const [name, setName] = useState("");
   const [accountIds, setAccountIds] = useState<string[]>([]);
   const [brief, setBrief] = useState("");
@@ -63,6 +73,8 @@ export default function AutomationsPage() {
   }
 
   function toggleAccount(id: string) {
+    const account = accounts.find((a) => a.id === id);
+    if (!accountIds.includes(id) && account && capabilities[account.platform]?.publish === false) return;
     setAccountIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
@@ -166,16 +178,28 @@ export default function AutomationsPage() {
           {!notifyOnly && (
             <>
               <div className="flex flex-wrap gap-2">
-                {accounts.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => toggleAccount(a.id)}
-                    className={`rounded-full border px-3 py-1 text-xs ${accountIds.includes(a.id) ? "border-accent bg-accent text-white" : "border-[var(--line)] text-ink/70 hover:bg-ink/5"}`}
-                  >
-                    {a.platform} — {a.displayName || a.username}
-                  </button>
-                ))}
+                {accounts.map((a) => {
+                  const canPublish = capabilities[a.platform]?.publish !== false;
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      disabled={!canPublish}
+                      title={canPublish ? undefined : capabilities[a.platform]?.notes}
+                      onClick={() => toggleAccount(a.id)}
+                      className={`rounded-full border px-3 py-1 text-xs ${
+                        !canPublish
+                          ? "cursor-not-allowed border-[var(--line)] text-ink/30 line-through"
+                          : accountIds.includes(a.id)
+                            ? "border-accent bg-accent text-white"
+                            : "border-[var(--line)] text-ink/70 hover:bg-ink/5"
+                      }`}
+                    >
+                      {a.platform} — {a.displayName || a.username}
+                      {!canPublish && <span className="ml-1 opacity-70">(publishing not supported)</span>}
+                    </button>
+                  );
+                })}
               </div>
               <input
                 value={brief}

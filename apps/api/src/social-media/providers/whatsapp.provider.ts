@@ -9,6 +9,7 @@ import {
   ConversationMessage,
   FeedItem,
   OAuthCredentials,
+  PlatformCapabilityUnavailableError,
   PlatformNotConfiguredError,
   PublishInput,
   PublishResult,
@@ -262,22 +263,22 @@ export class WhatsAppProvider implements SocialPlatformProvider {
   }
 
   async publish(): Promise<PublishResult> {
-    throw new PlatformNotConfiguredError("WhatsApp", "WhatsApp has no public feed or posting concept -- it is a messaging-only channel.");
+    throw new PlatformCapabilityUnavailableError("WhatsApp", "WhatsApp has no public feed or posting concept -- it is a messaging-only channel.");
   }
 
   async listFeed(): Promise<FeedItem[]> {
-    throw new PlatformNotConfiguredError("WhatsApp", "WhatsApp has no public feed or posting concept -- it is a messaging-only channel.");
+    throw new PlatformCapabilityUnavailableError("WhatsApp", "WhatsApp has no public feed or posting concept -- it is a messaging-only channel.");
   }
 
   async listConversations(): Promise<Conversation[]> {
-    throw new PlatformNotConfiguredError(
+    throw new PlatformCapabilityUnavailableError(
       "WhatsApp",
       "the Cloud API has no endpoint to read message history -- conversations only appear from messages received after connecting, via webhook.",
     );
   }
 
   async listMessages(): Promise<ConversationMessage[]> {
-    throw new PlatformNotConfiguredError(
+    throw new PlatformCapabilityUnavailableError(
       "WhatsApp",
       "the Cloud API has no endpoint to read message history -- conversations only appear from messages received after connecting, via webhook.",
     );
