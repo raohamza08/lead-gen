@@ -74,4 +74,11 @@ export const QUEUE_NAMES = {
   // finer-grained than the other sweeps, so the 5-minute cooldown is
   // actually honored rather than overshot by a coarser interval.
   EMAIL_ACCOUNT_RESUME_SWEEP: "email-account-resume-sweep",
+  // Pings the ai-workers process's own /health endpoint on a repeatable
+  // schedule and alerts if it's unreachable for several consecutive checks
+  // (Part: comprehensive operational alerting, 2026-09-08) -- distinct from
+  // AGENT_EXECUTION_SWEEP, which only knows about individual lead-level
+  // agent failures, not the whole process being down. See
+  // ai-workers-health.worker.ts.
+  AI_WORKERS_HEALTH: "ai-workers-health",
 } as const;

@@ -4,6 +4,8 @@ import { NotificationCategory, Prisma, Role } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { UserAccessCacheService } from "../common/access/user-access-cache.service";
+import { TransactionalEmailService } from "../email/transactional-email.service";
+import { dashboardUrl } from "../common/cors";
 
 export interface NotifyInput {
   category: NotificationCategory;
@@ -62,9 +64,11 @@ export class NotificationsService {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
     private readonly userAccess: UserAccessCacheService,
+    private readonly transactionalEmail: TransactionalEmailService,
   ) {}
 
   async notify(orgId: string, input: NotifyInput) {
+    const severity = input.severity ?? "ERROR";
     const notification = await this.prisma.notification.create({
       data: {
         orgId,
@@ -72,7 +76,7 @@ export class NotificationsService {
         type: input.type,
         title: input.title,
         message: input.message,
-        severity: input.severity ?? "ERROR",
+        severity,
         leadId: input.leadId,
         conversationId: input.conversationId,
         entityType: input.entityType,
@@ -86,7 +90,37 @@ export class NotificationsService {
     for (const userId of eligibleUserIds) {
       this.realtime.emitToUser(userId, "notification.created", notification);
     }
+
+    // Real email, not just the in-app bell (Part: comprehensive operational
+    // alerting, 2026-09-08) -- every ERROR-severity or SECURITY-category
+    // notification, from ANY call site in the app (agent failures including
+    // Claude/Gemini rate-limit exhaustion, sync auth failures, send
+    // failures, etc.), now also reaches the primary admin's inbox, not just
+    // whoever happens to be looking at the Notification Center. Deliberately
+    // the primary admin specifically, not every user this category is
+    // normally visible to in-app -- "I must know about it" was personal,
+    // not "broadcast to everyone with module access." Failure to send here
+    // must never fail the notification itself (in-app + realtime already
+    // succeeded by this point), so errors are swallowed, logged only.
+    if (severity === "ERROR" || input.category === NotificationCategory.SECURITY) {
+      this.emailPrimaryAdmin(orgId, input).catch((err) => {
+        this.logger.error(`Failed to email primary admin for [${input.type}]: ${(err as Error).message}`);
+      });
+    }
+
     return notification;
+  }
+
+  private async emailPrimaryAdmin(orgId: string, input: NotifyInput) {
+    const admin = await this.prisma.user.findFirst({ where: { orgId, isPrimaryAdmin: true }, select: { email: true } });
+    if (!admin?.email) return;
+    const actionLink = input.actionUrl ? `<p><a href="${dashboardUrl()}${input.actionUrl}">Open in Outly</a></p>` : "";
+    await this.transactionalEmail.send(
+      orgId,
+      admin.email,
+      `[Outly Alert] ${input.title}`,
+      `<p>${input.message}</p>${actionLink}`,
+    );
   }
 
   private isEligible(user: EligibilityUser, category: NotificationCategory): boolean {

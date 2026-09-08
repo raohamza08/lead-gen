@@ -5,7 +5,17 @@ import * as bcrypt from "bcryptjs";
 import { randomBytes, createHash } from "crypto";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { AuthTokens, JwtClaims, Role } from "@leadgen/types";
+import { NotificationCategory } from "@prisma/client";
 import { AuditLogService } from "../audit-log/audit-log.service";
+import { NotificationsService } from "../notifications/notifications.service";
+
+/** How many LOGIN_FAILED attempts for the same email, within this window,
+ *  before a SECURITY alert fires (Part: comprehensive operational alerting,
+ *  2026-09-08). Checked only at exactly this count, not "5 or more" -- a
+ *  sustained attack keeps failing past 5 too, and re-alerting on every
+ *  single one of those would just be noise once the admin already knows. */
+const LOGIN_FAILURE_ALERT_THRESHOLD = 5;
+const LOGIN_FAILURE_WINDOW_MS = 15 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -14,6 +24,7 @@ export class AuthService {
     private readonly jwt: JwtService,
     private readonly config: ConfigService,
     private readonly auditLog: AuditLogService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async login(email: string, password: string, ipAddress?: string): Promise<AuthTokens> {
@@ -26,6 +37,7 @@ export class AuthService {
         ipAddress,
         metadata: { email, reason: user ? "inactive account" : "unknown email" },
       });
+      await this.maybeAlertRepeatedFailures(email, ipAddress, user?.orgId);
       throw new UnauthorizedException("Invalid credentials");
     }
     const passwordOk = await bcrypt.compare(password, user.passwordHash);
@@ -39,10 +51,42 @@ export class AuthService {
         ipAddress,
         metadata: { email, reason: "wrong password" },
       });
+      await this.maybeAlertRepeatedFailures(email, ipAddress, user.orgId);
       throw new UnauthorizedException("Invalid credentials");
     }
     this.auditLog.write({ orgId: user.orgId, actorId: user.id, action: "LOGIN", entityType: "auth", ipAddress });
     return this.issueTokens({ sub: user.id, orgId: user.orgId, role: user.role as Role, email: user.email });
+  }
+
+  /** `orgId` is only known when the attempted email matches a real (if
+   *  inactive or wrong-password) user -- for a genuinely unknown email there
+   *  is no org to scope the alert to, so this falls back to whichever
+   *  organization was created first. Correct for this single-tenant
+   *  deployment; a real multi-tenant version would need a different
+   *  resolution here entirely (there's no tenant to attribute an
+   *  unknown-email probe to). */
+  private async maybeAlertRepeatedFailures(email: string, ipAddress: string | undefined, orgId: string | undefined) {
+    const count = await this.prisma.auditLog.count({
+      where: {
+        action: "LOGIN_FAILED",
+        createdAt: { gte: new Date(Date.now() - LOGIN_FAILURE_WINDOW_MS) },
+        metadata: { path: ["email"], equals: email },
+      },
+    });
+    if (count !== LOGIN_FAILURE_ALERT_THRESHOLD) return;
+
+    const targetOrgId = orgId ?? (await this.prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
+    if (!targetOrgId) return;
+
+    await this.notifications.notify(targetOrgId, {
+      category: NotificationCategory.SECURITY,
+      type: "REPEATED_LOGIN_FAILURES",
+      severity: "ERROR",
+      title: "Repeated failed login attempts",
+      message: `${count} failed login attempts for ${email} in the last ${LOGIN_FAILURE_WINDOW_MS / 60000} minutes (most recent from ${ipAddress ?? "an unknown IP"}).`,
+      entityType: "auth",
+      actionUrl: "/admin/system-logs",
+    });
   }
 
   async refresh(refreshToken: string): Promise<AuthTokens> {
