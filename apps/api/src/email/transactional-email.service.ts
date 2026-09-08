@@ -26,8 +26,13 @@ export class TransactionalEmailService {
 
   /** Returns false rather than throwing on failure — a team member's account
    *  should still get created even if the welcome email can't be sent right
-   *  now; the caller surfaces that to the admin instead of losing the account. */
-  async send(orgId: string, toAddress: string, subject: string, bodyHtml: string): Promise<boolean> {
+   *  now; the caller surfaces that to the admin instead of losing the account.
+   *
+   *  `fromNameOverride` lets a caller replace the org's normal branding name
+   *  (Part: alert email branding, 2026-09-08) — automated system alerts use
+   *  a distinct sender identity (see ALERT_EMAIL_FROM_NAME) so they read as
+   *  "the system" in an inbox, not as another business email from the org. */
+  async send(orgId: string, toAddress: string, subject: string, bodyHtml: string, fromNameOverride?: string): Promise<boolean> {
     const account = await this.prisma.emailAccount.findFirst({
       where: { orgId, status: "ACTIVE" },
       orderBy: { createdAt: "asc" },
@@ -43,7 +48,7 @@ export class TransactionalEmailService {
     try {
       await provider.send(account, {
         fromAddress: account.address,
-        fromName: branding.emailSenderName,
+        fromName: fromNameOverride ?? branding.emailSenderName,
         toAddress,
         subject,
         bodyHtml,

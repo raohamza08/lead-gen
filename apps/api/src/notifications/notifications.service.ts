@@ -6,6 +6,7 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { UserAccessCacheService } from "../common/access/user-access-cache.service";
 import { TransactionalEmailService } from "../email/transactional-email.service";
 import { dashboardUrl } from "../common/cors";
+import { ALERT_EMAIL_FROM_NAME, renderAlertEmail } from "./alert-email.template";
 
 export interface NotifyInput {
   category: NotificationCategory;
@@ -23,6 +24,15 @@ export interface NotifyInput {
    *  docblock for why this lives on the record instead of being guessed
    *  client-side. */
   actionUrl?: string;
+  /** Emails the primary admin even though severity/category alone wouldn't
+   *  trigger it (Part: alert email branding, 2026-09-08) — e.g. a "resumed,
+   *  all healthy" follow-up is WARNING/informational, not an error, but the
+   *  admin still explicitly wants it in their inbox. */
+  forceEmail?: boolean;
+  /** "alert" (red) vs "resolved" (green) banner on the email itself — see
+   *  renderAlertEmail. Defaults to "alert"; pass "resolved" for a
+   *  good-news/back-to-normal notification. */
+  emailTone?: "alert" | "resolved";
 }
 
 type EligibilityUser = {
@@ -102,7 +112,7 @@ export class NotificationsService {
     // not "broadcast to everyone with module access." Failure to send here
     // must never fail the notification itself (in-app + realtime already
     // succeeded by this point), so errors are swallowed, logged only.
-    if (severity === "ERROR" || input.category === NotificationCategory.SECURITY) {
+    if (severity === "ERROR" || input.category === NotificationCategory.SECURITY || input.forceEmail) {
       this.emailPrimaryAdmin(orgId, input).catch((err) => {
         this.logger.error(`Failed to email primary admin for [${input.type}]: ${(err as Error).message}`);
       });
@@ -114,13 +124,13 @@ export class NotificationsService {
   private async emailPrimaryAdmin(orgId: string, input: NotifyInput) {
     const admin = await this.prisma.user.findFirst({ where: { orgId, isPrimaryAdmin: true }, select: { email: true } });
     if (!admin?.email) return;
-    const actionLink = input.actionUrl ? `<p><a href="${dashboardUrl()}${input.actionUrl}">Open in Outly</a></p>` : "";
-    await this.transactionalEmail.send(
-      orgId,
-      admin.email,
-      `[Outly Alert] ${input.title}`,
-      `<p>${input.message}</p>${actionLink}`,
-    );
+    const bodyHtml = renderAlertEmail({
+      title: input.title,
+      message: input.message,
+      actionUrl: input.actionUrl ? `${dashboardUrl()}${input.actionUrl}` : undefined,
+      tone: input.emailTone ?? "alert",
+    });
+    await this.transactionalEmail.send(orgId, admin.email, `[Outly Sentinel] ${input.title}`, bodyHtml, ALERT_EMAIL_FROM_NAME);
   }
 
   private isEligible(user: EligibilityUser, category: NotificationCategory): boolean {

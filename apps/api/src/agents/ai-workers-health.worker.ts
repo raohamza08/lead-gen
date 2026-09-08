@@ -59,6 +59,7 @@ export class AiWorkersHealthWorker implements OnModuleInit, OnModuleDestroy {
         await this.notifyAllOrgs(
           "AI workers back online",
           `ai-workers (${url}) is responding again after ${this.consecutiveFailures} failed check(s).`,
+          "resolved",
         );
         this.alertSent = false;
       }
@@ -91,13 +92,15 @@ export class AiWorkersHealthWorker implements OnModuleInit, OnModuleDestroy {
    *  for the whole deployment, so every org gets the alert rather than
    *  guessing one. At today's single-tenant scale this is just the one org;
    *  written as a loop so it stays correct if that ever changes. */
-  private async notifyAllOrgs(title: string, message: string) {
+  private async notifyAllOrgs(title: string, message: string, tone: "alert" | "resolved" = "alert") {
     const orgs = await this.prisma.organization.findMany({ select: { id: true } });
     for (const org of orgs) {
       await this.notifications.notify(org.id, {
         category: NotificationCategory.SYSTEM,
         type: "AI_WORKERS_HEALTH",
-        severity: "ERROR",
+        severity: tone === "resolved" ? "WARNING" : "ERROR",
+        forceEmail: tone === "resolved",
+        emailTone: tone,
         title,
         message,
         entityType: "system",

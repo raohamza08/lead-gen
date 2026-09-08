@@ -1,8 +1,9 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Worker } from "bullmq";
+import { NotificationCategory } from "@prisma/client";
 import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { PrismaService } from "../common/prisma/prisma.service";
-import { TransactionalEmailService } from "../email/transactional-email.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 /** How long a SUSPENDED account sits before this worker tries resuming it
  *  (Part: email account auto-resume agent, 2026-09-08) -- an explicit,
@@ -32,7 +33,7 @@ export class EmailAccountResumeWorker implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly transactionalEmail: TransactionalEmailService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onModuleInit() {
@@ -63,20 +64,27 @@ export class EmailAccountResumeWorker implements OnModuleInit, OnModuleDestroy {
       });
       this.logger.warn(`Auto-resumed ${account.address} after ${EMAIL_ACCOUNT_RESUME_COOLDOWN_MS / 60000}min cooldown`);
 
-      // Same "any other active mailbox, never the outreach rotation" choice
-      // as EmailHubSyncWorker's own suspend-time alert -- see that method's
-      // docblock for why.
-      const admin = await this.prisma.user.findFirst({ where: { orgId: account.orgId, isPrimaryAdmin: true }, select: { email: true } });
-      if (admin?.email) {
-        await this.transactionalEmail.send(
-          account.orgId,
-          admin.email,
-          `Email account resumed: ${account.address}`,
-          `<p><strong>${account.address}</strong> has been automatically resumed by the email reviewer agent and the system is healthy.</p>` +
-            `<p>Inbox sync will pick it back up on its next check. If it was a real password problem, you'll get another ` +
-            `suspension email shortly -- otherwise, no further action needed.</p>`,
-        );
-      }
+      // Routed through NotificationsService (Part: alert email branding,
+      // 2026-09-08), not a direct TransactionalEmailService.send() -- gives
+      // this event an in-app bell entry too (previously email-only) and
+      // picks up the shared "Outly Sentinel" branding/sender identity
+      // automatically via forceEmail (severity WARNING alone wouldn't
+      // trigger the email bridge, but the user explicitly wants this one).
+      await this.notifications.notify(account.orgId, {
+        category: NotificationCategory.EMAIL,
+        type: "EMAIL_ACCOUNT_AUTO_RESUMED",
+        severity: "WARNING",
+        forceEmail: true,
+        emailTone: "resolved",
+        title: "Email Sync Resumed",
+        message:
+          `${account.address} has been automatically resumed by the email reviewer agent and the system is healthy.\n\n` +
+          `Inbox sync will pick it back up on its next check. If it was a real password problem, you'll get another ` +
+          `suspension alert shortly -- otherwise, no further action needed.`,
+        entityType: "emailAccount",
+        entityId: account.id,
+        actionUrl: "/settings/email-hub",
+      });
     }
   }
 }

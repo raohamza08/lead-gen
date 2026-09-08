@@ -9,7 +9,6 @@ import { ImapReaderProvider } from "./readers/imap-reader.provider";
 import { FetchedMessage } from "./mailbox-reader.interface";
 import { EmailLeadClassifierService } from "./email-lead-classifier.service";
 import { SequencerService } from "../sequencer/sequencer.service";
-import { TransactionalEmailService } from "../email/transactional-email.service";
 
 /** Strips reply/forward prefixes and collapses whitespace so "Re: Re: Fwd:
  *  Website proposal" and "Website proposal" thread together when no
@@ -45,19 +44,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
     private readonly notifications: NotificationsService,
     private readonly leadClassifier: EmailLeadClassifierService,
     private readonly sequencer: SequencerService,
-    private readonly transactionalEmail: TransactionalEmailService,
   ) {}
-
-  /** The org's primary admin (Part: email account auto-resume agent,
-   *  2026-09-08) — same person System Logs/SECURITY notifications already
-   *  single out (see PrimaryAdminGuard), the right target for "a mailbox
-   *  just got suspended" alerts too. Returns null rather than throwing if
-   *  somehow unset — a missing alert recipient must never fail the sync
-   *  tick itself. */
-  private async primaryAdminEmail(orgId: string): Promise<string | null> {
-    const admin = await this.prisma.user.findFirst({ where: { orgId, isPrimaryAdmin: true }, select: { email: true } });
-    return admin?.email ?? null;
-  }
 
   onModuleInit() {
     this.worker = new Worker(QUEUE_NAMES.EMAIL_SYNC, () => this.tick(), {
@@ -171,37 +158,25 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
         where: { id: account.id },
         data: { status: "SUSPENDED", suspendedAt: new Date() },
       });
+      // Single notify() call drives BOTH the in-app bell and the real email
+      // (Part: alert email branding, 2026-09-08 -- a prior version sent two
+      // separate emails for the same event, one via this notify() bridge and
+      // one via a direct TransactionalEmailService.send() call here; folded
+      // into one so only one email lands per suspension).
       await this.notifications.notify(account.orgId, {
         category: NotificationCategory.EMAIL,
         type: "EMAIL_SYNC_AUTH_FAILED",
         severity: "ERROR",
         title: "Email Sync Suspended",
-        message: `Inbox sync for ${account.address} was suspended — IMAP login failed. Check the password in Settings > Email Hub > Accounts.`,
+        message:
+          `${account.address} was just suspended — IMAP login failed (${err.message || "authentication rejected"}).\n\n` +
+          `The email reviewer agent will automatically try to resume it in 5 minutes. If the credentials are genuinely wrong, ` +
+          `it'll keep suspending and you'll keep getting this alert — that's your signal to update the password in ` +
+          `Settings > Email Hub > Accounts rather than wait on it.`,
         entityType: "emailAccount",
         entityId: account.id,
         actionUrl: "/settings/email-hub",
       });
-
-      // Real email, not just the in-app notification above (Part: email
-      // account auto-resume agent, 2026-09-08 -- the user explicitly wants
-      // to know the moment this happens, not only see it in-app). Sent via
-      // TransactionalEmailService, deliberately NOT the outreach-rotation
-      // pool this same account might belong to -- if the org's only
-      // sending-enabled mailbox is the one that just got suspended, alerting
-      // through it would be a chicken-and-egg failure; TransactionalEmailService
-      // picks any other still-ACTIVE mailbox instead.
-      const adminEmail = await this.primaryAdminEmail(account.orgId);
-      if (adminEmail) {
-        await this.transactionalEmail.send(
-          account.orgId,
-          adminEmail,
-          `Email account suspended: ${account.address}`,
-          `<p><strong>${account.address}</strong> was just suspended — IMAP login failed (${err.message || "authentication rejected"}).</p>` +
-            `<p>The email reviewer agent will automatically try to resume it in 5 minutes. If the credentials are genuinely wrong, ` +
-            `it'll keep suspending and you'll keep getting this email — that's your signal to update the password in ` +
-            `Settings &gt; Email Hub &gt; Accounts rather than wait on it.</p>`,
-        );
-      }
       return;
     }
     // err.message can be empty for some rejection shapes (e.g. a bare
