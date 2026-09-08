@@ -6,11 +6,28 @@ import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { EmailProviderService } from "../email/email-provider.service";
 import type { SendingJob } from "./sending-queue.queue";
 import { CLAIMABLE_FOR_SENDING } from "./email-status-transitions";
+import { classifySendFailure } from "../analytics/failure-classifier";
 
 /** Exponential from ~2 minutes, capped at ~1 hour — same shape as
  *  AgentExecutionService's backoffMs, reused here for send retries. */
 function backoffMs(attempt: number): number {
   const minutes = Math.min(60, 2 * 2 ** (attempt - 1));
+  return minutes * 60 * 1000;
+}
+
+/** A daily/hourly send-limit block isn't a failure in any real sense — it's
+ *  "not right now," and the cap resets on its own (Part: PROVIDER_LIMIT
+ *  retry fix, 2026-09-08). backoffMs's ~1-hour cap means MAX_SEND_ATTEMPTS
+ *  worth of retries all land within about 2 hours, well short of a daily
+ *  reset, so a message hitting this every attempt would exhaust and land
+ *  FAILED even though sending would very likely have worked a few hours
+ *  later — confirmed live: 83 leads' Email 2 stuck exactly this way, most
+ *  attributable to this exact failureReason. Escalates slower and caps much
+ *  higher (~4 hours) than the default backoff, so repeated retries actually
+ *  span past typical hourly/daily reset windows instead of all bunching
+ *  into the same short window the cap was already blocking. */
+function providerLimitBackoffMs(attempt: number): number {
+  const minutes = Math.min(240, 30 * 2 ** (attempt - 1));
   return minutes * 60 * 1000;
 }
 
@@ -88,7 +105,7 @@ export class SendingWorker implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    await this.onSendFailed(emailMessageId, message.lead.orgId, message.sendingSessionId, message.sendRetryCount);
+    await this.onSendFailed(emailMessageId, message.lead.orgId, message.sendingSessionId, message.sendRetryCount, result.failureReason);
   }
 
   private async onSendFailed(
@@ -96,9 +113,15 @@ export class SendingWorker implements OnModuleInit, OnModuleDestroy {
     orgId: string,
     sendingSessionId: string | null,
     priorAttempts: number,
+    failureReason: string | undefined,
   ) {
     const attempt = priorAttempts + 1;
-    const terminal = attempt >= MAX_SEND_ATTEMPTS;
+    // A capacity block (daily/hourly send limit) is never terminal -- see
+    // providerLimitBackoffMs's own docblock for why treating it the same as
+    // a real send failure was wrong. Every other category still gives up
+    // after MAX_SEND_ATTEMPTS, unchanged.
+    const isProviderLimit = failureReason ? classifySendFailure(failureReason) === "PROVIDER_LIMIT" : false;
+    const terminal = !isProviderLimit && attempt >= MAX_SEND_ATTEMPTS;
 
     if (terminal) {
       // Leave the FAILED status sendMessageNow already set — this is a
@@ -120,7 +143,7 @@ export class SendingWorker implements OnModuleInit, OnModuleDestroy {
         data: {
           status: "RETRY_SCHEDULED",
           sendRetryCount: attempt,
-          nextSendRetryAt: new Date(Date.now() + backoffMs(attempt)),
+          nextSendRetryAt: new Date(Date.now() + (isProviderLimit ? providerLimitBackoffMs(attempt) : backoffMs(attempt))),
           sendingLockedAt: null,
         },
       });
