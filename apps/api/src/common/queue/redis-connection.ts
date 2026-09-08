@@ -59,4 +59,12 @@ export const QUEUE_NAMES = {
   // stale SENDING locks a crashed worker left stuck — same shape as
   // AGENT_EXECUTION_SWEEP. See sending-sweep.worker.ts.
   SENDING_SWEEP: "sending-sweep",
+  // Self-heals a lead whose WAIT_TIMERS delayed job never fired (Redis
+  // eviction, a stalled job past its retry budget, etc.) -- WAIT_TIMERS
+  // itself has zero built-in retry (Part: pipeline wait sweep, 2026-09-08:
+  // confirmed live, 17 real leads sitting past their nextActionAt with no
+  // automatic advance, some over 4 days overdue). Same reconciliation
+  // shape as AGENT_EXECUTION_SWEEP/SENDING_SWEEP -- see
+  // pipeline-wait-sweep.worker.ts.
+  PIPELINE_WAIT_SWEEP: "pipeline-wait-sweep",
 } as const;

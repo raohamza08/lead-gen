@@ -272,6 +272,72 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  /** How overdue nextActionAt must be before recoverStuckWaits() will touch
+   *  a lead — must clear normal BullMQ delayed-job latency (typically well
+   *  under a minute) with real margin, so this never races a wait job
+   *  that's simply about to fire on its own. */
+  private static readonly STUCK_WAIT_GRACE_MS = 5 * 60 * 1000;
+
+  /**
+   * Self-heals a lead whose wait-timer delayed job never fired (Part:
+   * pipeline wait sweep, 2026-09-08) — called by PipelineWaitSweepWorker's
+   * repeatable tick, the same reconciliation shape AgentExecutionSweepWorker
+   * already provides for agent-retry timers. WAIT_TIMERS jobs are one-shot
+   * with no `attempts` configured (see scheduleWait), so a job lost to a
+   * Redis eviction, an unhandled exception mid-handleWaitJob, or any other
+   * one-off failure previously meant that lead's countdown finished but
+   * nothing ever happened — confirmed live: 17 real leads sitting up to 4+
+   * days past nextActionAt with their stage never advancing, zero automatic
+   * recovery, exactly the "timer completes but doesn't retry itself" gap.
+   *
+   * Re-checks the actual BullMQ job before touching anything: a job that's
+   * still delayed/waiting/active is left alone (it'll fire on its own, or
+   * get caught by the NEXT sweep if it doesn't) — this only ever acts on a
+   * job that's missing or failed, never races a healthy one.
+   */
+  async recoverStuckWaits(): Promise<void> {
+    const cutoff = new Date(Date.now() - SequencerService.STUCK_WAIT_GRACE_MS);
+    const stuck = await this.prisma.pipelineState.findMany({
+      where: { waitJobId: { not: null }, nextActionAt: { lte: cutoff } },
+      select: { leadId: true, stage: true, waitJobId: true },
+      take: 200,
+    });
+
+    for (const state of stuck) {
+      const nextStage = WAIT_AFTER[state.stage];
+      if (!nextStage || !state.waitJobId) continue; // stage no longer wait-eligible (moved on already) or malformed row -- nothing to recover
+
+      try {
+        const job = await this.waitQueue.getJob(state.waitJobId);
+        if (job) {
+          const jobState = await job.getState();
+          if (jobState === "delayed" || jobState === "waiting" || jobState === "active") continue; // healthy, let it fire
+        }
+
+        // Same effect as handleWaitJob's own success path -- this IS the
+        // fallback for that path never running. Conditioned on waitJobId
+        // still matching what was just fetched (same re-check handleWaitJob
+        // itself does) -- a reply arriving between the query above and here
+        // would have already run cancelWaitTimer and cleared waitJobId, and
+        // this must not overwrite that with a stage advance the cancel was
+        // specifically meant to prevent.
+        const updated = await this.prisma.pipelineState.updateMany({
+          where: { leadId: state.leadId, waitJobId: state.waitJobId },
+          data: { stage: nextStage, previousStage: state.stage, enteredStageAt: new Date(), waitJobId: null },
+        });
+        if (updated.count === 0) {
+          this.logger.log(`Skipping stuck-wait recovery for lead ${state.leadId} -- cancelled or already advanced concurrently`);
+          continue;
+        }
+        await this.sync.onStageChanged(state.leadId, nextStage);
+        await this.onStageEntered(state.leadId, nextStage);
+        this.logger.warn(`Recovered stuck wait for lead ${state.leadId}: ${state.stage} -> ${nextStage} (job ${state.waitJobId} was lost/failed)`);
+      } catch (err) {
+        this.logger.error(`could not recover stuck wait for lead ${state.leadId}: ${(err as Error).message}`);
+      }
+    }
+  }
+
   /**
    * Called when a reply is detected or a lead is manually marked Lost/Won
    * (Part C6: "reply detection short-circuits the sequence at every step").
