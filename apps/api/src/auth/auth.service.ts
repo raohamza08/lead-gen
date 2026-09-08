@@ -66,17 +66,42 @@ export class AuthService {
    *  resolution here entirely (there's no tenant to attribute an
    *  unknown-email probe to). */
   private async maybeAlertRepeatedFailures(email: string, ipAddress: string | undefined, orgId: string | undefined) {
-    const count = await this.prisma.auditLog.count({
+    // +1 for the attempt that just failed, not (only) what's already
+    // persisted -- AuditLogService.write() above is deliberately
+    // fire-and-forget (never awaited, by design: an audit-log failure must
+    // never fail the login response), so its own INSERT can still be
+    // in-flight when this query runs. Counting the DB rows alone under a
+    // fast burst would undercount by however many writes hadn't landed yet
+    // -- confirmed live, a 5-attempt burst never crossed the threshold
+    // until this fix.
+    const priorCount = await this.prisma.auditLog.count({
       where: {
         action: "LOGIN_FAILED",
         createdAt: { gte: new Date(Date.now() - LOGIN_FAILURE_WINDOW_MS) },
         metadata: { path: ["email"], equals: email },
       },
     });
-    if (count !== LOGIN_FAILURE_ALERT_THRESHOLD) return;
+    const count = priorCount + 1;
+    if (count < LOGIN_FAILURE_ALERT_THRESHOLD) return;
 
     const targetOrgId = orgId ?? (await this.prisma.organization.findFirst({ orderBy: { createdAt: "asc" }, select: { id: true } }))?.id;
     if (!targetOrgId) return;
+
+    // `>=`, not `===` -- concurrent requests racing the same priorCount
+    // query could otherwise all land on the same value and skip past the
+    // exact threshold without any of them firing. Dedup instead on whether
+    // an alert already exists for this email in the window (entityId
+    // doubles as the lookup key here), so a burst crossing the threshold
+    // fires exactly once regardless of how many requests raced past it
+    // simultaneously.
+    const alreadyAlerted = await this.prisma.notification.findFirst({
+      where: {
+        type: "REPEATED_LOGIN_FAILURES",
+        entityId: email,
+        createdAt: { gte: new Date(Date.now() - LOGIN_FAILURE_WINDOW_MS) },
+      },
+    });
+    if (alreadyAlerted) return;
 
     await this.notifications.notify(targetOrgId, {
       category: NotificationCategory.SECURITY,
@@ -85,6 +110,7 @@ export class AuthService {
       title: "Repeated failed login attempts",
       message: `${count} failed login attempts for ${email} in the last ${LOGIN_FAILURE_WINDOW_MS / 60000} minutes (most recent from ${ipAddress ?? "an unknown IP"}).`,
       entityType: "auth",
+      entityId: email,
       actionUrl: "/admin/system-logs",
     });
   }
