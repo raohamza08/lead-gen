@@ -8,6 +8,8 @@ import { EmailHubSyncWorker } from "./email-hub-sync.worker";
 import { EmailHubService } from "./email-hub.service";
 import { EmailHubController } from "./email-hub.controller";
 import { EmailLeadClassifierService } from "./email-lead-classifier.service";
+import { EmailAccountResumeQueue } from "./email-account-resume.queue";
+import { EmailAccountResumeWorker } from "./email-account-resume.worker";
 
 @Module({
   imports: [EmailModule, LeadsModule, SequencerModule],
@@ -18,6 +20,8 @@ import { EmailLeadClassifierService } from "./email-lead-classifier.service";
     EmailHubSyncWorker,
     EmailHubService,
     EmailLeadClassifierService,
+    EmailAccountResumeQueue,
+    EmailAccountResumeWorker,
   ],
 })
 export class EmailHubModule {}

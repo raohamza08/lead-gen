@@ -67,4 +67,11 @@ export const QUEUE_NAMES = {
   // shape as AGENT_EXECUTION_SWEEP/SENDING_SWEEP -- see
   // pipeline-wait-sweep.worker.ts.
   PIPELINE_WAIT_SWEEP: "pipeline-wait-sweep",
+  // Auto-resumes a SUSPENDED EmailAccount (IMAP auth failure) 5 minutes
+  // after it was suspended, so a transient credential hiccup doesn't sit
+  // needing a human to click resume (Part: email account auto-resume agent,
+  // 2026-09-08) -- see email-account-resume.worker.ts. Ticks every minute,
+  // finer-grained than the other sweeps, so the 5-minute cooldown is
+  // actually honored rather than overshot by a coarser interval.
+  EMAIL_ACCOUNT_RESUME_SWEEP: "email-account-resume-sweep",
 } as const;

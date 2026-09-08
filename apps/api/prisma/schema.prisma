@@ -846,6 +846,11 @@ model EmailAccount {
   /// SENT with nothing ever delivered. Defaults false — an admin must
   /// explicitly turn this on per mailbox now.
   sendingEnabled Boolean @default(false) @map("sending_enabled")
+  /// When this account most recently entered SUSPENDED (Part: email account
+  /// auto-resume agent, 2026-09-08) — the resume sweep's cooldown clock.
+  /// Cleared back to null on resume, so a later re-suspension always starts
+  /// a fresh cooldown rather than reading a stale timestamp.
+  suspendedAt    DateTime? @map("suspended_at")
   createdAt    DateTime @default(now()) @map("created_at")
 
   // GMAIL: OAuth2 refresh token for this mailbox (gmail.send + gmail.readonly
