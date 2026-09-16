@@ -101,18 +101,20 @@ export class NotificationsService {
       this.realtime.emitToUser(userId, "notification.created", notification);
     }
 
-    // Real email, not just the in-app bell (Part: comprehensive operational
-    // alerting, 2026-09-08) -- every ERROR-severity or SECURITY-category
-    // notification, from ANY call site in the app (agent failures including
-    // Claude/Gemini rate-limit exhaustion, sync auth failures, send
-    // failures, etc.), now also reaches the primary admin's inbox, not just
-    // whoever happens to be looking at the Notification Center. Deliberately
-    // the primary admin specifically, not every user this category is
-    // normally visible to in-app -- "I must know about it" was personal,
-    // not "broadcast to everyone with module access." Failure to send here
-    // must never fail the notification itself (in-app + realtime already
-    // succeeded by this point), so errors are swallowed, logged only.
-    if (severity === "ERROR" || input.category === NotificationCategory.SECURITY || input.forceEmail) {
+    // Real email, not just the in-app bell -- but ONLY when the call site
+    // explicitly opts in via forceEmail (Part: alert volume reduction,
+    // 2026-09-16). An earlier version emailed on every ERROR-severity or
+    // SECURITY-category notification from ANY call site -- agent retries,
+    // send failures, sync blips, permission denials, everything -- and blew
+    // past the user's email provider's sending limit. Narrowed to an
+    // explicit allowlist per the user's own words: "no other emails" beyond
+    // repeated login failures, an account getting suspended, a lead reply,
+    // and an agent that's failed 10 times in a row. Every call site that
+    // still wants email sets forceEmail: true itself -- severity/category
+    // alone no longer implies it. Failure to send here must never fail the
+    // notification itself (in-app + realtime already succeeded by this
+    // point), so errors are swallowed, logged only.
+    if (input.forceEmail) {
       this.emailPrimaryAdmin(orgId, input).catch((err) => {
         this.logger.error(`Failed to email primary admin for [${input.type}]: ${(err as Error).message}`);
       });

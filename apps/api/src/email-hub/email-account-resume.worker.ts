@@ -64,17 +64,15 @@ export class EmailAccountResumeWorker implements OnModuleInit, OnModuleDestroy {
       });
       this.logger.warn(`Auto-resumed ${account.address} after ${EMAIL_ACCOUNT_RESUME_COOLDOWN_MS / 60000}min cooldown`);
 
-      // Routed through NotificationsService (Part: alert email branding,
-      // 2026-09-08), not a direct TransactionalEmailService.send() -- gives
-      // this event an in-app bell entry too (previously email-only) and
-      // picks up the shared "Outly Sentinel" branding/sender identity
-      // automatically via forceEmail (severity WARNING alone wouldn't
-      // trigger the email bridge, but the user explicitly wants this one).
+      // In-app only, no email (Part: alert volume reduction, 2026-09-16) --
+      // the suspend-time alert already emailed; "resumed, healthy" is not on
+      // the user's explicit allowlist (repeated logins, suspend, lead
+      // reply, agent stuck 10x) and was contributing to the sending-limit
+      // problem this narrowing fixes.
       await this.notifications.notify(account.orgId, {
         category: NotificationCategory.EMAIL,
         type: "EMAIL_ACCOUNT_AUTO_RESUMED",
         severity: "WARNING",
-        forceEmail: true,
         emailTone: "resolved",
         title: "Email Sync Resumed",
         message:

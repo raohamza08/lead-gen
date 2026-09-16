@@ -38,6 +38,14 @@ function backoffMs(attempt: number): number {
  *  card is enough; not every transient blip needs a notification. */
 const NOTIFY_AFTER_ATTEMPTS = 3;
 
+/** Only at exactly this many failed attempts does the notification also
+ *  email the primary admin (Part: alert volume reduction, 2026-09-16) —
+ *  the in-app bell above already fires from NOTIFY_AFTER_ATTEMPTS onward on
+ *  every retry, but emailing that often blew past the user's sending limit.
+ *  "only send me then his email" once it's genuinely stuck, not on every
+ *  intermediate retry. */
+const AGENT_FAILURE_EMAIL_THRESHOLD = 10;
+
 /** Maps a raw exception/error string to the short, human-readable summary
  *  the spec wants on the lead card ("Claude limit reached", not a
  *  traceback). The full text is kept separately as errorDetail for logs. */
@@ -252,6 +260,7 @@ export class AgentExecutionService {
           category: NotificationCategory.AGENTS,
           type: "AGENT_EXECUTION_FAILED",
           severity: "ERROR",
+          forceEmail: existing.attempt === AGENT_FAILURE_EMAIL_THRESHOLD,
           title: "Lead Automation Failed",
           message: `${agent} failed ${existing.attempt} times for ${name}: ${errorSummary}`,
           leadId,

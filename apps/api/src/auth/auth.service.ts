@@ -107,6 +107,7 @@ export class AuthService {
       category: NotificationCategory.SECURITY,
       type: "REPEATED_LOGIN_FAILURES",
       severity: "ERROR",
+      forceEmail: true,
       title: "Repeated failed login attempts",
       message: `${count} failed login attempts for ${email} in the last ${LOGIN_FAILURE_WINDOW_MS / 60000} minutes (most recent from ${ipAddress ?? "an unknown IP"}).`,
       entityType: "auth",

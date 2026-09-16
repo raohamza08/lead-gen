@@ -91,7 +91,10 @@ export class AiWorkersHealthWorker implements OnModuleInit, OnModuleDestroy {
   /** No per-org concept of "who owns ai-workers" -- it's one shared process
    *  for the whole deployment, so every org gets the alert rather than
    *  guessing one. At today's single-tenant scale this is just the one org;
-   *  written as a loop so it stays correct if that ever changes. */
+   *  written as a loop so it stays correct if that ever changes.
+   *
+   *  In-app only, no email (Part: alert volume reduction, 2026-09-16) --
+   *  not on the user's explicit email allowlist; still visible on the bell. */
   private async notifyAllOrgs(title: string, message: string, tone: "alert" | "resolved" = "alert") {
     const orgs = await this.prisma.organization.findMany({ select: { id: true } });
     for (const org of orgs) {
@@ -99,7 +102,6 @@ export class AiWorkersHealthWorker implements OnModuleInit, OnModuleDestroy {
         category: NotificationCategory.SYSTEM,
         type: "AI_WORKERS_HEALTH",
         severity: tone === "resolved" ? "WARNING" : "ERROR",
-        forceEmail: tone === "resolved",
         emailTone: tone,
         title,
         message,

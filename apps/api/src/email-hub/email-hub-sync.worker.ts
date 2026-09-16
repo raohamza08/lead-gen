@@ -167,6 +167,7 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
         category: NotificationCategory.EMAIL,
         type: "EMAIL_SYNC_AUTH_FAILED",
         severity: "ERROR",
+        forceEmail: true,
         title: "Email Sync Suspended",
         message:
           `${account.address} was just suspended — IMAP login failed (${err.message || "authentication rejected"}).\n\n` +

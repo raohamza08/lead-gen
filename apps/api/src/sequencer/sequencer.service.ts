@@ -404,6 +404,7 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
       category: NotificationCategory.LEADS,
       type: "LEAD_REPLIED",
       severity: "WARNING",
+      forceEmail: true,
       title: "Lead Replied",
       message: `${lead.companyName ?? "A lead"} replied to your outreach.`,
       leadId: lead.id,
