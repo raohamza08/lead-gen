@@ -194,6 +194,18 @@ export class LeadsController {
     return this.leadsService.requestEnrichment(user.orgId, id);
   }
 
+  /** Re-runs company intelligence specifically — separate from /enrich
+   *  because that pipeline deliberately excludes it (Part: token
+   *  reduction, 2026-08-29); this is the way to backfill a lead whose
+   *  research came back empty. */
+  @Post(":id/company-intelligence")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
+  companyIntelligence(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.leadsService.requestCompanyIntelligence(user.orgId, id);
+  }
+
   /** Called by the AI workers once the manual-lead enrichment pipeline
    *  finishes. See LeadsService.applyEnrichment. */
   @Patch(":id/enrichment")

@@ -769,6 +769,23 @@ export class LeadsService {
     await this.agentDispatch.add({ kind: "enrich", leadId, orgId });
   }
 
+  /** Separate from requestEnrichment above because "enrich" deliberately
+   *  excludes company_intelligence (Part: token reduction, 2026-08-29) — a
+   *  lead whose research came back empty (filter had it disabled, or the
+   *  agent silently degraded) needs this specific re-run, not the broader
+   *  pipeline. */
+  async requestCompanyIntelligence(orgId: string, leadId: string) {
+    await this.assertOwnership(orgId, leadId);
+    try {
+      await this.agentDispatch.add({ kind: "company_intelligence", leadId, orgId });
+    } catch (err) {
+      throw new ServiceUnavailableException(
+        `Could not reach the AI workers: ${(err as Error).message}`,
+      );
+    }
+    return { accepted: true };
+  }
+
   /**
    * Stage transitions are validated against the state machine (Part C6) and
    * side-effect into the sequencer for the stages that trigger automation
