@@ -200,6 +200,21 @@ export class LeadsService {
         this.logger.warn(`Outreach entry failed for lead ${lead.id}: ${(err as Error).message}`),
       );
 
+      // Company intelligence for every lead reaching Ready (Part: company
+      // intelligence coverage, 2026-09-17) -- an AI-discovered lead normally
+      // already carries this from its niche filter's own lead_acquisition
+      // run, but that agent is both individually disable-able per filter
+      // (OPTIONAL_ENRICHMENT, for Claude call-budget reasons) and allowed to
+      // silently degrade to {} on failure (see CompanyIntelligenceAgent) --
+      // so a lead can land here with nothing even though research was
+      // attempted. Only backfills when it's actually missing, so a lead
+      // that already has real research never pays for a redundant call.
+      if (!dto.swotAnalysis || Object.keys(dto.swotAnalysis).length === 0) {
+        this.agentDispatch.add({ kind: "company_intelligence", leadId: lead.id, orgId }).catch((err) =>
+          this.logger.warn(`Company intelligence dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
+        );
+      }
+
       return { status: "created", leadId: lead.id };
     } catch (err) {
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
