@@ -126,6 +126,25 @@ export function TeamSection() {
     }
   }
 
+  async function deleteMember(member: TeamMember) {
+    if (
+      !window.confirm(
+        `Permanently delete ${member.name} (${member.email})?\n\nThis cannot be undone. Their leads, review notes and other history stay on record but are no longer attributed to them — this only removes their account and login access.`,
+      )
+    )
+      return;
+    setBusyId(member.id);
+    setError(null);
+    try {
+      await api.deleteUser(member.id);
+      refresh();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <section className="rounded-xl border border-[var(--line)] p-5">
       <div className="mb-4 flex items-center justify-between">
@@ -243,6 +262,22 @@ export function TeamSection() {
                           className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
                         >
                           {m.active ? "Deactivate" : "Activate"}
+                        </button>
+                      )}
+                      {isAdmin && (
+                        <button
+                          disabled={busyId === m.id || isSelf || m.isPrimaryAdmin}
+                          title={
+                            isSelf
+                              ? "You can't delete your own account."
+                              : m.isPrimaryAdmin
+                                ? "Transfer primary admin to someone else before deleting this account."
+                                : undefined
+                          }
+                          onClick={() => deleteMember(m)}
+                          className="rounded-md border border-[rgb(var(--bad-rgb)/0.4)] px-2.5 py-1 text-xs text-bad transition-colors hover:bg-[rgb(var(--bad-rgb)/0.08)] disabled:opacity-50"
+                        >
+                          Delete
                         </button>
                       )}
                     </div>

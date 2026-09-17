@@ -132,6 +132,35 @@ export class UsersService {
     return this.prisma.user.findUniqueOrThrow({ where: { id } });
   }
 
+  /** Hard delete, not a third state alongside active/inactive — deactivate
+   *  (setActive above) already covers "revoke access, keep the record."
+   *  Everything this row touches either cascades (refresh tokens, per-account
+   *  access grants, notification state) or sets null and survives as history
+   *  (assigned leads, audit logs, review notes, LinkedIn activity, social
+   *  conversation/comment assignments, internal notes, lead imports) — see
+   *  the delete-user migration's docblock for the two fields that needed a
+   *  schema change to allow that. Self and the primary admin are blocked
+   *  here rather than left to the FK layer, since both would otherwise
+   *  "succeed" and just leave the org in a broken state. */
+  async deleteUser(orgId: string, actorId: string, id: string) {
+    if (id === actorId) {
+      throw new ForbiddenException("You can't delete your own account — ask another admin.");
+    }
+    const target = await this.prisma.user.findFirst({ where: { id, orgId } });
+    if (!target) throw new NotFoundException("User not found");
+    if (target.isPrimaryAdmin) {
+      throw new ForbiddenException("This user is the primary admin — transfer that role to someone else first.");
+    }
+
+    await this.prisma.user.delete({ where: { id } });
+    await this.userAccessCache.invalidate(id);
+    this.auditLog.write({
+      orgId, actorId, action: "USER_DELETED", entityType: "user", entityId: id,
+      metadata: { email: target.email, name: target.name },
+    });
+    return { deleted: true };
+  }
+
   // ---- Person Access: module toggles + email/social account grants, read/written from one place ----
 
   /**

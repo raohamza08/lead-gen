@@ -364,6 +364,7 @@ export const api = {
     request("/users", { method: "POST", body: JSON.stringify(body) }),
   activateUser: (id: string) => request(`/users/${id}/activate`, { method: "PATCH" }),
   deactivateUser: (id: string) => request(`/users/${id}/deactivate`, { method: "PATCH" }),
+  deleteUser: (id: string) => request(`/users/${id}`, { method: "DELETE" }),
   changeUserRole: (id: string, role: string) => request(`/users/${id}/role/${role}`, { method: "PATCH" }),
   transferPrimaryAdmin: (id: string) => request(`/users/${id}/primary-admin`, { method: "PATCH" }),
   getMe: () => request("/users/me"),

@@ -75,6 +75,18 @@ export class UsersController {
     return this.usersService.setRole(user.orgId, user.sub, id, role);
   }
 
+  /** Self-guard duplicated from changeRole above rather than only relying on
+   *  UsersService.deleteUser's own check — same reasoning: fail before doing
+   *  any work, not after. */
+  @Delete(":id")
+  @Roles(Role.ADMIN)
+  remove(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    if (id === user.sub) {
+      throw new ForbiddenException("You can't delete your own account — ask another admin.");
+    }
+    return this.usersService.deleteUser(user.orgId, user.sub, id);
+  }
+
   @Get(":id/access")
   @Roles(Role.ADMIN)
   getAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string) {

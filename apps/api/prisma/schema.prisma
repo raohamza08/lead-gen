@@ -541,8 +541,12 @@ model LeadImport {
   id                 String   @id @default(uuid())
   orgId              String   @map("org_id")
   org                Organization @relation(fields: [orgId], references: [id])
-  uploadedByUserId   String   @map("uploaded_by_user_id")
-  uploadedByUser     User     @relation(fields: [uploadedByUserId], references: [id])
+  // Nullable (Part: delete user, 2026-09-17) -- this row is a historical
+  // record of the upload event itself, meant to outlive the leads it
+  // produced (see this model's own docblock); it must equally outlive the
+  // uploader if that user account is later deleted, not block the deletion.
+  uploadedByUserId   String?  @map("uploaded_by_user_id")
+  uploadedByUser     User?    @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
   sourceMethod       LeadImportSourceMethod @default(CSV) @map("source_method")
   fileName           String?  @map("file_name")
   totalRecords       Int      @map("total_records")
@@ -1746,8 +1750,11 @@ model SocialInternalNote {
   id             String   @id @default(uuid())
   conversationId String   @map("conversation_id")
   conversation   SocialConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  userId         String   @map("user_id")
-  user           User     @relation(fields: [userId], references: [id])
+  // Nullable (Part: delete user, 2026-09-17) -- the note's text is real
+  // conversation context worth keeping even after its author's account is
+  // deleted, same reasoning as AuditLog.actorId/ReviewNote.reviewerId.
+  userId         String?  @map("user_id")
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   note           String
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
