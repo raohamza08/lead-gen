@@ -102,6 +102,13 @@ class EmailAgent(Agent):
     responsibility = "Generates one email of the 5-email sequence (Problem Trigger through Breakup)."
     requires = ("lead", "review_merged", "sequence_step")
     provides = ("email_draft",)
+    # Nothing downstream (scheduler) is useful without a draft, and letting the
+    # pipeline "complete" on a FAILED draft leaves stopped_at/stop_reason unset
+    # — gemini_agent/runner.py then reports the real failure as the useless
+    # "stopped at None (None)" instead of the actual error (Part: drafting
+    # retry-loop fix, 2026-09-25; see AgentExecutionService's MAX_AGENT_ATTEMPTS
+    # for why this used to retry hourly forever with no visible cause).
+    critical = True
 
     async def execute(self, ctx: AgentContext) -> AgentResult:
         lead = ctx.get("lead")

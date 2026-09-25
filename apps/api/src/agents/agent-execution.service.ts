@@ -46,6 +46,18 @@ const NOTIFY_AFTER_ATTEMPTS = 3;
  *  intermediate retry. */
 const AGENT_FAILURE_EMAIL_THRESHOLD = 10;
 
+/** After this many failed attempts, stop retrying automatically and leave the
+ *  row FAILED_TERMINAL for a human to inspect/manually re-run (the lead
+ *  detail page's manual re-draft escape hatch) — mirrors SendingWorker's
+ *  MAX_SEND_ATTEMPTS. Deliberately the same number as
+ *  AGENT_FAILURE_EMAIL_THRESHOLD: the one attempt that finally emails the
+ *  admin is also the one that stops the silent hourly retry loop, instead of
+ *  continuing to fail invisibly forever after that single email — confirmed
+ *  live, 2026-09-25: with no cap, leads had retried 130-200+ times over
+ *  three weeks on the same unfixable failure, all but one attempt totally
+ *  invisible to anyone. */
+export const MAX_AGENT_ATTEMPTS = AGENT_FAILURE_EMAIL_THRESHOLD;
+
 /** Maps a raw exception/error string to the short, human-readable summary
  *  the spec wants on the lead card ("Claude limit reached", not a
  *  traceback). The full text is kept separately as errorDetail for logs. */
@@ -222,8 +234,9 @@ export class AgentExecutionService {
     }
 
     const errorSummary = classifyError(agent, errorDetail);
-    const status = retryable ? AgentExecutionStatus.FAILED_RETRY_SCHEDULED : AgentExecutionStatus.FAILED_TERMINAL;
-    const nextRetryAt = retryable ? new Date(Date.now() + backoffMs(existing.attempt)) : null;
+    const terminal = !retryable || existing.attempt >= MAX_AGENT_ATTEMPTS;
+    const status = terminal ? AgentExecutionStatus.FAILED_TERMINAL : AgentExecutionStatus.FAILED_RETRY_SCHEDULED;
+    const nextRetryAt = terminal ? null : new Date(Date.now() + backoffMs(existing.attempt));
 
     await this.prisma.agentExecution.update({
       where: { leadId_agent: { leadId, agent } },
