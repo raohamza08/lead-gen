@@ -137,7 +137,7 @@ export function SendingScheduleSection() {
               <input
                 type="text"
                 className="w-40 rounded-md border border-[var(--line)] px-2 py-1.5 text-sm"
-                placeholder="e.g. America/New_York"
+                placeholder="e.g. Asia/Karachi, America/New_York"
                 value={schedule.timezone}
                 disabled={saving}
                 onChange={(e) => set("timezone", e.target.value)}
