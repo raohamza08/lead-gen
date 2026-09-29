@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { useRealtimeEvent } from "../../../lib/realtime";
 import { DataTable, SectionCard, StatTile } from "../../../components/chart-kit";
+import { AgentOptimizationSection } from "../../../components/agent-optimization-section";
 
 /**
  * Automation / AI Performance dashboard.
@@ -230,6 +231,8 @@ export default function AutomationPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <AgentOptimizationSection />
+
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs uppercase tracking-wide text-ink/55">Window</span>
         <div className="flex rounded-lg border border-[var(--line)] p-0.5">

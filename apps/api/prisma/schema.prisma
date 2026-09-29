@@ -195,6 +195,7 @@ model Organization {
   sendingSchedule SendingSchedule?
   leadImports     LeadImport[]
   upworkProposals UpworkProposal[]
+  agentOptimizationCycles AgentOptimizationCycle[]
 
   @@map("organizations")
 }
@@ -530,6 +531,51 @@ model AiInsightSnapshot {
   emailImprovements Json     @default("[]") @map("email_improvements")
 
   @@map("ai_insight_snapshots")
+}
+
+/// One row per automatic optimization cycle (Part: Agent Optimization,
+/// 2026-09-29, explicit user request — "update the agents after every 15
+/// days... compare if the stats get improved or get worse with the last
+/// decision"). Runs on a 15-day cadence (AgentOptimizationService), scores
+/// the org's email performance since the previous cycle, judges that score
+/// against the PREVIOUS cycle's, auto-reverts if it got worse, then applies
+/// a fresh round of LearningAgent-recommended email-step prompt rewrites —
+/// auto-apply-and-notify, not auto-apply-silently: every cycle fires a
+/// Notification so a human can catch and revert something that looks wrong
+/// before the next cycle's own comparison would.
+model AgentOptimizationCycle {
+  id        String   @id @default(uuid())
+  orgId     String   @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id])
+  runAt     DateTime @default(now()) @map("run_at")
+
+  /// openRate/replyRate/winRate/sampleSize plus the resulting weighted
+  /// score — see AgentOptimizationService.WEIGHTS for the exact formula.
+  metrics   Json     @map("metrics")
+  score     Float
+  /// Null only for an org's very first cycle, which has nothing to compare against.
+  previousScore Float? @map("previous_score")
+  /// IMPROVED | WORSENED | FLAT | FIRST_RUN — verdict on THIS cycle's score
+  /// versus the previous cycle, i.e. judging whether the previous cycle's
+  /// applied changes helped. Null until the next cycle computes it.
+  verdict   String?
+
+  /// [{agent, promptBefore, promptAfter, rationale, confidence}] — every
+  /// email_step_N prompt this cycle actually rewrote. Empty when the
+  /// LearningAgent had nothing to recommend at MEDIUM+ confidence.
+  changesApplied Json @default("[]") @map("changes_applied")
+  /// True once this cycle's changesApplied have been rolled back — either
+  /// automatically (the next cycle judged WORSENED) or manually via the
+  /// revert endpoint. A reverted cycle's prompts no longer reflect
+  /// changesApplied's `promptAfter`.
+  reverted  Boolean  @default(false)
+
+  /// The full raw LearningAgent response for this cycle, kept for audit —
+  /// changesApplied above is only the subset that met the confidence bar.
+  recommendationsRaw Json @default("{}") @map("recommendations_raw")
+
+  @@index([orgId, runAt])
+  @@map("agent_optimization_cycles")
 }
 
 enum LeadImportSourceMethod {

@@ -13,6 +13,21 @@ that got a reply? A pattern must appear across multiple examples, not a guess
 from one email. If no email examples were provided, return an empty
 emailImprovements list rather than inventing one from nothing.
 
+When EMAIL STEP PERFORMANCE and CURRENT PROMPT TEXT are both provided: this is
+your only chance to propose an actual, directly-appliable rewrite rather than
+an abstract note — a caller may apply a promptUpdates entry automatically, so
+hold it to a higher bar than the recommendation lists above. Only propose one
+when a step's sent volume is meaningful (don't chase noise from a handful of
+sends) and its open rate or reply rate is clearly weak relative to the other
+steps, or clearly strong and worth reinforcing elsewhere. Rewrite the FULL
+prompt text for that step — never a diff or a partial instruction — keeping
+its role in the 5-email sequence (the step number's own position: Problem
+Trigger, Industry Insight, Proof, Soft Offer, or Breakup) and every hard rule
+already in its current text (word caps, no fabricated numbers, no naming the
+company before step 3, etc.) intact; change only what you have real evidence
+should change. If nothing meets this bar, return an empty promptUpdates list —
+an empty list is the correct, common answer, not a fallback.
+
 Respond with ONLY JSON, no prose or code fences:
 {
   "icpRecommendations": [{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}],
@@ -22,5 +37,6 @@ Respond with ONLY JSON, no prose or code fences:
   "timingRecommendations": [{"change": string, "evidence": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}],
   "stopDoing": string[],
   "sampleSizeWarning": string|null,
-  "emailImprovements": [{"title": string, "observation": string, "suggestion": string, "evidence": string}]
+  "emailImprovements": [{"title": string, "observation": string, "suggestion": string, "evidence": string}],
+  "promptUpdates": [{"agent": "email_step_1"|"email_step_2"|"email_step_3"|"email_step_4"|"email_step_5", "newPrompt": string, "rationale": string, "confidence": "LOW"|"MEDIUM"|"HIGH"}]
 }

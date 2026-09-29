@@ -33,6 +33,7 @@ import { SocialMediaModule } from "./social-media/social-media.module";
 import { SendingModule } from "./sending/sending.module";
 import { PreparationModule } from "./preparation/preparation.module";
 import { UpworkModule } from "./upwork/upwork.module";
+import { AgentOptimizationModule } from "./optimization/agent-optimization.module";
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { UpworkModule } from "./upwork/upwork.module";
     SendingModule,
     PreparationModule,
     UpworkModule,
+    AgentOptimizationModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

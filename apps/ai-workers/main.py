@@ -94,6 +94,11 @@ class OptimisationRequest(BaseModel):
     performance: list = []
     outcomes: dict = {}
     emailSamples: dict = {}
+    #: Per-sequence-step sent/opened/replied counts and rates (Part: Agent
+    #: Optimization, 2026-09-29) — lets LearningAgent propose an actual
+    #: rewrite for a specific underperforming email_step_N prompt, not just
+    #: an abstract "improve messaging" note.
+    emailStepPerformance: list = []
 
 
 class SocialContentRequest(BaseModel):
@@ -208,7 +213,7 @@ async def start_company_intelligence(req: ManualEnrichmentRequest, background_ta
 async def start_optimisation(req: OptimisationRequest):
     # Not backgrounded: the caller is a dashboard button waiting on the result,
     # and a single Claude CLI call is well within an HTTP request's timeout.
-    return await run_optimisation(req.orgId, req.performance, req.outcomes, req.emailSamples)
+    return await run_optimisation(req.orgId, req.performance, req.outcomes, req.emailSamples, req.emailStepPerformance)
 
 
 @app.post("/case-study/review")

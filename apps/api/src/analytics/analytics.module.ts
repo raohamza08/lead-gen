@@ -8,5 +8,6 @@ import { CampaignsModule } from "../campaigns/campaigns.module";
   imports: [CampaignsModule],
   providers: [AnalyticsService, UserAnalyticsService],
   controllers: [AnalyticsController],
+  exports: [AnalyticsService, UserAnalyticsService],
 })
 export class AnalyticsModule {}

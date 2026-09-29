@@ -76,16 +76,24 @@ async def run_linkedin_draft(lead_id: str, org_id: str | None = None) -> None:
 
 
 async def run_optimisation(
-    org_id: str, performance: list, outcomes: dict, email_samples: dict | None = None,
+    org_id: str,
+    performance: list,
+    outcomes: dict,
+    email_samples: dict | None = None,
+    email_step_performance: list | None = None,
 ) -> dict:
     """Synchronous by design (unlike the two background-task entry points
     above): the caller is a dashboard button waiting to render the result, not
-    a fire-and-forget sequencer hop.
+    a fire-and-forget sequencer hop. Also called on a schedule by the API's
+    AgentOptimizationService (Part: Agent Optimization, 2026-09-29) — same
+    entry point either way, the caller decides what to do with the result.
 
     `email_samples` is optional (not in seed_keys) — LearningAgent treats it
     as optional context (see MIN_EMAIL_SAMPLE there), so an org with too
     little email history still gets ordinary recommendations, just no
-    emailImprovements.
+    emailImprovements. `email_step_performance` is the same kind of optional
+    extra — lets LearningAgent propose an actual rewrite for one
+    underperforming email_step_N prompt instead of only an abstract note.
     """
     orchestrator = build("optimisation", seed_keys=("performance", "outcomes"))
     org_context = {"promptOverrides": await api_client.get_prompt_overrides(org_id)}
@@ -96,6 +104,7 @@ async def run_optimisation(
             "performance": performance,
             "outcomes": outcomes,
             "email_samples": email_samples or {},
+            "email_step_performance": email_step_performance or [],
             "org_context": org_context,
         },
     )
