@@ -281,7 +281,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
           <label className="block">
             <span className={labelClass}>Submitted by</span>
             <select value={submittedBy} onChange={(e) => setSubmittedBy(e.target.value)} required className={inputClass}>
-              <option value="" disabled>Select who's submitting…</option>
+              <option value="" disabled>Select submitter…</option>
               {(picklists?.submitters ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
             {picklists && picklists.submitters.length === 0 && (
