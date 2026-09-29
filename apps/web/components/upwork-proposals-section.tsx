@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { DataTable, type TableColumn } from "./chart-kit";
+import { UpworkPicklistManager } from "./upwork-picklist-manager";
 
 export type UpworkProposalType = "BIDDING" | "INVITE";
 type UpworkProposalStatus = "SUBMITTED" | "VIEWED" | "ACCEPTED" | "IN_DISCUSSION" | "FOLLOW_UP_1" | "FOLLOW_UP_2" | "WON" | "LOST";
@@ -47,10 +49,11 @@ const STATUS_TONE: Record<UpworkProposalStatus, string> = {
   LOST: "text-bad",
 };
 
-const CATEGORY_SUGGESTIONS = [
-  "Graphic Designing", "Virtual Assistant", "Admin Support", "Pitch Deck",
-  "Website Development", "CRM", "Video Editing", "Content Writing", "Social Media Marketing",
-];
+interface UpworkPicklists {
+  categories: string[];
+  submitters: string[];
+  profiles: string[];
+}
 
 const inputClass = "w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm";
 const labelClass = "mb-1 block text-xs text-ink/60";
@@ -83,6 +86,11 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [connects, setConnects] = useState("");
   const [accountType, setAccountType] = useState<UpworkAccountType>("LIVE");
   const [clientName, setClientName] = useState("");
+
+  const { data: picklists } = useQuery({
+    queryKey: ["upwork-picklists"],
+    queryFn: () => api.getUpworkPicklists() as Promise<UpworkPicklists>,
+  });
 
   function load() {
     api
@@ -227,6 +235,8 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         </button>
       </div>
 
+      <UpworkPicklistManager />
+
       {error && (
         <div className="mb-3 mt-3 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
           {error}
@@ -242,14 +252,23 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         <form onSubmit={submit} className="mb-5 mt-4 grid gap-3 rounded-lg border border-[var(--line)] p-4 sm:grid-cols-2">
           <label className="block">
             <span className={labelClass}>Upwork profile / ID name</span>
-            <input value={profileName} onChange={(e) => setProfileName(e.target.value)} required className={inputClass} />
+            <select value={profileName} onChange={(e) => setProfileName(e.target.value)} required className={inputClass}>
+              <option value="" disabled>Select a profile…</option>
+              {(picklists?.profiles ?? []).map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {picklists && picklists.profiles.length === 0 && (
+              <span className="mt-1 block text-[11px] text-gold">No profiles yet — an admin needs to add some above.</span>
+            )}
           </label>
           <label className="block">
             <span className={labelClass}>Job category</span>
-            <input value={jobCategory} onChange={(e) => setJobCategory(e.target.value)} required list="upwork-categories" className={inputClass} />
-            <datalist id="upwork-categories">
-              {CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
-            </datalist>
+            <select value={jobCategory} onChange={(e) => setJobCategory(e.target.value)} required className={inputClass}>
+              <option value="" disabled>Select a category…</option>
+              {(picklists?.categories ?? []).map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            {picklists && picklists.categories.length === 0 && (
+              <span className="mt-1 block text-[11px] text-gold">No categories yet — an admin needs to add some above.</span>
+            )}
           </label>
           <label className="block sm:col-span-2">
             <span className={labelClass}>Job link</span>
@@ -261,7 +280,13 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
           </label>
           <label className="block">
             <span className={labelClass}>Submitted by</span>
-            <input value={submittedBy} onChange={(e) => setSubmittedBy(e.target.value)} required className={inputClass} />
+            <select value={submittedBy} onChange={(e) => setSubmittedBy(e.target.value)} required className={inputClass}>
+              <option value="" disabled>Select who's submitting…</option>
+              {(picklists?.submitters ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            {picklists && picklists.submitters.length === 0 && (
+              <span className="mt-1 block text-[11px] text-gold">No names yet — an admin needs to add some above.</span>
+            )}
           </label>
           {type === "BIDDING" && (
             <>

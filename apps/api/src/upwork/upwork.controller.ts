@@ -10,6 +10,7 @@ import { UpworkService } from "./upwork.service";
 import { CreateUpworkProposalDto } from "./dto/create-upwork-proposal.dto";
 import { UpdateUpworkProposalDto } from "./dto/update-upwork-proposal.dto";
 import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
+import { UpdateUpworkPicklistsDto } from "./dto/update-upwork-picklists.dto";
 
 @Controller("upwork/proposals")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
@@ -20,6 +21,20 @@ export class UpworkController {
   @Get("stats")
   getStats(@CurrentUser() user: JwtClaims) {
     return this.upwork.getStats(user.orgId);
+  }
+
+  /** Every authenticated user with Upwork access reads these — they're what
+   *  populates the dropdowns on the submission form. */
+  @Get("picklists")
+  getPicklists(@CurrentUser() user: JwtClaims) {
+    return this.upwork.getPicklists(user.orgId);
+  }
+
+  /** Only an admin can edit the option lists themselves. */
+  @Patch("picklists")
+  @Roles(Role.ADMIN)
+  updatePicklists(@CurrentUser() user: JwtClaims, @Body() dto: UpdateUpworkPicklistsDto) {
+    return this.upwork.updatePicklists(user.orgId, dto);
   }
 
   @Get()

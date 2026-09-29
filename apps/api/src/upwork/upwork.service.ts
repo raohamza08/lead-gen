@@ -1,9 +1,16 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, UpworkProposalStatus, UpworkProposalType } from "@prisma/client";
+import { Prisma, UpworkAccountType, UpworkProposalStatus, UpworkProposalType } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateUpworkProposalDto } from "./dto/create-upwork-proposal.dto";
 import { UpdateUpworkProposalDto } from "./dto/update-upwork-proposal.dto";
 import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
+import { UpdateUpworkPicklistsDto } from "./dto/update-upwork-picklists.dto";
+
+interface UpworkPicklists {
+  categories: string[];
+  submitters: string[];
+  profiles: string[];
+}
 
 /**
  * Replaces the team's daily Upwork Proposals Google Form + Sheet (Part:
@@ -88,12 +95,75 @@ export class UpworkService {
     return { deleted: true };
   }
 
+  /** Job categories / submitter names / profile names a user picks from
+   *  when logging a proposal (Part: Upwork picklists, 2026-09-29) — stored
+   *  on Organization.settings, same JSON-blob pattern OrganizationService
+   *  already uses for branding/automation settings, rather than a new table
+   *  for what's just three lists of strings. */
+  async getPicklists(orgId: string): Promise<UpworkPicklists> {
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const settings = (org?.settings as Record<string, unknown>) ?? {};
+    const stored = (settings.upworkPicklists as Partial<UpworkPicklists>) ?? {};
+    return {
+      categories: stored.categories ?? [],
+      submitters: stored.submitters ?? [],
+      profiles: stored.profiles ?? [],
+    };
+  }
+
+  /** Admin-only (enforced by the controller's @Roles). Whichever of the
+   *  three lists is included in the body replaces that list wholesale — the
+   *  admin panel always sends the full edited list, not a diff, so there's
+   *  no add/remove race to reconcile server-side. Trimmed, de-duplicated
+   *  (case-insensitive), and sorted so the dropdown reads predictably. */
+  async updatePicklists(orgId: string, dto: UpdateUpworkPicklistsDto): Promise<UpworkPicklists> {
+    const clean = (list?: string[]) => {
+      if (!list) return undefined;
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const raw of list) {
+        const v = raw.trim();
+        const key = v.toLowerCase();
+        if (!v || seen.has(key)) continue;
+        seen.add(key);
+        out.push(v);
+      }
+      return out.sort((a, b) => a.localeCompare(b));
+    };
+
+    const org = await this.prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } });
+    const settings = { ...((org?.settings as Record<string, unknown>) ?? {}) };
+    const existing = (settings.upworkPicklists as Partial<UpworkPicklists>) ?? {};
+    const updated: UpworkPicklists = {
+      categories: clean(dto.categories) ?? existing.categories ?? [],
+      submitters: clean(dto.submitters) ?? existing.submitters ?? [],
+      profiles: clean(dto.profiles) ?? existing.profiles ?? [],
+    };
+    settings.upworkPicklists = updated;
+    await this.prisma.organization.update({ where: { id: orgId }, data: { settings: settings as Prisma.InputJsonValue } });
+    return updated;
+  }
+
   /**
    * One reporting call for the Upwork dashboard tab — every count comes
    * straight from this one table (no joins needed, unlike the lead/email
    * analytics services), so plain groupBy is enough rather than raw SQL.
+   *
+   * Training-account bids are excluded from every number here (Part:
+   * live-bids-only reporting, 2026-09-29, explicit user request — "I just
+   * need the live bidding data"). They're practice/test submissions, not
+   * real pipeline, so a Training bid must never count toward totals, status
+   * breakdowns, category/submitter/closer tables, or the trend chart — not
+   * just excluded from connects. INVITE rows have no accountType at all and
+   * are never touched by this filter.
    */
   async getStats(orgId: string) {
+    // Applied to every BIDDING-scoped query below via an OR: an INVITE row
+    // always counts, a BIDDING row only counts when it's LIVE.
+    const liveOnly: Prisma.UpworkProposalWhereInput = {
+      OR: [{ type: UpworkProposalType.INVITE }, { type: UpworkProposalType.BIDDING, accountType: UpworkAccountType.LIVE }],
+    };
+
     const [
       byTypeRaw,
       byStatusRaw,
@@ -101,30 +171,27 @@ export class UpworkService {
       bySubmitterRaw,
       connectsBySubmitterRaw,
       connectsAgg,
-      byAccountTypeRaw,
       byCloserRaw,
       trendRaw,
     ] = await Promise.all([
-      this.prisma.upworkProposal.groupBy({ by: ["type"], where: { orgId }, _count: { _all: true } }),
-      this.prisma.upworkProposal.groupBy({ by: ["type", "status"], where: { orgId }, _count: { _all: true } }),
+      this.prisma.upworkProposal.groupBy({ by: ["type"], where: { orgId, ...liveOnly }, _count: { _all: true } }),
+      this.prisma.upworkProposal.groupBy({ by: ["type", "status"], where: { orgId, ...liveOnly }, _count: { _all: true } }),
       this.prisma.upworkProposal.groupBy({
         by: ["jobCategory"],
-        where: { orgId },
+        where: { orgId, ...liveOnly },
         _count: { _all: true },
         orderBy: { _count: { jobCategory: "desc" } },
         take: 10,
       }),
-      this.prisma.upworkProposal.groupBy({ by: ["submittedBy", "type", "status"], where: { orgId }, _count: { _all: true } }),
+      this.prisma.upworkProposal.groupBy({ by: ["submittedBy", "type", "status"], where: { orgId, ...liveOnly }, _count: { _all: true } }),
       this.prisma.upworkProposal.groupBy({
         by: ["submittedBy"],
-        where: { orgId, type: UpworkProposalType.BIDDING },
+        where: { orgId, type: UpworkProposalType.BIDDING, accountType: UpworkAccountType.LIVE },
         _sum: { connects: true },
         _count: { _all: true },
       }),
-      this.prisma.upworkProposal.aggregate({ where: { orgId, type: UpworkProposalType.BIDDING }, _sum: { connects: true }, _count: { _all: true } }),
-      this.prisma.upworkProposal.groupBy({
-        by: ["accountType"],
-        where: { orgId, type: UpworkProposalType.BIDDING, accountType: { not: null } },
+      this.prisma.upworkProposal.aggregate({
+        where: { orgId, type: UpworkProposalType.BIDDING, accountType: UpworkAccountType.LIVE },
         _sum: { connects: true },
         _count: { _all: true },
       }),
@@ -133,13 +200,14 @@ export class UpworkService {
       // Invite closer's record never get summed into one misleading number.
       this.prisma.upworkProposal.groupBy({
         by: ["closedBy", "type", "status"],
-        where: { orgId, closedBy: { not: null } },
+        where: { orgId, closedBy: { not: null }, ...liveOnly },
         _count: { _all: true },
       }),
       this.prisma.$queryRaw<{ day: Date; type: UpworkProposalType; count: bigint }[]>`
         SELECT date_trunc('day', created_at) AS day, type, COUNT(*) AS count
         FROM upwork_proposals
         WHERE org_id = ${orgId} AND created_at >= NOW() - INTERVAL '30 days'
+          AND (type = 'INVITE' OR (type = 'BIDDING' AND account_type = 'LIVE'))
         GROUP BY 1, 2 ORDER BY 1
       `,
     ]);
@@ -191,12 +259,6 @@ export class UpworkService {
       map.set(name, entry);
     }
 
-    const accountTypeUsage = { TRAINING: { connects: 0, count: 0 }, LIVE: { connects: 0, count: 0 } };
-    for (const row of byAccountTypeRaw) {
-      if (!row.accountType) continue;
-      accountTypeUsage[row.accountType] = { connects: row._sum.connects ?? 0, count: row._count._all };
-    }
-
     const trendByDay = new Map<string, { date: string; bidding: number; invite: number }>();
     for (const row of trendRaw) {
       const date = row.day.toISOString().slice(0, 10);
@@ -218,7 +280,6 @@ export class UpworkService {
       winRate,
       connectsUsed,
       avgConnectsPerBid: bidsWithConnects > 0 ? Math.round((connectsUsed / bidsWithConnects) * 10) / 10 : 0,
-      byAccountType: accountTypeUsage,
       byCategory: byCategoryRaw.map((r) => ({ category: r.jobCategory, count: r._count._all })),
       bySubmitter: {
         BIDDING: Array.from(submitterMaps.BIDDING.values()).sort((a, b) => b.total - a.total),

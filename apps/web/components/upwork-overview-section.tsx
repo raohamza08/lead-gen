@@ -20,7 +20,6 @@ interface UpworkStats {
   winRate: number | null;
   connectsUsed: number;
   avgConnectsPerBid: number;
-  byAccountType: { TRAINING: { connects: number; count: number }; LIVE: { connects: number; count: number } };
   byCategory: { category: string; count: number }[];
   bySubmitter: { BIDDING: SubmitterRow[]; INVITE: SubmitterRow[] };
   byCloser: { BIDDING: CloserRow[]; INVITE: CloserRow[] };
@@ -91,14 +90,13 @@ export function UpworkOverviewSection() {
       <section className="card p-5">
         <h2 className="text-section-title text-ink">Connects spend</h2>
         <p className="mb-4 mt-0.5 text-xs text-ink/50">
-          Bidding only — invites don&apos;t cost connects. Cost is an estimate: set your account&apos;s real
-          rate per connect below.
+          Live-account bidding only — Training bids and their connects are excluded from this whole
+          dashboard entirely (they&apos;re practice, not real pipeline). Cost is an estimate: set your
+          account&apos;s real rate per connect below.
         </p>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatTile label="Connects used" value={stats.connectsUsed} />
           <StatTile label="Avg per bid" value={stats.avgConnectsPerBid} />
-          <StatTile label="Training account" value={`${stats.byAccountType.TRAINING.connects} (${stats.byAccountType.TRAINING.count} bids)`} />
-          <StatTile label="Live account" value={`${stats.byAccountType.LIVE.connects} (${stats.byAccountType.LIVE.count} bids)`} />
         </div>
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-[var(--line)] pt-3">
           <div>
@@ -147,7 +145,7 @@ export function UpworkOverviewSection() {
           combining who-closed-what across both) actively hid the answer to
           "same for the bidding, who did how many bids and who closed how
           many projects." */}
-      <SectionCard title="Bidding — by team member" subtitle="Bids submitted, won/lost, and connects spent.">
+      <SectionCard title="Bidding — by team member" subtitle="Live-account bids only. Submitted, won/lost, and connects spent.">
         {stats.bySubmitter.BIDDING.length === 0 ? (
           <p className="py-6 text-center text-sm text-ink/50">No bids logged yet.</p>
         ) : (
