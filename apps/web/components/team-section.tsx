@@ -1,9 +1,10 @@
 "use client";
 
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, getCurrentUser } from "../lib/api-client";
 import { PersonAccessPanel } from "./person-access-panel";
 import { Avatar } from "./avatar";
+import { Modal } from "./ui/modal";
 
 interface TeamMember {
   id: string;
@@ -37,7 +38,7 @@ export function TeamSection() {
   const [draft, setDraft] = useState(EMPTY_DRAFT);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [manageId, setManageId] = useState<string | null>(null);
 
   const currentUser = getCurrentUser();
   const isAdmin = currentUser?.role === "ADMIN";
@@ -186,8 +187,7 @@ export function TeamSection() {
             {members.map((m) => {
               const isSelf = m.id === currentUser?.sub;
               return (
-                <Fragment key={m.id}>
-                <tr className="border-b border-[var(--line)] last:border-0">
+                <tr key={m.id} className="border-b border-[var(--line)] last:border-0">
                   <td className="py-2 pr-3">
                     <div className="flex items-center gap-2">
                       <Avatar name={m.displayName || m.name} email={m.email} avatarUrl={m.avatarUrl} sizeClass="h-6 w-6 text-[10px]" />
@@ -207,24 +207,7 @@ export function TeamSection() {
                   </td>
                   <td className="py-2 pr-3 text-ink/60">{m.email}</td>
                   <td className="py-2 pr-3">
-                    {isAdmin && !isSelf ? (
-                      <select
-                        value={m.role}
-                        disabled={busyId === m.id}
-                        onChange={(e) => changeRole(m, e.target.value as TeamMember["role"])}
-                        className="rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs disabled:opacity-50"
-                      >
-                        {ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {r}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-ink/60" title={isSelf ? "You can't change your own role." : undefined}>
-                        {m.role}
-                      </span>
-                    )}
+                    <span className="rounded bg-ink/8 px-2 py-0.5 text-xs text-ink/70">{m.role}</span>
                   </td>
                   <td className="py-2 pr-3">
                     <span
@@ -237,31 +220,12 @@ export function TeamSection() {
                   </td>
                   <td className="py-2">
                     <div className="flex items-center gap-2">
-                      {isPrimaryAdmin && !isSelf && m.role === "ADMIN" && !m.isPrimaryAdmin && (
-                        <button
-                          disabled={busyId === m.id}
-                          onClick={() => makePrimaryAdmin(m)}
-                          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-                        >
-                          Make primary admin
-                        </button>
-                      )}
                       {isAdmin && (
                         <button
-                          onClick={() => setExpandedId(expandedId === m.id ? null : m.id)}
+                          onClick={() => setManageId(m.id)}
                           className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
                         >
-                          {expandedId === m.id ? "Hide access" : "Access"}
-                        </button>
-                      )}
-                      {isAdmin && (
-                        <button
-                          disabled={busyId === m.id || isSelf}
-                          title={isSelf ? "You can't deactivate your own account." : undefined}
-                          onClick={() => toggleActive(m)}
-                          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-                        >
-                          {m.active ? "Deactivate" : "Activate"}
+                          Manage
                         </button>
                       )}
                       {isAdmin && (
@@ -283,14 +247,6 @@ export function TeamSection() {
                     </div>
                   </td>
                 </tr>
-                {expandedId === m.id && (
-                  <tr className="border-b border-[var(--line)] last:border-0">
-                    <td colSpan={5} className="py-2">
-                      <PersonAccessPanel userId={m.id} />
-                    </td>
-                  </tr>
-                )}
-                </Fragment>
               );
             })}
             {members.length === 0 && (
@@ -373,6 +329,66 @@ export function TeamSection() {
           </div>
         </form>
       )}
+
+      {manageId && (() => {
+        const m = members.find((x) => x.id === manageId);
+        if (!m) return null;
+        const isSelf = m.id === currentUser?.sub;
+        return (
+          <Modal open onOpenChange={(open) => { if (!open) setManageId(null); }} title={`Manage ${m.name}`} contentClassName="w-full max-w-lg">
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-3">
+                <Avatar name={m.displayName || m.name} email={m.email} avatarUrl={m.avatarUrl} sizeClass="h-9 w-9 text-xs" />
+                <div>
+                  <div className="text-sm font-medium">{m.name}</div>
+                  <div className="text-xs text-ink/55">{m.email}</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 border-t border-[var(--line)] pt-3">
+                <label className="flex items-center gap-2 text-xs text-ink/70">
+                  Role
+                  <select
+                    value={m.role}
+                    disabled={busyId === m.id || isSelf}
+                    title={isSelf ? "You can't change your own role." : undefined}
+                    onChange={(e) => changeRole(m, e.target.value as TeamMember["role"])}
+                    className="rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs disabled:opacity-50"
+                  >
+                    {ROLES.map((r) => (
+                      <option key={r} value={r}>{r}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <button
+                  disabled={busyId === m.id || isSelf}
+                  title={isSelf ? "You can't deactivate your own account." : undefined}
+                  onClick={() => toggleActive(m)}
+                  className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                >
+                  {m.active ? "Deactivate" : "Activate"}
+                </button>
+
+                {isPrimaryAdmin && !isSelf && m.role === "ADMIN" && !m.isPrimaryAdmin && (
+                  <button
+                    disabled={busyId === m.id}
+                    onClick={() => makePrimaryAdmin(m)}
+                    className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                  >
+                    Make primary admin
+                  </button>
+                )}
+              </div>
+
+              <div className="border-t border-[var(--line)] pt-3">
+                <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Module &amp; account access</h4>
+                <PersonAccessPanel userId={m.id} />
+              </div>
+            </div>
+          </Modal>
+        );
+      })()}
     </section>
   );
 }

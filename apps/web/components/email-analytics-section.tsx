@@ -203,7 +203,6 @@ export function EmailAnalyticsSection({
           onClick={onSelectMetric ? () => onSelectMetric("SENT") : undefined}
           active={activeMetric === "SENT"}
         />
-        <StatTile label="Delivered" value={performance?.delivered ?? "—"} />
         <StatTile
           label="Verified Opens"
           value={performance?.uniqueLeadsOpened ?? "—"}

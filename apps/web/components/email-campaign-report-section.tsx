@@ -47,6 +47,27 @@ interface SendingScheduleInfo {
   nextFireAt: string | null;
 }
 
+interface EmailPerformanceCounts {
+  sent: number;
+  opened: number;
+  replied: number;
+  openRate: number;
+  replyRate: number;
+}
+
+interface EmailFunnelReport {
+  overall: EmailPerformanceCounts;
+  bySequenceStep: (EmailPerformanceCounts & { step: number })[];
+}
+
+const STEP_LABEL: Record<number, string> = {
+  1: "1 — Problem Trigger",
+  2: "2 — Industry Insight",
+  3: "3 — Proof",
+  4: "4 — Soft Offer",
+  5: "5 — Breakup",
+};
+
 /**
  * Everything the user actually asked to understand at a glance (Part: Email
  * Campaign reporting, 2026-09-29): exactly how many sent/opened/failed, who
@@ -80,6 +101,13 @@ export function EmailCampaignReportSection() {
     queryFn: () => api.getSuppressionList() as Promise<SuppressionEntry[]>,
   });
 
+  const funnelQuery = useQuery({
+    queryKey: ["email-campaign-funnel"],
+    queryFn: () => api.getEmailFunnel() as Promise<EmailFunnelReport>,
+  });
+  useRealtimeEvent("email.sent", () => queryClient.invalidateQueries({ queryKey: ["email-campaign-funnel"] }));
+  useRealtimeEvent("email.opened", () => queryClient.invalidateQueries({ queryKey: ["email-campaign-funnel"] }));
+
   const queueQuery = useQuery({
     queryKey: ["email-campaign-queue"],
     queryFn: () => api.getSendingQueueDashboard() as Promise<SendDashboard>,
@@ -109,6 +137,35 @@ export function EmailCampaignReportSection() {
   return (
     <div className="flex flex-col gap-5">
       <EmailAnalyticsSection activeMetric={tab} onSelectMetric={selectMetric} />
+
+      <SectionCard
+        title="By sequence step"
+        subtitle="All-time — how each of the 5 outreach emails performs on its own, not just the campaign overall."
+      >
+        {!funnelQuery.data || funnelQuery.data.bySequenceStep.length === 0 ? (
+          <p className="py-8 text-center text-sm text-ink/50">No emails sent yet.</p>
+        ) : (
+          <>
+            <DataTable
+              rows={funnelQuery.data.bySequenceStep}
+              rowKey={(r) => String(r.step)}
+              columns={[
+                { key: "step", header: "Step", render: (r) => STEP_LABEL[r.step] ?? `Step ${r.step}` },
+                { key: "sent", header: "Sent", numeric: true, render: (r) => r.sent },
+                { key: "opened", header: "Opened", numeric: true, render: (r) => r.opened },
+                { key: "openRate", header: "Open rate", numeric: true, render: (r) => `${r.openRate}%` },
+                { key: "replied", header: "Replied", numeric: true, render: (r) => r.replied },
+                { key: "replyRate", header: "Reply rate", numeric: true, render: (r) => `${r.replyRate}%` },
+              ]}
+            />
+            <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[var(--line)] pt-4">
+              <StatTile label="Total sent (all steps)" value={funnelQuery.data.overall.sent} />
+              <StatTile label="Overall open rate" value={`${funnelQuery.data.overall.openRate}%`} />
+              <StatTile label="Overall reply rate" value={`${funnelQuery.data.overall.replyRate}%`} />
+            </div>
+          </>
+        )}
+      </SectionCard>
 
       <SectionCard
         title="Send queue"

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../lib/api-client";
+import { Modal } from "./ui/modal";
 
 interface Account {
   id: string;
@@ -52,11 +53,7 @@ export function EmailHubAccessSection() {
       .catch((err) => setError((err as Error).message));
   }
 
-  function toggleExpand(accountId: string) {
-    if (expandedId === accountId) {
-      setExpandedId(null);
-      return;
-    }
+  function openManage(accountId: string) {
     setExpandedId(accountId);
     setAddUserId("");
     loadGrants(accountId);
@@ -111,64 +108,69 @@ export function EmailHubAccessSection() {
           <div key={a.id} className="rounded-lg border border-[var(--line)]">
             <button
               type="button"
-              onClick={() => toggleExpand(a.id)}
+              onClick={() => openManage(a.id)}
               className="flex w-full items-center justify-between px-3 py-2.5 text-left text-sm hover:bg-ink/5"
             >
               <span>{a.mailboxLabel || a.address}</span>
-              <span className="text-xs text-ink/50">{expandedId === a.id ? "Hide" : "Manage access"}</span>
+              <span className="text-xs text-ink/50">Manage access</span>
             </button>
-            {expandedId === a.id && (
-              <div className="border-t border-[var(--line)] p-3">
-                <div className="mb-3 flex flex-col gap-1.5">
-                  {grants.length === 0 && <p className="text-xs text-ink/50">No one granted yet (besides Admins).</p>}
-                  {grants.map((g) => (
-                    <div key={g.userId} className="flex items-center justify-between rounded border border-[var(--line)] px-2.5 py-1.5 text-xs">
-                      <span>
-                        {g.user.name} <span className="text-ink/50">({g.user.email}, {g.user.role})</span>
-                        {!g.canReply && <span className="ml-2 text-ink/40">view only</span>}
-                      </span>
-                      <button
-                        disabled={busy}
-                        onClick={() => revoke(a.id, g.userId)}
-                        className="text-bad hover:underline disabled:opacity-50"
-                      >
-                        Revoke
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    value={addUserId}
-                    onChange={(e) => setAddUserId(e.target.value)}
-                    className="rounded border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
-                  >
-                    <option value="">Select a team member…</option>
-                    {members
-                      .filter((m) => !grants.some((g) => g.userId === m.id))
-                      .map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.email})
-                        </option>
-                      ))}
-                  </select>
-                  <label className="flex items-center gap-1.5 text-xs text-ink/70">
-                    <input type="checkbox" checked={addCanReply} onChange={(e) => setAddCanReply(e.target.checked)} />
-                    Can reply
-                  </label>
-                  <button
-                    disabled={busy || !addUserId}
-                    onClick={() => grant(a.id)}
-                    className="rounded-md bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-50"
-                  >
-                    Grant access
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         ))}
       </div>
+
+      {expandedId && (() => {
+        const a = accounts.find((x) => x.id === expandedId);
+        if (!a) return null;
+        return (
+          <Modal open onOpenChange={(open) => { if (!open) setExpandedId(null); }} title={`Access — ${a.mailboxLabel || a.address}`} contentClassName="w-full max-w-lg">
+            <div className="mb-3 flex flex-col gap-1.5">
+              {grants.length === 0 && <p className="text-xs text-ink/50">No one granted yet (besides Admins).</p>}
+              {grants.map((g) => (
+                <div key={g.userId} className="flex items-center justify-between rounded border border-[var(--line)] px-2.5 py-1.5 text-xs">
+                  <span>
+                    {g.user.name} <span className="text-ink/50">({g.user.email}, {g.user.role})</span>
+                    {!g.canReply && <span className="ml-2 text-ink/40">view only</span>}
+                  </span>
+                  <button
+                    disabled={busy}
+                    onClick={() => revoke(a.id, g.userId)}
+                    className="text-bad hover:underline disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-3">
+              <select
+                value={addUserId}
+                onChange={(e) => setAddUserId(e.target.value)}
+                className="rounded border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
+              >
+                <option value="">Select a team member…</option>
+                {members
+                  .filter((m) => !grants.some((g) => g.userId === m.id))
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} ({m.email})
+                    </option>
+                  ))}
+              </select>
+              <label className="flex items-center gap-1.5 text-xs text-ink/70">
+                <input type="checkbox" checked={addCanReply} onChange={(e) => setAddCanReply(e.target.checked)} />
+                Can reply
+              </label>
+              <button
+                disabled={busy || !addUserId}
+                onClick={() => grant(a.id)}
+                className="rounded-md bg-accent px-3 py-1.5 text-xs text-white disabled:opacity-50"
+              >
+                Grant access
+              </button>
+            </div>
+          </Modal>
+        );
+      })()}
     </section>
   );
 }

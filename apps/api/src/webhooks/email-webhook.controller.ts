@@ -2,6 +2,7 @@ import { Body, Controller, Post } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { SequencerService } from "../sequencer/sequencer.service";
+import { LeadsService } from "../leads/leads.service";
 import { EmailEventType } from "@leadgen/types";
 import { GmailAdapterService } from "./gmail-adapter.service";
 import { GraphAdapterService } from "./graph-adapter.service";
@@ -26,6 +27,7 @@ export class EmailWebhookController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sequencer: SequencerService,
+    private readonly leads: LeadsService,
     private readonly gmailAdapter: GmailAdapterService,
     private readonly graphAdapter: GraphAdapterService,
   ) {}
@@ -82,6 +84,18 @@ export class EmailWebhookController {
     return { ok: true, translated: events.length };
   }
 
+  /**
+   * A hard bounce or spam complaint is as permanent an opt-out as a clicked
+   * Unsubscribe link — the lead is deleted the same way (Part:
+   * delete-on-unsubscribe, extended 2026-09-29 to cover this path too,
+   * explicit user request: a suppressed lead was still sitting in Sequences
+   * — visible in the send queue/pending-approvals lists, permanently
+   * blocked from ever actually sending — because only the unsubscribe-link
+   * handler deleted the lead; this webhook path never did). The
+   * SuppressionEntry is written first and unconditionally, same ordering
+   * guarantee as the unsubscribe path, so the opt-out survives regardless of
+   * whether the delete itself succeeds.
+   */
   private async addToSuppressionList(emailMessageId: string, reason: "BOUNCED" | "SPAM_COMPLAINT") {
     const message = await this.prisma.emailMessage.findUnique({
       where: { id: emailMessageId },
@@ -100,5 +114,12 @@ export class EmailWebhookController {
     // TODO(Part I4): if this pushes the sending account's rolling bounce/complaint
     // rate over threshold (~5% / ~0.1%), auto-pause that EmailAccount here rather
     // than only alerting — see Part I4 for why alerting alone is insufficient.
+    try {
+      await this.leads.remove(message.lead.orgId, message.lead.id);
+    } catch {
+      // The suppression entry above already guarantees no future send —
+      // a failed delete (e.g. already removed) must never break webhook
+      // ingest, which the provider expects to ack quickly regardless.
+    }
   }
 }

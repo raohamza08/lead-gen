@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { api } from "../../../../lib/api-client";
+import { Modal } from "../../../../components/ui/modal";
 
 interface Account {
   id: string;
@@ -389,10 +390,15 @@ export default function SocialMediaSettingsPage() {
               <span>
                 {a.platform} — {a.displayName || a.username} <span className="text-xs text-ink/45">({a.status})</span>
               </span>
-              <span className="text-xs text-ink/50">{expandedId === a.id ? "Hide" : "Manage"}</span>
+              <span className="text-xs text-ink/50">Manage</span>
             </button>
-            {expandedId === a.id && (
-              <div className="flex flex-col gap-4 border-t border-[var(--line)] p-4">
+            <Modal
+              open={expandedId === a.id}
+              onOpenChange={(open) => { if (!open) setExpandedId(null); }}
+              title={`${a.platform} — ${a.displayName || a.username}`}
+              contentClassName="w-full max-w-2xl"
+            >
+              <div className="flex flex-col gap-4">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-lg border border-[var(--line)] bg-ink/5 p-3 text-xs sm:grid-cols-4">
                   <div>
                     <div className="text-ink/45">External ID</div>
@@ -533,7 +539,7 @@ export default function SocialMediaSettingsPage() {
                   </div>
                 </div>
               </div>
-            )}
+            </Modal>
           </div>
         ))}
         {accounts.length === 0 && <p className="py-8 text-center text-sm text-ink/50">No accounts yet.</p>}
