@@ -306,6 +306,7 @@ export const api = {
   deleteEmailAccount: (id: string) => request(`/settings/email-accounts/${id}`, { method: "DELETE" }),
   getEmailFunnel: () => request("/analytics/email-funnel"),
   getEmailList: (event: "OPENED" | "REPLIED" | "FAILED" | "SENT") => request(`/analytics/emails?event=${event}`),
+  getSuppressionList: () => request("/analytics/suppression-list"),
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),
   getRevenuePipeline: () => request("/analytics/revenue-pipeline"),
   getCohortTrends: (days = 30) => request(`/analytics/cohort-trends?days=${days}`),

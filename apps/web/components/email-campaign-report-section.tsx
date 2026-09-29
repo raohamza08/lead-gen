@@ -14,6 +14,20 @@ const TAB_LABEL: Record<EmailListEvent, string> = {
   SENT: "Sent", OPENED: "Opened", REPLIED: "Replied", FAILED: "Failed",
 };
 
+interface SuppressionEntry {
+  id: string;
+  email: string;
+  reason: string;
+  createdAt: string;
+}
+
+const REASON_LABEL: Record<string, string> = {
+  UNSUBSCRIBED: "Unsubscribed",
+  HARD_BOUNCE: "Hard bounce",
+  SPAM_COMPLAINT: "Spam complaint",
+  MANUAL: "Manual",
+};
+
 interface SendingSessionRow {
   id: string;
   status: string;
@@ -59,6 +73,11 @@ export function EmailCampaignReportSection() {
   const listQuery = useQuery({
     queryKey: ["email-campaign-activity", tab],
     queryFn: () => api.getEmailList(tab) as Promise<EmailListItem[]>,
+  });
+
+  const suppressionQuery = useQuery({
+    queryKey: ["email-campaign-suppression"],
+    queryFn: () => api.getSuppressionList() as Promise<SuppressionEntry[]>,
   });
 
   const queueQuery = useQuery({
@@ -183,6 +202,27 @@ export function EmailCampaignReportSection() {
               ...(tab === "FAILED"
                 ? [{ key: "failureReason", header: "Why", render: (r: EmailListItem) => r.failureReason ?? "Unknown" }]
                 : []),
+            ]}
+          />
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title="Unsubscribed & suppressed"
+        subtitle="Anyone who opted out, hard-bounced, or was manually suppressed — kept permanently even after the lead itself is removed, so these addresses are never contacted again."
+      >
+        {suppressionQuery.isLoading ? (
+          <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
+        ) : (suppressionQuery.data?.length ?? 0) === 0 ? (
+          <p className="py-8 text-center text-sm text-ink/50">Nobody has unsubscribed or been suppressed yet.</p>
+        ) : (
+          <DataTable<SuppressionEntry>
+            rows={suppressionQuery.data!}
+            rowKey={(r) => r.id}
+            columns={[
+              { key: "email", header: "Email", render: (r) => r.email },
+              { key: "reason", header: "Reason", render: (r) => REASON_LABEL[r.reason] ?? r.reason },
+              { key: "when", header: "When", render: (r) => new Date(r.createdAt).toLocaleString() },
             ]}
           />
         )}

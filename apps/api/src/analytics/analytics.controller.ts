@@ -49,6 +49,13 @@ export class AnalyticsController {
     return this.analyticsService.getEmailList(user.orgId, event);
   }
 
+  /** Who's opted out (unsubscribe/bounce/spam-complaint/manual) and when —
+   *  survives even after the lead itself is deleted on unsubscribe. */
+  @Get("suppression-list")
+  getSuppressionList(@CurrentUser() user: JwtClaims) {
+    return this.analyticsService.getSuppressionList(user.orgId);
+  }
+
   @Get("linkedin-funnel")
   getLinkedinFunnel(@CurrentUser() user: JwtClaims) {
     return this.analyticsService.getLinkedinFunnel(user.orgId);

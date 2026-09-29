@@ -5,6 +5,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { SequencerService } from "../sequencer/sequencer.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { NotificationsService } from "../notifications/notifications.service";
+import { LeadsService } from "../leads/leads.service";
 import { dashboardUrl } from "../common/cors";
 
 // 1x1 transparent GIF, served for open tracking.
@@ -34,6 +35,7 @@ export class TrackingController {
     private readonly sequencer: SequencerService,
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
+    private readonly leads: LeadsService,
   ) {}
 
   /**
@@ -162,6 +164,16 @@ export class TrackingController {
     res.redirect(to || dashboardUrl());
   }
 
+  /**
+   * Unsubscribing both records the opt-out (SuppressionEntry — orgId+email,
+   * survives forever, checked before every future send regardless of
+   * whether the lead itself still exists) AND deletes the lead itself (Part:
+   * delete-on-unsubscribe, 2026-09-29, explicit user request — "delete those
+   * leads, just keep a record of when they unsubscribed"). The suppression
+   * entry is written FIRST and unconditionally before the delete is
+   * attempted, so a future re-import of the same email can never slip past
+   * the opt-out even if the delete itself fails.
+   */
   @Get("unsubscribe")
   async unsubscribe(@Query("lead") leadId: string, @Res() res: Response) {
     const lead = await this.prisma.lead.findUnique({ where: { id: leadId } });
@@ -171,7 +183,18 @@ export class TrackingController {
         create: { orgId: lead.orgId, email: lead.email, reason: "UNSUBSCRIBED" },
         update: {},
       });
-      await this.sequencer.cancelWaitTimer(leadId);
+      try {
+        // remove() already cancels the sequence wait-timer as part of the
+        // delete — no separate cancelWaitTimer call needed here.
+        await this.leads.remove(lead.orgId, leadId);
+      } catch {
+        // The suppression entry above is what actually matters for CAN-SPAM
+        // compliance and never sending again — a failed delete (e.g. the
+        // lead was already removed by an admin between the fetch above and
+        // here) must never break the unsubscribe redirect for the person
+        // who clicked the link.
+        await this.sequencer.cancelWaitTimer(leadId).catch(() => {});
+      }
     }
     res.redirect(`${dashboardUrl()}/unsubscribed`);
   }

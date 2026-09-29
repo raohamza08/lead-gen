@@ -338,6 +338,23 @@ export class AnalyticsService {
   }
 
   /**
+   * The durable record of who opted out and when (Part: delete-on-unsubscribe,
+   * 2026-09-29) — SuppressionEntry rows outlive the lead itself: clicking
+   * Unsubscribe deletes the Lead (see TrackingController.unsubscribe) but
+   * this row is written first and unconditionally, so "did we ever email
+   * this address" and "when did they opt out" stay answerable even though
+   * the lead record it originated from is gone.
+   */
+  async getSuppressionList(orgId: string) {
+    const rows = await this.prisma.suppressionEntry.findMany({
+      where: { orgId },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    });
+    return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+  }
+
+  /**
    * Real sent-email excerpts for the learning agent's copy-level review
    * (Part: email improvements) — opened-but-never-replied is the group whose
    * subject/opening line is worth questioning (it got attention and then
