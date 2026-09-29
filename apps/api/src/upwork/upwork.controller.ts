@@ -1,0 +1,52 @@
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { Roles } from "../common/decorators/roles.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
+import { CurrentUser } from "../common/decorators/current-user.decorator";
+import { JwtClaims, Role } from "@leadgen/types";
+import { UpworkService } from "./upwork.service";
+import { CreateUpworkProposalDto } from "./dto/create-upwork-proposal.dto";
+import { UpdateUpworkProposalDto } from "./dto/update-upwork-proposal.dto";
+import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
+
+@Controller("upwork/proposals")
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+@RequiresModule("UPWORK")
+export class UpworkController {
+  constructor(private readonly upwork: UpworkService) {}
+
+  @Get("stats")
+  getStats(@CurrentUser() user: JwtClaims) {
+    return this.upwork.getStats(user.orgId);
+  }
+
+  @Get()
+  findAll(@CurrentUser() user: JwtClaims, @Query() query: QueryUpworkProposalsDto) {
+    return this.upwork.findAll(user.orgId, query);
+  }
+
+  @Get(":id")
+  findOne(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.upwork.findOne(user.orgId, id);
+  }
+
+  @Post()
+  create(@CurrentUser() user: JwtClaims, @Body() dto: CreateUpworkProposalDto) {
+    return this.upwork.create(user.orgId, dto);
+  }
+
+  @Patch(":id")
+  update(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateUpworkProposalDto) {
+    return this.upwork.update(user.orgId, id, dto);
+  }
+
+  /** Same reasoning as leads' bulk-delete: mistakes should be fixable, but
+   *  only by someone with real authority over the data, not any submitter. */
+  @Delete(":id")
+  @Roles(Role.ADMIN, Role.MANAGER)
+  remove(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.upwork.remove(user.orgId, id);
+  }
+}

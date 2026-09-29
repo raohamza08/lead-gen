@@ -194,6 +194,7 @@ model Organization {
   sendingSessions SendingSession[]
   sendingSchedule SendingSchedule?
   leadImports     LeadImport[]
+  upworkProposals UpworkProposal[]
 
   @@map("organizations")
 }
@@ -224,6 +225,11 @@ model User {
   /// narrower grant an admin turns on for a specific person (e.g. a
   /// community manager), not an inherited default like the others.
   socialEngagementAccess Boolean @default(false) @map("social_engagement_access")
+  /// New module (Part: Upwork Proposals, 2026-09-29) — same default-true
+  /// retrofit reasoning as leadGenAccess/emailHubAccess/socialMediaAccess
+  /// above: every existing user keeps access rather than an admin having to
+  /// grant it by hand the moment this ships.
+  upworkAccess Boolean @default(true) @map("upwork_access")
   /// The org's single authorized administrator (Part: Notification Center &
   /// Admin/Audit, 2026-08-31) — distinct from Role.ADMIN, which any admin can
   /// already grant to any other user. This flag gates System Logs and
@@ -1357,6 +1363,81 @@ model CaseStudy {
 
   @@index([orgId, industry])
   @@map("case_studies")
+}
+
+// ============================================================================
+// Upwork Proposals (Part: Upwork Proposals, 2026-09-29) — a daily log of
+// proposals sent on Upwork, replacing the team's Google Form + Sheet. One
+// model covers both proposal types (BIDDING/INVITE) with a `type` discriminator
+// rather than two tables, since almost every field (job category, cover
+// letter, client name, outcome status) is shared between them and reporting
+// needs to slice by type — two tables would mean unioning them back together
+// for every report. Fields that only apply to one type (`connects`,
+// `accountType`) are simply left null for the other, mirroring how the source
+// spreadsheet's own columns were sparse per-row depending on the "proposal
+// type" answer.
+enum UpworkProposalType {
+  BIDDING
+  INVITE
+}
+
+/// Training vs Live Upwork account used to submit a BIDDING proposal (the
+/// sheet's "Bidding Type" column) — not applicable to INVITE, where there's
+/// no connects/account distinction since the client reached out first.
+enum UpworkAccountType {
+  TRAINING
+  LIVE
+}
+
+/// Outcome tracking (the sheet's manually-updated "Status" column) — starts
+/// at SUBMITTED and is moved forward by whoever is following up, ending at
+/// WON or LOST.
+enum UpworkProposalStatus {
+  SUBMITTED
+  IN_DISCUSSION
+  FOLLOW_UP_1
+  FOLLOW_UP_2
+  WON
+  LOST
+}
+
+model UpworkProposal {
+  id    String @id @default(uuid())
+  orgId String @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+
+  type UpworkProposalType
+
+  /// The Upwork profile/identity the proposal was submitted under ("ID Name"
+  /// / "Invite ID Name" in the source sheet) — not the team member's own name.
+  profileName String @map("profile_name")
+  jobCategory String @map("job_category")
+  jobLink     String @map("job_link")
+  coverLetter String @db.Text @map("cover_letter")
+  /// Connects spent — BIDDING only, null for INVITE (invites cost no connects).
+  connects    Int?
+  accountType UpworkAccountType? @map("account_type")
+
+  /// The team member who submitted this proposal (the sheet's "Submitted by"
+  /// / "Invite Submitted by") — a plain name, not a User relation: the sheet
+  /// this replaces never required the submitter to be a system account, and
+  /// forcing that mapping now would block logging a proposal for anyone not
+  /// yet set up with a login.
+  submittedBy String @map("submitted_by")
+
+  clickupTaskId String? @map("clickup_task_id")
+  clientName    String? @map("client_name")
+  status        UpworkProposalStatus @default(SUBMITTED)
+  /// Who closed the client, once WON — the sheet's "Client closed by".
+  closedBy      String? @map("closed_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([orgId, type])
+  @@index([orgId, status])
+  @@index([orgId, createdAt])
+  @@map("upwork_proposals")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every

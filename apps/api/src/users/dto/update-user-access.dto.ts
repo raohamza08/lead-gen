@@ -6,6 +6,7 @@ export class UpdateUserModulesDto {
   @IsOptional() @IsBoolean() emailHubAccess?: boolean;
   @IsOptional() @IsBoolean() socialMediaAccess?: boolean;
   @IsOptional() @IsBoolean() socialEngagementAccess?: boolean;
+  @IsOptional() @IsBoolean() upworkAccess?: boolean;
 }
 
 export class UpdateUserEmailAccountAccessDto {

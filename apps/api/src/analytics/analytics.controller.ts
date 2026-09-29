@@ -41,10 +41,11 @@ export class AnalyticsController {
     return this.analyticsService.getEmailFunnel(user.orgId);
   }
 
-  /** Backs the Analytics page's Opened/Replied tabs — row-level, unlike
-   *  every other endpoint here which returns only aggregate counts. */
+  /** Backs the Analytics/Email Campaign pages' Sent/Opened/Replied/Failed
+   *  tabs — row-level, unlike every other endpoint here which returns only
+   *  aggregate counts. */
   @Get("emails")
-  getEmailList(@CurrentUser() user: JwtClaims, @Query("event") event: "OPENED" | "REPLIED") {
+  getEmailList(@CurrentUser() user: JwtClaims, @Query("event") event: "OPENED" | "REPLIED" | "FAILED" | "SENT") {
     return this.analyticsService.getEmailList(user.orgId, event);
   }
 

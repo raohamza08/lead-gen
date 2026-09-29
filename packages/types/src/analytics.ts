@@ -112,6 +112,9 @@ export interface EmailListItem {
   /** When the event this list is filtered to (opened/replied) occurred. A
    *  message opened more than once takes the earliest open. */
   eventAt: string;
+  /** Set only when this list was requested for the FAILED event — why the
+   *  send attempt failed (ComplianceGateError message or provider error). */
+  failureReason?: string | null;
 }
 
 /** One piece of copy-level feedback from the learning agent, tied to real

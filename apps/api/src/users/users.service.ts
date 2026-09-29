@@ -57,6 +57,7 @@ export class UsersService {
         emailHubAccess: true,
         socialMediaAccess: true,
         socialEngagementAccess: true,
+        upworkAccess: true,
         isPrimaryAdmin: true,
         displayName: true,
         avatarStorageKey: true,
@@ -173,7 +174,7 @@ export class UsersService {
   async getAccess(orgId: string, userId: string) {
     const targetUser = await this.prisma.user.findFirst({
       where: { id: userId, orgId },
-      select: { id: true, role: true, leadGenAccess: true, emailHubAccess: true, socialMediaAccess: true, socialEngagementAccess: true },
+      select: { id: true, role: true, leadGenAccess: true, emailHubAccess: true, socialMediaAccess: true, socialEngagementAccess: true, upworkAccess: true },
     });
     if (!targetUser) throw new NotFoundException("User not found");
 
@@ -202,6 +203,7 @@ export class UsersService {
         emailHubAccess: targetUser.emailHubAccess,
         socialMediaAccess: targetUser.socialMediaAccess,
         socialEngagementAccess: targetUser.socialEngagementAccess,
+        upworkAccess: targetUser.upworkAccess,
       },
       emailAccounts: emailAccounts.map((a) => {
         const grant = emailGrantByAccount.get(a.id);
@@ -282,6 +284,7 @@ export class UsersService {
         emailHubAccess: true,
         socialMediaAccess: true,
         socialEngagementAccess: true,
+        upworkAccess: true,
         isPrimaryAdmin: true,
         displayName: true,
         jobTitle: true,

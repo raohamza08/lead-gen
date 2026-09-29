@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import {
@@ -27,6 +28,9 @@ import type { AnalyticsSummary, CohortTrendsReport, FunnelStageCount } from "@le
 import { Button } from "../../../components/ui/button";
 import { ErrorState } from "../../../components/ui/error-state";
 import { SkeletonCard } from "../../../components/ui/skeleton";
+import { EmailCampaignReportSection } from "../../../components/email-campaign-report-section";
+import { SocialInboxOverviewSection } from "../../../components/social-inbox-overview-section";
+import { UpworkOverviewSection } from "../../../components/upwork-overview-section";
 
 /** One stat card, reused across this page's several tile grids (main KPIs,
  *  Lead Room, Social Media, Email Overview) instead of duplicating the same
@@ -83,7 +87,44 @@ const stageLabel = (s: string) =>
  * revalidation runs behind it — no more blank skeleton on every return trip
  * to this page.
  */
+type ReportTab = "LEADS" | "EMAIL_CAMPAIGN" | "UNIFIED_INBOX" | "SOCIAL_INBOX" | "UPWORK";
+
+const REPORT_TABS: { value: ReportTab; label: string }[] = [
+  { value: "LEADS", label: "Leads" },
+  { value: "EMAIL_CAMPAIGN", label: "Email Campaign" },
+  { value: "UNIFIED_INBOX", label: "Unified Inbox" },
+  { value: "SOCIAL_INBOX", label: "Social Inbox" },
+  { value: "UPWORK", label: "Upwork" },
+];
+
+/** Split dashboard reporting (Part: Split dashboard reporting, 2026-09-29) —
+ *  one tab per module instead of every module's stats stacked vertically on
+ *  one page, so each area's reporting is easy to find and doesn't bury the
+ *  others. Each tab's content still fetches its own data independently
+ *  (unchanged sections/components), so switching tabs never re-fetches
+ *  everything at once. */
+function ReportTabBar({ tab, onChange }: { tab: ReportTab; onChange: (t: ReportTab) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--line)] p-1">
+      {REPORT_TABS.map((t) => (
+        <button
+          key={t.value}
+          type="button"
+          onClick={() => onChange(t.value)}
+          aria-pressed={tab === t.value}
+          className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+            tab === t.value ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+          }`}
+        >
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function OverviewPage() {
+  const [tab, setTab] = useState<ReportTab>("LEADS");
   const summaryQuery = useQuery({ queryKey: ["overview", "summary"], queryFn: () => api.getSummary() as Promise<AnalyticsSummary> });
   const funnelQuery = useQuery({ queryKey: ["overview", "funnel"], queryFn: () => api.getFunnel() as Promise<FunnelStageCount[]> });
   const trendsQuery = useQuery({ queryKey: ["overview", "trends"], queryFn: () => api.getCohortTrends(30) as Promise<CohortTrendsReport> });
@@ -100,12 +141,35 @@ export default function OverviewPage() {
   const agents = agentsQuery.data ?? null;
   const error = summaryQuery.error || funnelQuery.error || trendsQuery.error;
 
+  if (tab !== "LEADS") {
+    return (
+      <div className="flex flex-col gap-5">
+        <ReportTabBar tab={tab} onChange={setTab} />
+        {tab === "EMAIL_CAMPAIGN" && <EmailCampaignReportSection />}
+        {tab === "UNIFIED_INBOX" && <EmailOverviewSection />}
+        {tab === "SOCIAL_INBOX" && (
+          <>
+            <SocialInboxOverviewSection />
+            <SocialMediaOverviewSection />
+          </>
+        )}
+        {tab === "UPWORK" && <UpworkOverviewSection />}
+      </div>
+    );
+  }
+
   if (error) {
-    return <ErrorState message={(error as Error).message} onRetry={() => { summaryQuery.refetch(); funnelQuery.refetch(); trendsQuery.refetch(); }} />;
+    return (
+      <div className="flex flex-col gap-5">
+        <ReportTabBar tab={tab} onChange={setTab} />
+        <ErrorState message={(error as Error).message} onRetry={() => { summaryQuery.refetch(); funnelQuery.refetch(); trendsQuery.refetch(); }} />
+      </div>
+    );
   }
   if (!summary) {
     return (
       <div className="flex flex-col gap-4">
+        <ReportTabBar tab={tab} onChange={setTab} />
         {/* Skeleton matches the real layout so nothing shifts when data lands. */}
         <SkeletonCard className="h-32" />
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -144,6 +208,8 @@ export default function OverviewPage() {
 
   return (
     <div className="flex flex-col gap-5">
+      <ReportTabBar tab={tab} onChange={setTab} />
+
       {/* Hero: one number, with its own trend beneath it. */}
       <section className="card overflow-hidden">
         <div className="grid gap-0 md:grid-cols-[minmax(0,320px)_1fr]">
@@ -296,8 +362,6 @@ export default function OverviewPage() {
       </section>
 
       <LeadRoomOverviewSection />
-      <EmailOverviewSection />
-      <SocialMediaOverviewSection />
     </div>
   );
 }
@@ -435,7 +499,7 @@ function EmailOverviewSection() {
 
   return (
     <section className="card p-5">
-      <h2 className="text-section-title text-ink">Email Overview</h2>
+      <h2 className="text-section-title text-ink">Unified Inbox</h2>
       <p className="mb-4 mt-0.5 text-xs text-ink/50">Across every mailbox you have access to.</p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {tiles.map((t) => (

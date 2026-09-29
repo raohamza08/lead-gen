@@ -305,7 +305,7 @@ export const api = {
     request(`/settings/organization/agent-prompts/${name}`, { method: "DELETE" }),
   deleteEmailAccount: (id: string) => request(`/settings/email-accounts/${id}`, { method: "DELETE" }),
   getEmailFunnel: () => request("/analytics/email-funnel"),
-  getEmailList: (event: "OPENED" | "REPLIED") => request(`/analytics/emails?event=${event}`),
+  getEmailList: (event: "OPENED" | "REPLIED" | "FAILED" | "SENT") => request(`/analytics/emails?event=${event}`),
   getLinkedinFunnel: () => request("/analytics/linkedin-funnel"),
   getRevenuePipeline: () => request("/analytics/revenue-pipeline"),
   getCohortTrends: (days = 30) => request(`/analytics/cohort-trends?days=${days}`),
@@ -354,6 +354,15 @@ export const api = {
   getOrgBranding: () => request("/settings/organization/branding"),
   updateOrgBranding: (body: Record<string, unknown>) =>
     request("/settings/organization/branding", { method: "PATCH", body: JSON.stringify(body) }),
+  // Part: Upwork Proposals, 2026-09-29.
+  getUpworkProposals: (params: Record<string, string> = {}) =>
+    request(`/upwork/proposals?${new URLSearchParams(params).toString()}`),
+  getUpworkStats: () => request("/upwork/proposals/stats"),
+  createUpworkProposal: (body: Record<string, unknown>) =>
+    request("/upwork/proposals", { method: "POST", body: JSON.stringify(body) }),
+  updateUpworkProposal: (id: string, body: Record<string, unknown>) =>
+    request(`/upwork/proposals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteUpworkProposal: (id: string) => request(`/upwork/proposals/${id}`, { method: "DELETE" }),
   getCaseStudies: () => request("/settings/case-studies"),
   createCaseStudy: (body: { title?: string; rawStory: string; submittedIndustry: string }) =>
     request("/settings/case-studies", { method: "POST", body: JSON.stringify(body) }),

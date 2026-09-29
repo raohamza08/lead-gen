@@ -275,12 +275,14 @@ export class AnalyticsService {
    * fetch. REPLIED has no such verification window, so it still reads the
    * earliest matching EmailEvent as before.
    */
-  async getEmailList(orgId: string, event: "OPENED" | "REPLIED"): Promise<EmailListItem[]> {
-    const rows =
+  async getEmailList(orgId: string, event: "OPENED" | "REPLIED" | "FAILED" | "SENT"): Promise<EmailListItem[]> {
+    type Row = {
+      id: string; leadId: string; companyName: string; contactName: string | null; subject: string;
+      sequenceStep: number; sentAt: Date | null; eventAt: Date; failureReason?: string | null;
+    };
+    const rows: Row[] =
       event === "OPENED"
-        ? await this.prisma.$queryRaw<
-            { id: string; leadId: string; companyName: string; contactName: string | null; subject: string; sequenceStep: number; sentAt: Date | null; eventAt: Date }[]
-          >`
+        ? await this.prisma.$queryRaw<Row[]>`
       SELECT m.id, m.lead_id AS "leadId", l.company_name AS "companyName",
              l.contact_name AS "contactName", m.subject, m.sequence_step AS "sequenceStep",
              m.sent_at AS "sentAt", m.verified_opened_at AS "eventAt"
@@ -290,9 +292,8 @@ export class AnalyticsService {
       ORDER BY m.verified_opened_at DESC
       LIMIT 200
     `
-        : await this.prisma.$queryRaw<
-            { id: string; leadId: string; companyName: string; contactName: string | null; subject: string; sequenceStep: number; sentAt: Date | null; eventAt: Date }[]
-          >`
+        : event === "REPLIED"
+        ? await this.prisma.$queryRaw<Row[]>`
       SELECT m.id, m.lead_id AS "leadId", l.company_name AS "companyName",
              l.contact_name AS "contactName", m.subject, m.sequence_step AS "sequenceStep",
              m.sent_at AS "sentAt", MIN(e.occurred_at) AS "eventAt"
@@ -303,11 +304,36 @@ export class AnalyticsService {
       GROUP BY m.id, l.company_name, l.contact_name
       ORDER BY MIN(e.occurred_at) DESC
       LIMIT 200
+    `
+        : event === "FAILED"
+        ? await this.prisma.$queryRaw<Row[]>`
+      SELECT m.id, m.lead_id AS "leadId", l.company_name AS "companyName",
+             l.contact_name AS "contactName", m.subject, m.sequence_step AS "sequenceStep",
+             m.sent_at AS "sentAt", MAX(e.occurred_at) AS "eventAt", m.failure_reason AS "failureReason"
+      FROM email_events e
+      JOIN email_messages m ON m.id = e.message_id
+      JOIN leads l ON l.id = m.lead_id
+      WHERE l.org_id = ${orgId} AND e.event_type = 'FAILED'
+      GROUP BY m.id, l.company_name, l.contact_name
+      ORDER BY MAX(e.occurred_at) DESC
+      LIMIT 200
+    `
+        : // SENT — most recent successful sends, regardless of what happened after.
+          await this.prisma.$queryRaw<Row[]>`
+      SELECT m.id, m.lead_id AS "leadId", l.company_name AS "companyName",
+             l.contact_name AS "contactName", m.subject, m.sequence_step AS "sequenceStep",
+             m.sent_at AS "sentAt", m.sent_at AS "eventAt"
+      FROM email_messages m
+      JOIN leads l ON l.id = m.lead_id
+      WHERE l.org_id = ${orgId} AND m.sent_at IS NOT NULL
+      ORDER BY m.sent_at DESC
+      LIMIT 200
     `;
     return rows.map((r) => ({
       ...r,
       sentAt: r.sentAt?.toISOString() ?? null,
       eventAt: r.eventAt.toISOString(),
+      failureReason: r.failureReason ?? null,
     }));
   }
 

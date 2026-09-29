@@ -21,7 +21,7 @@ interface NavLink {
   countKey?: "unread" | "important" | "ignored";
 }
 
-type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess";
+type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess";
 
 type NavItem =
   // moduleFlag accepts an array for OR semantics (Part: narrow Social Inbox
@@ -92,6 +92,14 @@ const NAV: NavItem[] = [
       { href: "/settings/social-media", label: "Settings" },
     ],
   },
+  {
+    type: "group",
+    label: "Upwork Proposals",
+    links: [
+      { href: "/upwork/bidding", label: "Bidding" },
+      { href: "/upwork/invite", label: "Invite" },
+    ],
+  },
   // My Profile deliberately isn't a nav entry (Part: UI/UX Redesign,
   // 2026-09-01) — it moved into HeaderUserMenu's dropdown, which is now the
   // only place it's reachable from; it used to be duplicated here too.
@@ -109,6 +117,7 @@ const MODULE_FLAG_BY_GROUP: Record<string, ModuleFlag> = {
   "Lead Generation": "leadGenAccess",
   "Email Hub": "emailHubAccess",
   "Social Media": "socialMediaAccess",
+  "Upwork Proposals": "upworkAccess",
 };
 
 function isActive(pathname: string | null, search: string, link: NavLink): boolean {
@@ -152,6 +161,7 @@ export function SidebarNav({
           emailHubAccess: boolean;
           socialMediaAccess: boolean;
           socialEngagementAccess: boolean;
+          upworkAccess: boolean;
           isPrimaryAdmin: boolean;
         };
         setModuleAccess({
@@ -159,6 +169,7 @@ export function SidebarNav({
           emailHubAccess: m.emailHubAccess,
           socialMediaAccess: m.socialMediaAccess,
           socialEngagementAccess: m.socialEngagementAccess,
+          upworkAccess: m.upworkAccess,
         });
         setIsPrimaryAdmin(m.isPrimaryAdmin);
       })
