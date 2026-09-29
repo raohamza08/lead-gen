@@ -61,8 +61,14 @@ const labelClass = "mb-1 block text-xs text-ink/60";
  * Invite), backed by the same UpworkProposal table server-side. Field names
  * mirror the original sheet's columns 1:1 so nothing has to be relearned.
  */
+const PAGE_SIZE = 100;
+
 export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [items, setItems] = useState<UpworkProposal[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [statusFilter, setStatusFilter] = useState<UpworkProposalStatus | "">("");
+  const [searchSubmittedBy, setSearchSubmittedBy] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -80,12 +86,28 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
 
   function load() {
     api
-      .getUpworkProposals({ type })
-      .then((res) => setItems((res as { items: UpworkProposal[] }).items))
+      .getUpworkProposals({
+        type,
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(searchSubmittedBy.trim() ? { submittedBy: searchSubmittedBy.trim() } : {}),
+      })
+      .then((res) => {
+        const r = res as { items: UpworkProposal[]; total: number };
+        setItems(r.items);
+        setTotal(r.total);
+      })
       .catch((err) => setError((err as Error).message));
   }
 
-  useEffect(load, [type]);
+  useEffect(load, [type, page, statusFilter, searchSubmittedBy]);
+
+  // Changing a filter resets to page 1 in the same update, not a separate
+  // effect — otherwise the page-1 reset and the filter change would fire as
+  // two effects back to back, each triggering its own fetch.
+  function setStatusFilterAndReset(v: UpworkProposalStatus | "") { setStatusFilter(v); setPage(1); }
+  function setSearchAndReset(v: string) { setSearchSubmittedBy(v); setPage(1); }
 
   function resetForm() {
     setProfileName(""); setJobCategory(""); setJobLink(""); setCoverLetter("");
@@ -272,13 +294,54 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         </form>
       )}
 
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <input
+          value={searchSubmittedBy}
+          onChange={(e) => setSearchAndReset(e.target.value)}
+          placeholder="Filter by submitted by…"
+          className="w-48 rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilterAndReset(e.target.value as UpworkProposalStatus | "")}
+          className="rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs"
+        >
+          <option value="">All statuses</option>
+          {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <span className="ml-auto text-xs text-ink/50">{total} total</span>
+      </div>
+
       {items === null ? (
         <p className="mt-4 text-xs text-ink/50">Loading…</p>
       ) : items.length === 0 ? (
-        <p className="mt-4 text-xs text-ink/50">No {type === "BIDDING" ? "bidding" : "invite"} proposals logged yet.</p>
+        <p className="mt-4 text-xs text-ink/50">
+          No {type === "BIDDING" ? "bidding" : "invite"} proposals {statusFilter || searchSubmittedBy ? "match this filter" : "logged yet"}.
+        </p>
       ) : (
         <div className="mt-4">
           <DataTable columns={columns} rows={items} rowKey={(r) => r.id} />
+          <div className="mt-3 flex items-center justify-between text-xs text-ink/55">
+            <span>
+              Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="rounded border border-[var(--line)] px-2.5 py-1 disabled:opacity-40"
+              >
+                ← Previous
+              </button>
+              <button
+                onClick={() => setPage((p) => (p * PAGE_SIZE < total ? p + 1 : p))}
+                disabled={page * PAGE_SIZE >= total}
+                className="rounded border border-[var(--line)] px-2.5 py-1 disabled:opacity-40"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </section>

@@ -9,6 +9,9 @@ import {
 import { api } from "../lib/api-client";
 import { AXIS_PROPS, DataTable, GRID_PROPS, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE } from "./chart-kit";
 
+interface SubmitterRow { submittedBy: string; total: number; won: number; lost: number; connectsUsed: number }
+interface CloserRow { closedBy: string; won: number; lost: number; other: number }
+
 interface UpworkStats {
   total: number;
   byType: { BIDDING: number; INVITE: number };
@@ -19,8 +22,8 @@ interface UpworkStats {
   avgConnectsPerBid: number;
   byAccountType: { TRAINING: { connects: number; count: number }; LIVE: { connects: number; count: number } };
   byCategory: { category: string; count: number }[];
-  bySubmitter: { submittedBy: string; total: number; biddingCount: number; inviteCount: number; won: number; lost: number; connectsUsed: number }[];
-  byCloser: { closedBy: string; won: number; lost: number; other: number }[];
+  bySubmitter: { BIDDING: SubmitterRow[]; INVITE: SubmitterRow[] };
+  byCloser: { BIDDING: CloserRow[]; INVITE: CloserRow[] };
   trend: { date: string; bidding: number; invite: number }[];
 }
 
@@ -64,8 +67,7 @@ export function UpworkOverviewSection() {
   }
 
   const estimatedCost = stats.connectsUsed * rate;
-  const topSubmitterByConnects = [...stats.bySubmitter].sort((a, b) => b.connectsUsed - a.connectsUsed);
-  const topClosers = [...stats.byCloser].sort((a, b) => b.won - a.won);
+  const topBiddersByConnects = [...stats.bySubmitter.BIDDING].sort((a, b) => b.connectsUsed - a.connectsUsed);
 
   return (
     <div className="flex flex-col gap-4">
@@ -139,47 +141,37 @@ export function UpworkOverviewSection() {
         )}
       </SectionCard>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <SectionCard title="By team member" subtitle="Who's submitting, winning, and spending connects.">
+      {/* Bidding and Invite are kept in fully separate sections rather than
+          one merged table — "how many bids did X do" and "how many invites
+          did X receive" are different questions, and combining them (or
+          combining who-closed-what across both) actively hid the answer to
+          "same for the bidding, who did how many bids and who closed how
+          many projects." */}
+      <SectionCard title="Bidding — by team member" subtitle="Bids submitted, won/lost, and connects spent.">
+        {stats.bySubmitter.BIDDING.length === 0 ? (
+          <p className="py-6 text-center text-sm text-ink/50">No bids logged yet.</p>
+        ) : (
           <DataTable
-            rows={stats.bySubmitter}
+            rows={stats.bySubmitter.BIDDING}
             rowKey={(r) => r.submittedBy}
             columns={[
               { key: "submittedBy", header: "Name", render: (r) => r.submittedBy },
-              { key: "bidding", header: "Bids", numeric: true, render: (r) => r.biddingCount },
-              { key: "invite", header: "Invites", numeric: true, render: (r) => r.inviteCount },
+              { key: "total", header: "Bids", numeric: true, render: (r) => r.total },
               { key: "won", header: "Won", numeric: true, render: (r) => r.won },
               { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost },
               { key: "connects", header: "Connects", numeric: true, render: (r) => r.connectsUsed },
             ]}
           />
-        </SectionCard>
-
-        <SectionCard title="Who spent the most connects" subtitle="Same data, ranked by connects instead of volume.">
-          {topSubmitterByConnects.every((r) => r.connectsUsed === 0) ? (
-            <p className="py-6 text-center text-sm text-ink/50">No connects recorded yet.</p>
-          ) : (
-            <DataTable
-              rows={topSubmitterByConnects.slice(0, 10)}
-              rowKey={(r) => r.submittedBy}
-              columns={[
-                { key: "submittedBy", header: "Name", render: (r) => r.submittedBy },
-                { key: "connects", header: "Connects", numeric: true, render: (r) => r.connectsUsed },
-                { key: "cost", header: "Est. cost", numeric: true, render: (r) => `$${(r.connectsUsed * rate).toFixed(2)}` },
-                { key: "bidding", header: "Bids", numeric: true, render: (r) => r.biddingCount },
-              ]}
-            />
-          )}
-        </SectionCard>
-      </div>
+        )}
+      </SectionCard>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <SectionCard title="Who closed the most projects" subtitle="By closer, across both bidding and invites.">
-          {topClosers.length === 0 ? (
-            <p className="py-6 text-center text-sm text-ink/50">No closer recorded on any proposal yet.</p>
+        <SectionCard title="Bidding — who closed the most projects" subtitle="By closer, bidding proposals only.">
+          {stats.byCloser.BIDDING.length === 0 ? (
+            <p className="py-6 text-center text-sm text-ink/50">No closer recorded on any bid yet.</p>
           ) : (
             <DataTable
-              rows={topClosers}
+              rows={stats.byCloser.BIDDING}
               rowKey={(r) => r.closedBy}
               columns={[
                 { key: "closedBy", header: "Name", render: (r) => r.closedBy },
@@ -190,21 +182,73 @@ export function UpworkOverviewSection() {
           )}
         </SectionCard>
 
-        <SectionCard title="By category" subtitle="Top job categories proposals were submitted under.">
-          {stats.byCategory.length === 0 ? (
-            <p className="py-6 text-center text-sm text-ink/50">No data yet.</p>
+        <SectionCard title="Bidding — who spent the most connects" subtitle="Same bidders, ranked by connects instead of volume.">
+          {topBiddersByConnects.every((r) => r.connectsUsed === 0) ? (
+            <p className="py-6 text-center text-sm text-ink/50">No connects recorded yet.</p>
           ) : (
             <DataTable
-              rows={stats.byCategory}
-              rowKey={(r) => r.category}
+              rows={topBiddersByConnects.slice(0, 10)}
+              rowKey={(r) => r.submittedBy}
               columns={[
-                { key: "category", header: "Category", render: (r) => r.category },
-                { key: "count", header: "Proposals", numeric: true, render: (r) => r.count },
+                { key: "submittedBy", header: "Name", render: (r) => r.submittedBy },
+                { key: "connects", header: "Connects", numeric: true, render: (r) => r.connectsUsed },
+                { key: "cost", header: "Est. cost", numeric: true, render: (r) => `$${(r.connectsUsed * rate).toFixed(2)}` },
+                { key: "bids", header: "Bids", numeric: true, render: (r) => r.total },
               ]}
             />
           )}
         </SectionCard>
       </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <SectionCard title="Invite — by team member" subtitle="Invites received and how they closed.">
+          {stats.bySubmitter.INVITE.length === 0 ? (
+            <p className="py-6 text-center text-sm text-ink/50">No invites logged yet.</p>
+          ) : (
+            <DataTable
+              rows={stats.bySubmitter.INVITE}
+              rowKey={(r) => r.submittedBy}
+              columns={[
+                { key: "submittedBy", header: "Name", render: (r) => r.submittedBy },
+                { key: "total", header: "Invites", numeric: true, render: (r) => r.total },
+                { key: "won", header: "Won", numeric: true, render: (r) => r.won },
+                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost },
+              ]}
+            />
+          )}
+        </SectionCard>
+
+        <SectionCard title="Invite — who closed the most projects" subtitle="By closer, invite proposals only.">
+          {stats.byCloser.INVITE.length === 0 ? (
+            <p className="py-6 text-center text-sm text-ink/50">No closer recorded on any invite yet.</p>
+          ) : (
+            <DataTable
+              rows={stats.byCloser.INVITE}
+              rowKey={(r) => r.closedBy}
+              columns={[
+                { key: "closedBy", header: "Name", render: (r) => r.closedBy },
+                { key: "won", header: "Won", numeric: true, render: (r) => r.won },
+                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost },
+              ]}
+            />
+          )}
+        </SectionCard>
+      </div>
+
+      <SectionCard title="By category" subtitle="Top job categories proposals were submitted under.">
+        {stats.byCategory.length === 0 ? (
+          <p className="py-6 text-center text-sm text-ink/50">No data yet.</p>
+        ) : (
+          <DataTable
+            rows={stats.byCategory}
+            rowKey={(r) => r.category}
+            columns={[
+              { key: "category", header: "Category", render: (r) => r.category },
+              { key: "count", header: "Proposals", numeric: true, render: (r) => r.count },
+            ]}
+          />
+        )}
+      </SectionCard>
     </div>
   );
 }

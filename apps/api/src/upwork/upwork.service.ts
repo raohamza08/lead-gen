@@ -128,12 +128,11 @@ export class UpworkService {
         _sum: { connects: true },
         _count: { _all: true },
       }),
-      // "Who closed most projects" — closedBy is a free-text name, filled in
-      // regardless of proposal type, so this is intentionally not scoped to
-      // WON only: a closer's full track record (won vs lost after they took
-      // over the conversation) is more useful than a bare leaderboard count.
+      // "Who closed most projects" — kept separate per type (grouped by
+      // closedBy AND type), not merged, so a Bidding closer's record and an
+      // Invite closer's record never get summed into one misleading number.
       this.prisma.upworkProposal.groupBy({
-        by: ["closedBy", "status"],
+        by: ["closedBy", "type", "status"],
         where: { orgId, closedBy: { not: null } },
         _count: { _all: true },
       }),
@@ -159,36 +158,37 @@ export class UpworkService {
     const closed = won + lost;
     const winRate = closed > 0 ? Math.round((won / closed) * 100) : null;
 
-    const submitterMap = new Map<
-      string,
-      { submittedBy: string; total: number; biddingCount: number; inviteCount: number; won: number; lost: number; connectsUsed: number }
-    >();
-    const getSubmitter = (name: string) =>
-      submitterMap.get(name) ??
-      { submittedBy: name, total: 0, biddingCount: 0, inviteCount: 0, won: 0, lost: 0, connectsUsed: 0 };
+    // Kept fully split per type rather than one merged table — "how many
+    // bids did X do" and "how many invites did X receive" are different
+    // questions with different denominators (connects only exist for
+    // bidding), so combining them into one row/total was actively misleading.
+    type SubmitterRow = { submittedBy: string; total: number; won: number; lost: number; connectsUsed: number };
+    const submitterMaps = { BIDDING: new Map<string, SubmitterRow>(), INVITE: new Map<string, SubmitterRow>() };
+    const getSubmitter = (type: UpworkProposalType, name: string) =>
+      submitterMaps[type].get(name) ?? { submittedBy: name, total: 0, won: 0, lost: 0, connectsUsed: 0 };
     for (const row of bySubmitterRaw) {
-      const entry = getSubmitter(row.submittedBy);
+      const entry = getSubmitter(row.type, row.submittedBy);
       entry.total += row._count._all;
-      if (row.type === UpworkProposalType.BIDDING) entry.biddingCount += row._count._all;
-      else entry.inviteCount += row._count._all;
       if (row.status === UpworkProposalStatus.WON) entry.won += row._count._all;
       if (row.status === UpworkProposalStatus.LOST) entry.lost += row._count._all;
-      submitterMap.set(row.submittedBy, entry);
+      submitterMaps[row.type].set(row.submittedBy, entry);
     }
     for (const row of connectsBySubmitterRaw) {
-      const entry = getSubmitter(row.submittedBy);
+      const entry = getSubmitter(UpworkProposalType.BIDDING, row.submittedBy);
       entry.connectsUsed = row._sum.connects ?? 0;
-      submitterMap.set(row.submittedBy, entry);
+      submitterMaps.BIDDING.set(row.submittedBy, entry);
     }
 
-    const closerMap = new Map<string, { closedBy: string; won: number; lost: number; other: number }>();
+    type CloserRow = { closedBy: string; won: number; lost: number; other: number };
+    const closerMaps = { BIDDING: new Map<string, CloserRow>(), INVITE: new Map<string, CloserRow>() };
     for (const row of byCloserRaw) {
       const name = row.closedBy as string;
-      const entry = closerMap.get(name) ?? { closedBy: name, won: 0, lost: 0, other: 0 };
+      const map = closerMaps[row.type];
+      const entry = map.get(name) ?? { closedBy: name, won: 0, lost: 0, other: 0 };
       if (row.status === UpworkProposalStatus.WON) entry.won += row._count._all;
       else if (row.status === UpworkProposalStatus.LOST) entry.lost += row._count._all;
       else entry.other += row._count._all;
-      closerMap.set(name, entry);
+      map.set(name, entry);
     }
 
     const accountTypeUsage = { TRAINING: { connects: 0, count: 0 }, LIVE: { connects: 0, count: 0 } };
@@ -220,8 +220,14 @@ export class UpworkService {
       avgConnectsPerBid: bidsWithConnects > 0 ? Math.round((connectsUsed / bidsWithConnects) * 10) / 10 : 0,
       byAccountType: accountTypeUsage,
       byCategory: byCategoryRaw.map((r) => ({ category: r.jobCategory, count: r._count._all })),
-      bySubmitter: Array.from(submitterMap.values()).sort((a, b) => b.total - a.total),
-      byCloser: Array.from(closerMap.values()).sort((a, b) => b.won - a.won),
+      bySubmitter: {
+        BIDDING: Array.from(submitterMaps.BIDDING.values()).sort((a, b) => b.total - a.total),
+        INVITE: Array.from(submitterMaps.INVITE.values()).sort((a, b) => b.total - a.total),
+      },
+      byCloser: {
+        BIDDING: Array.from(closerMaps.BIDDING.values()).sort((a, b) => b.won - a.won),
+        INVITE: Array.from(closerMaps.INVITE.values()).sort((a, b) => b.won - a.won),
+      },
       trend: Array.from(trendByDay.values()).sort((a, b) => a.date.localeCompare(b.date)),
     };
   }
