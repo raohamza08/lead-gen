@@ -213,26 +213,52 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
   );
 }
 
-/** Label + value, with an optional tone. The number is the chart. */
+/** Label + value, with an optional tone. The number is the chart.
+ *
+ *  Optionally clickable (Part: Email Campaign dashboard, 2026-09-29) — when
+ *  `onClick` is given, the tile renders as a real `<button>` instead of a
+ *  `<div>` so it's keyboard/screen-reader operable, and `active` adds a
+ *  visible selected ring for tiles that double as tab selectors (e.g. "Sent"
+ *  filtering the message-activity list below it). Both are optional and
+ *  default to the plain static tile every existing caller already uses. */
 export function StatTile({
   label,
   value,
   hint,
   tone,
+  onClick,
+  active,
 }: {
   label: string;
   value: string | number;
   hint?: string;
   tone?: "good" | "bad" | "gold";
+  onClick?: () => void;
+  active?: boolean;
 }) {
   const toneClass =
     tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "gold" ? "text-gold" : "text-ink";
-  return (
-    <div className="card card-interactive px-3.5 py-3">
+  const body = (
+    <>
       <div className="text-[11px] uppercase tracking-wide text-ink/55">{label}</div>
       {/* Proportional figures, not tabular — these are standalone values, not a column. */}
       <div className={`mt-1 text-2xl font-semibold tracking-tight ${toneClass}`}>{value}</div>
       {hint ? <div className="mt-0.5 text-[11px] text-ink/45">{hint}</div> : null}
-    </div>
+    </>
+  );
+  if (!onClick) {
+    return <div className="card card-interactive px-3.5 py-3">{body}</div>;
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`card card-interactive w-full px-3.5 py-3 text-left transition-shadow ${
+        active ? "ring-2 ring-[var(--accent)]" : ""
+      }`}
+    >
+      {body}
+    </button>
   );
 }

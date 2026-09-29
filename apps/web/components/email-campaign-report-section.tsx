@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useRealtimeEvent } from "../lib/realtime";
@@ -45,6 +45,16 @@ interface SendingScheduleInfo {
 export function EmailCampaignReportSection() {
   const [tab, setTab] = useState<EmailListEvent>("SENT");
   const queryClient = useQueryClient();
+  const activityRef = useRef<HTMLDivElement>(null);
+
+  // Clicking a KPI tile in EmailAnalyticsSection above (Sent/Verified Opens/
+  // Replies/Failed) both switches the list below AND scrolls it into view —
+  // the click and the matching entries should feel like one action, not a
+  // silent state change somewhere off-screen.
+  function selectMetric(metric: EmailListEvent) {
+    setTab(metric);
+    activityRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const listQuery = useQuery({
     queryKey: ["email-campaign-activity", tab],
@@ -79,7 +89,7 @@ export function EmailCampaignReportSection() {
 
   return (
     <div className="flex flex-col gap-5">
-      <EmailAnalyticsSection />
+      <EmailAnalyticsSection activeMetric={tab} onSelectMetric={selectMetric} />
 
       <SectionCard
         title="Send queue"
@@ -124,6 +134,7 @@ export function EmailCampaignReportSection() {
         )}
       </SectionCard>
 
+      <div ref={activityRef} />
       <SectionCard
         title="Message activity"
         subtitle="Every individual email, who it went to, and exactly what happened — the detail behind the rates above."

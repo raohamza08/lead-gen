@@ -77,7 +77,21 @@ const pct = (n: number) => `${n}%`;
  * it a non-privileged caller actually gets back (one row, their own), so
  * this component never has to duplicate that permission check.
  */
-export function EmailAnalyticsSection() {
+export type EmailActivityMetric = "SENT" | "OPENED" | "REPLIED" | "FAILED";
+
+/** `activeMetric`/`onSelectMetric` are optional (Part: Email Campaign
+ *  dashboard, 2026-09-29) — when a parent passes them, the Sent/Verified
+ *  Opens/Replies/Failed tiles above become clickable tabs that select which
+ *  list of individual messages shows below (see EmailCampaignReportSection).
+ *  The plain /analytics page usage omits both and gets the original
+ *  static-tile behavior, unchanged. */
+export function EmailAnalyticsSection({
+  activeMetric,
+  onSelectMetric,
+}: {
+  activeMetric?: EmailActivityMetric;
+  onSelectMetric?: (metric: EmailActivityMetric) => void;
+} = {}) {
   const [range, setRange] = useState<DateRangeName>("LAST_30_DAYS");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -183,11 +197,32 @@ export function EmailAnalyticsSection() {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatTile label="Leads Uploaded" value={leadsUploaded} />
-        <StatTile label="Emails Sent" value={performance?.sent ?? "—"} />
+        <StatTile
+          label="Emails Sent"
+          value={performance?.sent ?? "—"}
+          onClick={onSelectMetric ? () => onSelectMetric("SENT") : undefined}
+          active={activeMetric === "SENT"}
+        />
         <StatTile label="Delivered" value={performance?.delivered ?? "—"} />
-        <StatTile label="Verified Opens" value={performance?.uniqueLeadsOpened ?? "—"} />
-        <StatTile label="Replies" value={performance?.uniqueLeadsReplied ?? "—"} />
-        <StatTile label="Failed" value={performance?.failed ?? "—"} tone={(performance?.failed ?? 0) > 0 ? "bad" : "good"} />
+        <StatTile
+          label="Verified Opens"
+          value={performance?.uniqueLeadsOpened ?? "—"}
+          onClick={onSelectMetric ? () => onSelectMetric("OPENED") : undefined}
+          active={activeMetric === "OPENED"}
+        />
+        <StatTile
+          label="Replies"
+          value={performance?.uniqueLeadsReplied ?? "—"}
+          onClick={onSelectMetric ? () => onSelectMetric("REPLIED") : undefined}
+          active={activeMetric === "REPLIED"}
+        />
+        <StatTile
+          label="Failed"
+          value={performance?.failed ?? "—"}
+          tone={(performance?.failed ?? 0) > 0 ? "bad" : "good"}
+          onClick={onSelectMetric ? () => onSelectMetric("FAILED") : undefined}
+          active={activeMetric === "FAILED"}
+        />
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-3">

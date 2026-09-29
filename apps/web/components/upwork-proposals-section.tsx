@@ -5,7 +5,7 @@ import { api } from "../lib/api-client";
 import { DataTable, type TableColumn } from "./chart-kit";
 
 export type UpworkProposalType = "BIDDING" | "INVITE";
-type UpworkProposalStatus = "SUBMITTED" | "IN_DISCUSSION" | "FOLLOW_UP_1" | "FOLLOW_UP_2" | "WON" | "LOST";
+type UpworkProposalStatus = "SUBMITTED" | "VIEWED" | "ACCEPTED" | "IN_DISCUSSION" | "FOLLOW_UP_1" | "FOLLOW_UP_2" | "WON" | "LOST";
 type UpworkAccountType = "TRAINING" | "LIVE";
 
 interface UpworkProposal {
@@ -27,6 +27,8 @@ interface UpworkProposal {
 
 const STATUS_OPTIONS: { value: UpworkProposalStatus; label: string }[] = [
   { value: "SUBMITTED", label: "Submitted" },
+  { value: "VIEWED", label: "Viewed" },
+  { value: "ACCEPTED", label: "Accepted" },
   { value: "IN_DISCUSSION", label: "In discussion" },
   { value: "FOLLOW_UP_1", label: "1st follow-up done" },
   { value: "FOLLOW_UP_2", label: "2nd follow-up done" },
@@ -36,6 +38,8 @@ const STATUS_OPTIONS: { value: UpworkProposalStatus; label: string }[] = [
 
 const STATUS_TONE: Record<UpworkProposalStatus, string> = {
   SUBMITTED: "text-ink/60",
+  VIEWED: "text-ink/60",
+  ACCEPTED: "text-gold",
   IN_DISCUSSION: "text-gold",
   FOLLOW_UP_1: "text-gold",
   FOLLOW_UP_2: "text-gold",
@@ -72,7 +76,6 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [submittedBy, setSubmittedBy] = useState("");
   const [connects, setConnects] = useState("");
   const [accountType, setAccountType] = useState<UpworkAccountType>("LIVE");
-  const [clickupTaskId, setClickupTaskId] = useState("");
   const [clientName, setClientName] = useState("");
 
   function load() {
@@ -86,7 +89,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
 
   function resetForm() {
     setProfileName(""); setJobCategory(""); setJobLink(""); setCoverLetter("");
-    setSubmittedBy(""); setConnects(""); setAccountType("LIVE"); setClickupTaskId(""); setClientName("");
+    setSubmittedBy(""); setConnects(""); setAccountType("LIVE"); setClientName("");
   }
 
   async function submit(e: React.FormEvent) {
@@ -102,7 +105,6 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         jobLink,
         coverLetter,
         submittedBy,
-        clickupTaskId: clickupTaskId.trim() || undefined,
         clientName: clientName.trim() || undefined,
         ...(type === "BIDDING"
           ? { connects: connects ? Number(connects) : undefined, accountType }
@@ -254,10 +256,6 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
               </label>
             </>
           )}
-          <label className="block">
-            <span className={labelClass}>ClickUp task ID (optional)</span>
-            <input value={clickupTaskId} onChange={(e) => setClickupTaskId(e.target.value)} className={inputClass} />
-          </label>
           <label className="block">
             <span className={labelClass}>Client name (optional)</span>
             <input value={clientName} onChange={(e) => setClientName(e.target.value)} className={inputClass} />

@@ -1394,6 +1394,14 @@ enum UpworkAccountType {
 /// WON or LOST.
 enum UpworkProposalStatus {
   SUBMITTED
+  /// Client opened/viewed the proposal — Bidding only (Upwork surfaces this
+  /// signal for bids, not invites). Added importing the team's historical
+  /// sheet (2026-09-29), which tracked it as a distinct status rather than
+  /// folding it into SUBMITTED.
+  VIEWED
+  /// Client accepted the invite — Invite only, the equivalent early signal
+  /// to VIEWED above before real back-and-forth starts. Same reason added.
+  ACCEPTED
   IN_DISCUSSION
   FOLLOW_UP_1
   FOLLOW_UP_2
