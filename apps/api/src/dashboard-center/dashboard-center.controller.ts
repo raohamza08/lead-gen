@@ -14,6 +14,7 @@ import { UpworkDashboardService } from "./upwork-dashboard.service";
 import { PipelineDashboardService } from "./pipeline-dashboard.service";
 import { TeamDashboardService } from "./team-dashboard.service";
 import { BenchmarkService } from "./benchmark.service";
+import { OverviewDashboardService } from "./overview-dashboard.service";
 import { CreateConnectPurchaseDto, DashboardRangeQueryDto, LeadsAuditQueryDto, SetBenchmarkDto } from "./dto/dashboard-center.dto";
 
 /** Cross-module BI layer (Part: Dashboard Center, 2026-09-30) — every route
@@ -38,7 +39,14 @@ export class DashboardCenterController {
     private readonly team: TeamDashboardService,
     private readonly benchmarks: BenchmarkService,
     private readonly auditLogs: AuditLogService,
+    private readonly overview: OverviewDashboardService,
   ) {}
+
+  // ---- Executive Overview ----
+  @Get("overview")
+  overviewSummary(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.overview.getSummary(user.orgId, query);
+  }
 
   // ---- Leads ----
   @Get("leads/kpis")

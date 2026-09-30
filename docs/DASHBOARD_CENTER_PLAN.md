@@ -2,7 +2,27 @@
 
 Started 2026-09-30. This is a large, multi-session build (the user's own spec has 33 sections and a 12-phase order) — this doc is the durable reference so a future session doesn't re-derive the architecture research from scratch. Read this before touching any `/dashboards/*` page or the Dashboard Center nav group in `sidebar-nav.tsx`.
 
-## RESUME HERE (state as of end of session, 2026-09-30)
+## RESUME HERE (state as of end of session 2, 2026-09-30)
+
+**Phases 2-9 are built, deployed, and live in production.** `/dashboards/leads`, `/email`, `/inbox`, `/social`, `/upwork`, `/pipeline`, `/team`, `/activity`, plus a new `/dashboards/benchmarks` admin page, all render real data from the `/dashboard-center/*` API built in session 1 — no more `NotBuiltYet` placeholders on any of them. Verified live: `https://outly.euroshub.com/dashboards/leads` returns 200, `https://api.outly.euroshub.com/api/v1/dashboard-center/leads/kpis` returns 401 (auth-gated, not 404/500 — endpoint exists and is wired), the API health check reports `database: up, redis: up`, and the shipped CSS is a real Tailwind build (not the empty-CSS trap documented in [[hetzner-vps-deployment]]). **Not verified by this session: an actual logged-in browser walkthrough** — no login credentials were available in-session (see [[dev-env-status]] on why the real admin login isn't written down). Ask the user to spot-check each page with real data at least once before treating the numbers as trustworthy end-to-end, not just "the route exists."
+
+**Session 2 addendum (same day):** the user reported "the overview is not working" — the Dashboard Center's own "Overview" nav item, which was left `NotBuiltYet` above. Built it: a new `OverviewDashboardService` (`apps/api/src/dashboard-center/overview-dashboard.service.ts`) composes every other domain service's already-built `getKpis()`/`getFunnel()`/`getPerformance()` — no new queries, so this page can never disagree with what its own per-module dashboard reports for the same range. Meta Ads (per-account endpoints only) is summed across every connected account for the org via `MetaAdsAnalyticsService.getOverview()`, newly exported from `MetaAdsModule`; reports `connected: false` rather than zeros when nothing is connected. New route `GET /dashboard-center/overview`, new frontend page replacing `/dashboards`' placeholder. Deployed same session — see the deploy log entry below for the commit hash.
+
+Phase 11 (data-quality) and Phase 12 (performance/exports/RBAC finer scoping) are still untouched.
+
+**What was built this session (session 2), on top of session 1's backend:**
+- `apps/web/lib/api-client.ts` — one `getDashboardCenter*`-style function per `/dashboard-center/*` route (leads, email, inbox, social, upwork incl. connect-purchase CRUD, pipeline, team, activity, benchmarks CRUD).
+- `apps/web/components/dashboard-center/date-range-bar.tsx` — added `dashboardRangeToQuery()`, the `{range, from, to, compare}` query-param mapper every dashboard page uses.
+- `apps/web/components/dashboard-center/format.ts` (new) — shared `num`/`pct`/`money`/`minutes`/`dateTime`/`titleCase` formatters so `undefined` renders as "—" everywhere, never a fabricated 0, matching the API's own safeRate/safeDivide convention.
+- 8 real dashboard pages replacing their Phase 1 placeholders (see file list below), plus a new `/dashboards/benchmarks` admin page (list/add/remove a Benchmark row) added to the Dashboard Center nav group in `sidebar-nav.tsx` — this page didn't exist as a Phase 1 placeholder, it's net-new.
+- Upwork page includes the connect-purchase ledger UI (add/delete, ADMIN-gated) the session-1 plan flagged as required before any Upwork $ metric could show real numbers.
+- Typechecked (`tsc --noEmit`) and linted (`next lint`) clean before deploy — see [[dev-env-status]]'s ESLint-vs-tsc trap note, both were run this time.
+
+**Files touched, for a future session's git-blame:** `apps/web/app/(dashboard)/dashboards/{leads,email,inbox,social,upwork,pipeline,team,activity}/page.tsx` (rewritten from placeholder), `apps/web/app/(dashboard)/dashboards/benchmarks/page.tsx` (new), `apps/web/components/dashboard-center/{date-range-bar.tsx,format.ts}`, `apps/web/components/sidebar-nav.tsx`, `apps/web/lib/api-client.ts`. Commit `3a9261d`.
+
+**Local dev DB connectivity is still broken** (see below, unchanged from session 1) — this session's frontend work was verified via typecheck/lint + a live production deploy, not a local `npm run dev:web` session, since the local API still can't reach the DB. If this matters for the next session's testing, fixing it properly (not re-doing the VPS-relay workaround) would mean switching the local `.env`'s `DATABASE_URL`/`DIRECT_URL` to Supabase's IPv4 pooler hostname (`aws-0-<region>.pooler.supabase.com`, username `postgres.<project-ref>`) instead of the IPv6-only direct-connect host — the region for project `zqagtaenbffersjqbjvx` wasn't determined this session (not written down anywhere in the repo; would need the Supabase dashboard to confirm before guessing across regions).
+
+### Original session-1 state (superseded above, kept for history)
 
 **Backend foundation is built and typechecks clean, but NOT deployed to production yet, and NOT wired to any frontend yet.** The live app (both production and this workstation's local dev, once its DB connectivity is fixed — see below) still shows the Phase 1 "NotBuiltYet" placeholder on every `/dashboards/*` page. Do not tell the user any dashboard beyond Phase 1's shell is live until both the API is deployed AND the frontend pages below are actually built.
 
@@ -16,12 +36,15 @@ Started 2026-09-30. This is a large, multi-session build (the user's own spec ha
 
 **Local dev environment note (unrelated to this work, but blocked runtime-testing it):** partway through this session, this workstation lost the ability to resolve/route to the Supabase DB host over IPv6 (`db.zqagtaenbffersjqbjvx.supabase.co` has no IPv4/A record — direct-connection hosts on Supabase are IPv6-only). Production was and is unaffected (the VPS reaches it fine). The new schema/migration work above was generated and applied by temporarily copying `schema.prisma` to the VPS, running `prisma migrate diff`/`deploy` there, copying the resulting migration folder back, and reverting the VPS's temp copy via `git checkout`. **Before continuing this build in a new session, check whether local DB connectivity has recovered** (`curl http://localhost:4001/api/v1/health` after starting the local API) — if not, repeat the same VPS-relay workaround rather than assuming something is broken in the code.
 
-**To actually make any of this live, a new session must still:**
-1. Build real frontend pages for `/dashboards/leads`, `/email`, `/inbox`, `/social`, `/upwork`, `/pipeline`, `/team`, `/activity` — replacing their current `NotBuiltYet` placeholders — consuming the new `/dashboard-center/*` endpoints (add corresponding `api.getDashboardCenter*()` functions to `apps/web/lib/api-client.ts` first, none exist yet).
-2. Build a settings UI for entering Upwork connect purchases (`POST/GET/DELETE /dashboard-center/upwork/connect-purchases`) — without at least one real entry, every Upwork $ metric stays `connectCostAvailable: false`.
-3. Build a simple admin Benchmark config UI (`GET/POST/DELETE /dashboard-center/benchmarks`).
-4. Deploy: commit is pushed to GitHub already; the VPS still needs `git pull` + `prisma generate` (migration is already applied, don't re-run `migrate deploy` — it'll no-op harmlessly if you do) + `nest build` + restart `outly-api` (OOM-safe build steps are documented in [[hetzner-vps-deployment]]/docs/RESUME.md). The web app doesn't need rebuilding until frontend pages exist.
-5. Finish the rest of Phase 10's audit-log coverage sweep (email accounts, and re-check for other silent creation endpoints) before presenting the Activity dashboard as comprehensive.
+**Done as of session 2 (2026-09-30):** items 1-4 below are complete and live in production. What's left for a future session:
+1. ~~Build real frontend pages for `/dashboards/leads`, `/email`, `/inbox`, `/social`, `/upwork`, `/pipeline`, `/team`, `/activity`~~ — done, session 2.
+2. ~~Build a settings UI for entering Upwork connect purchases~~ — done, session 2 (on the `/dashboards/upwork` page itself, ADMIN-gated).
+3. ~~Build a simple admin Benchmark config UI~~ — done, session 2 (`/dashboards/benchmarks`, new nav entry).
+4. ~~Deploy~~ — done, session 2 (commit `3a9261d`, both API and web rebuilt and restarted on the VPS).
+5. **Still open:** finish the rest of Phase 10's audit-log coverage sweep (email accounts, and re-check for other silent creation endpoints) before presenting the Activity dashboard as comprehensive.
+6. ~~The cross-module Executive Overview at `/dashboards` itself~~ — done, session 2 (same-day addendum, see above).
+7. **Still open:** an actual logged-in browser walkthrough of each new page with real data — session 2 verified routing/auth/build integrity externally via curl but had no login credentials to check the rendered numbers themselves.
+8. **Still open:** Phase 11 (alerts/data-quality) and Phase 12 (performance/exports/finer RBAC) haven't been started at all.
 
 **IA decision:** Dashboard Center is a **new, separate** top-level nav group, not a replacement for the existing `/overview` page or any existing per-module page (`/leads`, `/analytics`, `/upwork/*`, etc.). It reuses real endpoints/services wherever they exist rather than duplicating them. Meta Ads' nav entry inside Dashboard Center links straight at the already-built `/meta-ads` dashboard rather than a second copy.
 
@@ -54,12 +77,17 @@ Started 2026-09-30. This is a large, multi-session build (the user's own spec ha
 
 ## Phase status
 
-- **Phase 1 (shell + nav):** Done 2026-09-30. New "Dashboard Center" nav group (separate from `/overview`), 8 placeholder pages (`/dashboards`, `/dashboards/leads`, `/email`, `/inbox`, `/social`, `/upwork`, `/pipeline`, `/team`, `/activity`) each using shared `DashboardCenterShell`/`NotBuiltYet`/`DashboardDateRangeBar` components in `apps/web/components/dashboard-center/`. Every placeholder states plainly what it will read from and, where relevant, which specific gap above blocks it — no fabricated numbers anywhere. Meta Ads nav entry points at the existing `/meta-ads` page, no duplicate.
-- **Phases 2-12:** Not started. Build in the user's own specified order (Leads → Email → Inbox → Social → Upwork → Meta Ads extension → Pipeline → Team → Audit → Alerts/Benchmarks/Data-quality → Performance/exports/RBAC). Each phase should re-read its gap-analysis section above before writing queries, and explicitly decide per-metric whether to build it, or render "Data unavailable" with the reason.
+- **Phase 1 (shell + nav):** Done 2026-09-30 (session 1). New "Dashboard Center" nav group (separate from `/overview`), shared `DashboardCenterShell`/`NotBuiltYet`/`DashboardDateRangeBar` components in `apps/web/components/dashboard-center/`. Meta Ads nav entry points at the existing `/meta-ads` page, no duplicate.
+- **Phases 2-9 (Leads, Email, Inbox, Social, Upwork, Pipeline, Team, Activity):** Done 2026-09-30 (session 2), deployed live (commit `3a9261d`). Each page consumes its real `/dashboard-center/*` endpoint via new `api.getDashboardCenter*()` functions; every honestly-unavailable metric from the gap-analysis above (Social→Lead funnel, Upwork $ before a purchase is entered, etc.) renders as "—"/"unavailable" with the reason inline, not a fabricated number. Upwork's connect-purchase ledger UI and a new Benchmarks admin page (`/dashboards/benchmarks`) were built alongside as prerequisites called out in session 1's open decisions.
+- **Phase 6 addendum (Meta Ads):** its dashboard already existed pre-Dashboard-Center; only the nav link was added, no rework needed.
+- **Phase 10 (Audit) — partial:** the `/dashboards/activity` page and its backend route exist and work, but the underlying `auditLog.write()` coverage sweep across silent creation endpoints (email-account CRUD, etc.) is still incomplete — see the Activity/Audit gap-analysis above. Don't present this dashboard as a complete activity record yet.
+- **Phase 11 (Alerts/Benchmarks/Data-quality) — partial:** Benchmarks CRUD is built (list/set/remove a target per metric), but nothing yet actually calls `BenchmarkService.compare()` to show actual-vs-target on any dashboard, and there's no alerting or data-quality-scoring UI at all.
+- **Phase 12 (Performance/exports/RBAC):** Not started. Today every Dashboard Center route is flat ADMIN/MANAGER-only (see the controller's own docblock) — no per-employee scoping, no CSV/PDF export, no saved views.
+- **Executive Overview (`/dashboards` itself):** Done, session 2 same-day addendum. `OverviewDashboardService` composes every other domain's own KPI method; Meta Ads summed across all connected accounts via the now-exported `MetaAdsAnalyticsService`.
 
 ## Open decisions for the user (don't assume)
 
-1. **Upwork connect-purchase ledger**: build a manual-entry UI for recording each connect purchase (amount, cost, date)? Without it, every Upwork dollar metric in the spec stays unavailable.
-2. **Social/Meta Ads → Lead linkage**: worth building now (real scope: webhook or manual "convert to lead" linking), or accept those funnels stop at raw channel metrics for now?
-3. **Audit log coverage**: Phase 10 needs `auditLog.write()` added at many currently-silent endpoints — confirm this is in scope before starting, since it touches many existing files across leads/campaigns/email-accounts/upwork/meta-ads modules.
+1. ~~**Upwork connect-purchase ledger**~~ — resolved, built session 2 (`/dashboards/upwork`, ADMIN-gated add/delete).
+2. **Social/Meta Ads → Lead linkage**: still open — worth building now (real scope: webhook or manual "convert to lead" linking), or accept those funnels stop at raw channel metrics for now?
+3. **Audit log coverage**: still open — Phase 10 needs `auditLog.write()` added at many currently-silent endpoints — confirm this is in scope before starting, since it touches many existing files across leads/campaigns/email-accounts/upwork/meta-ads modules.
 4. **Email team attribution**: which user should get credit for a sent campaign's performance — the lead's `uploadedByUserId`, or a new explicit "campaign owner" concept?

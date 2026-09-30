@@ -26,5 +26,10 @@ import { MetaAdsTokenRefreshWorker } from "./meta-ads-token-refresh.worker";
     MetaAdsTokenRefreshQueue,
     MetaAdsTokenRefreshWorker,
   ],
+  // MetaAdsAnalyticsService is reused by DashboardCenterModule's Executive
+  // Overview (Part: Dashboard Center, 2026-09-30) to sum spend/leads across
+  // every connected account rather than duplicating the insight-aggregation
+  // logic there.
+  exports: [MetaAdsAnalyticsService],
 })
 export class MetaAdsModule {}

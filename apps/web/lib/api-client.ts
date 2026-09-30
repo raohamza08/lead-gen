@@ -632,6 +632,8 @@ export const api = {
     request(`/meta-ads/accounts/${accountId}/ads?${new URLSearchParams(params).toString()}`),
 
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
+  getDashboardOverview: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/overview?${new URLSearchParams(params).toString()}`),
   getDashboardLeadsKpis: (params: Record<string, string> = {}) =>
     request(`/dashboard-center/leads/kpis?${new URLSearchParams(params).toString()}`),
   getDashboardLeadsSources: (params: Record<string, string> = {}) =>
