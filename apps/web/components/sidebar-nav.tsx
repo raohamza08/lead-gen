@@ -19,16 +19,22 @@ interface NavLink {
    *  Inbox. Omitted for links with no meaningful unread count (Leads,
    *  Follow-ups, Sent, Settings). */
   countKey?: "unread" | "important" | "ignored";
+  /** Nested links shown in a collapsible sub-list under this one (Part:
+   *  Social Media nav reorg, 2026-09-30) — e.g. "Accounts" expands to the
+   *  individual platform pages. Clicking the row itself still navigates to
+   *  `href`; a separate chevron toggles the sub-list open/closed. Not
+   *  rendered in icons-only (compact) mode, same as group headers aren't. */
+  children?: { href: string; label: string }[];
 }
 
 type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess" | "metaAdsAccess";
 
 type NavItem =
   // moduleFlag accepts an array for OR semantics (Part: narrow Social Inbox
-  // + Engagement-only access, 2026-09-07) -- Social Inbox/Engagement show
-  // for someone with EITHER the broad Social Media grant or just the narrow
-  // Engagement-only one, matching ModuleAccessGuard's own OR handling for
-  // an array passed to @RequiresModule.
+  // + Engagement-only access, 2026-09-07), matching ModuleAccessGuard's own
+  // OR handling for an array passed to @RequiresModule -- no current
+  // top-level entry uses more than one flag, but the guard/backend still
+  // supports it for a future narrow-access grant.
   | { type: "link"; href: string; label: string; moduleFlag?: ModuleFlag | ModuleFlag[]; requiresPrimaryAdmin?: boolean }
   | { type: "group"; label: string; links: NavLink[] };
 
@@ -74,7 +80,6 @@ const NAV: NavItem[] = [
       { href: "/settings/email-hub", label: "Settings" },
     ],
   },
-  { type: "link", href: "/social-inbox", label: "Social Inbox", moduleFlag: ["socialMediaAccess", "socialEngagementAccess"] },
   // Engagement (Social Engagement Center) nav entry intentionally removed
   // (2026-09-30) -- no current requirement; the page/backend/sync worker
   // are untouched, just not linked, so re-adding this one line reconnects
@@ -83,12 +88,24 @@ const NAV: NavItem[] = [
     type: "group",
     label: "Social Media",
     links: [
-      { href: "/social-media/accounts", label: "Accounts" },
-      { href: "/social-media/linkedin", label: "LinkedIn" },
-      { href: "/social-media/instagram", label: "Instagram" },
-      { href: "/social-media/facebook", label: "Facebook" },
-      { href: "/social-media/whatsapp", label: "WhatsApp" },
-      { href: "/social-media/x", label: "X" },
+      // Social Inbox moved in from a standalone top-level entry (Part:
+      // Social Media nav reorg, 2026-09-30) -- now gated by this group's own
+      // socialMediaAccess flag like everything else here, rather than its
+      // own separate moduleFlag check.
+      { href: "/social-inbox", label: "Social Inbox" },
+      // LinkedIn/Instagram/Facebook/WhatsApp collapsed into a sub-list under
+      // Accounts (Part: Social Media nav reorg, 2026-09-30); X removed from
+      // nav entirely -- its page/provider are untouched, just not linked.
+      {
+        href: "/social-media/accounts",
+        label: "Accounts",
+        children: [
+          { href: "/social-media/linkedin", label: "LinkedIn" },
+          { href: "/social-media/instagram", label: "Instagram" },
+          { href: "/social-media/facebook", label: "Facebook" },
+          { href: "/social-media/whatsapp", label: "WhatsApp" },
+        ],
+      },
       { href: "/social-media/calendar", label: "Calendar" },
       { href: "/social-media/analytics", label: "Analytics" },
       { href: "/social-media/automations", label: "Automations" },
@@ -220,11 +237,30 @@ export function SidebarNav({
 
   // Auto-expand whichever group contains the current page, so a direct link
   // or refresh never lands on a page whose group looks collapsed/unselected.
+  // A link with children counts as "containing" the current page if either
+  // the link itself or one of its children matches.
   const [groupCollapsed, setGroupCollapsed] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
     for (const item of NAV) {
       if (item.type === "group") {
-        initial[item.label] = !item.links.some((l) => isActive(pathname, search, l));
+        initial[item.label] = !item.links.some(
+          (l) => isActive(pathname, search, l) || l.children?.some((c) => isActive(pathname, search, c)),
+        );
+      }
+    }
+    return initial;
+  });
+
+  // Which links-with-children sub-lists are expanded (Part: Social Media nav
+  // reorg, 2026-09-30) -- e.g. "Accounts" expanding to show LinkedIn/
+  // Instagram/Facebook/WhatsApp. Keyed by the parent link's href, same
+  // auto-expand-if-active reasoning as groupCollapsed above.
+  const [expandedLinks, setExpandedLinks] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {};
+    for (const item of NAV) {
+      if (item.type !== "group") continue;
+      for (const link of item.links) {
+        if (link.children) initial[link.href] = link.children.some((c) => isActive(pathname, search, c));
       }
     }
     return initial;
@@ -295,15 +331,14 @@ export function SidebarNav({
                   {item.links.map((link) => {
                     const active = isActive(pathname, search, link);
                     const count = link.countKey ? stats?.[link.countKey] ?? 0 : 0;
-                    return (
+                    const linkEl = (
                       <Link
-                        key={link.href}
                         href={link.href}
                         onClick={onNavigate}
                         aria-current={active ? "page" : undefined}
                         title={compact ? link.label : undefined}
                         className={`flex items-center justify-between rounded-lg text-sm transition-colors duration-fast ${
-                          compact ? "justify-center px-2 py-2" : "px-3 py-1.5"
+                          compact ? "justify-center px-2 py-2" : "flex-1 px-3 py-1.5"
                         } ${active ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
                       >
                         {compact ? (
@@ -325,6 +360,54 @@ export function SidebarNav({
                           </>
                         )}
                       </Link>
+                    );
+
+                    // Sub-list (e.g. Accounts -> LinkedIn/Instagram/Facebook/
+                    // WhatsApp) — not shown in compact mode, same as group
+                    // headers aren't, to keep icons-only mode from getting
+                    // cluttered with a second level of nesting.
+                    if (!link.children || compact) {
+                      return <div key={link.href}>{linkEl}</div>;
+                    }
+
+                    const childOpen = Boolean(expandedLinks[link.href]);
+                    return (
+                      <div key={link.href} className="flex flex-col">
+                        <div className="flex items-center">
+                          {linkEl}
+                          <button
+                            type="button"
+                            onClick={() => setExpandedLinks((e) => ({ ...e, [link.href]: !e[link.href] }))}
+                            aria-expanded={childOpen}
+                            aria-label={`${childOpen ? "Collapse" : "Expand"} ${link.label}`}
+                            className="flex items-center justify-center rounded-lg px-2 py-1.5 text-ink/50 transition-colors duration-fast hover:bg-ink/5 hover:text-ink/80"
+                          >
+                            <span aria-hidden className={`transition-transform duration-fast ${childOpen ? "rotate-90" : ""}`}>
+                              ›
+                            </span>
+                          </button>
+                        </div>
+                        {childOpen && (
+                          <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
+                            {link.children.map((child) => {
+                              const childActive = isActive(pathname, search, child);
+                              return (
+                                <Link
+                                  key={child.href}
+                                  href={child.href}
+                                  onClick={onNavigate}
+                                  aria-current={childActive ? "page" : undefined}
+                                  className={`rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
+                                    childActive ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                                  }`}
+                                >
+                                  {child.label}
+                                </Link>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
