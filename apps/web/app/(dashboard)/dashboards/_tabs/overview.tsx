@@ -23,12 +23,11 @@ interface OverviewSummary {
 /** Every Overview tile is a rollup already broken down in full on its own
  *  dashboard tab — the drill-down here jumps to that tab rather than
  *  duplicating the breakdown (Part: Dashboard Center, 2026-09-30). */
-function SeeFullDashboard({ tab, label, external }: { tab: string; label: string; external?: boolean }) {
-  const href = external ? tab : `/dashboards?tab=${tab}`;
+function SeeFullDashboard({ tab, label }: { tab: string; label: string }) {
   return (
     <div className="flex flex-col gap-3 text-sm">
       <p className="text-ink/70">This is a rollup computed the same way as the full {label} dashboard.</p>
-      <a href={href} className="text-sm text-accent hover:underline">
+      <a href={`/dashboards?tab=${tab}`} className="text-sm text-accent hover:underline">
         Open {label} dashboard →
       </a>
     </div>
@@ -119,11 +118,11 @@ export function OverviewTab() {
                     <StatTile
                       label="Spend"
                       value={s.metaAds.mixedCurrencies ? "Mixed currencies" : money(s.metaAds.spend, s.metaAds.currency)}
-                      hint={s.metaAds.mixedCurrencies ? "Connected accounts bill in different currencies — see /meta-ads per account" : undefined}
-                      detail={<SeeFullDashboard tab="/meta-ads" label="Meta Ads" external />}
+                      hint={s.metaAds.mixedCurrencies ? "Connected accounts bill in different currencies — see the Meta Ads tab per account" : undefined}
+                      detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />}
                     />
-                    <StatTile label="Leads" value={num(s.metaAds.leads)} detail={<SeeFullDashboard tab="/meta-ads" label="Meta Ads" external />} />
-                    <StatTile label="Connected Accounts" value={num(s.metaAds.accountCount)} detail={<SeeFullDashboard tab="/meta-ads" label="Meta Ads" external />} />
+                    <StatTile label="Leads" value={num(s.metaAds.leads)} detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />} />
+                    <StatTile label="Connected Accounts" value={num(s.metaAds.accountCount)} detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />} />
                   </div>
                 </>
               ) : (

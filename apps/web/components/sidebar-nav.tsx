@@ -132,7 +132,10 @@ const NAV: NavItem[] = [
     type: "group",
     label: "Meta Ads",
     links: [
-      { href: "/meta-ads", label: "Overview" },
+      // Overview moved into the Dashboard Center's own Meta Ads tab (Part:
+      // Dashboard Center tab consolidation, 2026-09-30) — reach it from
+      // there now, not a separate entry here. Campaigns/Ad Sets/Ads
+      // drill-down and Settings are unaffected.
       { href: "/meta-ads/campaigns", label: "Campaigns" },
       { href: "/meta-ads/adsets", label: "Ad Sets" },
       { href: "/meta-ads/ads", label: "Ads" },

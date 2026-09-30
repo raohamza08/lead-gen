@@ -9,6 +9,7 @@ import { EmailTab } from "./_tabs/email";
 import { InboxTab } from "./_tabs/inbox";
 import { SocialTab } from "./_tabs/social";
 import { UpworkTab } from "./_tabs/upwork";
+import { MetaAdsTab } from "./_tabs/meta-ads";
 import { PipelineTab } from "./_tabs/pipeline";
 import { TeamTab } from "./_tabs/team";
 import { ActivityTab } from "./_tabs/activity";
@@ -21,10 +22,11 @@ const TAB_DEFS: { value: string; label: string }[] = [
   { value: "inbox", label: "Unified Inbox" },
   { value: "social", label: "Social Inbox" },
   { value: "upwork", label: "Upwork" },
-  // Meta Ads has its own real, already-built dashboard with sub-pages
-  // (Campaigns/Ad Sets/Ads) — this tab navigates there rather than
-  // duplicating it inline, same "no duplicate" decision made in Phase 1
-  // (Part: Dashboard Center, 2026-09-30).
+  // Embedded inline, same as every other tab (Part: Dashboard Center tab
+  // consolidation, 2026-09-30 — "remove the meta ads overview and just keep
+  // its dashboard in the dashboard center"). Campaigns/Ad Sets/Ads
+  // drill-down pages and Settings stay separate real pages under the
+  // sidebar's own Meta Ads group; only the Overview-level charts moved here.
   { value: "meta-ads", label: "Meta Ads" },
   { value: "pipeline", label: "Pipeline" },
   { value: "team", label: "Team Performance" },
@@ -51,10 +53,6 @@ function DashboardCenterTabs() {
   const tab = searchParams.get("tab") ?? DEFAULT_TAB;
 
   function selectTab(value: string) {
-    if (value === "meta-ads") {
-      router.push("/meta-ads");
-      return;
-    }
     router.push(`/dashboards?tab=${value}`);
   }
 
@@ -66,7 +64,7 @@ function DashboardCenterTabs() {
       </div>
 
       <div className="overflow-x-auto pb-1">
-        <Tabs value={tab === "meta-ads" ? "" : tab} onValueChange={selectTab} tabs={TAB_DEFS} />
+        <Tabs value={tab} onValueChange={selectTab} tabs={TAB_DEFS} />
       </div>
 
       {tab === "overview" && <OverviewTab />}
@@ -75,6 +73,7 @@ function DashboardCenterTabs() {
       {tab === "inbox" && <InboxTab />}
       {tab === "social" && <SocialTab />}
       {tab === "upwork" && <UpworkTab />}
+      {tab === "meta-ads" && <MetaAdsTab />}
       {tab === "pipeline" && <PipelineTab />}
       {tab === "team" && <TeamTab />}
       {tab === "activity" && <ActivityTab />}

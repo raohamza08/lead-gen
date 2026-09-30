@@ -123,7 +123,7 @@ export default function MetaAdsSettingsPage() {
           </div>
           <p className="mt-0.5 text-xs text-ink/50">
             Connect the Meta ad account(s) you want reported in{" "}
-            <a href="/meta-ads" className="text-accent hover:underline">
+            <a href="/dashboards?tab=meta-ads" className="text-accent hover:underline">
               Meta Ads
             </a>
             . Read-only — this never posts or changes anything in your ad account.
