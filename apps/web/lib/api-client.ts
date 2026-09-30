@@ -370,6 +370,8 @@ export const api = {
   updateUpworkProposal: (id: string, body: Record<string, unknown>) =>
     request(`/upwork/proposals/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteUpworkProposal: (id: string) => request(`/upwork/proposals/${id}`, { method: "DELETE" }),
+  setUpworkNotifyRecipients: (id: string, body: { userIds: string[]; notifyNow?: boolean }) =>
+    request(`/upwork/proposals/${id}/notify-recipients`, { method: "PATCH", body: JSON.stringify(body) }),
   getCaseStudies: () => request("/settings/case-studies"),
   createCaseStudy: (body: { title?: string; rawStory: string; submittedIndustry: string }) =>
     request("/settings/case-studies", { method: "POST", body: JSON.stringify(body) }),
@@ -675,6 +677,14 @@ export const api = {
     request("/dashboard-center/upwork/connect-purchases", { method: "POST", body: JSON.stringify(body) }),
   deleteDashboardUpworkConnectPurchase: (id: string) =>
     request(`/dashboard-center/upwork/connect-purchases/${id}`, { method: "DELETE" }),
+  importDashboardUpworkConnectPurchases: (csv: string) =>
+    request("/dashboard-center/upwork/connect-purchases/import", { method: "POST", body: JSON.stringify({ csv }) }) as Promise<{
+      rowsInFile: number;
+      connectRowsFound: number;
+      imported: number;
+      alreadyImported: number;
+      skipped: { row: number; reason: string }[];
+    }>,
 
   getDashboardPipelineFunnel: () => request("/dashboard-center/pipeline/funnel"),
   getDashboardPipelineStageTiming: () => request("/dashboard-center/pipeline/stage-timing"),

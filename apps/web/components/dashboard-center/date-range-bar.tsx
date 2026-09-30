@@ -17,11 +17,14 @@ export type DashboardDateRangeName =
   | "THIS_YEAR"
   | "CUSTOM";
 
+export type CompareMode = "last_month" | "previous_period";
+
 export interface DashboardDateRange {
   range: DashboardDateRangeName;
   from: string; // YYYY-MM-DD, only meaningful when range === "CUSTOM"
   to: string;
   compare: boolean;
+  compareMode: CompareMode;
 }
 
 const PRESETS: { value: DashboardDateRangeName; label: string }[] = [
@@ -40,24 +43,34 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Comparison is ON by default, against last calendar month (Part: Dashboard
+ *  Center, 2026-09-30 fix — "the previous period must be selected by the
+ *  user, otherwise auto set to last month"). The backend's own default
+ *  matches this independently (see resolveDashboardRange), so a plain page
+ *  load and an explicit "Last month" selection are indistinguishable. */
 export function defaultDashboardDateRange(): DashboardDateRange {
   const to = new Date();
   const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-  return { range: "LAST_30_DAYS", from: isoDate(from), to: isoDate(to), compare: false };
+  return { range: "LAST_30_DAYS", from: isoDate(from), to: isoDate(to), compare: true, compareMode: "last_month" };
 }
 
-/** Turns the shared date-range control into the {range, from, to, compare}
- *  query params every /dashboard-center/* endpoint accepts (Part:
- *  Dashboard Center) — from/to are only meaningful (and only sent) when
- *  range === "CUSTOM", mirroring resolveDateRange's own CUSTOM handling on
- *  the API side. */
+/** Turns the shared date-range control into the {range, from, to, compare,
+ *  compareMode} query params every /dashboard-center/* endpoint accepts
+ *  (Part: Dashboard Center) — from/to are only meaningful (and only sent)
+ *  when range === "CUSTOM", mirroring resolveDateRange's own CUSTOM
+ *  handling on the API side. `compare` is only sent when explicitly turned
+ *  off, since the backend already defaults to comparing against last month. */
 export function dashboardRangeToQuery(range: DashboardDateRange): Record<string, string> {
   const params: Record<string, string> = { range: range.range };
   if (range.range === "CUSTOM") {
     params.from = range.from;
     params.to = range.to;
   }
-  if (range.compare) params.compare = "true";
+  if (!range.compare) {
+    params.compare = "false";
+  } else {
+    params.compareMode = range.compareMode;
+  }
   return params;
 }
 
@@ -105,8 +118,18 @@ export function DashboardDateRangeBar({
       )}
       <label className="flex items-center gap-1.5 text-xs text-ink/60">
         <input type="checkbox" checked={value.compare} onChange={(e) => onChange({ ...value, compare: e.target.checked })} />
-        Compare to previous period
+        Compare to
       </label>
+      {value.compare && (
+        <select
+          value={value.compareMode}
+          onChange={(e) => onChange({ ...value, compareMode: e.target.value as CompareMode })}
+          className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
+        >
+          <option value="last_month">Last month</option>
+          <option value="previous_period">Previous period (equal length)</option>
+        </select>
+      )}
     </div>
   );
 }

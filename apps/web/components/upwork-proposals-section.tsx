@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api-client";
+import { api, getCurrentUser } from "../lib/api-client";
 import { DataTable, type TableColumn } from "./chart-kit";
 import { UpworkPicklistManager } from "./upwork-picklist-manager";
+import { Modal } from "./ui/modal";
+import { Button } from "./ui/button";
 
 export type UpworkProposalType = "BIDDING" | "INVITE";
 type UpworkProposalStatus = "SUBMITTED" | "VIEWED" | "ACCEPTED" | "IN_DISCUSSION" | "FOLLOW_UP_1" | "FOLLOW_UP_2" | "WON" | "LOST";
@@ -25,6 +27,14 @@ interface UpworkProposal {
   status: UpworkProposalStatus;
   closedBy: string | null;
   createdAt: string;
+  acceptedAt: string | null;
+  notifyUserIds: string[];
+}
+
+interface OrgUser {
+  id: string;
+  name: string;
+  active: boolean;
 }
 
 const STATUS_OPTIONS: { value: UpworkProposalStatus; label: string }[] = [
@@ -67,6 +77,7 @@ const labelClass = "mb-1 block text-xs text-ink/60";
 const PAGE_SIZE = 100;
 
 export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [items, setItems] = useState<UpworkProposal[] | null>(null);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -77,6 +88,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [followUpTarget, setFollowUpTarget] = useState<UpworkProposal | null>(null);
 
   const [profileName, setProfileName] = useState("");
   const [jobCategory, setJobCategory] = useState("");
@@ -181,7 +193,11 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
     ...(type === "BIDDING"
       ? [{ key: "connects", header: "Connects", numeric: true, render: (r: UpworkProposal) => r.connects ?? "—" } as TableColumn<UpworkProposal>]
       : []),
-    { key: "submittedBy", header: "Submitted by", render: (r) => r.submittedBy },
+    // Every invite is accepted by a real person before anything else happens
+    // to it — for this type, "Submitted by" IS "who accepted the invite",
+    // not a literal submission (Part: Upwork Invites, 2026-09-30), so the
+    // column header reflects that instead of reusing Bidding's wording.
+    { key: "submittedBy", header: type === "INVITE" ? "Accepted by" : "Submitted by", render: (r) => r.submittedBy },
     { key: "jobLink", header: "Job", render: (r) => (
       <a href={r.jobLink} target="_blank" rel="noreferrer" className="text-accent hover:underline">Open ↗</a>
     ) },
@@ -203,14 +219,44 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         className="w-28 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
       />
     ) },
-    { key: "closedBy", header: "Closed by", render: (r) => (
-      <input
-        defaultValue={r.closedBy ?? ""}
-        placeholder="—"
-        onBlur={(e) => { if (e.target.value !== (r.closedBy ?? "")) updateField(r.id, { closedBy: e.target.value || null }); }}
-        className="w-24 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
-      />
-    ) },
+    // Closed By is dropped for invites (Part: Upwork Invites, 2026-09-30) —
+    // Won/Lost is set from the Status dropdown above, which is the only
+    // place that should change it; a separate free-text "closed by" field
+    // was a second, untracked path to the same outcome. Still shown on
+    // Bidding, unchanged.
+    ...(type === "INVITE"
+      ? []
+      : [
+          {
+            key: "closedBy",
+            header: "Closed by",
+            render: (r: UpworkProposal) => (
+              <input
+                defaultValue={r.closedBy ?? ""}
+                placeholder="—"
+                onBlur={(e) => { if (e.target.value !== (r.closedBy ?? "")) updateField(r.id, { closedBy: e.target.value || null }); }}
+                className="w-24 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
+              />
+            ),
+          } as TableColumn<UpworkProposal>,
+        ]),
+    // Follow-up reminders are invite-only and admin-only (Part: Upwork
+    // follow-up reminders, 2026-09-30) — the automatic 2-day nudge only
+    // ever applies once an invite is ACCEPTED, and choosing who gets
+    // pinged about a client relationship is an org-level call.
+    ...(type === "INVITE" && isAdmin
+      ? [
+          {
+            key: "followUp",
+            header: "Follow-up",
+            render: (r: UpworkProposal) => (
+              <button onClick={() => setFollowUpTarget(r)} className="text-xs text-accent hover:underline">
+                {r.notifyUserIds.length > 0 ? `${r.notifyUserIds.length} notified` : "Set reminder"}
+              </button>
+            ),
+          } as TableColumn<UpworkProposal>,
+        ]
+      : []),
     { key: "actions", header: "", render: (r) => (
       <button onClick={() => remove(r.id)} className="text-xs text-bad hover:underline">Delete</button>
     ) },
@@ -369,6 +415,89 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
           </div>
         </div>
       )}
+
+      {followUpTarget && (
+        <FollowUpRecipientsModal
+          proposal={followUpTarget}
+          onClose={() => setFollowUpTarget(null)}
+          onSaved={(updated) => {
+            setItems((prev) => prev?.map((p) => (p.id === updated.id ? { ...p, notifyUserIds: updated.notifyUserIds } : p)) ?? null);
+            setFollowUpTarget(null);
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * Who gets nudged to follow up on one accepted invite, and whether that
+ * nudge should fire immediately or wait for UpworkFollowUpReminderWorker's
+ * own 2-day cadence (Part: Upwork follow-up reminders, 2026-09-30 —
+ * "select the person to notify right now or later"). Recipients are saved
+ * wholesale, same pattern as UpworkPicklistManager.
+ */
+function FollowUpRecipientsModal({
+  proposal,
+  onClose,
+  onSaved,
+}: {
+  proposal: UpworkProposal;
+  onClose: () => void;
+  onSaved: (updated: { id: string; notifyUserIds: string[] }) => void;
+}) {
+  const { data: users } = useQuery({ queryKey: ["org-users-for-notify"], queryFn: () => api.getUsers() as Promise<OrgUser[]> });
+  const [selected, setSelected] = useState<string[]>(proposal.notifyUserIds);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function toggle(userId: string) {
+    setSelected((prev) => (prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]));
+  }
+
+  async function save(notifyNow: boolean) {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = (await api.setUpworkNotifyRecipients(proposal.id, { userIds: selected, notifyNow })) as {
+        id: string;
+        notifyUserIds: string[];
+      };
+      onSaved(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onOpenChange={(open) => !open && onClose()} title="Follow-up reminder" contentClassName="w-full max-w-sm">
+      <div className="flex flex-col gap-3 text-sm">
+        <p className="text-xs text-ink/55">
+          Choose who should be reminded to follow up on {proposal.clientName ?? "this client"}
+          {"'"}s invite if it stays Accepted with no status change. They{"'"}ll be nudged every 2 days automatically —
+          or notify them right now instead.
+        </p>
+        <div className="flex max-h-48 flex-col gap-1.5 overflow-y-auto rounded-lg border border-[var(--line)] p-2">
+          {(users ?? []).filter((u) => u.active).map((u) => (
+            <label key={u.id} className="flex items-center gap-2 text-xs">
+              <input type="checkbox" checked={selected.includes(u.id)} onChange={() => toggle(u.id)} />
+              {u.name}
+            </label>
+          ))}
+          {users && users.filter((u) => u.active).length === 0 && <p className="text-xs text-ink/45">No active team members.</p>}
+        </div>
+        {error && <span className="text-xs text-error">{error}</span>}
+        <div className="flex items-center gap-2">
+          <Button size="sm" disabled={saving || selected.length === 0} loading={saving} onClick={() => save(true)}>
+            Save &amp; notify now
+          </Button>
+          <Button size="sm" variant="secondary" disabled={saving} loading={saving} onClick={() => save(false)}>
+            Save for later
+          </Button>
+        </div>
+      </div>
+    </Modal>
   );
 }

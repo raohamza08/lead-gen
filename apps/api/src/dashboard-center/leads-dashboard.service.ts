@@ -35,16 +35,29 @@ export class LeadsDashboardService {
     };
   }
 
+  /**
+   * Every count here is scoped to the selected date range (Part: Dashboard
+   * Center, 2026-09-30 fix) — previously `totalLeads` and the rest of this
+   * KPI row counted org-wide, all-time totals while `getSourceBreakdown`/
+   * `getNicheBreakdown` below (rendered on the same page, under the same
+   * date-range bar) were already period-scoped. That mismatch is what made
+   * the page look like it was "counting leads wrong": e.g. the default
+   * Last 30 Days view showed "Total Leads: 645" next to a source-by-channel
+   * chart that only summed to 13. Scoping everything to one range fixes the
+   * inconsistency. The org-wide, all-time count is still available as
+   * `allTimeTotal`, clearly separate from the period figures.
+   */
   async getKpis(orgId: string, query: LeadsDashboardQuery) {
     const { current, previous } = resolveDashboardRange(query);
     const where = this.baseWhere(orgId, query);
+    const inRange = { ...where, createdAt: { gte: current.from, lte: current.to } };
 
     const countInRange = (from: Date, to: Date) => this.prisma.lead.count({ where: { ...where, createdAt: { gte: from, lte: to } } });
 
     const [
+      allTimeTotal,
       totalLeads,
-      newLeads,
-      previousNewLeads,
+      previousTotalLeads,
       qualified,
       converted,
       lost,
@@ -56,13 +69,13 @@ export class LeadsDashboardService {
       this.prisma.lead.count({ where }),
       countInRange(current.from, current.to),
       previous ? countInRange(previous.from, previous.to) : Promise.resolve(undefined),
-      this.prisma.lead.count({ where: { ...where, pipelineState: { stage: { in: QUALIFIED_STAGES } } } }),
-      this.prisma.lead.count({ where: { ...where, pipelineState: { stage: { in: CONVERTED_STAGES } } } }),
-      this.prisma.lead.count({ where: { ...where, pipelineState: { stage: { in: LOST_STAGES } } } }),
-      this.prisma.lead.count({ where: { ...where, possibleDuplicate: true } }),
-      this.prisma.lead.count({ where: { ...where, uploadedByUserId: null } }),
-      this.prisma.lead.count({ where: { ...where, filterId: null } }),
-      this.prisma.lead.count({ where: { ...where, pipelineState: null } }),
+      this.prisma.lead.count({ where: { ...inRange, pipelineState: { stage: { in: QUALIFIED_STAGES } } } }),
+      this.prisma.lead.count({ where: { ...inRange, pipelineState: { stage: { in: CONVERTED_STAGES } } } }),
+      this.prisma.lead.count({ where: { ...inRange, pipelineState: { stage: { in: LOST_STAGES } } } }),
+      this.prisma.lead.count({ where: { ...inRange, possibleDuplicate: true } }),
+      this.prisma.lead.count({ where: { ...inRange, uploadedByUserId: null } }),
+      this.prisma.lead.count({ where: { ...inRange, filterId: null } }),
+      this.prisma.lead.count({ where: { ...inRange, pipelineState: null } }),
     ]);
 
     const active = totalLeads - converted - lost;
@@ -70,9 +83,10 @@ export class LeadsDashboardService {
     return {
       range: { from: current.from, to: current.to },
       compareRange: previous ? { from: previous.from, to: previous.to } : null,
+      allTimeTotal,
       totalLeads,
-      newLeads,
-      newLeadsDeltaPct: previous ? percentDelta(newLeads, previousNewLeads) : null,
+      previousTotalLeads: previous ? previousTotalLeads : undefined,
+      totalLeadsDeltaPct: previous ? percentDelta(totalLeads, previousTotalLeads) : null,
       qualified,
       unqualified: totalLeads - qualified,
       active,

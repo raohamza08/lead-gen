@@ -8,6 +8,7 @@
  */
 
 import { ReactNode, useId, useState } from "react";
+import { Modal } from "./ui/modal";
 
 /**
  * The categorical palette, in fixed slot order. Assign by index and never
@@ -59,17 +60,42 @@ export function formatCompact(value: number): string {
   return value.toLocaleString();
 }
 
+/** Small four-corners icon for the SectionCard expand button — distinct from
+ *  Modal's own close X so the two are never confused mid-interaction. */
+function ExpandIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 16 16" aria-hidden>
+      <path
+        d="M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        fill="none"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function SectionCard({
   title,
   subtitle,
   actions,
+  expandable,
   children,
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  /** When true, an expand button renders the same content full-size inside
+   *  a modal (Part: Dashboard Center, 2026-09-30 — "each section must be
+   *  clickable and open a modal with the data"). Reuses the exact `children`
+   *  already being rendered inline, not a second fetch — both copies read
+   *  the same already-loaded query data. */
+  expandable?: boolean;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
   return (
     <section className="card p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -77,9 +103,28 @@ export function SectionCard({
           <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
           {subtitle ? <p className="mt-0.5 text-xs text-ink/55">{subtitle}</p> : null}
         </div>
-        {actions}
+        <div className="flex items-center gap-2">
+          {actions}
+          {expandable && (
+            <button
+              type="button"
+              onClick={() => setOpen(true)}
+              title="Expand"
+              aria-label={`Expand ${title}`}
+              className="rounded-md border border-[var(--line)] p-1.5 text-ink/60 transition-colors hover:bg-ink/5"
+            >
+              <ExpandIcon />
+            </button>
+          )}
+        </div>
       </div>
       {children}
+      {expandable && (
+        <Modal open={open} onOpenChange={setOpen} title={title} contentClassName="w-full max-w-4xl">
+          {subtitle ? <p className="mb-4 text-xs text-ink/55">{subtitle}</p> : null}
+          {children}
+        </Modal>
+      )}
     </section>
   );
 }
@@ -155,12 +200,14 @@ export function ChartWithTable({
   title,
   subtitle,
   actions,
+  expandable,
   chart,
   table,
 }: {
   title: string;
   subtitle?: string;
   actions?: ReactNode;
+  expandable?: boolean;
   chart: ReactNode;
   table: ReactNode;
 }) {
@@ -171,6 +218,7 @@ export function ChartWithTable({
     <SectionCard
       title={title}
       subtitle={subtitle}
+      expandable={expandable}
       actions={
         <div className="flex items-center gap-2">
           {actions}
@@ -228,14 +276,24 @@ export function StatTile({
   tone,
   onClick,
   active,
+  detail,
 }: {
   label: string;
   value: string | number;
-  hint?: string;
+  /** Plain string for a static note, or a ReactNode (e.g. ComparisonHint)
+   *  for a colored period-over-period comparison. */
+  hint?: ReactNode;
   tone?: "good" | "bad" | "gold";
   onClick?: () => void;
   active?: boolean;
+  /** When given (and `onClick` isn't), the tile becomes clickable and opens
+   *  a modal showing this content — typically the raw numbers/definition
+   *  behind the value (Part: Dashboard Center, 2026-09-30 — "each tile that
+   *  shows a value must be clickable and open a modal with the data"). Uses
+   *  data already on the page, no extra fetch. */
+  detail?: ReactNode;
 }) {
+  const [open, setOpen] = useState(false);
   const toneClass =
     tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "gold" ? "text-gold" : "text-ink";
   const body = (
@@ -246,19 +304,26 @@ export function StatTile({
       {hint ? <div className="mt-0.5 text-[11px] text-ink/45">{hint}</div> : null}
     </>
   );
-  if (!onClick) {
+  if (!onClick && !detail) {
     return <div className="card card-interactive px-3.5 py-3">{body}</div>;
   }
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      className={`card card-interactive w-full px-3.5 py-3 text-left transition-shadow ${
-        active ? "ring-2 ring-[var(--accent)]" : ""
-      }`}
-    >
-      {body}
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={onClick ?? (() => setOpen(true))}
+        aria-pressed={onClick ? active : undefined}
+        className={`card card-interactive w-full px-3.5 py-3 text-left transition-shadow ${
+          active ? "ring-2 ring-[var(--accent)]" : ""
+        }`}
+      >
+        {body}
+      </button>
+      {detail && (
+        <Modal open={open} onOpenChange={setOpen} title={label} contentClassName="w-full max-w-lg">
+          {detail}
+        </Modal>
+      )}
+    </>
   );
 }

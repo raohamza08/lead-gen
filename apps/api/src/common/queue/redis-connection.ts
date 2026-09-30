@@ -90,4 +90,9 @@ export const QUEUE_NAMES = {
   // expiry (Part: Meta Ads module, 2026-09-30) -- see
   // meta-ads-token-refresh.worker.ts.
   META_ADS_TOKEN_REFRESH: "meta-ads-token-refresh",
+  // Every 2 days, nudges an Upwork invite's admin-picked recipients to
+  // follow up if it's sat ACCEPTED with no further status change (Part:
+  // Upwork follow-up reminders, 2026-09-30) -- see
+  // upwork-follow-up-reminder.worker.ts.
+  UPWORK_FOLLOW_UP_REMINDER: "upwork-follow-up-reminder",
 } as const;

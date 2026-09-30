@@ -5,23 +5,33 @@ import { api } from "../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../components/dashboard-center/date-range-bar";
 import { num, pct, money } from "../../../components/dashboard-center/format";
+import { ComparisonHint } from "../../../components/dashboard-center/metric-detail";
 import { SectionCard, StatTile } from "../../../components/chart-kit";
 import { ErrorState } from "../../../components/ui/error-state";
 import { SkeletonCard } from "../../../components/ui/skeleton";
 
 interface OverviewSummary {
-  leads: { total: number; newLeads: number; newLeadsDeltaPct: number | null; conversionRate?: number };
+  leads: { total: number; newLeads: number; previousTotalLeads?: number; newLeadsDeltaPct: number | null; conversionRate?: number };
   email: { sent: number; openRate: number; replyRate: number; bounced: number };
   social: { totalConversations: number; responseRate?: number };
-  upwork: { totalBids: number; clientsWon: number; conversionRate?: number; connectCostAvailable: boolean; connectCost?: number };
+  upwork: { totalBids: number; clientsWon: number; conversionRate?: number; connectCostBasis: "actual_purchases" | "flat_rate_estimate"; connectCost?: number };
   pipeline: { total: number; won: number; lost: number; conversionRate?: number };
   team: { activeMembers: number };
-  metaAds: { connected: boolean; accountCount: number; spend?: number; leads?: number };
+  metaAds: { connected: boolean; accountCount: number; spend?: number; leads?: number; currency?: string; mixedCurrencies?: boolean };
 }
 
-function deltaHint(pctVal: number | null | undefined): string | undefined {
-  if (pctVal === null || pctVal === undefined) return undefined;
-  return `${pctVal > 0 ? "↑" : "↓"} ${Math.abs(pctVal).toFixed(1)}% vs previous period`;
+/** Every Overview tile is a rollup already broken down in full on its own
+ *  dashboard page — the drill-down here is a pointer there rather than a
+ *  duplicated breakdown (Part: Dashboard Center, 2026-09-30). */
+function SeeFullDashboard({ href, label }: { href: string; label: string }) {
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p className="text-ink/70">This is a rollup computed the same way as the full {label} dashboard.</p>
+      <a href={href} className="text-sm text-accent hover:underline">
+        Open {label} dashboard →
+      </a>
+    </div>
+  );
 }
 
 /**
@@ -48,58 +58,72 @@ export default function ExecutiveDashboardPage() {
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => summaryQuery.refetch()}
+      refreshing={summaryQuery.isFetching}
     >
       {summaryQuery.isLoading && <SkeletonCard className="h-64" />}
       {summaryQuery.error && <ErrorState message={(summaryQuery.error as Error).message} onRetry={() => summaryQuery.refetch()} />}
 
       {s && (
         <>
-          <SectionCard title="Leads">
+          <SectionCard title="Leads" expandable>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile label="Total Leads" value={num(s.leads.total)} />
-              <StatTile label="New This Period" value={num(s.leads.newLeads)} hint={deltaHint(s.leads.newLeadsDeltaPct)} />
-              <StatTile label="Conversion Rate" value={pct(s.leads.conversionRate)} />
-              <StatTile label="Active in Pipeline" value={num(s.pipeline.total)} />
+              <StatTile label="Total Leads" value={num(s.leads.total)} detail={<SeeFullDashboard href="/dashboards/leads" label="Leads" />} />
+              <StatTile
+                label="New This Period"
+                value={num(s.leads.newLeads)}
+                hint={<ComparisonHint deltaPct={s.leads.newLeadsDeltaPct} previousValue={s.leads.previousTotalLeads !== undefined ? num(s.leads.previousTotalLeads) : undefined} />}
+                detail={<SeeFullDashboard href="/dashboards/leads" label="Leads" />}
+              />
+              <StatTile label="Conversion Rate" value={pct(s.leads.conversionRate)} detail={<SeeFullDashboard href="/dashboards/leads" label="Leads" />} />
+              <StatTile label="Active in Pipeline" value={num(s.pipeline.total)} detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
             </div>
           </SectionCard>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard title="Email">
+            <SectionCard title="Email" expandable>
               <div className="grid grid-cols-2 gap-3">
-                <StatTile label="Sent" value={num(s.email.sent)} />
-                <StatTile label="Open Rate" value={pct(s.email.openRate)} />
-                <StatTile label="Reply Rate" value={pct(s.email.replyRate)} />
-                <StatTile label="Bounced" value={num(s.email.bounced)} tone="bad" />
+                <StatTile label="Sent" value={num(s.email.sent)} detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
+                <StatTile label="Open Rate" value={pct(s.email.openRate)} detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
+                <StatTile label="Reply Rate" value={pct(s.email.replyRate)} detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
+                <StatTile label="Bounced" value={num(s.email.bounced)} tone="bad" detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
               </div>
             </SectionCard>
 
-            <SectionCard title="Social Inbox">
+            <SectionCard title="Social Inbox" expandable>
               <div className="grid grid-cols-2 gap-3">
-                <StatTile label="Conversations" value={num(s.social.totalConversations)} />
-                <StatTile label="Response Rate" value={pct(s.social.responseRate)} />
+                <StatTile label="Conversations" value={num(s.social.totalConversations)} detail={<SeeFullDashboard href="/dashboards/social" label="Social Inbox" />} />
+                <StatTile label="Response Rate" value={pct(s.social.responseRate)} detail={<SeeFullDashboard href="/dashboards/social" label="Social Inbox" />} />
               </div>
             </SectionCard>
 
-            <SectionCard title="Upwork">
+            <SectionCard title="Upwork" expandable>
               <div className="grid grid-cols-2 gap-3">
-                <StatTile label="Total Bids" value={num(s.upwork.totalBids)} />
-                <StatTile label="Clients Won" value={num(s.upwork.clientsWon)} tone="good" />
-                <StatTile label="Conversion Rate" value={pct(s.upwork.conversionRate)} />
+                <StatTile label="Total Bids" value={num(s.upwork.totalBids)} detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />} />
+                <StatTile label="Clients Won" value={num(s.upwork.clientsWon)} tone="good" detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />} />
+                <StatTile label="Conversion Rate" value={pct(s.upwork.conversionRate)} detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />} />
                 <StatTile
                   label="Connect Cost"
-                  value={s.upwork.connectCostAvailable ? money(s.upwork.connectCost) : "Unavailable"}
-                  hint={!s.upwork.connectCostAvailable ? "No connect purchases on record" : undefined}
+                  value={money(s.upwork.connectCost)}
+                  hint={s.upwork.connectCostBasis === "flat_rate_estimate" ? "Estimated at $0.15/connect" : undefined}
+                  detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />}
                 />
               </div>
             </SectionCard>
 
-            <SectionCard title="Meta Ads">
+            <SectionCard title="Meta Ads" expandable>
               {s.metaAds.connected ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <StatTile label="Spend" value={money(s.metaAds.spend)} />
-                  <StatTile label="Leads" value={num(s.metaAds.leads)} />
-                  <StatTile label="Connected Accounts" value={num(s.metaAds.accountCount)} />
-                </div>
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatTile
+                      label="Spend"
+                      value={s.metaAds.mixedCurrencies ? "Mixed currencies" : money(s.metaAds.spend, s.metaAds.currency)}
+                      hint={s.metaAds.mixedCurrencies ? "Connected accounts bill in different currencies — see /meta-ads per account" : undefined}
+                      detail={<SeeFullDashboard href="/meta-ads" label="Meta Ads" />}
+                    />
+                    <StatTile label="Leads" value={num(s.metaAds.leads)} detail={<SeeFullDashboard href="/meta-ads" label="Meta Ads" />} />
+                    <StatTile label="Connected Accounts" value={num(s.metaAds.accountCount)} detail={<SeeFullDashboard href="/meta-ads" label="Meta Ads" />} />
+                  </div>
+                </>
               ) : (
                 <p className="py-4 text-center text-xs text-ink/45">
                   No Meta Ads account connected. <a href="/settings/meta-ads" className="text-accent hover:underline">Connect one</a> to see spend and lead data here.
@@ -108,12 +132,12 @@ export default function ExecutiveDashboardPage() {
             </SectionCard>
           </div>
 
-          <SectionCard title="Pipeline & Team">
+          <SectionCard title="Pipeline & Team" expandable>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile label="Won" value={num(s.pipeline.won)} tone="good" />
-              <StatTile label="Lost" value={num(s.pipeline.lost)} tone="bad" />
-              <StatTile label="Pipeline Conv. Rate" value={pct(s.pipeline.conversionRate)} />
-              <StatTile label="Active Team Members" value={num(s.team.activeMembers)} />
+              <StatTile label="Won" value={num(s.pipeline.won)} tone="good" detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
+              <StatTile label="Lost" value={num(s.pipeline.lost)} tone="bad" detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
+              <StatTile label="Pipeline Conv. Rate" value={pct(s.pipeline.conversionRate)} detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
+              <StatTile label="Active Team Members" value={num(s.team.activeMembers)} detail={<SeeFullDashboard href="/dashboards/team" label="Team Performance" />} />
             </div>
           </SectionCard>
         </>

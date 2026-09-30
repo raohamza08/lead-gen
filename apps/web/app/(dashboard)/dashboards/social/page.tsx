@@ -5,6 +5,7 @@ import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
+import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
 import { DataTable, SectionCard, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
@@ -12,6 +13,8 @@ import { EmptyState } from "../../../../components/ui/empty-state";
 
 interface SocialKpis {
   totalConversations: number;
+  previousTotalConversations?: number;
+  totalConversationsDeltaPct: number | null;
   unreadConversations: number;
   repliedConversations: number;
   pendingConversations: number;
@@ -64,6 +67,7 @@ export default function SocialDashboardPage() {
         platformsQuery.refetch();
         teamQuery.refetch();
       }}
+      refreshing={kpisQuery.isFetching || platformsQuery.isFetching || teamQuery.isFetching}
     >
       {kpisQuery.isLoading && <SkeletonCard className="h-32" />}
       {kpisQuery.error && <ErrorState message={(kpisQuery.error as Error).message} onRetry={() => kpisQuery.refetch()} />}
@@ -71,12 +75,37 @@ export default function SocialDashboardPage() {
       {kpis && (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <StatTile label="Conversations" value={num(kpis.totalConversations)} />
-            <StatTile label="Unread" value={num(kpis.unreadConversations)} />
-            <StatTile label="Replied (Closed)" value={num(kpis.repliedConversations)} />
-            <StatTile label="Pending" value={num(kpis.pendingConversations)} />
-            <StatTile label="Response Rate" value={pct(kpis.responseRate)} />
-            <StatTile label="Avg. Response Time" value={minutes(kpis.avgResponseMinutes)} />
+            <StatTile
+              label="Conversations"
+              value={num(kpis.totalConversations)}
+              hint={<ComparisonHint deltaPct={kpis.totalConversationsDeltaPct} previousValue={kpis.previousTotalConversations !== undefined ? num(kpis.previousTotalConversations) : undefined} />}
+              detail={<MetricDetail definition="Social conversations with activity in the selected period, across every connected account." rows={[{ label: "Conversations", value: num(kpis.totalConversations) }]} />}
+            />
+            <StatTile
+              label="Unread"
+              value={num(kpis.unreadConversations)}
+              detail={<MetricDetail definition="Conversations with an unread count greater than zero." rows={[{ label: "Unread", value: num(kpis.unreadConversations) }, { label: "Total", value: num(kpis.totalConversations) }]} />}
+            />
+            <StatTile
+              label="Replied (Closed)"
+              value={num(kpis.repliedConversations)}
+              detail={<MetricDetail definition="Conversations with status CLOSED — the closest real proxy for 'handled' in this schema; there's no distinct 'replied' status." rows={[{ label: "Closed", value: num(kpis.repliedConversations) }, { label: "Total", value: num(kpis.totalConversations) }]} />}
+            />
+            <StatTile
+              label="Pending"
+              value={num(kpis.pendingConversations)}
+              detail={<MetricDetail definition="Conversations with status OPEN or PENDING." rows={[{ label: "Pending", value: num(kpis.pendingConversations) }, { label: "Total", value: num(kpis.totalConversations) }]} />}
+            />
+            <StatTile
+              label="Response Rate"
+              value={pct(kpis.responseRate)}
+              detail={<MetricDetail definition="Conversations with a computed first-response time divided by every conversation checked (sampled up to 500)." rows={[{ label: "Rate", value: pct(kpis.responseRate) }]} />}
+            />
+            <StatTile
+              label="Avg. Response Time"
+              value={minutes(kpis.avgResponseMinutes)}
+              detail={<MetricDetail definition="Average time from the first inbound message to the first outbound reply after it, per conversation — computed on the fly, not pre-aggregated." rows={[{ label: "Average", value: minutes(kpis.avgResponseMinutes) }]} />}
+            />
           </div>
 
           {!kpis.leadConversionAvailable && (
@@ -89,7 +118,7 @@ export default function SocialDashboardPage() {
         </>
       )}
 
-      <SectionCard title="By platform" subtitle="Per connected account, this period">
+      <SectionCard title="By platform" subtitle="Per connected account, this period" expandable>
         {platformsQuery.isLoading && <SkeletonCard className="h-32" />}
         {platformsQuery.error && <ErrorState message={(platformsQuery.error as Error).message} onRetry={() => platformsQuery.refetch()} />}
         {!platformsQuery.isLoading && platforms.length === 0 && <EmptyState title="No social accounts connected" />}
@@ -110,7 +139,7 @@ export default function SocialDashboardPage() {
         )}
       </SectionCard>
 
-      <SectionCard title="Team response performance" subtitle="Only conversations with a real assignedToUserId">
+      <SectionCard title="Team response performance" subtitle="Only conversations with a real assignedToUserId" expandable>
         {teamQuery.isLoading && <SkeletonCard className="h-32" />}
         {teamQuery.error && <ErrorState message={(teamQuery.error as Error).message} onRetry={() => teamQuery.refetch()} />}
         {!teamQuery.isLoading && team.length === 0 && <EmptyState title="No assigned conversations in this period" />}

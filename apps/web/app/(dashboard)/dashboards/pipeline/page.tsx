@@ -5,6 +5,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
+import { MetricDetail } from "../../../../components/dashboard-center/metric-detail";
 import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
@@ -60,21 +61,40 @@ export default function PipelineDashboardPage() {
         timingQuery.refetch();
         agingQuery.refetch();
       }}
+      refreshing={funnelQuery.isFetching || timingQuery.isFetching || agingQuery.isFetching}
     >
       {funnelQuery.isLoading && <SkeletonCard className="h-32" />}
       {funnelQuery.error && <ErrorState message={(funnelQuery.error as Error).message} onRetry={() => funnelQuery.refetch()} />}
 
       {funnel && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Total in Pipeline" value={num(funnel.total)} />
-          <StatTile label="Won" value={num(funnel.won)} tone="good" />
-          <StatTile label="Lost" value={num(funnel.lost)} tone="bad" />
-          <StatTile label="Conversion Rate" value={pct(funnel.conversionRate)} />
+          <StatTile
+            label="Total in Pipeline"
+            value={num(funnel.total)}
+            detail={<MetricDetail definition="Every lead with a PipelineState row, regardless of stage." rows={[{ label: "Total", value: num(funnel.total) }]} />}
+          />
+          <StatTile
+            label="Won"
+            value={num(funnel.won)}
+            tone="good"
+            detail={<MetricDetail definition="Leads currently at the WON stage." rows={[{ label: "Won", value: num(funnel.won) }, { label: "Total in pipeline", value: num(funnel.total) }]} />}
+          />
+          <StatTile
+            label="Lost"
+            value={num(funnel.lost)}
+            tone="bad"
+            detail={<MetricDetail definition="Leads currently at the LOST stage." rows={[{ label: "Lost", value: num(funnel.lost) }, { label: "Total in pipeline", value: num(funnel.total) }]} />}
+          />
+          <StatTile
+            label="Conversion Rate"
+            value={pct(funnel.conversionRate)}
+            detail={<MetricDetail definition="Won divided by total in pipeline." rows={[{ label: "Won", value: num(funnel.won) }, { label: "Total", value: num(funnel.total) }, { label: "Rate", value: pct(funnel.conversionRate) }]} />}
+          />
         </div>
       )}
 
       {funnel && (
-        <SectionCard title="Stage funnel" subtitle="Current lead count per pipeline stage">
+        <SectionCard title="Stage funnel" subtitle="Current lead count per pipeline stage" expandable>
           <DataTable
             rowKey={(r) => r.stage}
             rows={funnel.stages}
@@ -90,6 +110,7 @@ export default function PipelineDashboardPage() {
       <ChartWithTable
         title="Lead aging"
         subtitle="How long active (non-terminal) leads have sat in their current stage"
+        expandable
         chart={
           agingQuery.isLoading ? (
             <SkeletonCard className="h-56" />
@@ -120,6 +141,7 @@ export default function PipelineDashboardPage() {
       <SectionCard
         title="Average time in stage"
         subtitle="Computed from LeadStageHistory, tracked only since 2026-09-30 — stages with a small sample size are shown as-is rather than hidden, so the limited history is visible"
+        expandable
       >
         {timingQuery.isLoading && <SkeletonCard className="h-32" />}
         {timingQuery.error && <ErrorState message={(timingQuery.error as Error).message} onRetry={() => timingQuery.refetch()} />}

@@ -36,6 +36,7 @@ export default function TeamDashboardPage() {
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => teamQuery.refetch()}
+      refreshing={teamQuery.isFetching}
     >
       {teamQuery.isLoading && <SkeletonCard className="h-56" />}
       {teamQuery.error && <ErrorState message={(teamQuery.error as Error).message} onRetry={() => teamQuery.refetch()} />}
@@ -44,6 +45,7 @@ export default function TeamDashboardPage() {
       {team.length > 0 && (
         <ChartWithTable
           title="Leads added per team member"
+          expandable
           chart={
             <ResponsiveContainer width="100%" height={Math.max(220, team.length * 36)}>
               <BarChart data={team} layout="vertical" margin={{ left: 24 }}>

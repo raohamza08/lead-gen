@@ -33,6 +33,12 @@ export interface NotifyInput {
    *  renderAlertEmail. Defaults to "alert"; pass "resolved" for a
    *  good-news/back-to-normal notification. */
   emailTone?: "alert" | "resolved";
+  /** Explicit, hand-picked recipients (Part: Upwork follow-up reminders,
+   *  2026-09-30) — when given and non-empty, ONLY these user IDs can see or
+   *  receive this notification, overriding the normal category-based
+   *  eligibility rule entirely. Omit for every other call site; the default
+   *  (unset) preserves the original org-wide-by-category behavior exactly. */
+  recipientUserIds?: string[];
 }
 
 type EligibilityUser = {
@@ -79,6 +85,7 @@ export class NotificationsService {
 
   async notify(orgId: string, input: NotifyInput) {
     const severity = input.severity ?? "ERROR";
+    const recipientUserIds = input.recipientUserIds ?? [];
     const notification = await this.prisma.notification.create({
       data: {
         orgId,
@@ -92,12 +99,13 @@ export class NotificationsService {
         entityType: input.entityType,
         entityId: input.entityId,
         actionUrl: input.actionUrl,
+        recipientUserIds,
       },
     });
     this.logger.warn(`[${input.type}] ${input.message}`);
 
-    const eligibleUserIds = await this.eligibleUserIds(orgId, input.category);
-    for (const userId of eligibleUserIds) {
+    const pushTargets = recipientUserIds.length > 0 ? recipientUserIds : await this.eligibleUserIds(orgId, input.category);
+    for (const userId of pushTargets) {
       this.realtime.emitToUser(userId, "notification.created", notification);
     }
 
@@ -182,6 +190,12 @@ export class NotificationsService {
     const where: Prisma.NotificationWhereInput = {
       orgId: user.orgId,
       category: { in: categories },
+      // Empty recipientUserIds (every ordinary notification) is visible to
+      // anyone eligible by category, exactly as before this field existed;
+      // a non-empty list (Part: Upwork follow-up reminders, 2026-09-30)
+      // narrows it to only those explicitly named users, even within an
+      // otherwise-broadcast-eligible category like UPWORK.
+      OR: [{ recipientUserIds: { isEmpty: true } }, { recipientUserIds: { has: user.sub } }],
       AND: [
         { userStates: { none: { userId: user.sub, dismissedAt: { not: null } } } },
         ...(options.unreadOnly ? [{ userStates: { none: { userId: user.sub, readAt: { not: null } } } }] : []),
@@ -215,6 +229,7 @@ export class NotificationsService {
       where: {
         orgId: user.orgId,
         category: { in: categories },
+        OR: [{ recipientUserIds: { isEmpty: true } }, { recipientUserIds: { has: user.sub } }],
         userStates: { none: { userId: user.sub, OR: [{ readAt: { not: null } }, { dismissedAt: { not: null } }] } },
       },
       _count: { _all: true },
@@ -275,6 +290,7 @@ export class NotificationsService {
       where: {
         orgId: user.orgId,
         category: { in: categories },
+        OR: [{ recipientUserIds: { isEmpty: true } }, { recipientUserIds: { has: user.sub } }],
         userStates: { none: { userId: user.sub, [field]: { not: null } } },
       },
       select: { id: true },

@@ -12,6 +12,7 @@ export class DashboardRangeQueryDto {
   @IsOptional() @IsString() from?: string;
   @IsOptional() @IsString() to?: string;
   @IsOptional() @IsIn(["true", "false"]) compare?: string;
+  @IsOptional() @IsIn(["last_month", "previous_period"]) compareMode?: string;
   @IsOptional() @IsString() ownerId?: string;
   @IsOptional() @IsString() nicheId?: string;
   @IsOptional() @IsString() campaignId?: string;
@@ -35,4 +36,8 @@ export class CreateConnectPurchaseDto {
 export class SetBenchmarkDto {
   @IsString() metricKey!: string;
   @IsNumber() targetValue!: number;
+}
+
+export class ImportConnectPurchasesDto {
+  @IsString() csv!: string;
 }

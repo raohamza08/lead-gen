@@ -5,6 +5,7 @@ import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, dateTime, titleCase } from "../../../../components/dashboard-center/format";
+import { MetricDetail } from "../../../../components/dashboard-center/metric-detail";
 import { DataTable, SectionCard, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
@@ -75,18 +76,44 @@ export default function InboxDashboardPage() {
         volumeQuery.refetch();
         leadsQuery.refetch();
       }}
+      refreshing={accountsQuery.isFetching || volumeQuery.isFetching || leadsQuery.isFetching}
     >
       {volumeQuery.isLoading && <SkeletonCard className="h-24" />}
       {volumeQuery.error && <ErrorState message={(volumeQuery.error as Error).message} onRetry={() => volumeQuery.refetch()} />}
       {volume && (
         <div className="grid grid-cols-3 gap-3">
-          <StatTile label="Received" value={num(volume.received)} />
-          <StatTile label="Sent" value={num(volume.sent)} />
-          <StatTile label="Unread" value={num(volume.unread)} />
+          <StatTile
+            label="Received"
+            value={num(volume.received)}
+            detail={
+              <MetricDetail
+                definition="Inbound messages received across every connected mailbox in the selected period."
+                rows={[
+                  { label: "Received", value: num(volume.received) },
+                  { label: "Mailboxes", value: num(accounts.length) },
+                ]}
+              />
+            }
+          />
+          <StatTile
+            label="Sent"
+            value={num(volume.sent)}
+            detail={<MetricDetail definition="Outbound campaign messages sent in the selected period, across the whole org." rows={[{ label: "Sent", value: num(volume.sent) }]} />}
+          />
+          <StatTile
+            label="Unread"
+            value={num(volume.unread)}
+            detail={
+              <MetricDetail
+                definition="Inbound messages not yet marked read, across every connected mailbox — a live snapshot, not scoped to the date range."
+                rows={[{ label: "Unread", value: num(volume.unread) }]}
+              />
+            }
+          />
         </div>
       )}
 
-      <SectionCard title="Mailboxes" subtitle="Per-account received/sent/unread and sync health">
+      <SectionCard title="Mailboxes" subtitle="Per-account received/sent/unread and sync health" expandable>
         {accountsQuery.isLoading && <SkeletonCard className="h-32" />}
         {accountsQuery.error && <ErrorState message={(accountsQuery.error as Error).message} onRetry={() => accountsQuery.refetch()} />}
         {!accountsQuery.isLoading && accounts.length === 0 && <EmptyState title="No email accounts connected" />}
@@ -110,6 +137,7 @@ export default function InboxDashboardPage() {
       <SectionCard
         title="Leads created from inbound email"
         subtitle="No separate 'website form submission' model exists in the schema — this covers any inbound thread linked to a real Lead, not just contact-form fills"
+        expandable
       >
         {leadsQuery.isLoading && <SkeletonCard className="h-32" />}
         {leadsQuery.error && <ErrorState message={(leadsQuery.error as Error).message} onRetry={() => leadsQuery.refetch()} />}

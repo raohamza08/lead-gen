@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
-import { DashboardRangeQuery, resolveDashboardRange, safeDivide, safeRate } from "./dashboard-center.util";
+import { DashboardRangeQuery, resolveDashboardRange, safeDivide, safeRate, percentDelta } from "./dashboard-center.util";
+import { parseCsvRows } from "../leads/lead-import-mapping";
 
 export interface CreateConnectPurchaseInput {
   purchasedAt: string;
@@ -9,6 +10,17 @@ export interface CreateConnectPurchaseInput {
   currency?: string;
   notes?: string;
 }
+
+/** Upwork's flat per-connect price, as told to the app by the org
+ *  (Part: Dashboard Center, 2026-09-30) — Upwork's own API exposes no
+ *  pricing data, so this is a real-world fact supplied directly rather than
+ *  something computable from any endpoint. Used as the fallback rate for
+ *  every connect-cost calculation below when no `UpworkConnectPurchase`
+ *  ledger entries exist yet; once real purchases are on record, their
+ *  actual weighted-average cost (see `costPerConnectAsOf`) is used instead
+ *  since it reflects whatever was actually paid (bulk pricing, promos,
+ *  etc.), not just the flat rate. */
+const DEFAULT_CONNECT_UNIT_COST_USD = 0.15;
 
 @Injectable()
 export class UpworkDashboardService {
@@ -43,6 +55,90 @@ export class UpworkDashboardService {
     return { deleted: true };
   }
 
+  /**
+   * Bulk-imports connect purchases straight from Upwork's own "Transaction
+   * Report" CSV export (Part: Dashboard Center, 2026-09-30) — only rows
+   * with Transaction type "Connects" are fee-deduction rows for a connect
+   * purchase; the paired "Payment" rows are the card charge that funded it
+   * and aren't a separate purchase. Idempotent by design: each row's real
+   * Upwork "Transaction ID" is stored as `sourceTransactionId`, and
+   * `skipDuplicates` means re-uploading the same or an overlapping export
+   * (e.g. a fresh monthly report that overlaps the last one) never creates
+   * duplicate ledger rows.
+   */
+  async importConnectPurchasesFromCsv(orgId: string, userId: string, csv: string) {
+    let rows: Record<string, string>[];
+    try {
+      rows = parseCsvRows(csv);
+    } catch (err) {
+      throw new BadRequestException(`Could not parse this file as CSV: ${(err as Error).message}`);
+    }
+
+    const connectRows = rows.filter((r) => r["Transaction type"]?.trim() === "Connects");
+    if (connectRows.length === 0) {
+      throw new BadRequestException(
+        'No "Connects" transaction rows found. Expected an Upwork Transaction Report export with a "Transaction type" column.',
+      );
+    }
+
+    const purchases: {
+      orgId: string;
+      purchasedAt: Date;
+      connectsAmount: number;
+      totalCost: number;
+      currency: string;
+      sourceTransactionId: string;
+      createdByUserId: string;
+    }[] = [];
+    const skipped: { row: number; reason: string }[] = [];
+
+    connectRows.forEach((row, i) => {
+      const rowNumber = i + 2; // header + 1-indexed
+      const transactionId = row["Transaction ID"]?.trim();
+      if (!transactionId) {
+        skipped.push({ row: rowNumber, reason: "missing Transaction ID" });
+        return;
+      }
+      const purchasedAt = new Date(row["Date"]);
+      if (Number.isNaN(purchasedAt.getTime())) {
+        skipped.push({ row: rowNumber, reason: `unparseable date "${row["Date"]}"` });
+        return;
+      }
+      const connectsMatch = /^(\d[\d,]*)\s*Connects/i.exec(row["Transaction summary"]?.trim() ?? "");
+      if (!connectsMatch) {
+        skipped.push({ row: rowNumber, reason: `couldn't read connects amount from "${row["Transaction summary"]}"` });
+        return;
+      }
+      const connectsAmount = Number(connectsMatch[1].replace(/,/g, ""));
+      const amountRaw = Number((row["Amount $"] ?? "").replace(/,/g, ""));
+      if (Number.isNaN(amountRaw)) {
+        skipped.push({ row: rowNumber, reason: `unparseable amount "${row["Amount $"]}"` });
+        return;
+      }
+      const totalCost = Math.abs(amountRaw);
+
+      purchases.push({
+        orgId,
+        purchasedAt,
+        connectsAmount,
+        totalCost,
+        currency: row["Currency"]?.trim() || "USD",
+        sourceTransactionId: transactionId,
+        createdByUserId: userId,
+      });
+    });
+
+    const result = await this.prisma.upworkConnectPurchase.createMany({ data: purchases, skipDuplicates: true });
+
+    return {
+      rowsInFile: rows.length,
+      connectRowsFound: connectRows.length,
+      imported: result.count,
+      alreadyImported: purchases.length - result.count,
+      skipped,
+    };
+  }
+
   /** Cumulative weighted-average cost per connect, as of `asOf` -- total real
    *  money spent on connects up to that date divided by total connects
    *  bought up to that date (Part: schema comment on UpworkConnectPurchase
@@ -58,10 +154,10 @@ export class UpworkDashboardService {
   }
 
   async getKpis(orgId: string, query: DashboardRangeQuery) {
-    const { current } = resolveDashboardRange(query);
+    const { current, previous } = resolveDashboardRange(query);
     const where = { orgId, createdAt: { gte: current.from, lte: current.to } };
 
-    const [totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, connectsAgg, hasAnyPurchase] = await Promise.all([
+    const [totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, connectsAgg, hasAnyPurchase, previousWon, previousBids] = await Promise.all([
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: { in: ["ACCEPTED", "IN_DISCUSSION", "FOLLOW_UP_1", "FOLLOW_UP_2", "WON"] } } }),
@@ -70,11 +166,18 @@ export class UpworkDashboardService {
       this.prisma.upworkProposal.count({ where: { ...where, status: "LOST" } }),
       this.prisma.upworkProposal.aggregate({ where, _sum: { connects: true } }),
       this.prisma.upworkConnectPurchase.count({ where: { orgId } }),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, status: "WON", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "BIDDING", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
     ]);
 
     const connectsUsed = connectsAgg._sum.connects ?? 0;
-    const costPerConnect = hasAnyPurchase > 0 ? await this.costPerConnectAsOf(orgId, current.to) : undefined;
-    const connectCost = costPerConnect !== undefined ? connectsUsed * costPerConnect : undefined;
+    // Real purchase history (if any) reflects what was actually paid; the
+    // flat $0.15/connect rate is the fallback, not undefined -- see
+    // DEFAULT_CONNECT_UNIT_COST_USD's own docblock for why this is now a
+    // known fact rather than a genuinely unknown one.
+    const actualCostPerConnect = hasAnyPurchase > 0 ? await this.costPerConnectAsOf(orgId, current.to) : undefined;
+    const costPerConnect = actualCostPerConnect ?? DEFAULT_CONNECT_UNIT_COST_USD;
+    const connectCost = connectsUsed * costPerConnect;
 
     return {
       range: { from: current.from, to: current.to },
@@ -83,15 +186,22 @@ export class UpworkDashboardService {
       invitesAccepted,
       invitesRejected,
       clientsWon: won,
+      previousClientsWon: previous ? previousWon : undefined,
+      clientsWonDeltaPct: previous ? percentDelta(won, previousWon) : null,
       clientsLost: lost,
       connectsUsed,
-      // Every $ figure below is undefined (not 0) until at least one real
-      // purchase is on record -- see costPerConnectAsOf's own docblock.
-      connectCostAvailable: hasAnyPurchase > 0,
+      previousTotalBids: previous ? previousBids : undefined,
+      totalBidsDeltaPct: previous ? percentDelta(totalBids, previousBids) : null,
+      // Always available now that a real per-connect rate is known -- see
+      // connectCostBasis for whether the figure below reflects actual
+      // recorded purchases or the flat fallback rate.
+      connectCostAvailable: true,
+      connectCostBasis: actualCostPerConnect !== undefined ? "actual_purchases" : "flat_rate_estimate",
+      connectUnitCost: costPerConnect,
       connectCost,
-      costPerBid: connectCost !== undefined ? safeDivide(connectCost, totalBids) : undefined,
-      costPerClient: connectCost !== undefined ? safeDivide(connectCost, won) : undefined,
-      costPerInvite: connectCost !== undefined ? safeDivide(connectCost, totalInvites) : undefined,
+      costPerBid: safeDivide(connectCost, totalBids),
+      costPerClient: safeDivide(connectCost, won),
+      costPerInvite: safeDivide(connectCost, totalInvites),
       bidsPerClient: safeDivide(totalBids, won),
       connectsPerClient: safeDivide(connectsUsed, won),
       avgConnectsPerBid: safeDivide(connectsUsed, totalBids),
@@ -137,6 +247,12 @@ export class UpworkDashboardService {
         clientsWon: b.won,
         connectsPurchased: b.purchaseConnects || undefined,
         purchaseCost: b.purchaseCost || undefined,
+        // Estimated at the flat $0.15/connect rate regardless of that
+        // month's actual purchases -- a stable, comparable figure month to
+        // month, distinct from `purchaseCost` above (what was actually
+        // invoiced that month, only present for months with a recorded
+        // purchase).
+        estimatedUsageCost: b.connects * DEFAULT_CONNECT_UNIT_COST_USD,
         bidsPerClient: safeDivide(b.bids, b.won),
         connectsPerClient: safeDivide(b.connects, b.won),
       }));
@@ -167,6 +283,7 @@ export class UpworkDashboardService {
       ...b,
       conversionRate: safeRate(b.won, b.bids + b.invites),
       connectsPerClient: safeDivide(b.connects, b.won),
+      estimatedCost: b.connects * DEFAULT_CONNECT_UNIT_COST_USD,
     }));
   }
 }

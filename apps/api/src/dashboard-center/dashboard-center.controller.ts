@@ -15,7 +15,7 @@ import { PipelineDashboardService } from "./pipeline-dashboard.service";
 import { TeamDashboardService } from "./team-dashboard.service";
 import { BenchmarkService } from "./benchmark.service";
 import { OverviewDashboardService } from "./overview-dashboard.service";
-import { CreateConnectPurchaseDto, DashboardRangeQueryDto, LeadsAuditQueryDto, SetBenchmarkDto } from "./dto/dashboard-center.dto";
+import { CreateConnectPurchaseDto, DashboardRangeQueryDto, ImportConnectPurchasesDto, LeadsAuditQueryDto, SetBenchmarkDto } from "./dto/dashboard-center.dto";
 
 /** Cross-module BI layer (Part: Dashboard Center, 2026-09-30) — every route
  *  here composes existing services/Prisma queries per-domain rather than
@@ -137,6 +137,11 @@ export class DashboardCenterController {
   @Roles(Role.ADMIN)
   createConnectPurchase(@CurrentUser() user: JwtClaims, @Body() dto: CreateConnectPurchaseDto) {
     return this.upwork.createConnectPurchase(user.orgId, user.sub, dto);
+  }
+  @Post("upwork/connect-purchases/import")
+  @Roles(Role.ADMIN)
+  importConnectPurchases(@CurrentUser() user: JwtClaims, @Body() dto: ImportConnectPurchasesDto) {
+    return this.upwork.importConnectPurchasesFromCsv(user.orgId, user.sub, dto.csv);
   }
   @Delete("upwork/connect-purchases/:id")
   @Roles(Role.ADMIN)

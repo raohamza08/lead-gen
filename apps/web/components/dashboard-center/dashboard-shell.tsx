@@ -1,7 +1,8 @@
 "use client";
 
-import { ReactNode, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { DashboardDateRangeBar, DashboardDateRange, defaultDashboardDateRange } from "./date-range-bar";
+import { Spinner } from "../spinner";
 
 /**
  * Shared chrome for every Dashboard Center page (Part: Dashboard Center
@@ -10,8 +11,13 @@ import { DashboardDateRangeBar, DashboardDateRange, defaultDashboardDateRange } 
  * `children` for the actual KPIs/charts/tables; this file only owns the
  * chrome so it can't drift page to page.
  *
- * `onRefresh`/`lastUpdated` are optional — a dashboard that hasn't been
- * wired to a real query yet (see NotBuiltYet below) has nothing to refresh.
+ * `onRefresh` is optional — a dashboard that hasn't been wired to a real
+ * query yet (see NotBuiltYet below) has nothing to refresh. `refreshing`
+ * drives the button's own spinner/disabled state and auto-stamps "Last
+ * updated" the moment a refresh completes (Part: Dashboard Center,
+ * 2026-09-30 fix — previously the button gave zero visual feedback on
+ * click, which read as "doesn't work" even though the underlying refetch
+ * genuinely ran; no page needs to track its own timestamp for this).
  */
 export function DashboardCenterShell({
   title,
@@ -19,7 +25,7 @@ export function DashboardCenterShell({
   dateRange,
   onDateRangeChange,
   onRefresh,
-  lastUpdated,
+  refreshing,
   extraFilters,
   children,
 }: {
@@ -28,10 +34,17 @@ export function DashboardCenterShell({
   dateRange: DashboardDateRange;
   onDateRangeChange: (range: DashboardDateRange) => void;
   onRefresh?: () => void;
-  lastUpdated?: Date | null;
+  refreshing?: boolean;
   extraFilters?: ReactNode;
   children: ReactNode;
 }) {
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const wasRefreshing = useRef(refreshing);
+  useEffect(() => {
+    if (wasRefreshing.current && !refreshing) setLastUpdated(new Date());
+    wasRefreshing.current = refreshing;
+  }, [refreshing]);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -48,9 +61,11 @@ export function DashboardCenterShell({
             <button
               type="button"
               onClick={onRefresh}
-              className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+              disabled={refreshing}
+              className="flex items-center gap-1.5 rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-60"
             >
-              Refresh
+              {refreshing && <Spinner className="h-3 w-3" />}
+              {refreshing ? "Refreshing…" : "Refresh"}
             </button>
           )}
         </div>

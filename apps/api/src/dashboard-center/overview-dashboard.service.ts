@@ -44,10 +44,10 @@ export class OverviewDashboardService {
       this.upwork.getKpis(orgId, query),
       this.pipeline.getFunnel(orgId),
       this.team.getPerformance(orgId, query),
-      this.prisma.metaAdAccount.findMany({ where: { orgId }, select: { id: true } }),
+      this.prisma.metaAdAccount.findMany({ where: { orgId }, select: { id: true, currency: true } }),
     ]);
 
-    let metaAds: { connected: boolean; accountCount: number; spend?: number; leads?: number } = {
+    let metaAds: { connected: boolean; accountCount: number; spend?: number; leads?: number; currency?: string; mixedCurrencies?: boolean } = {
       connected: false,
       accountCount: 0,
     };
@@ -56,20 +56,29 @@ export class OverviewDashboardService {
         metaAccounts.map((a) => this.metaAdsAnalytics.getOverview(orgId, a.id, { from, to }).catch(() => null)),
       );
       const valid = overviews.filter((o): o is NonNullable<typeof o> => o !== null);
+      // Spend is only safe to sum across accounts that share one currency —
+      // Meta reports each account's spend in its own account currency, and
+      // this org's connected accounts are billed in PKR (Part: Dashboard
+      // Center, 2026-09-30). Flag mixed currencies rather than silently
+      // summing incompatible units into a meaningless total.
+      const currencies = new Set(metaAccounts.map((a) => a.currency).filter((c): c is string => Boolean(c)));
       metaAds = {
         connected: true,
         accountCount: metaAccounts.length,
         spend: valid.reduce((s, o) => s + o.current.spend, 0),
         leads: valid.reduce((s, o) => s + (o.current.leads ?? 0), 0),
+        currency: currencies.size === 1 ? [...currencies][0] : undefined,
+        mixedCurrencies: currencies.size > 1,
       };
     }
 
     return {
       range: { from: current.from, to: current.to },
       leads: {
-        total: leadsKpis.totalLeads,
-        newLeads: leadsKpis.newLeads,
-        newLeadsDeltaPct: leadsKpis.newLeadsDeltaPct,
+        total: leadsKpis.allTimeTotal,
+        newLeads: leadsKpis.totalLeads,
+        previousTotalLeads: leadsKpis.previousTotalLeads,
+        newLeadsDeltaPct: leadsKpis.totalLeadsDeltaPct,
         conversionRate: leadsKpis.conversionRate,
       },
       email: {
@@ -86,7 +95,7 @@ export class OverviewDashboardService {
         totalBids: upworkKpis.totalBids,
         clientsWon: upworkKpis.clientsWon,
         conversionRate: upworkKpis.conversionRate,
-        connectCostAvailable: upworkKpis.connectCostAvailable,
+        connectCostBasis: upworkKpis.connectCostBasis,
         connectCost: upworkKpis.connectCost,
       },
       pipeline: {

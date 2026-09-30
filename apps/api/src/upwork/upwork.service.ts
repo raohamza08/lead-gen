@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
-import { Prisma, UpworkAccountType, UpworkProposalStatus, UpworkProposalType } from "@prisma/client";
+import { NotificationCategory, Prisma, UpworkAccountType, UpworkProposalStatus, UpworkProposalType } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateUpworkProposalDto } from "./dto/create-upwork-proposal.dto";
 import { UpdateUpworkProposalDto } from "./dto/update-upwork-proposal.dto";
 import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
 import { UpdateUpworkPicklistsDto } from "./dto/update-upwork-picklists.dto";
+import { SetNotifyRecipientsDto } from "./dto/set-notify-recipients.dto";
+import { NotificationsService } from "../notifications/notifications.service";
 
 interface UpworkPicklists {
   categories: string[];
@@ -21,7 +23,10 @@ interface UpworkPicklists {
  */
 @Injectable()
 export class UpworkService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationsService,
+  ) {}
 
   create(orgId: string, dto: CreateUpworkProposalDto) {
     const isBidding = dto.type === UpworkProposalType.BIDDING;
@@ -86,7 +91,52 @@ export class UpworkService {
   async update(orgId: string, id: string, dto: UpdateUpworkProposalDto) {
     const existing = await this.prisma.upworkProposal.findFirst({ where: { id, orgId } });
     if (!existing) throw new NotFoundException("Proposal not found");
-    return this.prisma.upworkProposal.update({ where: { id }, data: dto });
+    // Stamps the follow-up timer's start line the moment status first
+    // becomes ACCEPTED (Part: Upwork follow-up reminders, 2026-09-30) —
+    // only on that specific transition, not on every save while already
+    // ACCEPTED, so re-saving an unrelated field (e.g. clientName) never
+    // resets the clock.
+    const justAccepted = dto.status === UpworkProposalStatus.ACCEPTED && existing.status !== UpworkProposalStatus.ACCEPTED;
+    return this.prisma.upworkProposal.update({
+      where: { id },
+      data: { ...dto, ...(justAccepted ? { acceptedAt: new Date(), lastFollowUpNotifiedAt: null } : {}) },
+    });
+  }
+
+  /** Admin sets who should be nudged to follow up on this one proposal, and
+   *  can optionally fire that nudge immediately instead of waiting for
+   *  UpworkFollowUpReminderWorker's next sweep (Part: Upwork follow-up
+   *  reminders, 2026-09-30 — "select the person to notify right now or
+   *  later"). Recipients replace the previous list wholesale, same pattern
+   *  as updatePicklists — the picker always sends the full edited set. */
+  async setNotifyRecipients(orgId: string, id: string, dto: SetNotifyRecipientsDto) {
+    const existing = await this.prisma.upworkProposal.findFirst({ where: { id, orgId } });
+    if (!existing) throw new NotFoundException("Proposal not found");
+
+    const userIds = [...new Set(dto.userIds)];
+    const proposal = await this.prisma.upworkProposal.update({
+      where: { id },
+      data: {
+        notifyUserIds: userIds,
+        ...(dto.notifyNow ? { lastFollowUpNotifiedAt: new Date() } : {}),
+      },
+    });
+
+    if (dto.notifyNow && userIds.length > 0) {
+      await this.notifications.notify(orgId, {
+        category: NotificationCategory.UPWORK,
+        type: "UPWORK_INVITE_FOLLOW_UP",
+        title: "Follow up on this Upwork invite",
+        message: `${proposal.clientName ?? "This client"}'s invite (${proposal.profileName}) needs a follow-up — status hasn't moved since it was accepted.`,
+        actionUrl: "/upwork/invite",
+        severity: "WARNING",
+        entityType: "upworkProposal",
+        entityId: proposal.id,
+        recipientUserIds: userIds,
+      });
+    }
+
+    return proposal;
   }
 
   async remove(orgId: string, id: string) {

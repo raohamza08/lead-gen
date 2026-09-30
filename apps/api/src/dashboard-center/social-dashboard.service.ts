@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
-import { DashboardRangeQuery, resolveDashboardRange, safeRate } from "./dashboard-center.util";
+import { DashboardRangeQuery, resolveDashboardRange, safeRate, percentDelta } from "./dashboard-center.util";
 
 function averageMinutes(values: number[]): number | undefined {
   if (values.length === 0) return undefined;
@@ -38,17 +38,26 @@ export class SocialDashboardService {
   }
 
   async getKpis(orgId: string, query: DashboardRangeQuery) {
-    const { current } = resolveDashboardRange(query);
+    const { current, previous } = resolveDashboardRange(query);
     const where = { socialAccount: { orgId }, lastMessageAt: { gte: current.from, lte: current.to } };
 
     // ConversationStatus has no distinct "replied" state -- CLOSED is used
     // as the closest real proxy for "handled," not a fabricated category.
-    const [total, unread, replied, pending, conversationIds] = await Promise.all([
+    const [total, unread, replied, pending, conversationIds, previousTotal] = await Promise.all([
       this.prisma.socialConversation.count({ where }),
       this.prisma.socialConversation.count({ where: { ...where, unreadCount: { gt: 0 } } }),
       this.prisma.socialConversation.count({ where: { ...where, status: "CLOSED" } }),
       this.prisma.socialConversation.count({ where: { ...where, status: { in: ["OPEN", "PENDING"] } } }),
       this.prisma.socialConversation.findMany({ where, select: { id: true }, take: 500 }).then((r) => r.map((c) => c.id)),
+      // Only the top-line volume figure is compared to the previous period --
+      // response-time/rate comparisons would need the same expensive
+      // per-conversation-message walk (responseTimesFor) run a second time,
+      // not worth doubling this endpoint's cost for a secondary tile.
+      previous
+        ? this.prisma.socialConversation.count({
+            where: { socialAccount: { orgId }, lastMessageAt: { gte: previous.from, lte: previous.to } },
+          })
+        : Promise.resolve(undefined),
     ]);
 
     const times = await this.responseTimesFor(conversationIds);
@@ -57,6 +66,8 @@ export class SocialDashboardService {
     return {
       range: { from: current.from, to: current.to },
       totalConversations: total,
+      previousTotalConversations: previous ? previousTotal : undefined,
+      totalConversationsDeltaPct: previous ? percentDelta(total, previousTotal) : null,
       unreadConversations: unread,
       repliedConversations: replied,
       pendingConversations: pending,

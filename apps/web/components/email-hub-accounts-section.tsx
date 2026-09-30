@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../lib/api-client";
+import { Modal } from "./ui/modal";
 
 interface Account {
   id: string;
@@ -135,9 +136,7 @@ export function EmailHubAccountsSection() {
       } else {
         await api.createEmailAccount(body);
       }
-      setDraft(EMPTY_DRAFT);
-      setEditingId(null);
-      setShowForm(false);
+      closeForm();
       setNotice(editingId ? "Mailbox updated." : "Mailbox added — turn on Sending below once it's tested.");
       refresh();
     } catch (err) {
@@ -145,6 +144,12 @@ export function EmailHubAccountsSection() {
     } finally {
       setSaving(false);
     }
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setDraft(EMPTY_DRAFT);
+    setEditingId(null);
   }
 
   function startEdit(account: Account) {
@@ -290,15 +295,13 @@ export function EmailHubAccountsSection() {
           <button
             type="button"
             onClick={() => {
-              if (showForm) {
-                setDraft(EMPTY_DRAFT);
-                setEditingId(null);
-              }
-              setShowForm((v) => !v);
+              setDraft(EMPTY_DRAFT);
+              setEditingId(null);
+              setShowForm(true);
             }}
             className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
           >
-            {showForm ? "Cancel" : "Add mailbox"}
+            Add mailbox
           </button>
         </div>
       </div>
@@ -426,10 +429,13 @@ export function EmailHubAccountsSection() {
         </table>
       </div>
 
-      {showForm && (
-        <form onSubmit={saveAccount} className="mt-4 flex flex-col gap-4 border-t border-[var(--line)] pt-4">
-          <h3 className="text-xs font-medium text-ink/70">{editingId ? "Edit mailbox" : "New mailbox"}</h3>
-
+      <Modal
+        open={showForm}
+        onOpenChange={(open) => (open ? setShowForm(true) : closeForm())}
+        title={editingId ? "Edit mailbox" : "New mailbox"}
+        contentClassName="w-full max-w-2xl"
+      >
+        <form onSubmit={saveAccount} className="flex flex-col gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
               <span className="mb-1 block text-xs text-ink/60">Provider</span>
@@ -626,20 +632,12 @@ export function EmailHubAccountsSection() {
             >
               {saving ? "Saving…" : editingId ? "Save changes" : "Add mailbox"}
             </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDraft(EMPTY_DRAFT);
-                setEditingId(null);
-                setShowForm(false);
-              }}
-              className="rounded-md border border-[var(--line)] px-4 py-2 text-sm text-ink/70"
-            >
+            <button type="button" onClick={closeForm} className="rounded-md border border-[var(--line)] px-4 py-2 text-sm text-ink/70">
               Cancel
             </button>
           </div>
         </form>
-      )}
+      </Modal>
     </section>
   );
 }

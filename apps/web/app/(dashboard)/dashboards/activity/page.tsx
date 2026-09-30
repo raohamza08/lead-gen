@@ -76,6 +76,7 @@ export default function ActivityDashboardPage() {
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => activityQuery.refetch()}
+      refreshing={activityQuery.isFetching}
     >
       <div className="card grid grid-cols-2 gap-3 p-3 sm:grid-cols-4">
         <Input

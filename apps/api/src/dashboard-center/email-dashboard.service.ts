@@ -49,6 +49,7 @@ export class EmailDashboardService {
       totalCampaigns,
       activeCampaigns,
       performance,
+      previousPerformance: previousPerformance ?? undefined,
       deltas: previousPerformance
         ? {
             sent: percentDelta(performance.sent, previousPerformance.sent),

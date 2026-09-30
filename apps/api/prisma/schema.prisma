@@ -954,7 +954,16 @@ model UpworkConnectPurchase {
   createdByUser   User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt      DateTime @default(now()) @map("created_at")
 
+  /// Upwork's own "Transaction ID" for this purchase's fee row, when the
+  /// row came from an uploaded transaction-report CSV rather than manual
+  /// entry (Part: Dashboard Center, 2026-09-30) -- makes re-uploading the
+  /// same or an overlapping export idempotent via the unique constraint
+  /// below, instead of creating duplicate purchase rows. Null for anything
+  /// entered by hand through the form.
+  sourceTransactionId String? @map("source_transaction_id")
+
   @@index([orgId, purchasedAt])
+  @@unique([orgId, sourceTransactionId])
   @@map("upwork_connect_purchases")
 }
 
@@ -1592,9 +1601,27 @@ model UpworkProposal {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  /// Stamped the moment `status` transitions to ACCEPTED (Part: Upwork
+  /// follow-up reminders, 2026-09-30) — the follow-up timer's start line.
+  /// Null again if it were ever moved off ACCEPTED back to something else
+  /// (doesn't happen today, but keeps the field's meaning exact either way).
+  acceptedAt DateTime? @map("accepted_at")
+  /// Who should be nudged to follow up on this one proposal once it's sat
+  /// ACCEPTED for a while with no further status change — explicitly
+  /// admin-picked per proposal, not a broadcast to a module/role. Paired
+  /// 1:1 with Notification.recipientUserIds on the reminders this drives.
+  notifyUserIds String[] @default([]) @map("notify_user_ids")
+  /// Last time a follow-up reminder actually went out for this proposal —
+  /// gates the every-2-days cadence in UpworkFollowUpReminderWorker so the
+  /// same still-ACCEPTED proposal isn't re-notified more than once per
+  /// window. Also set immediately by an admin's own "notify now" action, so
+  /// the next automatic sweep doesn't double up right behind it.
+  lastFollowUpNotifiedAt DateTime? @map("last_follow_up_notified_at")
+
   @@index([orgId, type])
   @@index([orgId, status])
   @@index([orgId, createdAt])
+  @@index([orgId, status, acceptedAt])
   @@map("upwork_proposals")
 }
 
@@ -1666,6 +1693,10 @@ enum NotificationCategory {
   ERRORS
   SECURITY
   OTHER
+  /// Upwork invite/bid follow-up reminders (Part: Upwork follow-up
+  /// reminders, 2026-09-30) — always paired with an explicit
+  /// `Notification.recipientUserIds` list, never broadcast org-wide.
+  UPWORK
 }
 
 /// One row per event, not per recipient — who can see it is computed live
@@ -1706,6 +1737,15 @@ model Notification {
   severity  String   @default("ERROR") // ERROR | WARNING
   message   String
   createdAt DateTime @default(now()) @map("created_at")
+
+  /// Explicit, admin-picked recipients for this one notification (Part:
+  /// Upwork follow-up reminders, 2026-09-30) — overrides the normal
+  /// category-based eligibility rule above when non-empty: only these
+  /// users can see it, regardless of their module access. Empty (the
+  /// default) means every call site's existing behavior is unchanged —
+  /// eligibility still comes from `category` alone, exactly as before this
+  /// field existed.
+  recipientUserIds String[] @default([]) @map("recipient_user_ids")
 
   userStates NotificationUserState[]
 
