@@ -49,6 +49,27 @@ type NavItem =
  */
 const NAV: NavItem[] = [
   { type: "link", href: "/overview", label: "Dashboard" },
+  // New, separate from the existing /overview page above (Part: Dashboard
+  // Center, 2026-09-30) -- a cross-module BI layer, not a replacement for
+  // the existing per-module dashboards. Most pages are honest placeholders
+  // ("NotBuiltYet") until their real endpoints exist; Meta Ads links straight
+  // at the already-real /meta-ads dashboard rather than duplicating it.
+  {
+    type: "group",
+    label: "Dashboard Center",
+    links: [
+      { href: "/dashboards", label: "Overview" },
+      { href: "/dashboards/leads", label: "Leads" },
+      { href: "/dashboards/email", label: "Email Campaigns" },
+      { href: "/dashboards/inbox", label: "Unified Inbox" },
+      { href: "/dashboards/social", label: "Social Inbox" },
+      { href: "/dashboards/upwork", label: "Upwork" },
+      { href: "/meta-ads", label: "Meta Ads" },
+      { href: "/dashboards/pipeline", label: "Pipeline" },
+      { href: "/dashboards/team", label: "Team Performance" },
+      { href: "/dashboards/activity", label: "Activity / Audit" },
+    ],
+  },
   {
     type: "group",
     label: "Lead Room",
