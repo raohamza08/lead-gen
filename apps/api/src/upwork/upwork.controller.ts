@@ -11,12 +11,16 @@ import { CreateUpworkProposalDto } from "./dto/create-upwork-proposal.dto";
 import { UpdateUpworkProposalDto } from "./dto/update-upwork-proposal.dto";
 import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
 import { UpdateUpworkPicklistsDto } from "./dto/update-upwork-picklists.dto";
+import { AuditLogService } from "../audit-log/audit-log.service";
 
 @Controller("upwork/proposals")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
 @RequiresModule("UPWORK")
 export class UpworkController {
-  constructor(private readonly upwork: UpworkService) {}
+  constructor(
+    private readonly upwork: UpworkService,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   @Get("stats")
   getStats(@CurrentUser() user: JwtClaims) {
@@ -48,8 +52,10 @@ export class UpworkController {
   }
 
   @Post()
-  create(@CurrentUser() user: JwtClaims, @Body() dto: CreateUpworkProposalDto) {
-    return this.upwork.create(user.orgId, dto);
+  async create(@CurrentUser() user: JwtClaims, @Body() dto: CreateUpworkProposalDto) {
+    const proposal = await this.upwork.create(user.orgId, dto);
+    this.auditLog.write({ orgId: user.orgId, actorId: user.sub, action: "UPWORK_PROPOSAL_CREATED", entityType: "upworkProposal", entityId: proposal.id, metadata: { type: proposal.type } });
+    return proposal;
   }
 
   @Patch(":id")

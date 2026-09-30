@@ -223,7 +223,7 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   advanceStage(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: AdvanceStageDto) {
-    return this.leadsService.advanceStage(user.orgId, id, dto.stage);
+    return this.leadsService.advanceStage(user.orgId, id, dto.stage, user.sub);
   }
 
   /** Undo one step — see LeadsService.moveBack for why this doesn't re-run automation. */
@@ -232,7 +232,7 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   moveBack(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
-    return this.leadsService.moveBack(user.orgId, id);
+    return this.leadsService.moveBack(user.orgId, id, user.sub);
   }
 
   /** Back to any earlier stage the caller picks — see LeadsService.rewindTo. */
@@ -241,7 +241,7 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN, Role.MANAGER, Role.LEAD_REVIEWER, Role.SALES_REP)
   rewind(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: AdvanceStageDto) {
-    return this.leadsService.rewindTo(user.orgId, id, dto.stage);
+    return this.leadsService.rewindTo(user.orgId, id, dto.stage, user.sub);
   }
 
   /** Re-checks this lead's email and starts outreach immediately if it now
@@ -359,7 +359,7 @@ export class LeadsController {
   @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN)
   removeByIds(@CurrentUser() user: JwtClaims, @Body() dto: BulkDeleteLeadsDto) {
-    return this.leadsService.removeByIds(user.orgId, dto.leadIds);
+    return this.leadsService.removeByIds(user.orgId, dto.leadIds, user.sub);
   }
 
   // ADMIN only: unlike other deletes in this app (niche filter, email

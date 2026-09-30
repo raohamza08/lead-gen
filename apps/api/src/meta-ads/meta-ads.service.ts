@@ -6,6 +6,7 @@ import { EncryptionService } from "../common/crypto/encryption.service";
 import { apiPublicUrl } from "../common/api-url";
 import { dashboardUrl } from "../common/cors";
 import { NotificationsService } from "../notifications/notifications.service";
+import { AuditLogService } from "../audit-log/audit-log.service";
 import { MetaMarketingApiClient } from "./meta-marketing-api.client";
 import { MetaAdsOAuthStateStore } from "./meta-ads-oauth-state.store";
 import { MetaAdsPendingSelectionStore } from "./meta-ads-pending-selection.store";
@@ -27,6 +28,7 @@ export class MetaAdsService {
     private readonly config: ConfigService,
     private readonly encryption: EncryptionService,
     private readonly notifications: NotificationsService,
+    private readonly auditLog: AuditLogService,
     private readonly client: MetaMarketingApiClient,
     private readonly oauthState: MetaAdsOAuthStateStore,
     private readonly pendingSelection: MetaAdsPendingSelectionStore,
@@ -181,6 +183,10 @@ export class MetaAdsService {
       entityType: "metaAdAccount",
       entityId: connected[0].id,
       actionUrl: "/settings/meta-ads",
+    });
+    this.auditLog.write({
+      orgId: pending.orgId, actorId: pending.userId, action: "META_ADS_ACCOUNT_CONNECTED",
+      entityType: "metaAdAccount", entityId: connected[0].id, metadata: { count: connected.length, names: connected.map((c) => c.name) },
     });
 
     return { connected: connected.map((c) => ({ id: c.id, name: c.name })) };

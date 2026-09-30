@@ -197,6 +197,9 @@ model Organization {
   upworkProposals UpworkProposal[]
   agentOptimizationCycles AgentOptimizationCycle[]
   metaAdAccounts  MetaAdAccount[]
+  leadStageHistory LeadStageHistory[]
+  upworkConnectPurchases UpworkConnectPurchase[]
+  benchmarks      Benchmark[]
 
   @@map("organizations")
 }
@@ -279,6 +282,9 @@ model User {
   uploadedLeads         Lead[] @relation("UploadedByUser")
   leadImports           LeadImport[]
   ignoredSenderRules    IgnoredSender[]
+  leadStageChanges      LeadStageHistory[]
+  upworkConnectPurchasesCreated UpworkConnectPurchase[]
+  benchmarksUpdated     Benchmark[]
 
   @@map("users")
 }
@@ -716,6 +722,7 @@ model Lead {
   reviewNote          ReviewNote?
   agentReview         AgentReview?
   pipelineState       PipelineState?
+  stageHistory        LeadStageHistory[]
   emailMessages       EmailMessage[]
   linkedinActivities  LinkedinActivity[]
   clickupSync         ClickupSync?
@@ -881,6 +888,98 @@ model PipelineState {
   preparationCompletedAt DateTime? @map("preparation_completed_at")
 
   @@map("pipeline_states")
+}
+
+/// Historical log of human-initiated stage transitions (Part: Dashboard
+/// Center, 2026-09-30) — PipelineState above only ever holds the CURRENT
+/// stage plus one level of "previousStage" undo, so once a lead moves twice
+/// there is no way to recover how long it sat in the stage before that. This
+/// table is additive, append-only, and deliberately scoped to the
+/// human-facing transitions (advanceStage/moveBack/rewindTo, plus initial
+/// pipeline entry) — NOT every automated sequencer sub-stage hop
+/// (WAITING_EMAIL_N <-> EMAIL_N_SENT), to avoid touching that live,
+/// revenue-generating send automation just to backfill audit granularity
+/// nobody asked about for a purely internal step. Dashboards built on this
+/// must note that coverage boundary rather than imply full automated-stage
+/// timing.
+model LeadStageHistory {
+  id     String @id @default(uuid())
+  orgId  String @map("org_id")
+  org    Organization @relation(fields: [orgId], references: [id])
+  leadId String @map("lead_id")
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  /// Null for the row marking initial pipeline entry (nothing came before it).
+  fromStage PipelineStage? @map("from_stage")
+  toStage   PipelineStage  @map("to_stage")
+  /// When this transition happened -- also when dwell time in fromStage
+  /// ended, letting "average time in stage" be computed as a self-join over
+  /// consecutive rows for the same lead without needing a separate duration
+  /// column that could drift out of sync with the raw timestamps.
+  transitionedAt DateTime @default(now()) @map("transitioned_at")
+  /// Null means system/automation-driven (e.g. promoteToPipeline's bulk
+  /// entry), not a missing value -- distinguishing "a person did this" from
+  /// "automation did this" is itself part of what the Activity/Audit
+  /// dashboard needs to show honestly.
+  changedByUserId String? @map("changed_by_user_id")
+  changedByUser   User?   @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([leadId, transitionedAt])
+  @@index([orgId, toStage, transitionedAt])
+  @@map("lead_stage_history")
+}
+
+/// Manually-entered record of buying Upwork Connects (Part: Dashboard
+/// Center / Upwork Connect Analytics, 2026-09-30) — Upwork's API exposes no
+/// way to read what was actually paid for connects, and `UpworkProposal.
+/// connects` is only ever a per-proposal count with zero cost attached. This
+/// is the only source of truth for real connect cost; without at least one
+/// row here every dollar-based Upwork metric (cost/bid, cost/client, etc.)
+/// stays "data unavailable" rather than assuming a fixed price. Cost per
+/// connect for any given period is computed as a cumulative weighted-average
+/// (total cost of purchases to date / total connects purchased to date),
+/// not per-transaction FIFO consumption tracking — simpler and still honest
+/// about actual money spent, just not attributing a specific used connect to
+/// a specific purchase lot.
+model UpworkConnectPurchase {
+  id             String   @id @default(uuid())
+  orgId          String   @map("org_id")
+  org            Organization @relation(fields: [orgId], references: [id])
+  purchasedAt    DateTime @map("purchased_at")
+  connectsAmount Int      @map("connects_amount")
+  totalCost      Float    @map("total_cost")
+  currency       String   @default("USD")
+  notes          String?
+  createdByUserId String? @map("created_by_user_id")
+  createdByUser   User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, purchasedAt])
+  @@map("upwork_connect_purchases")
+}
+
+/// Admin-configurable performance targets (Part: Dashboard Center /
+/// Benchmark System, 2026-09-30) — deliberately a real typed model rather
+/// than stuffing thresholds into Organization.settings Json, matching this
+/// codebase's existing precedent of dedicated models for anything that
+/// drives real logic (NicheFilter.scheduleCron, SendingSchedule) rather than
+/// display-only config. `metricKey` is a free string keyed by convention
+/// (e.g. "EMAIL_OPEN_RATE", "COST_PER_LEAD") rather than an enum, so a new
+/// benchmarked metric never needs a migration to add. A dashboard shows
+/// actual vs. this value vs. the difference — never a bare "good/bad" label,
+/// per the spec's explicit "do not imply performance judgments" rule.
+model Benchmark {
+  id              String   @id @default(uuid())
+  orgId           String   @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  metricKey       String   @map("metric_key")
+  targetValue     Float    @map("target_value")
+  updatedByUserId String?  @map("updated_by_user_id")
+  updatedByUser   User?    @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([orgId, metricKey])
+  @@map("benchmarks")
 }
 
 model EmailAccount {

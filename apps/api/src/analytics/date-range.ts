@@ -19,6 +19,9 @@ export type DateRangeName =
   | "LAST_WEEK"
   | "THIS_MONTH"
   | "LAST_MONTH"
+  | "THIS_QUARTER"
+  | "THIS_YEAR"
+  | "LAST_7_DAYS"
   | "LAST_30_DAYS"
   | "LAST_90_DAYS"
   | "CUSTOM"
@@ -82,6 +85,14 @@ export function resolveDateRange(
       const thisMonth = startOfMonth(now);
       return { from: new Date(thisMonth.getFullYear(), thisMonth.getMonth() - 1, 1), to: thisMonth };
     }
+    case "THIS_QUARTER": {
+      const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3;
+      return { from: new Date(now.getFullYear(), quarterStartMonth, 1), to: now };
+    }
+    case "THIS_YEAR":
+      return { from: new Date(now.getFullYear(), 0, 1), to: now };
+    case "LAST_7_DAYS":
+      return { from: addDays(today, -7), to: now };
     case "LAST_30_DAYS":
       return { from: addDays(today, -30), to: now };
     case "LAST_90_DAYS":

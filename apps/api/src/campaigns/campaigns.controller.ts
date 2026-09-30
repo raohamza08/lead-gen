@@ -10,6 +10,7 @@ import { Roles } from "../common/decorators/roles.decorator";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
+import { AuditLogService } from "../audit-log/audit-log.service";
 
 export class UpsertCampaignDto {
   @IsString() name!: string;
@@ -34,6 +35,7 @@ export class CampaignsController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly campaigns: CampaignsService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   @Get()
@@ -60,10 +62,12 @@ export class CampaignsController {
 
   @Post()
   @Roles(Role.ADMIN, Role.MANAGER)
-  create(@CurrentUser() user: JwtClaims, @Body() dto: UpsertCampaignDto) {
-    return this.prisma.campaign.create({
+  async create(@CurrentUser() user: JwtClaims, @Body() dto: UpsertCampaignDto) {
+    const campaign = await this.prisma.campaign.create({
       data: { ...dto, orgId: user.orgId, emailSequence: dto.emailSequence ?? [], linkedinSequence: dto.linkedinSequence ?? [] },
     });
+    this.auditLog.write({ orgId: user.orgId, actorId: user.sub, action: "CAMPAIGN_CREATED", entityType: "campaign", entityId: campaign.id, metadata: { name: campaign.name } });
+    return campaign;
   }
 
   @Patch(":id")

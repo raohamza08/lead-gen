@@ -29,6 +29,7 @@ import { EmailVerificationService } from "./email-verification.service";
 import { NotificationsService } from "../notifications/notifications.service";
 import { ReportEmailDraftFailureDto } from "./dto/report-email-draft-failure.dto";
 import { PreparationPipelineService } from "../preparation/preparation-pipeline.service";
+import { AuditLogService } from "../audit-log/audit-log.service";
 
 export interface CreateLeadResult {
   status: "created" | "duplicate";
@@ -50,6 +51,7 @@ export class LeadsService {
     private readonly emailVerification: EmailVerificationService,
     private readonly notifications: NotificationsService,
     private readonly preparationPipeline: PreparationPipelineService,
+    private readonly auditLog: AuditLogService,
   ) {}
 
   /**
@@ -170,6 +172,9 @@ export class LeadsService {
 
         await tx.pipelineState.create({
           data: { leadId: created.id, stage: PipelineStage.READY_FOR_OUTREACH },
+        });
+        await tx.leadStageHistory.create({
+          data: { orgId, leadId: created.id, fromStage: null, toStage: PipelineStage.READY_FOR_OUTREACH },
         });
 
         return created;
@@ -443,7 +448,7 @@ export class LeadsService {
    *  matching a filter. Re-scoped to `orgId` here (not just trusted from
    *  the request) so a crafted id list from another org can't be used to
    *  delete leads outside the caller's own org. */
-  async removeByIds(orgId: string, leadIds: string[]) {
+  async removeByIds(orgId: string, leadIds: string[], actorId?: string) {
     const leads = await this.prisma.lead.findMany({
       where: { orgId, id: { in: leadIds } },
       select: { id: true },
@@ -453,6 +458,7 @@ export class LeadsService {
     }
     if (leads.length === 0) return { deleted: 0 };
     const result = await this.prisma.lead.deleteMany({ where: { id: { in: leads.map((l) => l.id) } } });
+    this.auditLog.write({ orgId, actorId, action: "LEADS_BULK_DELETED", entityType: "lead", metadata: { count: result.count, leadIds: leads.map((l) => l.id) } });
     return { deleted: result.count };
   }
 
@@ -486,6 +492,11 @@ export class LeadsService {
 
     await this.prisma.pipelineState.createMany({
       data: candidates.map((l) => ({ leadId: l.id, stage: PipelineStage.READY_FOR_OUTREACH })),
+    });
+    // Null fromStage/changedByUserId -- this is bulk pipeline entry, not a
+    // one-lead human decision (Part: Dashboard Center, 2026-09-30).
+    await this.prisma.leadStageHistory.createMany({
+      data: candidates.map((l) => ({ orgId, leadId: l.id, fromStage: null, toStage: PipelineStage.READY_FOR_OUTREACH })),
     });
 
     for (const { id } of candidates) {
@@ -791,7 +802,7 @@ export class LeadsService {
    * side-effect into the sequencer for the stages that trigger automation
    * (e.g. entering READY_FOR_OUTREACH enqueues Email #1).
    */
-  async advanceStage(orgId: string, id: string, toStage: PipelineStage) {
+  async advanceStage(orgId: string, id: string, toStage: PipelineStage, userId?: string) {
     const lead = await this.assertOwnership(orgId, id);
     const current = await this.prisma.pipelineState.findUnique({ where: { leadId: id } });
     // A Lead Room lead (human-added, not yet promoted — see
@@ -815,6 +826,9 @@ export class LeadsService {
       // automation failed (e.g. Email #1 with no mailbox configured yet)
       // without a separate retry mechanism.
       data: { stage: toStage, previousStage: current.stage, enteredStageAt: new Date() },
+    });
+    await this.prisma.leadStageHistory.create({
+      data: { orgId, leadId: id, fromStage: current.stage, toStage, changedByUserId: userId },
     });
 
     await this.prisma.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
@@ -865,7 +879,7 @@ export class LeadsService {
    * timer, since rewinding out of a WAITING_* stage must not leave a stale
    * BullMQ job that fires against a stage the lead has since left.
    */
-  async moveBack(orgId: string, id: string) {
+  async moveBack(orgId: string, id: string, userId?: string) {
     await this.assertOwnership(orgId, id);
     const current = await this.prisma.pipelineState.findUniqueOrThrow({ where: { leadId: id } });
 
@@ -878,6 +892,9 @@ export class LeadsService {
     const updated = await this.prisma.pipelineState.update({
       where: { leadId: id },
       data: { stage: current.previousStage, previousStage: current.stage, enteredStageAt: new Date() },
+    });
+    await this.prisma.leadStageHistory.create({
+      data: { orgId, leadId: id, fromStage: current.stage, toStage: current.previousStage, changedByUserId: userId },
     });
 
     await this.prisma.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
@@ -906,7 +923,7 @@ export class LeadsService {
    * and re-firing it could send a duplicate of an email that already went
    * out.
    */
-  async rewindTo(orgId: string, id: string, toStage: PipelineStage) {
+  async rewindTo(orgId: string, id: string, toStage: PipelineStage, userId?: string) {
     await this.assertOwnership(orgId, id);
     const current = await this.prisma.pipelineState.findUniqueOrThrow({ where: { leadId: id } });
 
@@ -919,6 +936,9 @@ export class LeadsService {
     const updated = await this.prisma.pipelineState.update({
       where: { leadId: id },
       data: { stage: toStage, previousStage: current.stage, enteredStageAt: new Date() },
+    });
+    await this.prisma.leadStageHistory.create({
+      data: { orgId, leadId: id, fromStage: current.stage, toStage, changedByUserId: userId },
     });
 
     await this.prisma.lead.update({ where: { id }, data: { lastActivityAt: new Date() } });
@@ -1240,6 +1260,7 @@ export class LeadsService {
     }
 
     const lead = await this.insertManualLead(orgId, dto, websiteDomain, sourceLayer, uploadedByUserId);
+    this.auditLog.write({ orgId, actorId: uploadedByUserId, action: "LEAD_CREATED_MANUAL", entityType: "lead", entityId: lead.id, leadId: lead.id, metadata: { companyName: dto.companyName } });
 
     this.sync.onLeadCreated(lead.id).catch((err) =>
       this.logger.warn(`Sync dispatch failed for lead ${lead.id}: ${(err as Error).message}`),
@@ -1545,6 +1566,10 @@ export class LeadsService {
       successful: created.length,
       duplicates: duplicateCount,
       invalid: failed.length,
+    });
+    this.auditLog.write({
+      orgId, actorId: userId, action: "LEADS_IMPORTED", entityType: "leadImport", entityId: importRecord.id,
+      metadata: { total: rows.length, successful: created.length, duplicates: duplicateCount, invalid: failed.length },
     });
 
     return { created: created.length, duplicates: duplicateCount, failed, importId: importRecord.id };
