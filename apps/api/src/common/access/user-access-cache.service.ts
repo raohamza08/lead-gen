@@ -11,6 +11,7 @@ export interface UserAccessSnapshot {
   socialMediaAccess: boolean;
   socialEngagementAccess: boolean;
   upworkAccess: boolean;
+  metaAdsAccess: boolean;
   isPrimaryAdmin: boolean;
 }
 
@@ -59,6 +60,7 @@ export class UserAccessCacheService {
           socialMediaAccess: true,
           socialEngagementAccess: true,
           upworkAccess: true,
+          metaAdsAccess: true,
           isPrimaryAdmin: true,
         },
       });

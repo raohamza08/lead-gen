@@ -196,6 +196,7 @@ model Organization {
   leadImports     LeadImport[]
   upworkProposals UpworkProposal[]
   agentOptimizationCycles AgentOptimizationCycle[]
+  metaAdAccounts  MetaAdAccount[]
 
   @@map("organizations")
 }
@@ -231,6 +232,10 @@ model User {
   /// above: every existing user keeps access rather than an admin having to
   /// grant it by hand the moment this ships.
   upworkAccess Boolean @default(true) @map("upwork_access")
+  /// New module (Part: Meta Ads, 2026-09-30) — same default-true retrofit
+  /// reasoning as upworkAccess above: every existing user keeps access
+  /// rather than an admin having to grant it by hand the moment this ships.
+  metaAdsAccess Boolean @default(true) @map("meta_ads_access")
   /// The org's single authorized administrator (Part: Notification Center &
   /// Admin/Audit, 2026-08-31) — distinct from Role.ADMIN, which any admin can
   /// already grant to any other user. This flag gates System Logs and
@@ -2149,4 +2154,203 @@ model SocialAuditLog {
 
   @@index([orgId, createdAt])
   @@map("social_audit_logs")
+}
+
+// ----------------------------------------------------------------------
+// Meta Ads (Part: Meta Ads module, 2026-09-30) — read-only Marketing API
+// reporting, deliberately its own connection separate from SocialAccount's
+// Facebook row (Part: standing decision): ads_read is a different grant than
+// the posting/DM/engagement scopes the Social Media module already requests,
+// and Meta rejects an entire OAuth request outright if any one requested
+// scope isn't approved for the app (same failure mode facebook.provider.ts
+// already documents) — keeping this a separate authorization means a
+// problem with one never breaks the other.
+//
+// Insights are stored at the finest available granularity (one row per ad
+// per day) rather than duplicated per level (account/campaign/ad set/ad) —
+// campaign and ad-set rollups are computed by aggregating this table at read
+// time. This means exactly one Insights API call per sync window, not one
+// per level, and campaign/ad-set totals can never drift out of sync with
+// their own ads' numbers since there is only one copy of the underlying
+// number.
+// ----------------------------------------------------------------------
+
+enum MetaAdAccountStatus {
+  CONNECTED
+  EXPIRED
+  DISCONNECTED
+  ERROR
+}
+
+model MetaAdAccount {
+  id    String @id @default(uuid())
+  orgId String @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+
+  /// Meta's own id, e.g. "act_1234567890" — used verbatim as the path
+  /// segment on every Marketing API call for this account.
+  externalAccountId String @map("external_account_id")
+  name              String
+  currency          String?
+  timezoneName      String? @map("timezone_name")
+  businessId        String? @map("business_id")
+  businessName      String? @map("business_name")
+  status            MetaAdAccountStatus @default(DISCONNECTED)
+
+  /// Long-lived (~60 day) user access token — encrypted at rest
+  /// (EncryptionService), same convention as SocialAccount.accessTokenEnc.
+  /// Unlike a Facebook Page token, this genuinely expires, so
+  /// tokenExpiresAt is load-bearing here (see MetaTokenRefreshWorker), not
+  /// just informational.
+  accessTokenEnc    String?   @map("access_token_enc")
+  tokenExpiresAt    DateTime? @map("token_expires_at")
+  connectedByUserId String?   @map("connected_by_user_id")
+  connectedAt       DateTime? @map("connected_at")
+  lastSyncAt        DateTime? @map("last_sync_at")
+  /// Last sync failure, human-readable — surfaced directly in the connection
+  /// status UI rather than a raw Meta error blob (Part: Error Handling).
+  /// Cleared on the next successful sync.
+  lastSyncError     String?   @map("last_sync_error")
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  campaigns MetaCampaign[]
+  insights  MetaAdInsightDaily[]
+
+  /// One row per (org, Meta ad account) — reconnecting the same account
+  /// edits this row rather than creating a duplicate, same convention as
+  /// SocialAccount's own unique constraint.
+  @@unique([orgId, externalAccountId])
+  @@map("meta_ad_accounts")
+}
+
+model MetaCampaign {
+  id          String @id @default(uuid())
+  adAccountId String @map("ad_account_id")
+  adAccount   MetaAdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+
+  externalCampaignId String @map("external_campaign_id")
+  name               String
+  /// Meta's effective_status verbatim ("ACTIVE", "PAUSED", "ARCHIVED",
+  /// "DELETED", ...) — free text like SocialAccount.accountType, since
+  /// Meta's own vocabulary is the source of truth, not a fixed enum we'd
+  /// have to keep in sync with their API.
+  status             String
+  objective          String?
+  dailyBudget        Float?    @map("daily_budget")
+  lifetimeBudget     Float?    @map("lifetime_budget")
+  buyingType         String?   @map("buying_type")
+  startTime          DateTime? @map("start_time")
+  stopTime           DateTime? @map("stop_time")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  adSets   MetaAdSet[]
+  insights MetaAdInsightDaily[]
+
+  @@unique([adAccountId, externalCampaignId])
+  @@index([adAccountId])
+  @@map("meta_campaigns")
+}
+
+model MetaAdSet {
+  id         String @id @default(uuid())
+  campaignId String @map("campaign_id")
+  campaign   MetaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  externalAdSetId  String    @map("external_ad_set_id")
+  name             String
+  status           String
+  dailyBudget      Float?    @map("daily_budget")
+  lifetimeBudget   Float?    @map("lifetime_budget")
+  optimizationGoal String?   @map("optimization_goal")
+  billingEvent     String?   @map("billing_event")
+  startTime        DateTime? @map("start_time")
+  endTime          DateTime? @map("end_time")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  ads      MetaAd[]
+  insights MetaAdInsightDaily[]
+
+  @@unique([campaignId, externalAdSetId])
+  @@index([campaignId])
+  @@map("meta_ad_sets")
+}
+
+model MetaAd {
+  id      String @id @default(uuid())
+  adSetId String @map("ad_set_id")
+  adSet   MetaAdSet @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+
+  externalAdId String   @map("external_ad_id")
+  name         String
+  status       String
+  creativeId   String?  @map("creative_id")
+  thumbnailUrl String?  @map("thumbnail_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  insights MetaAdInsightDaily[]
+
+  @@unique([adSetId, externalAdId])
+  @@index([adSetId])
+  @@map("meta_ads_entities")
+}
+
+model MetaAdInsightDaily {
+  id String @id @default(uuid())
+
+  /// Denormalized onto every row (not just reachable via ad -> adSet ->
+  /// campaign) so account/campaign/ad-set rollup queries never need a join
+  /// through three tables just to filter — same tradeoff SocialAuditLog's
+  /// own accountId/postId columns already make.
+  adAccountId String  @map("ad_account_id")
+  adAccount   MetaAdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  campaignId  String? @map("campaign_id")
+  campaign    MetaCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  adSetId     String? @map("ad_set_id")
+  adSet       MetaAdSet? @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+  adId        String? @map("ad_id")
+  ad          MetaAd? @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  date DateTime @db.Date
+
+  impressions Int    @default(0)
+  reach       Int    @default(0)
+  frequency   Float?
+  clicks      Int    @default(0)
+  linkClicks  Int?   @map("link_clicks")
+  spend       Float  @default(0)
+  ctr         Float?
+  cpc         Float?
+  cpm         Float?
+  videoViews         Int? @map("video_views")
+  landingPageViews   Int? @map("landing_page_views")
+
+  /// Meta's raw `actions` array verbatim (one entry per action_type: link
+  /// click, purchase, lead, add_to_cart, ...) — stored as-is rather than one
+  /// column per action type (Part: "do not hard-code metrics Meta doesn't
+  /// return"). The dashboard reads named actions out of this dynamically, so
+  /// a new/renamed Meta action type needs no migration here.
+  actions           Json? @map("actions")
+  actionValues      Json? @map("action_values")
+  costPerActionType Json? @map("cost_per_action_type")
+  /// Meta's `purchase_roas` array verbatim — only present when Meta actually
+  /// returns it (purchase-optimized campaigns with a connected catalog/
+  /// pixel), never fabricated for campaigns without it.
+  purchaseRoas      Json? @map("purchase_roas")
+  currency          String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  /// One row per ad per day — the sync always pulls at ad level with
+  /// time_increment=1, so this is what dedup/upsert keys on. A row with
+  /// adId null never happens in practice (the sync never requests
+  /// account/campaign-level aggregates), kept nullable only because the
+  /// FK chain above is itself nullable on delete.
+  @@unique([adId, date])
+  @@index([adAccountId, date])
+  @@index([campaignId, date])
+  @@index([adSetId, date])
+  @@map("meta_ad_insights_daily")
 }

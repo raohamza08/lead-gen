@@ -2,7 +2,7 @@ import { SetMetadata } from "@nestjs/common";
 
 export const MODULE_ACCESS_KEY = "requiresModule";
 
-export type AccessModule = "LEAD_GENERATION" | "EMAIL_HUB" | "SOCIAL_MEDIA" | "SOCIAL_ENGAGEMENT" | "UPWORK";
+export type AccessModule = "LEAD_GENERATION" | "EMAIL_HUB" | "SOCIAL_MEDIA" | "SOCIAL_ENGAGEMENT" | "UPWORK" | "META_ADS";
 
 /** Attach to a controller/route: @RequiresModule("EMAIL_HUB"). Enforced by
  *  ModuleAccessGuard. Pass an array for OR semantics — access.

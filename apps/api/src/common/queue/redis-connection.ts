@@ -81,4 +81,13 @@ export const QUEUE_NAMES = {
   // agent failures, not the whole process being down. See
   // ai-workers-health.worker.ts.
   AI_WORKERS_HEALTH: "ai-workers-health",
+  // Periodic campaigns/ad sets/ads + daily insights pull for every CONNECTED
+  // Meta ad account (Part: Meta Ads module, 2026-09-30) -- see
+  // meta-ads-sync.worker.ts. Separate from every social-media queue since
+  // this module is its own connection, not part of that one.
+  META_ADS_SYNC: "meta-ads-sync",
+  // Proactively re-exchanges a Meta Ads long-lived token before its ~60 day
+  // expiry (Part: Meta Ads module, 2026-09-30) -- see
+  // meta-ads-token-refresh.worker.ts.
+  META_ADS_TOKEN_REFRESH: "meta-ads-token-refresh",
 } as const;

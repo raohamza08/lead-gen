@@ -7,6 +7,7 @@ export class UpdateUserModulesDto {
   @IsOptional() @IsBoolean() socialMediaAccess?: boolean;
   @IsOptional() @IsBoolean() socialEngagementAccess?: boolean;
   @IsOptional() @IsBoolean() upworkAccess?: boolean;
+  @IsOptional() @IsBoolean() metaAdsAccess?: boolean;
 }
 
 export class UpdateUserEmailAccountAccessDto {

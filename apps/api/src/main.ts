@@ -53,7 +53,7 @@ async function bootstrap() {
     // matching how media's own public URL is built. Without this exclusion
     // that URL 404'd against the real (prefixed) route while every avatar
     // in the app silently failed to load.
-    exclude: ["webhooks/(.*)", "track/(.*)", "unsubscribe", "media/(.*)", "social-oauth/(.*)", "users/:id/avatar"],
+    exclude: ["webhooks/(.*)", "track/(.*)", "unsubscribe", "media/(.*)", "social-oauth/(.*)", "meta-ads-oauth/(.*)", "users/:id/avatar"],
   });
 
   // Managed hosts (Render, Railway, Fly) inject the port to bind and route to

@@ -9,6 +9,7 @@ interface ModuleFlags {
   socialMediaAccess: boolean;
   socialEngagementAccess: boolean;
   upworkAccess: boolean;
+  metaAdsAccess: boolean;
 }
 
 interface EmailAccountRow {
@@ -46,6 +47,7 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
     hint: "Narrower than Social Media — only DMs and comments, not Create Post/Calendar/Analytics/Automations/Accounts. Redundant if Social Media is already checked.",
   },
   { key: "upworkAccess", label: "Upwork Proposals" },
+  { key: "metaAdsAccess", label: "Meta Ads" },
 ];
 
 /**

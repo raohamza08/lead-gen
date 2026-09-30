@@ -137,6 +137,50 @@ not change with any of this.
 
 ---
 
+## Meta Ads module (2026-09-30)
+
+New, separate module: `apps/api/src/meta-ads/` (backend) and
+`/meta-ads`, `/meta-ads/campaigns`, `/meta-ads/adsets`, `/meta-ads/ads`,
+`/settings/meta-ads` (frontend) — read-only Meta Marketing API reporting
+(campaigns/ad sets/ads/daily insights), deliberately a **separate connection**
+from the Social Media module's Facebook page: `ads_read` is a different OAuth
+grant than that module's posting/DM/engagement scopes, and reuses the same
+Meta App (`META_OAUTH_CLIENT_ID`/`SECRET`, already in `.env`) without
+touching that provider's own requested scopes.
+
+**Data model:** `MetaAdAccount → MetaCampaign → MetaAdSet → MetaAd`, plus one
+`MetaAdInsightDaily` table storing insights at the **finest** granularity
+(one row per ad per day) — campaign/ad-set/account rollups are aggregated at
+read time, so exactly one Meta Insights API call happens per sync window, not
+one per level. Action-type metrics (purchases, leads, add-to-cart, ROAS,
+etc.) are stored as Meta's raw `actions`/`action_values` JSON, never
+hardcoded columns — `meta-ads-metrics.util.ts` derives named metrics from
+whatever action types a given campaign's objective actually produced.
+
+**Sync:** `MetaAdsSyncWorker` ticks every 3h across every CONNECTED account
+(first sync pulls 37 days back-filled, later ticks re-pull a rolling 3-day
+window to catch Meta's late attribution updates); `MetaAdsTokenRefreshWorker`
+proactively re-exchanges the long-lived (~60 day) token within 7 days of
+expiry. Manual "Sync now" (dashboard button) calls the same
+`MetaAdsSyncService.syncAccount` synchronously rather than queuing a job.
+
+**Module access:** new `metaAdsAccess` per-user flag (`AccessModule.META_ADS`
+in `requires-module.decorator.ts`), same default-true retrofit pattern as
+`upworkAccess` — toggle lives in Settings → Team → person access panel.
+
+**Verified live (2026-09-30):** clicking Connect from `/settings/meta-ads`
+correctly redirects to Meta's real OAuth dialog with the right client id,
+`ads_read` scope, and callback URL. Not yet verified past that point — no
+real Meta ad account has actually been connected/synced, since that needs a
+human to complete the real Facebook login (off-limits for an agent to do).
+First real connect should double-check: (1) whether `ads_read` needs Meta App
+Review/Advanced Access for ad accounts the logging-in user doesn't personally
+administer, and (2) the actual shape of a live Insights API response — the
+field list and action-type matching in `meta-ads-metrics.util.ts` are built
+from Meta's documented API, not a real captured response.
+
+---
+
 ## 5-email sequence, real drafting engine (2026-08-12)
 
 **Replaces the old 3-email flow (Email 1/2 static templates + a Gemini-drafted

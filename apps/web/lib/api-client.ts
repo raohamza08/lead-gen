@@ -611,4 +611,23 @@ export const api = {
   replySocialEngagementComment: (id: string, text: string) =>
     request(`/social-engagement/comments/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
   likeSocialEngagementComment: (id: string) => request(`/social-engagement/comments/${id}/like`, { method: "POST" }),
+
+  // ---- Meta Ads ----
+  getMetaAdsOAuthUrl: () => request("/meta-ads/oauth/url") as Promise<{ url: string }>,
+  getMetaAdsPendingSelection: (pendingId: string) => request(`/meta-ads/pending/${pendingId}`),
+  selectMetaAdAccounts: (pendingId: string, externalAccountIds: string[]) =>
+    request("/meta-ads/accounts/select", { method: "POST", body: JSON.stringify({ pendingId, externalAccountIds }) }),
+  getMetaAdsAccounts: () => request("/meta-ads/accounts"),
+  disconnectMetaAdAccount: (id: string) => request(`/meta-ads/accounts/${id}`, { method: "DELETE" }),
+  syncMetaAdAccount: (id: string) => request(`/meta-ads/accounts/${id}/sync`, { method: "POST" }),
+  getMetaAdsOverview: (accountId: string, params: Record<string, string> = {}) =>
+    request(`/meta-ads/accounts/${accountId}/overview?${new URLSearchParams(params).toString()}`),
+  getMetaAdsTimeseries: (accountId: string, params: Record<string, string> = {}) =>
+    request(`/meta-ads/accounts/${accountId}/timeseries?${new URLSearchParams(params).toString()}`),
+  getMetaAdsCampaigns: (accountId: string, params: Record<string, string> = {}) =>
+    request(`/meta-ads/accounts/${accountId}/campaigns?${new URLSearchParams(params).toString()}`),
+  getMetaAdsAdSets: (accountId: string, params: Record<string, string> = {}) =>
+    request(`/meta-ads/accounts/${accountId}/adsets?${new URLSearchParams(params).toString()}`),
+  getMetaAdsAds: (accountId: string, params: Record<string, string> = {}) =>
+    request(`/meta-ads/accounts/${accountId}/ads?${new URLSearchParams(params).toString()}`),
 };

@@ -5,12 +5,13 @@ import { UserAccessCacheService } from "../access/user-access-cache.service";
 import { AccessModule, MODULE_ACCESS_KEY } from "../decorators/requires-module.decorator";
 import { PermissionDenialLogger } from "./permission-denial-logger.service";
 
-const FIELD_BY_MODULE: Record<AccessModule, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess"> = {
+const FIELD_BY_MODULE: Record<AccessModule, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess" | "metaAdsAccess"> = {
   LEAD_GENERATION: "leadGenAccess",
   EMAIL_HUB: "emailHubAccess",
   SOCIAL_MEDIA: "socialMediaAccess",
   SOCIAL_ENGAGEMENT: "socialEngagementAccess",
   UPWORK: "upworkAccess",
+  META_ADS: "metaAdsAccess",
 };
 
 /**
