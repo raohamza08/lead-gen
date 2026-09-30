@@ -75,7 +75,10 @@ const NAV: NavItem[] = [
     ],
   },
   { type: "link", href: "/social-inbox", label: "Social Inbox", moduleFlag: ["socialMediaAccess", "socialEngagementAccess"] },
-  { type: "link", href: "/social-engagement", label: "Engagement", moduleFlag: ["socialMediaAccess", "socialEngagementAccess"] },
+  // Engagement (Social Engagement Center) nav entry intentionally removed
+  // (2026-09-30) -- no current requirement; the page/backend/sync worker
+  // are untouched, just not linked, so re-adding this one line reconnects
+  // it later.
   {
     type: "group",
     label: "Social Media",

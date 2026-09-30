@@ -29,7 +29,6 @@ import { SocialInboxSyncWorker } from "./social-inbox-sync.worker";
 import { SocialInboxService } from "./social-inbox.service";
 import { SocialInboxController } from "./social-inbox.controller";
 import { SocialEngagementIngestService } from "./social-engagement-ingest.service";
-import { SocialEngagementSyncQueue } from "./social-engagement-sync.queue";
 import { SocialEngagementSyncWorker } from "./social-engagement-sync.worker";
 import { SocialEngagementService } from "./social-engagement.service";
 import { SocialEngagementController } from "./social-engagement.controller";
@@ -62,7 +61,15 @@ import { SocialOAuthAppService } from "./social-oauth-app.service";
     SocialInboxSyncWorker,
     SocialInboxService,
     SocialEngagementIngestService,
-    SocialEngagementSyncQueue,
+    // SocialEngagementSyncQueue deliberately not registered (2026-09-30) --
+    // Engagement is disconnected/hidden, no current requirement. That Queue
+    // is what schedules the repeatable "tick" job (and its already-scheduled
+    // job was removed from Redis directly); SocialEngagementSyncWorker
+    // itself stays registered below since SocialEngagementService injects
+    // it directly for manual per-account sync (bypassing the queue) -- with
+    // no Queue ever adding jobs, the Worker's own consumer just sits idle,
+    // so automatic polling is fully stopped either way. Re-adding the
+    // Queue's import + provider line reconnects the poll cycle later.
     SocialEngagementSyncWorker,
     SocialEngagementService,
     SocialOAuthAppService,
