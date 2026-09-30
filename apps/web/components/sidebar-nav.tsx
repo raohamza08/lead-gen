@@ -68,6 +68,7 @@ const NAV: NavItem[] = [
       { href: "/dashboards/pipeline", label: "Pipeline" },
       { href: "/dashboards/team", label: "Team Performance" },
       { href: "/dashboards/activity", label: "Activity / Audit" },
+      { href: "/dashboards/benchmarks", label: "Benchmarks" },
     ],
   },
   {

@@ -46,6 +46,21 @@ export function defaultDashboardDateRange(): DashboardDateRange {
   return { range: "LAST_30_DAYS", from: isoDate(from), to: isoDate(to), compare: false };
 }
 
+/** Turns the shared date-range control into the {range, from, to, compare}
+ *  query params every /dashboard-center/* endpoint accepts (Part:
+ *  Dashboard Center) — from/to are only meaningful (and only sent) when
+ *  range === "CUSTOM", mirroring resolveDateRange's own CUSTOM handling on
+ *  the API side. */
+export function dashboardRangeToQuery(range: DashboardDateRange): Record<string, string> {
+  const params: Record<string, string> = { range: range.range };
+  if (range.range === "CUSTOM") {
+    params.from = range.from;
+    params.to = range.to;
+  }
+  if (range.compare) params.compare = "true";
+  return params;
+}
+
 /** The universal date filter every Dashboard Center page shares (Part:
  *  Dashboard Center spec section 1/14) — named presets plus a custom range
  *  and a "compare to previous period" toggle. Purely a UI control here;

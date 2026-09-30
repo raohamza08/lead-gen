@@ -1,22 +1,131 @@
 "use client";
 
-import { DashboardCenterShell, NotBuiltYet, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
+import { useQuery } from "@tanstack/react-query";
+import { api } from "../../../../lib/api-client";
+import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
+import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
+import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
+import { DataTable, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { ErrorState } from "../../../../components/ui/error-state";
+import { SkeletonCard } from "../../../../components/ui/skeleton";
+import { EmptyState } from "../../../../components/ui/empty-state";
 
-export default function SocialInboxDashboardPage() {
+interface SocialKpis {
+  totalConversations: number;
+  unreadConversations: number;
+  repliedConversations: number;
+  pendingConversations: number;
+  responseRate?: number;
+  avgResponseMinutes?: number;
+  leadConversionAvailable: boolean;
+}
+
+interface PlatformRow {
+  accountId: string;
+  platform: string;
+  username: string;
+  conversations: number;
+  newConversations: number;
+  unread: number;
+  messagesIn: number;
+  messagesOut: number;
+}
+
+interface TeamRow {
+  userId: string;
+  name: string;
+  conversationsHandled: number;
+  avgResponseMinutes?: number;
+}
+
+export default function SocialDashboardPage() {
   const [dateRange, setDateRange] = useDashboardDateRange();
+  const query = dashboardRangeToQuery(dateRange);
+
+  const kpisQuery = useQuery({ queryKey: ["dc-social-kpis", query], queryFn: () => api.getDashboardSocialKpis(query) as Promise<SocialKpis> });
+  const platformsQuery = useQuery({
+    queryKey: ["dc-social-platforms", query],
+    queryFn: () => api.getDashboardSocialPlatforms(query) as Promise<PlatformRow[]>,
+  });
+  const teamQuery = useQuery({ queryKey: ["dc-social-team", query], queryFn: () => api.getDashboardSocialTeam(query) as Promise<TeamRow[]> });
+
+  const kpis = kpisQuery.data;
+  const platforms = platformsQuery.data ?? [];
+  const team = teamQuery.data ?? [];
+
   return (
     <DashboardCenterShell
       title="Social Inbox Dashboard"
-      subtitle="Conversation volume, platform breakdown, and per-user response metrics."
+      subtitle="Conversation volume, response times, and per-platform breakdown across connected social accounts."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
+      onRefresh={() => {
+        kpisQuery.refetch();
+        platformsQuery.refetch();
+        teamQuery.refetch();
+      }}
     >
-      <NotBuiltYet dataSources={["SocialConversation", "SocialMessage", "SocialAccountAnalyticsSnapshot"]} />
-      <p className="text-xs text-ink/45">
-        Note: the schema has no link from a social conversation to a CRM Lead yet, so the
-        &quot;message → lead → client&quot; conversion funnel in the spec can&apos;t be built honestly until that
-        linkage exists — it will show as unavailable rather than a guessed number.
-      </p>
+      {kpisQuery.isLoading && <SkeletonCard className="h-32" />}
+      {kpisQuery.error && <ErrorState message={(kpisQuery.error as Error).message} onRetry={() => kpisQuery.refetch()} />}
+
+      {kpis && (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <StatTile label="Conversations" value={num(kpis.totalConversations)} />
+            <StatTile label="Unread" value={num(kpis.unreadConversations)} />
+            <StatTile label="Replied (Closed)" value={num(kpis.repliedConversations)} />
+            <StatTile label="Pending" value={num(kpis.pendingConversations)} />
+            <StatTile label="Response Rate" value={pct(kpis.responseRate)} />
+            <StatTile label="Avg. Response Time" value={minutes(kpis.avgResponseMinutes)} />
+          </div>
+
+          {!kpis.leadConversionAvailable && (
+            <div className="card px-4 py-3 text-xs text-ink/55">
+              <span className="font-medium text-ink/70">Message → Lead → Client funnel: data unavailable.</span> No social
+              conversation or comment in this schema links to a CRM Lead record — this is a deliberate later-phase decision,
+              not a bug, so this funnel is not fabricated here.
+            </div>
+          )}
+        </>
+      )}
+
+      <SectionCard title="By platform" subtitle="Per connected account, this period">
+        {platformsQuery.isLoading && <SkeletonCard className="h-32" />}
+        {platformsQuery.error && <ErrorState message={(platformsQuery.error as Error).message} onRetry={() => platformsQuery.refetch()} />}
+        {!platformsQuery.isLoading && platforms.length === 0 && <EmptyState title="No social accounts connected" />}
+        {platforms.length > 0 && (
+          <DataTable
+            rowKey={(r) => r.accountId}
+            rows={platforms}
+            columns={[
+              { key: "platform", header: "Platform", render: (r) => titleCase(r.platform) },
+              { key: "username", header: "Account", render: (r) => r.username },
+              { key: "conversations", header: "Total Conv.", render: (r) => num(r.conversations), numeric: true },
+              { key: "newConversations", header: "New", render: (r) => num(r.newConversations), numeric: true },
+              { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true },
+              { key: "messagesIn", header: "In", render: (r) => num(r.messagesIn), numeric: true },
+              { key: "messagesOut", header: "Out", render: (r) => num(r.messagesOut), numeric: true },
+            ]}
+          />
+        )}
+      </SectionCard>
+
+      <SectionCard title="Team response performance" subtitle="Only conversations with a real assignedToUserId">
+        {teamQuery.isLoading && <SkeletonCard className="h-32" />}
+        {teamQuery.error && <ErrorState message={(teamQuery.error as Error).message} onRetry={() => teamQuery.refetch()} />}
+        {!teamQuery.isLoading && team.length === 0 && <EmptyState title="No assigned conversations in this period" />}
+        {team.length > 0 && (
+          <DataTable
+            rowKey={(r) => r.userId}
+            rows={team}
+            columns={[
+              { key: "name", header: "Team member", render: (r) => r.name },
+              { key: "conversationsHandled", header: "Conversations", render: (r) => num(r.conversationsHandled), numeric: true },
+              { key: "avgResponseMinutes", header: "Avg. Response Time", render: (r) => minutes(r.avgResponseMinutes), numeric: true },
+            ]}
+          />
+        )}
+      </SectionCard>
     </DashboardCenterShell>
   );
 }

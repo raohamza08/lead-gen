@@ -630,4 +630,63 @@ export const api = {
     request(`/meta-ads/accounts/${accountId}/adsets?${new URLSearchParams(params).toString()}`),
   getMetaAdsAds: (accountId: string, params: Record<string, string> = {}) =>
     request(`/meta-ads/accounts/${accountId}/ads?${new URLSearchParams(params).toString()}`),
+
+  // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
+  getDashboardLeadsKpis: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/leads/kpis?${new URLSearchParams(params).toString()}`),
+  getDashboardLeadsSources: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/leads/source-breakdown?${new URLSearchParams(params).toString()}`),
+  getDashboardLeadsNiches: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/leads/niche-breakdown?${new URLSearchParams(params).toString()}`),
+  getDashboardLeadsAudit: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/leads/audit?${new URLSearchParams(params).toString()}`),
+
+  getDashboardEmailKpis: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/email/kpis?${new URLSearchParams(params).toString()}`),
+  getDashboardEmailQueue: () => request("/dashboard-center/email/queue"),
+  getDashboardEmailSessions: () => request("/dashboard-center/email/sessions"),
+  getDashboardEmailStageFunnel: () => request("/dashboard-center/email/stage-funnel"),
+  getDashboardEmailTimeseries: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/email/timeseries?${new URLSearchParams(params).toString()}`),
+
+  getDashboardInboxAccounts: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/inbox/accounts?${new URLSearchParams(params).toString()}`),
+  getDashboardInboxVolume: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/inbox/volume?${new URLSearchParams(params).toString()}`),
+  getDashboardInboxLeadsFromEmail: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/inbox/leads-from-email?${new URLSearchParams(params).toString()}`),
+
+  getDashboardSocialKpis: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/social/kpis?${new URLSearchParams(params).toString()}`),
+  getDashboardSocialPlatforms: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/social/platforms?${new URLSearchParams(params).toString()}`),
+  getDashboardSocialTeam: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/social/team?${new URLSearchParams(params).toString()}`),
+
+  getDashboardUpworkKpis: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/upwork/kpis?${new URLSearchParams(params).toString()}`),
+  getDashboardUpworkMonthly: () => request("/dashboard-center/upwork/monthly"),
+  getDashboardUpworkSubmitters: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/upwork/submitters?${new URLSearchParams(params).toString()}`),
+  getDashboardUpworkConnectPurchases: () => request("/dashboard-center/upwork/connect-purchases"),
+  createDashboardUpworkConnectPurchase: (body: { purchasedAt: string; connectsAmount: number; totalCost: number; currency?: string; notes?: string }) =>
+    request("/dashboard-center/upwork/connect-purchases", { method: "POST", body: JSON.stringify(body) }),
+  deleteDashboardUpworkConnectPurchase: (id: string) =>
+    request(`/dashboard-center/upwork/connect-purchases/${id}`, { method: "DELETE" }),
+
+  getDashboardPipelineFunnel: () => request("/dashboard-center/pipeline/funnel"),
+  getDashboardPipelineStageTiming: () => request("/dashboard-center/pipeline/stage-timing"),
+  getDashboardPipelineAging: () => request("/dashboard-center/pipeline/aging"),
+
+  getDashboardTeamPerformance: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/team/performance?${new URLSearchParams(params).toString()}`),
+
+  getDashboardActivity: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/activity?${new URLSearchParams(params).toString()}`),
+
+  getDashboardBenchmarks: () => request("/dashboard-center/benchmarks"),
+  setDashboardBenchmark: (metricKey: string, targetValue: number) =>
+    request("/dashboard-center/benchmarks", { method: "POST", body: JSON.stringify({ metricKey, targetValue }) }),
+  deleteDashboardBenchmark: (metricKey: string) =>
+    request(`/dashboard-center/benchmarks/${encodeURIComponent(metricKey)}`, { method: "DELETE" }),
 };
