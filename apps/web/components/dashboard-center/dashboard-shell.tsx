@@ -27,6 +27,7 @@ export function DashboardCenterShell({
   onRefresh,
   refreshing,
   extraFilters,
+  compact,
   children,
 }: {
   title: string;
@@ -36,6 +37,12 @@ export function DashboardCenterShell({
   onRefresh?: () => void;
   refreshing?: boolean;
   extraFilters?: ReactNode;
+  /** Omits the big `<h1>{title}</h1>` block (Part: Dashboard Center tab
+   *  consolidation, 2026-09-30) — for a tab embedded in the unified
+   *  `/dashboards` page, the tab bar above it already names the section;
+   *  a second giant heading per tab switch was redundant. `subtitle` still
+   *  renders (smaller, still useful context), just not `title`. */
+  compact?: boolean;
   children: ReactNode;
 }) {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
@@ -47,10 +54,13 @@ export function DashboardCenterShell({
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
-        {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
-      </div>
+      {!compact && (
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+          {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
+        </div>
+      )}
+      {compact && subtitle && <p className="text-xs text-ink/50">{subtitle}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <DashboardDateRangeBar value={dateRange} onChange={onDateRangeChange} />

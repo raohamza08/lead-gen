@@ -21,7 +21,7 @@ export default function LoginPage() {
       // nothing left to refresh with.
       const tokens = await api.login(email, password);
       setTokens(tokens);
-      router.push("/overview");
+      router.push("/dashboards");
     } catch (err) {
       const message = (err as Error).message;
       // A network failure and wrong credentials are different problems with

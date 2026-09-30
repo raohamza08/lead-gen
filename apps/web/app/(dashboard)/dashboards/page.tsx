@@ -1,147 +1,92 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../../../lib/api-client";
-import { DashboardCenterShell, useDashboardDateRange } from "../../../components/dashboard-center/dashboard-shell";
-import { dashboardRangeToQuery } from "../../../components/dashboard-center/date-range-bar";
-import { num, pct, money } from "../../../components/dashboard-center/format";
-import { ComparisonHint } from "../../../components/dashboard-center/metric-detail";
-import { SectionCard, StatTile } from "../../../components/chart-kit";
-import { ErrorState } from "../../../components/ui/error-state";
-import { SkeletonCard } from "../../../components/ui/skeleton";
+import { Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Tabs } from "../../../components/ui/tabs";
+import { OverviewTab } from "./_tabs/overview";
+import { LeadsTab } from "./_tabs/leads";
+import { EmailTab } from "./_tabs/email";
+import { InboxTab } from "./_tabs/inbox";
+import { SocialTab } from "./_tabs/social";
+import { UpworkTab } from "./_tabs/upwork";
+import { PipelineTab } from "./_tabs/pipeline";
+import { TeamTab } from "./_tabs/team";
+import { ActivityTab } from "./_tabs/activity";
+import { BenchmarksTab } from "./_tabs/benchmarks";
 
-interface OverviewSummary {
-  leads: { total: number; newLeads: number; previousTotalLeads?: number; newLeadsDeltaPct: number | null; conversionRate?: number };
-  email: { sent: number; openRate: number; replyRate: number; bounced: number };
-  social: { totalConversations: number; responseRate?: number };
-  upwork: { totalBids: number; clientsWon: number; conversionRate?: number; connectCostBasis: "actual_purchases" | "flat_rate_estimate"; connectCost?: number };
-  pipeline: { total: number; won: number; lost: number; conversionRate?: number };
-  team: { activeMembers: number };
-  metaAds: { connected: boolean; accountCount: number; spend?: number; leads?: number; currency?: string; mixedCurrencies?: boolean };
-}
+const TAB_DEFS: { value: string; label: string }[] = [
+  { value: "overview", label: "Overview" },
+  { value: "leads", label: "Leads" },
+  { value: "email", label: "Email Campaigns" },
+  { value: "inbox", label: "Unified Inbox" },
+  { value: "social", label: "Social Inbox" },
+  { value: "upwork", label: "Upwork" },
+  // Meta Ads has its own real, already-built dashboard with sub-pages
+  // (Campaigns/Ad Sets/Ads) — this tab navigates there rather than
+  // duplicating it inline, same "no duplicate" decision made in Phase 1
+  // (Part: Dashboard Center, 2026-09-30).
+  { value: "meta-ads", label: "Meta Ads" },
+  { value: "pipeline", label: "Pipeline" },
+  { value: "team", label: "Team Performance" },
+  { value: "activity", label: "Activity / Audit" },
+  { value: "benchmarks", label: "Benchmarks" },
+];
 
-/** Every Overview tile is a rollup already broken down in full on its own
- *  dashboard page — the drill-down here is a pointer there rather than a
- *  duplicated breakdown (Part: Dashboard Center, 2026-09-30). */
-function SeeFullDashboard({ href, label }: { href: string; label: string }) {
+const DEFAULT_TAB = "overview";
+
+/**
+ * Dashboard Center, unified (Part: Dashboard Center tab consolidation,
+ * 2026-09-30 — "remove the dropdown menu ... take all its tabs to the tabs
+ * view in one page"). Replaces both the old top-level "Dashboard" nav entry
+ * and the Dashboard Center sidebar dropdown: every dashboard that used to be
+ * its own route now lives here as an in-page tab, switched with no
+ * navigation/full reload. The old routes (`/dashboards/leads` etc.) still
+ * exist as thin redirects here (`?tab=leads`) so old bookmarks don't 404.
+ * The active tab is in the URL (`?tab=`) so a direct link/bookmark/refresh
+ * lands on the right one.
+ */
+function DashboardCenterTabs() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") ?? DEFAULT_TAB;
+
+  function selectTab(value: string) {
+    if (value === "meta-ads") {
+      router.push("/meta-ads");
+      return;
+    }
+    router.push(`/dashboards?tab=${value}`);
+  }
+
   return (
-    <div className="flex flex-col gap-3 text-sm">
-      <p className="text-ink/70">This is a rollup computed the same way as the full {label} dashboard.</p>
-      <a href={href} className="text-sm text-accent hover:underline">
-        Open {label} dashboard →
-      </a>
+    <div className="flex flex-col gap-5">
+      <div>
+        <h1 className="text-lg font-semibold tracking-tight">Dashboard Center</h1>
+        <p className="mt-0.5 text-xs text-ink/50">Cross-module BI — every dashboard in one place, switched with a tab instead of a page reload.</p>
+      </div>
+
+      <div className="overflow-x-auto pb-1">
+        <Tabs value={tab === "meta-ads" ? "" : tab} onValueChange={selectTab} tabs={TAB_DEFS} />
+      </div>
+
+      {tab === "overview" && <OverviewTab />}
+      {tab === "leads" && <LeadsTab />}
+      {tab === "email" && <EmailTab />}
+      {tab === "inbox" && <InboxTab />}
+      {tab === "social" && <SocialTab />}
+      {tab === "upwork" && <UpworkTab />}
+      {tab === "pipeline" && <PipelineTab />}
+      {tab === "team" && <TeamTab />}
+      {tab === "activity" && <ActivityTab />}
+      {tab === "benchmarks" && <BenchmarksTab />}
     </div>
   );
 }
 
-/**
- * Executive Overview — the one Dashboard Center page that reads across every
- * module at once (Part: Dashboard Center, 2026-09-30). Every number here is
- * fetched from its own module's already-built dashboard endpoint via
- * OverviewDashboardService, not recomputed — this page can never disagree
- * with what /dashboards/leads, /email, etc. report for the same range.
- */
-export default function ExecutiveDashboardPage() {
-  const [dateRange, setDateRange] = useDashboardDateRange();
-  const query = dashboardRangeToQuery(dateRange);
-
-  const summaryQuery = useQuery({
-    queryKey: ["dc-overview", query],
-    queryFn: () => api.getDashboardOverview(query) as Promise<OverviewSummary>,
-  });
-  const s = summaryQuery.data;
-
+export default function DashboardCenterPage() {
   return (
-    <DashboardCenterShell
-      title="Overview / Executive Dashboard"
-      subtitle="Management-level KPIs and channel performance across every module, each pulled from that module's own dashboard endpoint."
-      dateRange={dateRange}
-      onDateRangeChange={setDateRange}
-      onRefresh={() => summaryQuery.refetch()}
-      refreshing={summaryQuery.isFetching}
-    >
-      {summaryQuery.isLoading && <SkeletonCard className="h-64" />}
-      {summaryQuery.error && <ErrorState message={(summaryQuery.error as Error).message} onRetry={() => summaryQuery.refetch()} />}
-
-      {s && (
-        <>
-          <SectionCard title="Leads" expandable>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile label="Total Leads" value={num(s.leads.total)} detail={<SeeFullDashboard href="/dashboards/leads" label="Leads" />} />
-              <StatTile
-                label="New This Period"
-                value={num(s.leads.newLeads)}
-                hint={<ComparisonHint deltaPct={s.leads.newLeadsDeltaPct} previousValue={s.leads.previousTotalLeads !== undefined ? num(s.leads.previousTotalLeads) : undefined} />}
-                detail={<SeeFullDashboard href="/dashboards/leads" label="Leads" />}
-              />
-              <StatTile label="Conversion Rate" value={pct(s.leads.conversionRate)} detail={<SeeFullDashboard href="/dashboards/leads" label="Leads" />} />
-              <StatTile label="Active in Pipeline" value={num(s.pipeline.total)} detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
-            </div>
-          </SectionCard>
-
-          <div className="grid gap-4 lg:grid-cols-2">
-            <SectionCard title="Email" expandable>
-              <div className="grid grid-cols-2 gap-3">
-                <StatTile label="Sent" value={num(s.email.sent)} detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
-                <StatTile label="Open Rate" value={pct(s.email.openRate)} detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
-                <StatTile label="Reply Rate" value={pct(s.email.replyRate)} detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
-                <StatTile label="Bounced" value={num(s.email.bounced)} tone="bad" detail={<SeeFullDashboard href="/dashboards/email" label="Email Campaign" />} />
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Social Inbox" expandable>
-              <div className="grid grid-cols-2 gap-3">
-                <StatTile label="Conversations" value={num(s.social.totalConversations)} detail={<SeeFullDashboard href="/dashboards/social" label="Social Inbox" />} />
-                <StatTile label="Response Rate" value={pct(s.social.responseRate)} detail={<SeeFullDashboard href="/dashboards/social" label="Social Inbox" />} />
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Upwork" expandable>
-              <div className="grid grid-cols-2 gap-3">
-                <StatTile label="Total Bids" value={num(s.upwork.totalBids)} detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />} />
-                <StatTile label="Clients Won" value={num(s.upwork.clientsWon)} tone="good" detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />} />
-                <StatTile label="Conversion Rate" value={pct(s.upwork.conversionRate)} detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />} />
-                <StatTile
-                  label="Connect Cost"
-                  value={money(s.upwork.connectCost)}
-                  hint={s.upwork.connectCostBasis === "flat_rate_estimate" ? "Estimated at $0.15/connect" : undefined}
-                  detail={<SeeFullDashboard href="/dashboards/upwork" label="Upwork" />}
-                />
-              </div>
-            </SectionCard>
-
-            <SectionCard title="Meta Ads" expandable>
-              {s.metaAds.connected ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <StatTile
-                      label="Spend"
-                      value={s.metaAds.mixedCurrencies ? "Mixed currencies" : money(s.metaAds.spend, s.metaAds.currency)}
-                      hint={s.metaAds.mixedCurrencies ? "Connected accounts bill in different currencies — see /meta-ads per account" : undefined}
-                      detail={<SeeFullDashboard href="/meta-ads" label="Meta Ads" />}
-                    />
-                    <StatTile label="Leads" value={num(s.metaAds.leads)} detail={<SeeFullDashboard href="/meta-ads" label="Meta Ads" />} />
-                    <StatTile label="Connected Accounts" value={num(s.metaAds.accountCount)} detail={<SeeFullDashboard href="/meta-ads" label="Meta Ads" />} />
-                  </div>
-                </>
-              ) : (
-                <p className="py-4 text-center text-xs text-ink/45">
-                  No Meta Ads account connected. <a href="/settings/meta-ads" className="text-accent hover:underline">Connect one</a> to see spend and lead data here.
-                </p>
-              )}
-            </SectionCard>
-          </div>
-
-          <SectionCard title="Pipeline & Team" expandable>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatTile label="Won" value={num(s.pipeline.won)} tone="good" detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
-              <StatTile label="Lost" value={num(s.pipeline.lost)} tone="bad" detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
-              <StatTile label="Pipeline Conv. Rate" value={pct(s.pipeline.conversionRate)} detail={<SeeFullDashboard href="/dashboards/pipeline" label="Pipeline" />} />
-              <StatTile label="Active Team Members" value={num(s.team.activeMembers)} detail={<SeeFullDashboard href="/dashboards/team" label="Team Performance" />} />
-            </div>
-          </SectionCard>
-        </>
-      )}
-    </DashboardCenterShell>
+    <Suspense fallback={null}>
+      <DashboardCenterTabs />
+    </Suspense>
   );
 }

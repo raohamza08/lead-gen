@@ -48,29 +48,15 @@ type NavItem =
  * rendered vertically and one level deeper.
  */
 const NAV: NavItem[] = [
-  { type: "link", href: "/overview", label: "Dashboard" },
-  // New, separate from the existing /overview page above (Part: Dashboard
-  // Center, 2026-09-30) -- a cross-module BI layer, not a replacement for
-  // the existing per-module dashboards. Most pages are honest placeholders
-  // ("NotBuiltYet") until their real endpoints exist; Meta Ads links straight
-  // at the already-real /meta-ads dashboard rather than duplicating it.
-  {
-    type: "group",
-    label: "Dashboard Center",
-    links: [
-      { href: "/dashboards", label: "Overview" },
-      { href: "/dashboards/leads", label: "Leads" },
-      { href: "/dashboards/email", label: "Email Campaigns" },
-      { href: "/dashboards/inbox", label: "Unified Inbox" },
-      { href: "/dashboards/social", label: "Social Inbox" },
-      { href: "/dashboards/upwork", label: "Upwork" },
-      { href: "/meta-ads", label: "Meta Ads" },
-      { href: "/dashboards/pipeline", label: "Pipeline" },
-      { href: "/dashboards/team", label: "Team Performance" },
-      { href: "/dashboards/activity", label: "Activity / Audit" },
-      { href: "/dashboards/benchmarks", label: "Benchmarks" },
-    ],
-  },
+  // Dashboard Center is now the app's home/landing nav entry, replacing the
+  // old standalone "Dashboard" (`/overview`) link (Part: Dashboard Center
+  // tab consolidation, 2026-09-30 — explicit user request: "replacing the
+  // dashboard with dashboard center"). It's a single link, not a dropdown
+  // group, like "Dashboard" used to be — every dashboard that used to be
+  // its own group entry is now an in-page tab on /dashboards itself (see
+  // that page for the tab list, including why Meta Ads still links out
+  // rather than duplicating its own dashboard inline).
+  { type: "link", href: "/dashboards", label: "Dashboard Center" },
   {
     type: "group",
     label: "Lead Room",
