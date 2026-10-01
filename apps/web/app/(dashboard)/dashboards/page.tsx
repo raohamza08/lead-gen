@@ -2,7 +2,9 @@
 
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { getCurrentUser } from "../../../lib/api-client";
 import { Tabs } from "../../../components/ui/tabs";
+import { EmptyState } from "../../../components/ui/empty-state";
 import { OverviewTab } from "./_tabs/overview";
 import { LeadsTab } from "./_tabs/leads";
 import { EmailTab } from "./_tabs/email";
@@ -15,7 +17,7 @@ import { TeamTab } from "./_tabs/team";
 import { ActivityTab } from "./_tabs/activity";
 import { BenchmarksTab } from "./_tabs/benchmarks";
 
-const TAB_DEFS: { value: string; label: string }[] = [
+const ALL_TAB_DEFS: { value: string; label: string }[] = [
   { value: "overview", label: "Overview" },
   { value: "leads", label: "Leads" },
   { value: "email", label: "Email Campaigns" },
@@ -36,6 +38,20 @@ const TAB_DEFS: { value: string; label: string }[] = [
 
 const DEFAULT_TAB = "overview";
 
+// Mirrors DashboardCenterController's own @Roles matrix exactly (Part:
+// Dashboard Center access fix, 2026-10-01, explicit user request — "the
+// team is able to see the dashboards, but are not able to see the content
+// in it... make sure that they don't see it"). Before this, every role saw
+// the full tabbed shell and every API call underneath it 403'd, which read
+// as a broken page rather than a hidden one. ADMIN/MANAGER see everything;
+// BUSINESS_DEVELOPER only has backend access to the Upwork tab's routes
+// (see dashboard-center.controller.ts's method-level @Roles overrides and
+// UpworkRequestController's dashboardSummary route), so that's the only tab
+// shown to them; every other role has zero Dashboard Center routes granted
+// and gets a clean "no access" message instead of a page full of errors.
+const FULL_ACCESS_ROLES = ["ADMIN", "MANAGER"];
+const UPWORK_ONLY_ROLES = ["BUSINESS_DEVELOPER"];
+
 /**
  * Dashboard Center, unified (Part: Dashboard Center tab consolidation,
  * 2026-09-30 — "remove the dropdown menu ... take all its tabs to the tabs
@@ -50,7 +66,22 @@ const DEFAULT_TAB = "overview";
 function DashboardCenterTabs() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = searchParams.get("tab") ?? DEFAULT_TAB;
+  const role = getCurrentUser()?.role;
+  const hasFullAccess = role ? FULL_ACCESS_ROLES.includes(role) : false;
+  const isUpworkOnly = role ? UPWORK_ONLY_ROLES.includes(role) : false;
+
+  if (!hasFullAccess && !isUpworkOnly) {
+    return (
+      <EmptyState
+        title="No access to the Dashboard Center"
+        description="This cross-team view is restricted to Admins, Managers, and (for the Upwork tab) Business Developers — ask an admin if you need access."
+      />
+    );
+  }
+
+  const tabDefs = hasFullAccess ? ALL_TAB_DEFS : ALL_TAB_DEFS.filter((t) => t.value === "upwork");
+  const requestedTab = searchParams.get("tab") ?? DEFAULT_TAB;
+  const tab = tabDefs.some((t) => t.value === requestedTab) ? requestedTab : tabDefs[0].value;
 
   function selectTab(value: string) {
     router.push(`/dashboards?tab=${value}`);
@@ -64,7 +95,7 @@ function DashboardCenterTabs() {
       </div>
 
       <div className="overflow-x-auto pb-1">
-        <Tabs value={tab} onValueChange={selectTab} tabs={TAB_DEFS} />
+        <Tabs value={tab} onValueChange={selectTab} tabs={tabDefs} />
       </div>
 
       {tab === "overview" && <OverviewTab />}

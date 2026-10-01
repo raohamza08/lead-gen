@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../lib/api-client";
+import { api, getCurrentUser } from "../lib/api-client";
 import { useRealtimeRefetch } from "../lib/realtime";
 
 interface NavLink {
@@ -53,7 +53,22 @@ type NavItem =
   // OR handling for an array passed to @RequiresModule -- no current
   // top-level entry uses more than one flag, but the guard/backend still
   // supports it for a future narrow-access grant.
-  | { type: "link"; href: string; label: string; moduleFlag?: ModuleFlag | ModuleFlag[]; requiresPrimaryAdmin?: boolean }
+  | {
+      type: "link";
+      href: string;
+      label: string;
+      moduleFlag?: ModuleFlag | ModuleFlag[];
+      requiresPrimaryAdmin?: boolean;
+      /** Restricts this link to specific roles, independent of moduleFlag
+       *  (Part: Dashboard Center access fix, 2026-10-01, explicit user
+       *  request — "the team is able to see the dashboards, but are not
+       *  able to see the content in it... make sure that they don't see
+       *  it"). Dashboard Center has no module-access flag at all — it's
+       *  gated purely by role on the backend (DashboardCenterController's
+       *  @Roles), so the nav link needs the same role check or every other
+       *  role reaches a shell whose API calls all 403. */
+      allowedRoles?: string[];
+    }
   | { type: "group"; label: string; links: NavLink[] };
 
 /**
@@ -74,7 +89,13 @@ const NAV: NavItem[] = [
   // its own group entry is now an in-page tab on /dashboards itself (see
   // that page for the tab list, including why Meta Ads still links out
   // rather than duplicating its own dashboard inline).
-  { type: "link", href: "/dashboards", label: "Dashboard Center" },
+  // Mirrors DashboardCenterController's own @Roles matrix -- ADMIN/MANAGER
+  // see every tab there; BUSINESS_DEVELOPER only has backend access to the
+  // Upwork tab's routes and sees a narrowed-down Dashboard Center page (see
+  // dashboards/page.tsx); every other role has zero Dashboard Center routes
+  // granted, so the link itself is hidden rather than leading to a page
+  // whose every API call 403s.
+  { type: "link", href: "/dashboards", label: "Dashboard Center", allowedRoles: ["ADMIN", "MANAGER", "BUSINESS_DEVELOPER"] },
   {
     type: "group",
     label: "Lead Room",
@@ -285,6 +306,10 @@ export function SidebarNav({
     return { ...item, links: item.links.filter((l) => flagGranted(l.moduleFlag)) };
   }).filter((item) => {
     if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
+    if (item.type === "link" && item.allowedRoles) {
+      const role = getCurrentUser()?.role;
+      return role ? item.allowedRoles.includes(role) : false;
+    }
     if (item.type === "group") {
       const flag = MODULE_FLAG_BY_GROUP[item.label];
       // No single group-level flag (Upwork Proposals) -- show the group iff
