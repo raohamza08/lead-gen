@@ -21,6 +21,7 @@ interface UpworkProposal {
   coverLetter: string;
   connects: number | null;
   accountType: UpworkAccountType | null;
+  projectHours: number | null;
   submittedBy: string;
   clickupTaskId: string | null;
   clientName: string | null;
@@ -97,6 +98,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [submittedBy, setSubmittedBy] = useState("");
   const [connects, setConnects] = useState("");
   const [accountType, setAccountType] = useState<UpworkAccountType>("LIVE");
+  const [projectHours, setProjectHours] = useState("");
   const [clientName, setClientName] = useState("");
 
   const { data: picklists } = useQuery({
@@ -131,7 +133,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
 
   function resetForm() {
     setProfileName(""); setJobCategory(""); setJobLink(""); setCoverLetter("");
-    setSubmittedBy(""); setConnects(""); setAccountType("LIVE"); setClientName("");
+    setSubmittedBy(""); setConnects(""); setAccountType("LIVE"); setProjectHours(""); setClientName("");
   }
 
   async function submit(e: React.FormEvent) {
@@ -148,6 +150,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         coverLetter,
         submittedBy,
         clientName: clientName.trim() || undefined,
+        projectHours: projectHours ? Number(projectHours) : undefined,
         ...(type === "BIDDING"
           ? { connects: connects ? Number(connects) : undefined, accountType }
           : {}),
@@ -200,6 +203,20 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
     { key: "submittedBy", header: type === "INVITE" ? "Accepted by" : "Submitted by", render: (r) => r.submittedBy },
     { key: "jobLink", header: "Job", render: (r) => (
       <a href={r.jobLink} target="_blank" rel="noreferrer" className="text-accent hover:underline">Open ↗</a>
+    ) },
+    { key: "projectHours", header: "Project Hours", numeric: true, render: (r) => (
+      <input
+        defaultValue={r.projectHours ?? ""}
+        placeholder="—"
+        type="number"
+        min={0}
+        step="0.5"
+        onBlur={(e) => {
+          const next = e.target.value === "" ? null : Number(e.target.value);
+          if (next !== r.projectHours) updateField(r.id, { projectHours: next });
+        }}
+        className="w-16 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
+      />
     ) },
     { key: "status", header: "Status", render: (r) => (
       <select
@@ -349,6 +366,10 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
               </label>
             </>
           )}
+          <label className="block">
+            <span className={labelClass}>Project hours (if known)</span>
+            <input value={projectHours} onChange={(e) => setProjectHours(e.target.value)} type="number" min={0} step="0.5" placeholder="e.g. 20" className={inputClass} />
+          </label>
           <label className="block">
             <span className={labelClass}>Client name (optional)</span>
             <input value={clientName} onChange={(e) => setClientName(e.target.value)} className={inputClass} />

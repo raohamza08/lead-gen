@@ -10,7 +10,17 @@ interface TeamMember {
   id: string;
   email: string;
   name: string;
-  role: "ADMIN" | "MANAGER" | "LEAD_REVIEWER" | "SALES_REP" | "VIEWER";
+  role:
+    | "ADMIN"
+    | "MANAGER"
+    | "LEAD_REVIEWER"
+    | "SALES_REP"
+    | "VIEWER"
+    | "PROJECT_MANAGER"
+    | "BUSINESS_DEVELOPER"
+    | "EMAIL_REVIEWER"
+    | "ADS_MANAGER"
+    | "LEAD_GEN_MANAGER";
   active: boolean;
   createdAt: string;
   isPrimaryAdmin: boolean;
@@ -18,7 +28,18 @@ interface TeamMember {
   avatarUrl: string | null;
 }
 
-const ROLES: TeamMember["role"][] = ["ADMIN", "MANAGER", "LEAD_REVIEWER", "SALES_REP", "VIEWER"];
+const ROLES: TeamMember["role"][] = [
+  "ADMIN",
+  "MANAGER",
+  "LEAD_REVIEWER",
+  "SALES_REP",
+  "VIEWER",
+  "PROJECT_MANAGER",
+  "BUSINESS_DEVELOPER",
+  "EMAIL_REVIEWER",
+  "ADS_MANAGER",
+  "LEAD_GEN_MANAGER",
+];
 
 const EMPTY_DRAFT = { name: "", email: "", password: "", role: "SALES_REP" as TeamMember["role"] };
 

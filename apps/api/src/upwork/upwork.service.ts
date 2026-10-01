@@ -44,6 +44,7 @@ export class UpworkService {
         // 400, it should just not mean anything for that type.
         connects: isBidding ? dto.connects ?? null : null,
         accountType: isBidding ? dto.accountType ?? null : null,
+        projectHours: dto.projectHours ?? null,
         clickupTaskId: dto.clickupTaskId,
         clientName: dto.clientName,
       },
@@ -97,9 +98,20 @@ export class UpworkService {
     // ACCEPTED, so re-saving an unrelated field (e.g. clientName) never
     // resets the clock.
     const justAccepted = dto.status === UpworkProposalStatus.ACCEPTED && existing.status !== UpworkProposalStatus.ACCEPTED;
+    // Stamps the Upwork Dashboard's "onboarded during week X" start line the
+    // moment status first becomes WON (Part: Upwork Requests, 2026-10-01) —
+    // same one-way-stamp pattern as `justAccepted` above, deliberately
+    // independent of `createdAt` (submission date). See UpworkProposal.
+    // onboardedAt's own schema docblock for why this, not createdAt, is what
+    // the weekly bidding/invite hour totals bucket by.
+    const justWon = dto.status === UpworkProposalStatus.WON && existing.status !== UpworkProposalStatus.WON;
     return this.prisma.upworkProposal.update({
       where: { id },
-      data: { ...dto, ...(justAccepted ? { acceptedAt: new Date(), lastFollowUpNotifiedAt: null } : {}) },
+      data: {
+        ...dto,
+        ...(justAccepted ? { acceptedAt: new Date(), lastFollowUpNotifiedAt: null } : {}),
+        ...(justWon ? { onboardedAt: new Date() } : {}),
+      },
     });
   }
 

@@ -32,4 +32,12 @@ export class UpdateUserAccessDto {
 
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => UpdateUserSocialAccountAccessDto)
   socialAccounts?: UpdateUserSocialAccountAccessDto[];
+
+  /** Which Upwork profiles/IDs this person (normally a Project Manager) may
+   *  request hours against (Part: Upwork Requests, 2026-10-01) — the whole
+   *  edited set, replacing whatever was granted before, same wholesale-
+   *  replace convention as notify-recipients. An empty/omitted array means
+   *  unrestricted — see UpworkProfileAccess's own schema docblock. */
+  @IsOptional() @IsArray() @IsString({ each: true })
+  upworkProfiles?: string[];
 }

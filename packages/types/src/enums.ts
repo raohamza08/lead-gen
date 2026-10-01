@@ -4,6 +4,24 @@ export enum Role {
   LEAD_REVIEWER = "LEAD_REVIEWER",
   SALES_REP = "SALES_REP",
   VIEWER = "VIEWER",
+  /** Upwork Requests (Part: Upwork Requests, 2026-10-01) — creates hour
+   *  requests against specific profiles/IDs, sees only their own requests
+   *  and weekly target/achievement. */
+  PROJECT_MANAGER = "PROJECT_MANAGER",
+  /** Upwork Requests reviewer ("BDS" in the spec's own shorthand) — reviews/
+   *  approves/rejects Project Manager requests; also reads Bidding/Invite
+   *  and the Upwork Dashboard. */
+  BUSINESS_DEVELOPER = "BUSINESS_DEVELOPER",
+  /** No dedicated module yet — behaves like VIEWER until one exists. */
+  EMAIL_REVIEWER = "EMAIL_REVIEWER",
+  /** No dedicated module yet — behaves like VIEWER until one exists. Not the
+   *  same thing as Meta Ads module access (metaAdsAccess), which any role
+   *  can already be granted. */
+  ADS_MANAGER = "ADS_MANAGER",
+  /** No dedicated module yet — behaves like VIEWER until one exists. Not the
+   *  same thing as Lead Generation module access (leadGenAccess), which any
+   *  role can already be granted. */
+  LEAD_GEN_MANAGER = "LEAD_GEN_MANAGER",
 }
 
 /**

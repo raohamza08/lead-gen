@@ -117,19 +117,29 @@ export class DashboardCenterController {
   }
 
   // ---- Upwork ----
+  // Method-level @Roles widens (not narrows) the class-level ADMIN/MANAGER
+  // default to also admit Business Developer (Part: Upwork Requests,
+  // 2026-10-01, spec's explicit "Business Developer should be able to ...
+  // View Upwork Dashboard") — RolesGuard's getAllAndOverride prefers handler
+  // metadata, so this only affects these specific Upwork read routes, not
+  // the rest of the Dashboard Center.
   @Get("upwork/kpis")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.BUSINESS_DEVELOPER)
   upworkKpis(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
     return this.upwork.getKpis(user.orgId, query);
   }
   @Get("upwork/monthly")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.BUSINESS_DEVELOPER)
   upworkMonthly(@CurrentUser() user: JwtClaims) {
     return this.upwork.getMonthlyTable(user.orgId);
   }
   @Get("upwork/submitters")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.BUSINESS_DEVELOPER)
   upworkSubmitters(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
     return this.upwork.getSubmitterBreakdown(user.orgId, query);
   }
   @Get("upwork/connect-purchases")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.BUSINESS_DEVELOPER)
   listConnectPurchases(@CurrentUser() user: JwtClaims) {
     return this.upwork.listConnectPurchases(user.orgId);
   }

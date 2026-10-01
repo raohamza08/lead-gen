@@ -30,11 +30,17 @@ interface SocialAccountRow {
   canApprove: boolean;
 }
 
+interface UpworkProfileAccess {
+  available: string[];
+  granted: string[];
+}
+
 interface AccessData {
   isAdmin: boolean;
   modules: ModuleFlags;
   emailAccounts: EmailAccountRow[];
   socialAccounts: SocialAccountRow[];
+  upworkProfiles: UpworkProfileAccess;
 }
 
 const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] = [
@@ -107,6 +113,14 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
     });
   }
 
+  function toggleUpworkProfile(profileName: string) {
+    if (!data || data.isAdmin) return;
+    const granted = data.upworkProfiles.granted.includes(profileName)
+      ? data.upworkProfiles.granted.filter((p) => p !== profileName)
+      : [...data.upworkProfiles.granted, profileName];
+    setData({ ...data, upworkProfiles: { ...data.upworkProfiles, granted } });
+  }
+
   async function save() {
     if (!data) return;
     setSaving(true);
@@ -122,6 +136,7 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
           canPublish: a.canPublish,
           canApprove: a.canApprove,
         })),
+        upworkProfiles: data.isAdmin ? undefined : data.upworkProfiles.granted,
       });
       setNotice("Saved.");
       refresh();
@@ -204,6 +219,31 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {data.upworkProfiles.available.length > 0 && (
+        <div>
+          <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Upwork profiles/IDs (Requests)</h4>
+          {data.isAdmin ? (
+            <p className="text-xs text-ink/50">Admins can request hours against every profile — this can&apos;t be restricted here.</p>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-ink/50">
+                {data.upworkProfiles.granted.length === 0
+                  ? "No profiles restricted yet — this person can request hours against any profile. Check specific ones below to limit them."
+                  : "Restricted to the checked profiles below."}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                {data.upworkProfiles.available.map((p) => (
+                  <label key={p} className="flex items-center gap-1.5 text-sm">
+                    <input type="checkbox" checked={data.upworkProfiles.granted.includes(p)} onChange={() => toggleUpworkProfile(p)} />
+                    {p}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

@@ -22,6 +22,29 @@ enum Role {
   LEAD_REVIEWER
   SALES_REP
   VIEWER
+  /// Upwork Requests (Part: Upwork Requests, 2026-10-01) — creates hour
+  /// requests against specific profiles/IDs, sees only their own requests
+  /// and weekly target/achievement, per the spec's explicit role list.
+  PROJECT_MANAGER
+  /// Upwork Requests reviewer (Part: Upwork Requests, 2026-10-01) — reviews/
+  /// approves/rejects Project Manager requests; also reads Bidding/Invite
+  /// and the Upwork Dashboard. "BDS" in the spec's own shorthand.
+  BUSINESS_DEVELOPER
+  /// Added per spec's required role list (Part: Upwork Requests, 2026-10-01)
+  /// — no dedicated module exists for this yet; behaves like VIEWER until
+  /// one does, same bootstrapping-a-role-before-its-module pattern as the
+  /// other two new non-Upwork roles below.
+  EMAIL_REVIEWER
+  /// Added per spec's required role list (Part: Upwork Requests, 2026-10-01)
+  /// — no dedicated module exists for this yet; behaves like VIEWER until
+  /// one does. Not the same thing as Meta Ads module access (metaAdsAccess),
+  /// which any role can already be granted.
+  ADS_MANAGER
+  /// Added per spec's required role list (Part: Upwork Requests, 2026-10-01)
+  /// — no dedicated module exists for this yet; behaves like VIEWER until
+  /// one does. Not the same thing as Lead Generation module access
+  /// (leadGenAccess), which any role can already be granted.
+  LEAD_GEN_MANAGER
 }
 
 // Declaration order is funnel order — see the note on the shared PipelineStage
@@ -200,6 +223,7 @@ model Organization {
   leadStageHistory LeadStageHistory[]
   upworkConnectPurchases UpworkConnectPurchase[]
   benchmarks      Benchmark[]
+  upworkRequests  UpworkRequest[]
 
   @@map("organizations")
 }
@@ -285,6 +309,12 @@ model User {
   leadStageChanges      LeadStageHistory[]
   upworkConnectPurchasesCreated UpworkConnectPurchase[]
   benchmarksUpdated     Benchmark[]
+  /// Requests this person created as a Project Manager (Part: Upwork
+  /// Requests, 2026-10-01) — distinct from upworkRequestsReviewed below,
+  /// which is the same person acting as a reviewer on someone else's request.
+  upworkRequestsAsPM     UpworkRequest[] @relation("UpworkRequestsByPM")
+  upworkRequestsReviewed UpworkRequest[] @relation("UpworkRequestsReviewed")
+  upworkProfileAccess    UpworkProfileAccess[]
 
   @@map("users")
 }
@@ -1584,6 +1614,13 @@ model UpworkProposal {
   /// Connects spent — BIDDING only, null for INVITE (invites cost no connects).
   connects    Int?
   accountType UpworkAccountType? @map("account_type")
+  /// Hours the project is actually worth (Part: Upwork Requests, 2026-10-01
+  /// — "use the actual Project Hours stored against projects, do not
+  /// calculate from number of bids/invites"). Optional because it's only
+  /// known once a project materializes, not at submission time; the Upwork
+  /// Dashboard's onboarded-hours totals sum this field directly, never a
+  /// row count.
+  projectHours Float? @map("project_hours")
 
   /// The team member who submitted this proposal (the sheet's "Submitted by"
   /// / "Invite Submitted by") — a plain name, not a User relation: the sheet
@@ -1618,11 +1655,126 @@ model UpworkProposal {
   /// the next automatic sweep doesn't double up right behind it.
   lastFollowUpNotifiedAt DateTime? @map("last_follow_up_notified_at")
 
+  /// Stamped the moment `status` first transitions to WON (Part: Upwork
+  /// Requests, 2026-10-01) — same one-way-stamp pattern as `acceptedAt`
+  /// above. This, not `createdAt` (submission date), is what "onboarded
+  /// during week X" means for the Upwork Dashboard's weekly bidding/invite
+  /// hours and the Request vs Achievement report: a project is "onboarded"
+  /// when it's won, not when the proposal/invite was originally submitted.
+  onboardedAt DateTime? @map("onboarded_at")
+
   @@index([orgId, type])
   @@index([orgId, status])
   @@index([orgId, createdAt])
   @@index([orgId, status, acceptedAt])
+  @@index([orgId, type, status, onboardedAt])
   @@map("upwork_proposals")
+}
+
+/// Mirrors UpworkProposalStatus/UpworkConnectPurchase's docblock reasoning:
+/// a daily log of Project Manager hour requests against specific Upwork
+/// profiles/IDs, replacing what the spec describes as an ad-hoc
+/// request-and-approve conversation with no record (Part: Upwork Requests,
+/// 2026-10-01). Starts at DRAFT (not yet submitted) or SUBMITTED (the normal
+/// path — "the system should submit the request once all required
+/// information is entered") and is moved forward by a reviewer, ending at
+/// APPROVED+COMPLETED or REJECTED.
+enum UpworkRequestStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  COMPLETED
+}
+
+/// One Project Manager's weekly-ish ask for hours against one or more Upwork
+/// profiles/IDs (Part: Upwork Requests, 2026-10-01) — `items` below is the
+/// per-profile breakdown ("Profile A: 20h, Profile B: 15h"); this row is
+/// just the envelope (who, when, status, total, review trail). Deliberately
+/// a real model, not a JSON blob, matching this codebase's own precedent
+/// (NicheFilter, SendingSchedule, UpworkConnectPurchase) of a dedicated
+/// table for anything that drives real calculations rather than display-only
+/// config — the weekly target and Request-vs-Achievement report both query
+/// this directly.
+model UpworkRequest {
+  id    String @id @default(uuid())
+  orgId String @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+
+  projectManagerId String @map("project_manager_id")
+  projectManager   User   @relation("UpworkRequestsByPM", fields: [projectManagerId], references: [id])
+
+  /// The week/date this request is FOR, not necessarily "now" — a PM filling
+  /// this in on a Friday for next week's work sets this forward. Weekly
+  /// reporting (weekly target, Request vs Achievement) buckets by this
+  /// field, not `createdAt`.
+  requestDate DateTime @default(now()) @map("request_date")
+  status      UpworkRequestStatus @default(SUBMITTED)
+  notes       String?
+
+  /// Denormalized sum of items[].requestedHours, kept in sync by
+  /// UpworkRequestService on every create/update — avoids every reporting
+  /// query having to join+sum `items` just to show one total (Part: spec
+  /// section 16 — "total hours should be calculated automatically").
+  totalRequestedHours Float @default(0) @map("total_requested_hours")
+
+  reviewedByUserId String?  @map("reviewed_by_user_id")
+  reviewedByUser   User?    @relation("UpworkRequestsReviewed", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewNotes      String?  @map("review_notes")
+  reviewedAt       DateTime? @map("reviewed_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items UpworkRequestItem[]
+
+  @@index([orgId, status])
+  @@index([orgId, projectManagerId])
+  @@index([orgId, requestDate])
+  @@map("upwork_requests")
+}
+
+/// Per-profile line of one UpworkRequest (Part: Upwork Requests, 2026-10-01)
+/// — `profileName` matches the free-text convention UpworkProposal.
+/// profileName and the org's upworkPicklists.profiles list already use
+/// (Part: Upwork Proposals, 2026-09-29's own docblock explains why submitter/
+/// profile identity is a plain string here, not a separate relational
+/// table) rather than introducing a second, inconsistent identity model just
+/// for this feature. Achievement reporting matches this string
+/// case-insensitively against UpworkProposal.profileName.
+model UpworkRequestItem {
+  id             String @id @default(uuid())
+  requestId      String @map("request_id")
+  request        UpworkRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  profileName    String @map("profile_name")
+  requestedHours Float  @map("requested_hours")
+
+  @@unique([requestId, profileName])
+  @@map("upwork_request_items")
+}
+
+/// Which Upwork profiles/IDs a specific person (normally a Project Manager)
+/// is allowed to request hours against (Part: Upwork Requests, 2026-10-01 —
+/// "the system should display all available IDs/profiles that the Project
+/// Manager is allowed to request work for"). Presence of a row is the grant
+/// (no boolean column needed), same convention as SuppressionEntry. A user
+/// with ZERO rows here is treated as unrestricted (sees every active
+/// profile) rather than locked out — same default-open-until-narrowed
+/// reasoning as the module-access booleans on User defaulting true, so a
+/// brand-new Project Manager isn't greeted with an empty picker before an
+/// admin has had a chance to configure anything. Once an admin grants at
+/// least one profile to a user, that becomes a real allow-list and every
+/// other profile is hidden from them.
+model UpworkProfileAccess {
+  id          String @id @default(uuid())
+  userId      String @map("user_id")
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileName String @map("profile_name")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, profileName])
+  @@map("upwork_profile_access")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every

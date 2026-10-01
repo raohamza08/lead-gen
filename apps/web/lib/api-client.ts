@@ -59,7 +59,17 @@ export function hasSession(): boolean {
 export interface CurrentUser {
   sub: string;
   orgId: string;
-  role: "ADMIN" | "MANAGER" | "LEAD_REVIEWER" | "SALES_REP" | "VIEWER";
+  role:
+    | "ADMIN"
+    | "MANAGER"
+    | "LEAD_REVIEWER"
+    | "SALES_REP"
+    | "VIEWER"
+    | "PROJECT_MANAGER"
+    | "BUSINESS_DEVELOPER"
+    | "EMAIL_REVIEWER"
+    | "ADS_MANAGER"
+    | "LEAD_GEN_MANAGER";
   email: string;
 }
 
@@ -372,6 +382,25 @@ export const api = {
   deleteUpworkProposal: (id: string) => request(`/upwork/proposals/${id}`, { method: "DELETE" }),
   setUpworkNotifyRecipients: (id: string, body: { userIds: string[]; notifyNow?: boolean }) =>
     request(`/upwork/proposals/${id}/notify-recipients`, { method: "PATCH", body: JSON.stringify(body) }),
+  // Part: Upwork Requests, 2026-10-01.
+  getUpworkRequestProfiles: () => request("/upwork/requests/profiles"),
+  getUpworkRequests: (params: Record<string, string> = {}) =>
+    request(`/upwork/requests?${new URLSearchParams(params).toString()}`),
+  getUpworkRequest: (id: string) => request(`/upwork/requests/${id}`),
+  createUpworkRequest: (body: Record<string, unknown>) =>
+    request("/upwork/requests", { method: "POST", body: JSON.stringify(body) }),
+  updateUpworkRequest: (id: string, body: Record<string, unknown>) =>
+    request(`/upwork/requests/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  submitUpworkRequest: (id: string) => request(`/upwork/requests/${id}/submit`, { method: "PATCH" }),
+  reviewUpworkRequest: (id: string, body: { status: string; reviewNotes?: string }) =>
+    request(`/upwork/requests/${id}/review`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteUpworkRequest: (id: string) => request(`/upwork/requests/${id}`, { method: "DELETE" }),
+  getUpworkWeeklyTarget: (params: Record<string, string> = {}) =>
+    request(`/upwork/requests/weekly-target?${new URLSearchParams(params).toString()}`),
+  getUpworkAchievement: (params: Record<string, string> = {}) =>
+    request(`/upwork/requests/achievement?${new URLSearchParams(params).toString()}`),
+  getUpworkRequestsDashboardSummary: (params: Record<string, string> = {}) =>
+    request(`/upwork/requests/dashboard-summary?${new URLSearchParams(params).toString()}`),
   getCaseStudies: () => request("/settings/case-studies"),
   createCaseStudy: (body: { title?: string; rawStory: string; submittedIndustry: string }) =>
     request("/settings/case-studies", { method: "POST", body: JSON.stringify(body) }),

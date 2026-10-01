@@ -52,6 +52,19 @@ interface MonthlyRow {
   connectsPerClient?: number;
 }
 
+interface UpworkRequestsSummary {
+  requestedHours: number;
+  biddingHours: number;
+  inviteHours: number;
+  totalOnboardedHours: number;
+  remainingHours: number;
+  pendingReview: number;
+  approvedCount: number;
+  rejectedCount: number;
+  byProjectManager: { projectManagerId: string; name: string; requestedHours: number }[];
+  byProfile: { profileName: string; requestedHours: number; achievedHours: number }[];
+}
+
 interface SubmitterRow {
   name: string;
   bids: number;
@@ -93,6 +106,13 @@ export function UpworkTab() {
   const purchasesQuery = useQuery({
     queryKey: ["dc-upwork-purchases"],
     queryFn: () => api.getDashboardUpworkConnectPurchases() as Promise<ConnectPurchase[]>,
+  });
+  // Part: Upwork Requests, 2026-10-01 -- reuses this page's own shared date
+  // range control rather than a second filter bar, per the feature's UI/UX
+  // requirement to stay consistent with existing dashboard components.
+  const requestsQuery = useQuery({
+    queryKey: ["dc-upwork-requests-summary", query],
+    queryFn: () => api.getUpworkRequestsDashboardSummary(query) as Promise<UpworkRequestsSummary>,
   });
 
   const createMutation = useMutation({
@@ -190,8 +210,9 @@ export function UpworkTab() {
         monthlyQuery.refetch();
         submittersQuery.refetch();
         purchasesQuery.refetch();
+        requestsQuery.refetch();
       }}
-      refreshing={kpisQuery.isFetching || monthlyQuery.isFetching || submittersQuery.isFetching || purchasesQuery.isFetching}
+      refreshing={kpisQuery.isFetching || monthlyQuery.isFetching || submittersQuery.isFetching || purchasesQuery.isFetching || requestsQuery.isFetching}
     >
       {kpisQuery.isLoading && <SkeletonCard className="h-32" />}
       {kpisQuery.error && <ErrorState message={(kpisQuery.error as Error).message} onRetry={() => kpisQuery.refetch()} />}
@@ -304,6 +325,59 @@ export function UpworkTab() {
           />
         </div>
       )}
+
+      <SectionCard
+        title="Requests"
+        subtitle="Project Manager hour requests for the selected period — see the Requests tab under Upwork Proposals to review/approve individual requests."
+        expandable
+      >
+        {requestsQuery.isLoading && <SkeletonCard className="h-32" />}
+        {requestsQuery.error && <ErrorState message={(requestsQuery.error as Error).message} onRetry={() => requestsQuery.refetch()} />}
+        {requestsQuery.data && (
+          <>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+              <StatTile label="Requested Hours" value={num(requestsQuery.data.requestedHours)} />
+              <StatTile label="Bidding Hours" value={num(requestsQuery.data.biddingHours)} />
+              <StatTile label="Invite Hours" value={num(requestsQuery.data.inviteHours)} />
+              <StatTile label="Total Onboarded" value={num(requestsQuery.data.totalOnboardedHours)} tone="good" />
+              <StatTile label="Remaining Target" value={num(requestsQuery.data.remainingHours)} tone={requestsQuery.data.remainingHours > 0 ? "gold" : "good"} />
+              <StatTile label="Pending Review" value={num(requestsQuery.data.pendingReview)} />
+              <StatTile label="Approved / Rejected" value={`${num(requestsQuery.data.approvedCount)} / ${num(requestsQuery.data.rejectedCount)}`} />
+            </div>
+
+            {requestsQuery.data.byProjectManager.length > 0 && (
+              <div className="mt-4">
+                <DataTable
+                  rowKey={(r) => r.projectManagerId}
+                  rows={requestsQuery.data.byProjectManager}
+                  columns={[
+                    { key: "name", header: "Project Manager", render: (r) => r.name },
+                    { key: "requestedHours", header: "Approved Requested Hours", numeric: true, render: (r) => num(r.requestedHours) },
+                  ]}
+                />
+              </div>
+            )}
+
+            {requestsQuery.data.byProfile.length > 0 && (
+              <div className="mt-4">
+                <DataTable
+                  rowKey={(r) => r.profileName}
+                  rows={requestsQuery.data.byProfile}
+                  columns={[
+                    { key: "profileName", header: "Profile/ID", render: (r) => r.profileName },
+                    { key: "requestedHours", header: "Requested", numeric: true, render: (r) => num(r.requestedHours) },
+                    { key: "achievedHours", header: "Achieved", numeric: true, render: (r) => num(r.achievedHours) },
+                  ]}
+                />
+              </div>
+            )}
+
+            {requestsQuery.data.byProjectManager.length === 0 && (
+              <EmptyState title="No approved requests in this period" description="Requests are created from the Requests tab under Upwork Proposals." />
+            )}
+          </>
+        )}
+      </SectionCard>
 
       <SectionCard
         title="Connect purchase ledger"

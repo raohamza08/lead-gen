@@ -126,6 +126,7 @@ const NAV: NavItem[] = [
     links: [
       { href: "/upwork/bidding", label: "Bidding" },
       { href: "/upwork/invite", label: "Invite" },
+      { href: "/upwork/requests", label: "Requests" },
     ],
   },
   {

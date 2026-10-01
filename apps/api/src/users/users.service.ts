@@ -179,7 +179,7 @@ export class UsersService {
     });
     if (!targetUser) throw new NotFoundException("User not found");
 
-    const [emailAccounts, emailGrants, socialAccounts, socialGrants] = await Promise.all([
+    const [emailAccounts, emailGrants, socialAccounts, socialGrants, org, upworkProfileGrants] = await Promise.all([
       this.prisma.emailAccount.findMany({
         where: { orgId },
         select: { id: true, address: true, mailboxLabel: true },
@@ -192,10 +192,20 @@ export class UsersService {
         orderBy: { createdAt: "asc" },
       }),
       this.prisma.socialAccountAccess.findMany({ where: { userId } }),
+      this.prisma.organization.findUnique({ where: { id: orgId }, select: { settings: true } }),
+      this.prisma.upworkProfileAccess.findMany({ where: { userId }, select: { profileName: true } }),
     ]);
 
     const emailGrantByAccount = new Map(emailGrants.map((g) => [g.accountId, g]));
     const socialGrantByAccount = new Map(socialGrants.map((g) => [g.accountId, g]));
+
+    // Which Upwork profiles/IDs this person is allowed to request hours
+    // against (Part: Upwork Requests, 2026-10-01) — `granted` empty means
+    // unrestricted, same convention UpworkRequestService.listAvailableProfiles
+    // reads on the request-creation side; see UpworkProfileAccess's schema
+    // docblock for why zero rows isn't treated as "locked out of everything."
+    const settings = (org?.settings as Record<string, unknown>) ?? {};
+    const availableProfiles = ((settings.upworkPicklists as { profiles?: string[] } | undefined)?.profiles) ?? [];
 
     return {
       isAdmin: targetUser.role === Role.ADMIN,
@@ -215,6 +225,10 @@ export class UsersService {
         const grant = socialGrantByAccount.get(a.id);
         return { ...a, granted: Boolean(grant), canPublish: grant?.canPublish ?? false, canApprove: grant?.canApprove ?? false };
       }),
+      upworkProfiles: {
+        available: availableProfiles,
+        granted: upworkProfileGrants.map((g) => g.profileName),
+      },
     };
   }
 
@@ -236,10 +250,20 @@ export class UsersService {
     if (dto.modules && targetUser.role === Role.ADMIN) {
       throw new ForbiddenException("Admins always have full module access — change their role first if you want to restrict them.");
     }
+    if (dto.upworkProfiles && targetUser.role === Role.ADMIN) {
+      throw new ForbiddenException("Admins always have access to every Upwork profile — change their role first if you want to restrict them.");
+    }
 
     await this.prisma.$transaction(async (tx) => {
       if (dto.modules) {
         await tx.user.update({ where: { id: userId }, data: dto.modules });
+      }
+      if (dto.upworkProfiles) {
+        const clean = [...new Set(dto.upworkProfiles.map((p) => p.trim()).filter(Boolean))];
+        await tx.upworkProfileAccess.deleteMany({ where: { userId } });
+        if (clean.length > 0) {
+          await tx.upworkProfileAccess.createMany({ data: clean.map((profileName) => ({ userId, profileName })) });
+        }
       }
       for (const entry of dto.emailAccounts ?? []) {
         if (entry.granted) {
