@@ -5,12 +5,21 @@ import { UserAccessCacheService } from "../access/user-access-cache.service";
 import { AccessModule, MODULE_ACCESS_KEY } from "../decorators/requires-module.decorator";
 import { PermissionDenialLogger } from "./permission-denial-logger.service";
 
-const FIELD_BY_MODULE: Record<AccessModule, "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess" | "metaAdsAccess"> = {
+const FIELD_BY_MODULE: Record<
+  AccessModule,
+  "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess" | "upworkRequestsAccess" | "metaAdsAccess"
+> = {
   LEAD_GENERATION: "leadGenAccess",
   EMAIL_HUB: "emailHubAccess",
   SOCIAL_MEDIA: "socialMediaAccess",
   SOCIAL_ENGAGEMENT: "socialEngagementAccess",
   UPWORK: "upworkAccess",
+  // Independent of UPWORK above (Part: Upwork Requests, 2026-10-01, explicit
+  // user request — "not everyone needs everything... the request tab will
+  // be shown to some person"): a Project Manager can be granted just this
+  // without the broader upworkAccess, same as socialEngagementAccess next
+  // to socialMediaAccess.
+  UPWORK_REQUESTS: "upworkRequestsAccess",
   META_ADS: "metaAdsAccess",
 };
 

@@ -17,9 +17,14 @@ import { AuditLogService } from "../audit-log/audit-log.service";
 /**
  * Project Manager hour requests, inside the Upwork Proposal module (Part:
  * Upwork Requests, 2026-10-01 — "add a new Requests tab inside the Upwork
- * Proposal module"). Gated by the same UPWORK module flag as bidding/invite;
- * individual actions are further restricted by role below (creation ->
- * Project Manager/Admin, review -> Business Developer/Admin).
+ * Proposal module"). Gated by its OWN module flag (upworkRequestsAccess),
+ * independent of Bidding/Invite access (Part: Upwork Requests, 2026-10-01,
+ * explicit user request — "not everyone needs everything... the request tab
+ * will be shown to some person [while] I want to hide bidding and invites
+ * for them") — see UpworkProposalAccessGuard for how Bidding/Invite enforce
+ * their own, separate flags. Individual actions are further restricted by
+ * role below (creation -> Project Manager/Admin, review -> Business
+ * Developer/Admin).
  *
  * Static sub-paths (profiles, weekly-target, achievement, dashboard-summary)
  * are declared before the `:id` route so Nest's router doesn't swallow them
@@ -27,7 +32,7 @@ import { AuditLogService } from "../audit-log/audit-log.service";
  */
 @Controller("upwork/requests")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK")
+@RequiresModule("UPWORK_REQUESTS")
 export class UpworkRequestController {
   constructor(
     private readonly requests: UpworkRequestService,

@@ -198,7 +198,10 @@ export class UpworkRequestService {
   }
 
   async review(orgId: string, reviewerId: string, id: string, dto: ReviewUpworkRequestDto) {
-    const existing = await this.prisma.upworkRequest.findFirst({ where: { id, orgId } });
+    const existing = await this.prisma.upworkRequest.findFirst({
+      where: { id, orgId },
+      include: { items: true, projectManager: { select: { name: true } } },
+    });
     if (!existing) throw new NotFoundException("Request not found");
 
     const nextStatus = dto.status as UpworkRequestStatus;
@@ -233,7 +236,7 @@ export class UpworkRequestService {
         message:
           dto.reviewNotes ||
           (nextStatus === UpworkRequestStatus.APPROVED
-            ? "It now counts toward your weekly target."
+            ? "It now counts toward the Business Developer team's weekly target."
             : "No review notes were left."),
         actionUrl: "/upwork/requests",
         severity: "WARNING",
@@ -241,6 +244,17 @@ export class UpworkRequestService {
         entityId: id,
         recipientUserIds: [existing.projectManagerId],
       });
+    }
+
+    // The weekly target belongs to whichever Business Developer approves a
+    // request, not the requesting Project Manager (Part: Upwork Requests,
+    // 2026-10-01, explicit user request — "the target is for the persons
+    // who are mentioned as bd... they should get notified for the new
+    // target"). Broadcast to the whole BD team, not just the approver, so
+    // everyone sees the team's total target move -- same broadcast pattern
+    // as notifyReviewers on submission.
+    if (nextStatus === UpworkRequestStatus.APPROVED) {
+      await this.notifyNewTarget(orgId, existing);
     }
 
     return updated;
@@ -279,6 +293,32 @@ export class UpworkRequestService {
       severity: "WARNING",
       entityType: "upworkRequest",
       entityId: requestId,
+      recipientUserIds,
+    });
+  }
+
+  /** Broadcasts to every active Business Developer (not just whoever
+   *  approved this one) that a new chunk of hours now counts toward the
+   *  team's weekly target -- see `review`'s own comment for why BDs, not
+   *  the requesting Project Manager, own the target. */
+  private async notifyNewTarget(
+    orgId: string,
+    request: { id: string; totalRequestedHours: number; items: { profileName: string }[]; projectManager: { name: string } },
+  ) {
+    const bds = await this.prisma.user.findMany({ where: { orgId, active: true, role: Role.BUSINESS_DEVELOPER }, select: { id: true } });
+    const recipientUserIds = bds.map((b) => b.id);
+    if (recipientUserIds.length === 0) return;
+
+    const profileList = request.items.map((i) => i.profileName).join(", ");
+    await this.notifications.notify(orgId, {
+      category: NotificationCategory.UPWORK,
+      type: "UPWORK_NEW_TARGET",
+      title: "New weekly target approved",
+      message: `${request.totalRequestedHours}h approved for ${request.projectManager.name}'s request (${profileList}) — now part of the Business Developer team's weekly target.`,
+      actionUrl: "/upwork/requests",
+      severity: "WARNING",
+      entityType: "upworkRequest",
+      entityId: request.id,
       recipientUserIds,
     });
   }
@@ -329,19 +369,42 @@ export class UpworkRequestService {
     return result;
   }
 
+  /** Resolves which dimension(s) to scope reporting by, given who's asking
+   *  (Part: Upwork Requests, 2026-10-01, explicit user request — "the
+   *  target is for the persons who are mentioned as bd", not the requesting
+   *  Project Manager). A Project Manager always sees only their own asks
+   *  (informational — "what I requested vs. what came in"); a Business
+   *  Developer always sees only the targets they personally approved (their
+   *  real performance number); an Admin/Manager can filter by either
+   *  dimension, or neither for a combined org-wide view. The two dimensions
+   *  are independent and can be combined (e.g. an admin inspecting one PM's
+   *  requests that a specific BD approved). */
+  private resolveReportScope(requesterId: string, requesterRole: Role, query: QueryUpworkWeekDto) {
+    if (requesterRole === Role.PROJECT_MANAGER) {
+      return { projectManagerId: requesterId, businessDeveloperId: query.businessDeveloperId };
+    }
+    if (requesterRole === Role.BUSINESS_DEVELOPER) {
+      return { projectManagerId: query.projectManagerId, businessDeveloperId: requesterId };
+    }
+    return { projectManagerId: query.projectManagerId, businessDeveloperId: query.businessDeveloperId };
+  }
+
   /**
    * "Requested Hours: 100 / Bidding Hours Onboarded: 65 / Invite Hours
    * Onboarded: 20 / Total Hours Onboarded: 85 / Remaining Hours: 15" (Part:
-   * spec section 4). Achievement is matched by profile name against
-   * whichever profiles appear in this PM's APPROVED requests for the period
-   * — there's no other link between a Project Manager and a Bidding/Invite
-   * row (UpworkProposal.submittedBy is a free-text name, not a User
-   * relation; see that field's own schema docblock), so profile identity is
-   * the only honest join key available.
+   * spec section 4) — this is the Business Developer's target, not the
+   * Project Manager's: it's scoped by `reviewedByUserId` (whoever approved
+   * the request), since that's who's on the hook to actually deliver the
+   * hours via Bidding/Invite. Achievement is matched by profile name against
+   * whichever profiles appear in the scoped APPROVED requests for the
+   * period — there's no other link between a person and a Bidding/Invite row
+   * (UpworkProposal.submittedBy is a free-text name, not a User relation;
+   * see that field's own schema docblock), so profile identity is the only
+   * honest join key available.
    */
   async getWeeklyTarget(orgId: string, requesterId: string, requesterRole: Role, query: QueryUpworkWeekDto) {
     const range = this.resolveRange(query);
-    const projectManagerId = requesterRole === Role.PROJECT_MANAGER ? requesterId : query.projectManagerId;
+    const { projectManagerId, businessDeveloperId } = this.resolveReportScope(requesterId, requesterRole, query);
 
     const approvedItems = await this.prisma.upworkRequestItem.findMany({
       where: {
@@ -350,6 +413,7 @@ export class UpworkRequestService {
           status: UpworkRequestStatus.APPROVED,
           requestDate: { gte: range.from, lte: range.to },
           ...(projectManagerId ? { projectManagerId } : {}),
+          ...(businessDeveloperId ? { reviewedByUserId: businessDeveloperId } : {}),
         },
       },
       select: { profileName: true, requestedHours: true },
@@ -370,6 +434,7 @@ export class UpworkRequestService {
     return {
       range: { from: range.from, to: range.to },
       projectManagerId: projectManagerId ?? null,
+      businessDeveloperId: businessDeveloperId ?? null,
       requestedHours,
       biddingHoursOnboarded,
       inviteHoursOnboarded,
@@ -379,12 +444,10 @@ export class UpworkRequestService {
   }
 
   /** Per-profile Request vs Achievement table, plus totals (Part: spec
-   *  section 9). Scoped the same way getWeeklyTarget is: a Project Manager
-   *  always sees only their own; a reviewer/admin can pass projectManagerId
-   *  to inspect one person or omit it for an org-wide, all-PMs view. */
+   *  section 9). Scoped the same dual-dimension way getWeeklyTarget is. */
   async getAchievement(orgId: string, requesterId: string, requesterRole: Role, query: QueryUpworkWeekDto) {
     const range = this.resolveRange(query);
-    const projectManagerId = requesterRole === Role.PROJECT_MANAGER ? requesterId : query.projectManagerId;
+    const { projectManagerId, businessDeveloperId } = this.resolveReportScope(requesterId, requesterRole, query);
 
     const items = await this.prisma.upworkRequestItem.findMany({
       where: {
@@ -393,6 +456,7 @@ export class UpworkRequestService {
           status: UpworkRequestStatus.APPROVED,
           requestDate: { gte: range.from, lte: range.to },
           ...(projectManagerId ? { projectManagerId } : {}),
+          ...(businessDeveloperId ? { reviewedByUserId: businessDeveloperId } : {}),
         },
         ...(query.profileName ? { profileName: { equals: query.profileName, mode: "insensitive" } } : {}),
       },
@@ -462,7 +526,16 @@ export class UpworkRequestService {
       this.prisma.upworkRequest.count({ where: { orgId, status: UpworkRequestStatus.REJECTED, requestDate: { gte: range.from, lte: range.to } } }),
       this.prisma.upworkRequestItem.findMany({
         where: { request: { orgId, status: UpworkRequestStatus.APPROVED, requestDate: { gte: range.from, lte: range.to } } },
-        include: { request: { select: { projectManagerId: true, projectManager: { select: { name: true } } } } },
+        include: {
+          request: {
+            select: {
+              projectManagerId: true,
+              projectManager: { select: { name: true } },
+              reviewedByUserId: true,
+              reviewedByUser: { select: { name: true } },
+            },
+          },
+        },
       }),
     ]);
 
@@ -479,6 +552,12 @@ export class UpworkRequestService {
 
     const byPM = new Map<string, { projectManagerId: string; name: string; requestedHours: number }>();
     const byProfile = new Map<string, { profileName: string; requestedHours: number }>();
+    // Business Developer breakdown (Part: Upwork Requests, 2026-10-01,
+    // explicit user request — "the target is for the persons who are
+    // mentioned as bd") -- tracked per-BD here since reviewedByUserId is
+    // only set once a request is APPROVED, same rows this whole method
+    // already scopes to.
+    const byBD = new Map<string, { businessDeveloperId: string; name: string; requestedHours: number; profiles: Set<string> }>();
     for (const item of approvedItems) {
       const pmEntry = byPM.get(item.request.projectManagerId) ?? {
         projectManagerId: item.request.projectManagerId,
@@ -492,6 +571,18 @@ export class UpworkRequestService {
       const profEntry = byProfile.get(key) ?? { profileName: item.profileName, requestedHours: 0 };
       profEntry.requestedHours += item.requestedHours;
       byProfile.set(key, profEntry);
+
+      if (item.request.reviewedByUserId && item.request.reviewedByUser) {
+        const bdEntry = byBD.get(item.request.reviewedByUserId) ?? {
+          businessDeveloperId: item.request.reviewedByUserId,
+          name: item.request.reviewedByUser.name,
+          requestedHours: 0,
+          profiles: new Set<string>(),
+        };
+        bdEntry.requestedHours += item.requestedHours;
+        bdEntry.profiles.add(key);
+        byBD.set(item.request.reviewedByUserId, bdEntry);
+      }
     }
 
     const achievedByRequestedProfile = await this.sumOnboardedHoursByProfile(orgId, range, [...byProfile.keys()]);
@@ -507,6 +598,16 @@ export class UpworkRequestService {
       approvedCount,
       rejectedCount,
       byProjectManager: [...byPM.values()].sort((a, b) => b.requestedHours - a.requestedHours),
+      byBusinessDeveloper: [...byBD.values()]
+        .map((b) => {
+          let achievedHours = 0;
+          for (const p of b.profiles) {
+            const achieved = orgWideByProfile.get(p);
+            achievedHours += (achieved?.bidding ?? 0) + (achieved?.invites ?? 0);
+          }
+          return { businessDeveloperId: b.businessDeveloperId, name: b.name, requestedHours: b.requestedHours, achievedHours };
+        })
+        .sort((a, b) => b.requestedHours - a.requestedHours),
       byProfile: [...byProfile.entries()]
         .map(([key, v]) => {
           const achieved = achievedByRequestedProfile.get(key) ?? { bidding: 0, invites: 0 };

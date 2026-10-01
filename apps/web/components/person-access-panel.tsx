@@ -9,6 +9,9 @@ interface ModuleFlags {
   socialMediaAccess: boolean;
   socialEngagementAccess: boolean;
   upworkAccess: boolean;
+  upworkBiddingAccess: boolean;
+  upworkInviteAccess: boolean;
+  upworkRequestsAccess: boolean;
   metaAdsAccess: boolean;
 }
 
@@ -52,7 +55,13 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
     label: "Social Inbox + Engagement",
     hint: "Narrower than Social Media — only DMs and comments, not Create Post/Calendar/Analytics/Automations/Accounts. Redundant if Social Media is already checked.",
   },
-  { key: "upworkAccess", label: "Upwork Proposals" },
+  // Upwork Proposals is three independent toggles, not one (Part: Upwork
+  // Requests, 2026-10-01, explicit user request — "not everyone needs
+  // everything... hide bidding and invites for them") -- e.g. a Project
+  // Manager who should only see Requests, not Bidding/Invite.
+  { key: "upworkBiddingAccess", label: "Upwork — Bidding" },
+  { key: "upworkInviteAccess", label: "Upwork — Invite" },
+  { key: "upworkRequestsAccess", label: "Upwork — Requests" },
   { key: "metaAdsAccess", label: "Meta Ads" },
 ];
 

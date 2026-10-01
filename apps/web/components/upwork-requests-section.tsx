@@ -92,21 +92,32 @@ export function UpworkRequestsSection() {
   const user = getCurrentUser();
   const role = user?.role;
   const isPM = role === "PROJECT_MANAGER";
-  const isReviewer = role === "ADMIN" || role === "BUSINESS_DEVELOPER";
+  const isBD = role === "BUSINESS_DEVELOPER";
+  const isReviewer = role === "ADMIN" || isBD;
   const canCreate = isPM || role === "ADMIN";
   const queryClient = useQueryClient();
 
   const [range, setRange] = useState<RangeName>("THIS_WEEK");
   const [customFrom, setCustomFrom] = useState(todayIso());
   const [customTo, setCustomTo] = useState(todayIso());
-  const [pmFilter, setPmFilter] = useState<string>(""); // reviewer-only filter
+  const [pmFilter, setPmFilter] = useState<string>(""); // admin-only filter
+  const [bdFilter, setBdFilter] = useState<string>(""); // admin-only filter
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [reviewTarget, setReviewTarget] = useState<UpworkRequest | null>(null);
 
+  // The weekly target belongs to whichever Business Developer approves a
+  // request, not the requesting Project Manager (explicit user decision —
+  // "the target is for the persons who are mentioned as bd"). A PM/BD's own
+  // scope is enforced server-side regardless of what's sent here; only an
+  // Admin's pmFilter/bdFilter selections actually do anything.
   const rangeParams: Record<string, string> = range === "CUSTOM" ? { range, from: customFrom, to: customTo } : { range };
-  const scopedParams = { ...rangeParams, ...(isReviewer && pmFilter ? { projectManagerId: pmFilter } : {}) };
+  const scopedParams = {
+    ...rangeParams,
+    ...(role === "ADMIN" && pmFilter ? { projectManagerId: pmFilter } : {}),
+    ...(role === "ADMIN" && bdFilter ? { businessDeveloperId: bdFilter } : {}),
+  };
 
   const profilesQuery = useQuery({
     queryKey: ["upwork-request-profiles"],
@@ -135,6 +146,7 @@ export function UpworkRequestsSection() {
     enabled: isReviewer,
   });
   const projectManagers = (usersQuery.data ?? []).filter((u) => u.role === "PROJECT_MANAGER" && u.active);
+  const businessDevelopers = (usersQuery.data ?? []).filter((u) => u.role === "BUSINESS_DEVELOPER" && u.active);
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ["upwork-requests"] });
@@ -160,7 +172,10 @@ export function UpworkRequestsSection() {
 
   const columns: TableColumn<UpworkRequest>[] = [
     { key: "requestDate", header: "Date", render: (r) => new Date(r.requestDate).toLocaleDateString() },
-    ...(isReviewer ? [{ key: "pm", header: "Project Manager", render: (r: UpworkRequest) => r.projectManager.name } as TableColumn<UpworkRequest>] : []),
+    // Always shown, regardless of viewer role (explicit user request — "the
+    // name of the person who is making request for hours should also be
+    // mentioned with the request").
+    { key: "pm", header: "Requested by", render: (r) => r.projectManager.name },
     {
       key: "items",
       header: "Profiles / Hours",
@@ -205,11 +220,13 @@ export function UpworkRequestsSection() {
       <section className="card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold tracking-tight">Weekly target</h2>
+            <h2 className="text-sm font-semibold tracking-tight">{isBD ? "Your weekly target" : isPM ? "Your requests this week" : "Weekly target"}</h2>
             <p className="mt-0.5 text-xs text-ink/55">
               {isPM
-                ? "What you requested, what came in through Bidding/Invite for those profiles, and what's left."
-                : "Org-wide requested vs. onboarded hours for the selected period."}
+                ? "What you requested, and what came in through Bidding/Invite for those profiles — the target itself belongs to whichever Business Developer approves it."
+                : isBD
+                  ? "Requests you've approved — what you're on the hook to deliver through Bidding/Invite, and what's come in so far."
+                  : "Org-wide requested vs. onboarded hours for the selected period. Filter by Project Manager (who asked) or Business Developer (who owns the target)."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -225,11 +242,17 @@ export function UpworkRequestsSection() {
                 <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="rounded border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs" />
               </>
             )}
-            {isReviewer && (
-              <select value={pmFilter} onChange={(e) => setPmFilter(e.target.value)} className="rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs">
-                <option value="">All project managers</option>
-                {projectManagers.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
-              </select>
+            {role === "ADMIN" && (
+              <>
+                <select value={pmFilter} onChange={(e) => setPmFilter(e.target.value)} className="rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs">
+                  <option value="">All project managers</option>
+                  {projectManagers.map((pm) => <option key={pm.id} value={pm.id}>{pm.name}</option>)}
+                </select>
+                <select value={bdFilter} onChange={(e) => setBdFilter(e.target.value)} className="rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs">
+                  <option value="">All business developers</option>
+                  {businessDevelopers.map((bd) => <option key={bd.id} value={bd.id}>{bd.name}</option>)}
+                </select>
+              </>
             )}
           </div>
         </div>

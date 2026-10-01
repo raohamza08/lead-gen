@@ -258,7 +258,22 @@ model User {
   /// retrofit reasoning as leadGenAccess/emailHubAccess/socialMediaAccess
   /// above: every existing user keeps access rather than an admin having to
   /// grant it by hand the moment this ships.
+  /// SUPERSEDED for enforcement (Part: Upwork Requests, 2026-10-01, explicit
+  /// user request — "not everyone needs everything... hide bidding and
+  /// invites for them") by the three granular flags directly below. Kept as
+  /// a column (not dropped) since nothing else needs removing it, but
+  /// ModuleAccessGuard/UpworkController no longer check it — the three
+  /// per-tab flags are now the only real gate for this module.
   upworkAccess Boolean @default(true) @map("upwork_access")
+  /// Per-tab grant within Upwork Proposals (Part: Upwork Requests,
+  /// 2026-10-01) — independent of the other two below, same "not everyone
+  /// needs everything" reasoning the user gave explicitly. All three default
+  /// true so nothing changes for any existing user until an admin
+  /// deliberately narrows one of these for a specific person (e.g. a
+  /// Project Manager who should only see Requests, not Bidding/Invite).
+  upworkBiddingAccess Boolean @default(true) @map("upwork_bidding_access")
+  upworkInviteAccess Boolean @default(true) @map("upwork_invite_access")
+  upworkRequestsAccess Boolean @default(true) @map("upwork_requests_access")
   /// New module (Part: Meta Ads, 2026-09-30) — same default-true retrofit
   /// reasoning as upworkAccess above: every existing user keeps access
   /// rather than an admin having to grant it by hand the moment this ships.

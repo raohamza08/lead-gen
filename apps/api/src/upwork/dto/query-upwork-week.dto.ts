@@ -18,6 +18,12 @@ export class QueryUpworkWeekDto {
   @IsOptional() @IsString() from?: string;
   @IsOptional() @IsString() to?: string;
   @IsOptional() @IsString() projectManagerId?: string;
+  /** The Business Developer who approved/owns the target (Part: Upwork
+   *  Requests, 2026-10-01, explicit user request — "the target is for the
+   *  persons who are mentioned as bd", not the requesting Project Manager).
+   *  Maps to UpworkRequest.reviewedByUserId -- whoever approves a request
+   *  becomes responsible for delivering it. */
+  @IsOptional() @IsString() businessDeveloperId?: string;
   @IsOptional() @IsString() profileName?: string;
   @IsOptional() @IsIn(["BIDDING", "INVITE"]) source?: "BIDDING" | "INVITE";
 }

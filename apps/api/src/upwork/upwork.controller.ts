@@ -1,9 +1,8 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
-import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { UpworkProposalAccessGuard } from "./upwork-proposal-access.guard";
 import { Roles } from "../common/decorators/roles.decorator";
-import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 import { UpworkService } from "./upwork.service";
@@ -15,8 +14,7 @@ import { SetNotifyRecipientsDto } from "./dto/set-notify-recipients.dto";
 import { AuditLogService } from "../audit-log/audit-log.service";
 
 @Controller("upwork/proposals")
-@UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK")
+@UseGuards(JwtAuthGuard, RolesGuard, UpworkProposalAccessGuard)
 export class UpworkController {
   constructor(
     private readonly upwork: UpworkService,

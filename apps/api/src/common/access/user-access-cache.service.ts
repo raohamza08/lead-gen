@@ -11,6 +11,9 @@ export interface UserAccessSnapshot {
   socialMediaAccess: boolean;
   socialEngagementAccess: boolean;
   upworkAccess: boolean;
+  upworkBiddingAccess: boolean;
+  upworkInviteAccess: boolean;
+  upworkRequestsAccess: boolean;
   metaAdsAccess: boolean;
   isPrimaryAdmin: boolean;
 }
@@ -60,6 +63,9 @@ export class UserAccessCacheService {
           socialMediaAccess: true,
           socialEngagementAccess: true,
           upworkAccess: true,
+          upworkBiddingAccess: true,
+          upworkInviteAccess: true,
+          upworkRequestsAccess: true,
           metaAdsAccess: true,
           isPrimaryAdmin: true,
         },

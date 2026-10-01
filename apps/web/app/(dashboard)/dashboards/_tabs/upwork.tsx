@@ -62,6 +62,11 @@ interface UpworkRequestsSummary {
   approvedCount: number;
   rejectedCount: number;
   byProjectManager: { projectManagerId: string; name: string; requestedHours: number }[];
+  // The weekly target belongs to whichever Business Developer approves a
+  // request, not the requesting Project Manager (explicit user decision) —
+  // this is the real performance breakdown; byProjectManager above is just
+  // "who asked."
+  byBusinessDeveloper: { businessDeveloperId: string; name: string; requestedHours: number; achievedHours: number }[];
   byProfile: { profileName: string; requestedHours: number; achievedHours: number }[];
 }
 
@@ -345,8 +350,24 @@ export function UpworkTab() {
               <StatTile label="Approved / Rejected" value={`${num(requestsQuery.data.approvedCount)} / ${num(requestsQuery.data.rejectedCount)}`} />
             </div>
 
+            {requestsQuery.data.byBusinessDeveloper.length > 0 && (
+              <div className="mt-4">
+                <p className="mb-1.5 text-xs font-medium text-ink/60">By Business Developer (the target owner)</p>
+                <DataTable
+                  rowKey={(r) => r.businessDeveloperId}
+                  rows={requestsQuery.data.byBusinessDeveloper}
+                  columns={[
+                    { key: "name", header: "Business Developer", render: (r) => r.name },
+                    { key: "requestedHours", header: "Target Hours", numeric: true, render: (r) => num(r.requestedHours) },
+                    { key: "achievedHours", header: "Achieved", numeric: true, render: (r) => num(r.achievedHours) },
+                  ]}
+                />
+              </div>
+            )}
+
             {requestsQuery.data.byProjectManager.length > 0 && (
               <div className="mt-4">
+                <p className="mb-1.5 text-xs font-medium text-ink/60">By Project Manager (who asked)</p>
                 <DataTable
                   rowKey={(r) => r.projectManagerId}
                   rows={requestsQuery.data.byProjectManager}

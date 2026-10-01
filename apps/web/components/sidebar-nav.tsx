@@ -25,9 +25,27 @@ interface NavLink {
    *  `href`; a separate chevron toggles the sub-list open/closed. Not
    *  rendered in icons-only (compact) mode, same as group headers aren't. */
   children?: { href: string; label: string }[];
+  /** Per-link access, independent of the group's own moduleFlag (Part:
+   *  Upwork Requests, 2026-10-01, explicit user request — "not everyone
+   *  needs everything... hide bidding and invites for them"). Only the
+   *  Upwork Proposals group's three links use this; every other group gates
+   *  all its links uniformly via MODULE_FLAG_BY_GROUP instead. When set, a
+   *  link is hidden unless this flag (or any flag, for an array) is true —
+   *  the group header itself then only shows if at least one child link
+   *  survives this filtering (see visibleNav below). */
+  moduleFlag?: ModuleFlag | ModuleFlag[];
 }
 
-type ModuleFlag = "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess" | "metaAdsAccess";
+type ModuleFlag =
+  | "leadGenAccess"
+  | "emailHubAccess"
+  | "socialMediaAccess"
+  | "socialEngagementAccess"
+  | "upworkAccess"
+  | "upworkBiddingAccess"
+  | "upworkInviteAccess"
+  | "upworkRequestsAccess"
+  | "metaAdsAccess";
 
 type NavItem =
   // moduleFlag accepts an array for OR semantics (Part: narrow Social Inbox
@@ -123,10 +141,15 @@ const NAV: NavItem[] = [
   {
     type: "group",
     label: "Upwork Proposals",
+    // Each link gated by its own flag, not the group as a whole (Part:
+    // Upwork Requests, 2026-10-01, explicit user request) -- see NavLink's
+    // own moduleFlag docblock. The group header itself has no entry in
+    // MODULE_FLAG_BY_GROUP below; it shows automatically once at least one
+    // of these three survives per-link filtering.
     links: [
-      { href: "/upwork/bidding", label: "Bidding" },
-      { href: "/upwork/invite", label: "Invite" },
-      { href: "/upwork/requests", label: "Requests" },
+      { href: "/upwork/bidding", label: "Bidding", moduleFlag: "upworkBiddingAccess" },
+      { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess" },
+      { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess" },
     ],
   },
   {
@@ -160,7 +183,11 @@ const MODULE_FLAG_BY_GROUP: Record<string, ModuleFlag> = {
   "Lead Generation": "leadGenAccess",
   "Email Hub": "emailHubAccess",
   "Social Media": "socialMediaAccess",
-  "Upwork Proposals": "upworkAccess",
+  // Upwork Proposals deliberately has no entry here (Part: Upwork Requests,
+  // 2026-10-01) -- each of its three links carries its own moduleFlag
+  // instead (see the NAV array above); the group's own visibility is
+  // derived in visibleNav from whether any child link survives that
+  // per-link filtering, not from a single flag here.
   "Meta Ads": "metaAdsAccess",
 };
 
@@ -206,6 +233,9 @@ export function SidebarNav({
           socialMediaAccess: boolean;
           socialEngagementAccess: boolean;
           upworkAccess: boolean;
+          upworkBiddingAccess: boolean;
+          upworkInviteAccess: boolean;
+          upworkRequestsAccess: boolean;
           metaAdsAccess: boolean;
           isPrimaryAdmin: boolean;
         };
@@ -215,6 +245,9 @@ export function SidebarNav({
           socialMediaAccess: m.socialMediaAccess,
           socialEngagementAccess: m.socialEngagementAccess,
           upworkAccess: m.upworkAccess,
+          upworkBiddingAccess: m.upworkBiddingAccess,
+          upworkInviteAccess: m.upworkInviteAccess,
+          upworkRequestsAccess: m.upworkRequestsAccess,
           metaAdsAccess: m.metaAdsAccess,
         });
         setIsPrimaryAdmin(m.isPrimaryAdmin);
@@ -238,13 +271,28 @@ export function SidebarNav({
   );
   const stats = statsQuery.data;
 
-  const visibleNav = NAV.filter((item) => {
-    if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
-    const flag = item.type === "group" ? MODULE_FLAG_BY_GROUP[item.label] : item.moduleFlag;
+  function flagGranted(flag: ModuleFlag | ModuleFlag[] | undefined): boolean {
     if (!flag || !moduleAccess) return true;
     // Array means OR: any one of the listed flags being granted is enough
     // (mirrors ModuleAccessGuard's own array handling on the backend).
     return Array.isArray(flag) ? flag.some((f) => moduleAccess[f]) : moduleAccess[flag];
+  }
+
+  const visibleNav = NAV.map((item) => {
+    if (item.type !== "group") return item;
+    // Per-link filtering (Part: Upwork Requests, 2026-10-01) -- a no-op for
+    // every group whose links don't set their own moduleFlag.
+    return { ...item, links: item.links.filter((l) => flagGranted(l.moduleFlag)) };
+  }).filter((item) => {
+    if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
+    if (item.type === "group") {
+      const flag = MODULE_FLAG_BY_GROUP[item.label];
+      // No single group-level flag (Upwork Proposals) -- show the group iff
+      // at least one child link survived the per-link filtering above.
+      if (!flag) return item.links.length > 0;
+      return flagGranted(flag);
+    }
+    return flagGranted(item.moduleFlag);
   });
 
   // Auto-expand whichever group contains the current page, so a direct link
