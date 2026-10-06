@@ -83,13 +83,14 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<UpworkProposalStatus | "">("");
-  const [searchSubmittedBy, setSearchSubmittedBy] = useState("");
+  const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [followUpTarget, setFollowUpTarget] = useState<UpworkProposal | null>(null);
+  const [detailTarget, setDetailTarget] = useState<UpworkProposal | null>(null);
 
   const [profileName, setProfileName] = useState("");
   const [jobCategory, setJobCategory] = useState("");
@@ -113,7 +114,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         page: String(page),
         pageSize: String(PAGE_SIZE),
         ...(statusFilter ? { status: statusFilter } : {}),
-        ...(searchSubmittedBy.trim() ? { submittedBy: searchSubmittedBy.trim() } : {}),
+        ...(search.trim() ? { search: search.trim() } : {}),
       })
       .then((res) => {
         const r = res as { items: UpworkProposal[]; total: number };
@@ -123,13 +124,13 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
       .catch((err) => setError((err as Error).message));
   }
 
-  useEffect(load, [type, page, statusFilter, searchSubmittedBy]);
+  useEffect(load, [type, page, statusFilter, search]);
 
   // Changing a filter resets to page 1 in the same update, not a separate
   // effect — otherwise the page-1 reset and the filter change would fire as
   // two effects back to back, each triggering its own fetch.
   function setStatusFilterAndReset(v: UpworkProposalStatus | "") { setStatusFilter(v); setPage(1); }
-  function setSearchAndReset(v: string) { setSearchSubmittedBy(v); setPage(1); }
+  function setSearchAndReset(v: string) { setSearch(v); setPage(1); }
 
   function resetForm() {
     setProfileName(""); setJobCategory(""); setJobLink(""); setCoverLetter("");
@@ -190,6 +191,11 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   }
 
   const columns: TableColumn<UpworkProposal>[] = [
+    { key: "view", header: "", render: (r) => (
+      <button onClick={() => setDetailTarget(r)} className="text-xs text-accent hover:underline" title="View and edit all fields">
+        Open
+      </button>
+    ) },
     { key: "createdAt", header: "Date", render: (r) => new Date(r.createdAt).toLocaleDateString() },
     { key: "profileName", header: "Profile", render: (r) => r.profileName },
     { key: "jobCategory", header: "Category", render: (r) => r.jobCategory },
@@ -313,6 +319,12 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
 
       {showForm && (
         <form onSubmit={submit} className="mb-5 mt-4 grid gap-3 rounded-lg border border-[var(--line)] p-4 sm:grid-cols-2">
+          {type === "INVITE" && (
+            <label className="block sm:col-span-2">
+              <span className={labelClass}>Client name</span>
+              <input value={clientName} onChange={(e) => setClientName(e.target.value)} required className={inputClass} />
+            </label>
+          )}
           <label className="block">
             <span className={labelClass}>Upwork profile / ID name</span>
             <select value={profileName} onChange={(e) => setProfileName(e.target.value)} required className={inputClass}>
@@ -370,14 +382,24 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
             <span className={labelClass}>Project hours (if known)</span>
             <input value={projectHours} onChange={(e) => setProjectHours(e.target.value)} type="number" min={0} step="0.5" placeholder="e.g. 20" className={inputClass} />
           </label>
-          <label className="block">
-            <span className={labelClass}>Client name (optional)</span>
-            <input value={clientName} onChange={(e) => setClientName(e.target.value)} className={inputClass} />
-          </label>
+          {type === "BIDDING" && (
+            <label className="block">
+              <span className={labelClass}>Client name (optional)</span>
+              <input value={clientName} onChange={(e) => setClientName(e.target.value)} className={inputClass} />
+            </label>
+          )}
           <div className="sm:col-span-2">
             <button
               type="submit"
-              disabled={submitting || !profileName || !jobCategory || !jobLink || !coverLetter || !submittedBy}
+              disabled={
+                submitting ||
+                !profileName ||
+                !jobCategory ||
+                !jobLink ||
+                !coverLetter ||
+                !submittedBy ||
+                (type === "INVITE" && !clientName.trim())
+              }
               className="rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
             >
               {submitting ? "Saving…" : "Log proposal"}
@@ -388,10 +410,10 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <input
-          value={searchSubmittedBy}
+          value={search}
           onChange={(e) => setSearchAndReset(e.target.value)}
-          placeholder="Filter by submitted by…"
-          className="w-48 rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs"
+          placeholder="Search by client, submitter, or profile name…"
+          className="w-64 rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs"
         />
         <select
           value={statusFilter}
@@ -408,7 +430,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         <p className="mt-4 text-xs text-ink/50">Loading…</p>
       ) : items.length === 0 ? (
         <p className="mt-4 text-xs text-ink/50">
-          No {type === "BIDDING" ? "bidding" : "invite"} proposals {statusFilter || searchSubmittedBy ? "match this filter" : "logged yet"}.
+          No {type === "BIDDING" ? "bidding" : "invite"} proposals {statusFilter || search ? "match this filter" : "logged yet"}.
         </p>
       ) : (
         <div className="mt-4">
@@ -447,7 +469,174 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
           }}
         />
       )}
+
+      {detailTarget && (
+        <ProposalDetailModal
+          proposal={detailTarget}
+          type={type}
+          picklists={picklists}
+          onClose={() => setDetailTarget(null)}
+          onSaved={(updated) => {
+            setItems((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? null);
+            setDetailTarget(null);
+            setNotice("Proposal updated.");
+          }}
+        />
+      )}
     </section>
+  );
+}
+
+/**
+ * Full read/write view of one proposal row (Part: Upwork proposal search,
+ * 2026-10-06, explicit user request — "open in a modal so that we can see
+ * and update anything in it"). Unlike the inline table columns, which only
+ * ever expose a handful of post-submission fields, this reaches every field
+ * the original form collected too — a wrong profile, job link, or submitter
+ * picked at submission time shouldn't require deleting and re-logging the
+ * row.
+ */
+function ProposalDetailModal({
+  proposal,
+  type,
+  picklists,
+  onClose,
+  onSaved,
+}: {
+  proposal: UpworkProposal;
+  type: UpworkProposalType;
+  picklists?: UpworkPicklists;
+  onClose: () => void;
+  onSaved: (updated: UpworkProposal) => void;
+}) {
+  const [profileName, setProfileName] = useState(proposal.profileName);
+  const [jobCategory, setJobCategory] = useState(proposal.jobCategory);
+  const [jobLink, setJobLink] = useState(proposal.jobLink);
+  const [coverLetter, setCoverLetter] = useState(proposal.coverLetter);
+  const [submittedBy, setSubmittedBy] = useState(proposal.submittedBy);
+  const [connects, setConnects] = useState(proposal.connects != null ? String(proposal.connects) : "");
+  const [accountType, setAccountType] = useState<UpworkAccountType>(proposal.accountType ?? "LIVE");
+  const [projectHours, setProjectHours] = useState(proposal.projectHours != null ? String(proposal.projectHours) : "");
+  const [clientName, setClientName] = useState(proposal.clientName ?? "");
+  const [status, setStatus] = useState<UpworkProposalStatus>(proposal.status);
+  const [closedBy, setClosedBy] = useState(proposal.closedBy ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // A proposal's current value might not be in the live picklist anymore
+  // (removed by an admin after submission) — union it in so the select
+  // doesn't silently blank out a real value.
+  const profileOptions = Array.from(new Set([proposal.profileName, ...(picklists?.profiles ?? [])]));
+  const categoryOptions = Array.from(new Set([proposal.jobCategory, ...(picklists?.categories ?? [])]));
+  const submitterOptions = Array.from(new Set([proposal.submittedBy, ...(picklists?.submitters ?? [])]));
+
+  async function save() {
+    if (type === "INVITE" && !clientName.trim()) {
+      setError("Client name is required for invites.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = (await api.updateUpworkProposal(proposal.id, {
+        profileName,
+        jobCategory,
+        jobLink,
+        coverLetter,
+        submittedBy,
+        projectHours: projectHours ? Number(projectHours) : null,
+        clientName: clientName.trim() || null,
+        status,
+        ...(type === "BIDDING"
+          ? { connects: connects ? Number(connects) : null, accountType, closedBy: closedBy || null }
+          : {}),
+      })) as UpworkProposal;
+      onSaved(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={(open) => !open && onClose()}
+      title={`${type === "BIDDING" ? "Bidding" : "Invite"} proposal details`}
+      contentClassName="w-full max-w-lg"
+    >
+      <div className="flex max-h-[70vh] flex-col gap-3 overflow-y-auto pr-1 text-sm">
+        <label className="block">
+          <span className={labelClass}>Client name{type === "INVITE" ? " (required)" : ""}</span>
+          <input value={clientName} onChange={(e) => setClientName(e.target.value)} className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Upwork profile / ID name</span>
+          <select value={profileName} onChange={(e) => setProfileName(e.target.value)} className={inputClass}>
+            {profileOptions.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className={labelClass}>Job category</span>
+          <select value={jobCategory} onChange={(e) => setJobCategory(e.target.value)} className={inputClass}>
+            {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className={labelClass}>Job link</span>
+          <input value={jobLink} onChange={(e) => setJobLink(e.target.value)} type="url" className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>{type === "BIDDING" ? "Proposal / cover letter" : "Cover letter for invite"}</span>
+          <textarea value={coverLetter} onChange={(e) => setCoverLetter(e.target.value)} rows={5} className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>{type === "INVITE" ? "Accepted by" : "Submitted by"}</span>
+          <select value={submittedBy} onChange={(e) => setSubmittedBy(e.target.value)} className={inputClass}>
+            {submitterOptions.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </label>
+        {type === "BIDDING" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block">
+              <span className={labelClass}>Connects spent</span>
+              <input value={connects} onChange={(e) => setConnects(e.target.value)} type="number" min={0} className={inputClass} />
+            </label>
+            <label className="block">
+              <span className={labelClass}>Bidding type</span>
+              <select value={accountType} onChange={(e) => setAccountType(e.target.value as UpworkAccountType)} className={inputClass}>
+                <option value="LIVE">Live</option>
+                <option value="TRAINING">Training</option>
+              </select>
+            </label>
+          </div>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className={labelClass}>Project hours</span>
+            <input value={projectHours} onChange={(e) => setProjectHours(e.target.value)} type="number" min={0} step="0.5" className={inputClass} />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Status</span>
+            <select value={status} onChange={(e) => setStatus(e.target.value as UpworkProposalStatus)} className={inputClass}>
+              {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </label>
+        </div>
+        {type === "BIDDING" && (
+          <label className="block">
+            <span className={labelClass}>Closed by</span>
+            <input value={closedBy} onChange={(e) => setClosedBy(e.target.value)} className={inputClass} />
+          </label>
+        )}
+        {error && <span className="text-xs text-bad">{error}</span>}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button size="sm" variant="secondary" disabled={saving} onClick={onClose}>Cancel</Button>
+          <Button size="sm" disabled={saving} loading={saving} onClick={save}>Save changes</Button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

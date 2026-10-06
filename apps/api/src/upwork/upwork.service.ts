@@ -60,6 +60,15 @@ export class UpworkService {
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),
       ...(query.submittedBy ? { submittedBy: { equals: query.submittedBy, mode: "insensitive" } } : {}),
+      ...(query.search?.trim()
+        ? {
+            OR: [
+              { clientName: { contains: query.search.trim(), mode: "insensitive" } },
+              { submittedBy: { contains: query.search.trim(), mode: "insensitive" } },
+              { profileName: { contains: query.search.trim(), mode: "insensitive" } },
+            ],
+          }
+        : {}),
       ...(query.from || query.to
         ? {
             createdAt: {

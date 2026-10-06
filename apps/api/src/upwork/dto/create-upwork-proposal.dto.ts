@@ -1,5 +1,5 @@
 import { UpworkAccountType, UpworkProposalType } from "@prisma/client";
-import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
+import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min, MinLength, ValidateIf } from "class-validator";
 
 export class CreateUpworkProposalDto {
   @IsEnum(UpworkProposalType) type!: UpworkProposalType;
@@ -22,5 +22,13 @@ export class CreateUpworkProposalDto {
   @IsOptional() @IsNumber() @Min(0) projectHours?: number;
 
   @IsOptional() @IsString() clickupTaskId?: string;
-  @IsOptional() @IsString() clientName?: string;
+
+  /** Required for INVITE — every invite starts from a named client, so the
+   *  form must collect it up front, not as an afterthought (Part: Upwork
+   *  proposal search, 2026-10-06). Still optional for BIDDING, where the
+   *  client is often unknown until later. */
+  @ValidateIf((o) => o.type === UpworkProposalType.INVITE)
+  @IsString()
+  @MinLength(1, { message: "Client name is required for invites" })
+  clientName?: string;
 }
