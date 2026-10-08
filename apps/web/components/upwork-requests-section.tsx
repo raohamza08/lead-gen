@@ -220,13 +220,13 @@ export function UpworkRequestsSection() {
       <section className="card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold tracking-tight">{isBD ? "Your weekly target" : isPM ? "Your requests this week" : "Weekly target"}</h2>
+            <h2 className="text-sm font-semibold tracking-tight">{isBD ? "Team weekly target" : isPM ? "Your requests this week" : "Weekly target"}</h2>
             <p className="mt-0.5 text-xs text-ink/55">
               {isPM
-                ? "What you requested, and what came in through Bidding/Invite for those profiles — the target itself belongs to whichever Business Developer approves it."
+                ? "What you requested, and what came in through Bidding/Invite for those profiles."
                 : isBD
-                  ? "Requests you've approved — what you're on the hook to deliver through Bidding/Invite, and what's come in so far."
-                  : "Org-wide requested vs. onboarded hours for the selected period. Filter by Project Manager (who asked) or Business Developer (who owns the target)."}
+                  ? "Every approved request across the team, and what's come in through Bidding/Invite so far — shared across everyone with your role."
+                  : "Org-wide requested vs. onboarded hours for the selected period. Filter by Project Manager (who asked) or Business Developer (who approved)."}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

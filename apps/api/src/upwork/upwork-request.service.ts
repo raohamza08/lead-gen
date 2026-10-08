@@ -369,22 +369,24 @@ export class UpworkRequestService {
     return result;
   }
 
-  /** Resolves which dimension(s) to scope reporting by, given who's asking
-   *  (Part: Upwork Requests, 2026-10-01, explicit user request — "the
-   *  target is for the persons who are mentioned as bd", not the requesting
-   *  Project Manager). A Project Manager always sees only their own asks
-   *  (informational — "what I requested vs. what came in"); a Business
-   *  Developer always sees only the targets they personally approved (their
-   *  real performance number); an Admin/Manager can filter by either
-   *  dimension, or neither for a combined org-wide view. The two dimensions
-   *  are independent and can be combined (e.g. an admin inspecting one PM's
-   *  requests that a specific BD approved). */
+  /** Resolves which dimension(s) to scope reporting by, given who's asking.
+   *  A Project Manager always sees only their own asks (informational —
+   *  "what I requested vs. what came in"); an Admin/Manager can filter by
+   *  either dimension, or neither for a combined org-wide view.
+   *
+   *  A Business Developer is deliberately NOT scoped to only the requests
+   *  they personally reviewed (Part: Upwork proposal visibility, 2026-10-08,
+   *  revised from the original "BD-owned target" design, 2026-10-01) — in
+   *  practice the Admin does all the reviewing, so every BD's personal
+   *  target came back empty under the old `reviewedByUserId === self` rule
+   *  even though 230 hours had genuinely been approved. Every Business
+   *  Developer now sees the same shared, org-wide requested-vs-onboarded
+   *  numbers, same as an Admin/Manager viewing with no filter — "shown to
+   *  each person whose role is business developer", automatically, with no
+   *  per-person toggle to remember. */
   private resolveReportScope(requesterId: string, requesterRole: Role, query: QueryUpworkWeekDto) {
     if (requesterRole === Role.PROJECT_MANAGER) {
       return { projectManagerId: requesterId, businessDeveloperId: query.businessDeveloperId };
-    }
-    if (requesterRole === Role.BUSINESS_DEVELOPER) {
-      return { projectManagerId: query.projectManagerId, businessDeveloperId: requesterId };
     }
     return { projectManagerId: query.projectManagerId, businessDeveloperId: query.businessDeveloperId };
   }
