@@ -1815,6 +1815,14 @@ enum UpworkApiConnectionStatus {
 /// no tables yet — those land once the app is approved and each service's
 /// stub is replaced with a real implementation against Upwork's confirmed
 /// API schema, not guessed ahead of time.
+///
+/// LOAD-BEARING CONSTRAINT for whoever builds those tables next: Upwork's
+/// own API docs (developer/documentation/graphql/api/docs, checked
+/// 2026-10-12) state "we don't allow storing data for more than 24 hours"
+/// — any future table holding synced Upwork data needs an expiry/refresh
+/// design (TTL column + a sweep, or always re-fetch), not a plain permanent
+/// cache. Also note the published rate limits (300 req/min per IP, 40,000
+/// req/day) when building the sync workers.
 model UpworkApiConnection {
   id                String   @id @default(uuid())
   orgId             String   @unique @map("org_id")
@@ -1828,6 +1836,16 @@ model UpworkApiConnection {
   /// returned it — kept verbatim rather than parsed into a String[] since
   /// we don't yet know Upwork's exact scope vocabulary to validate against.
   scope             String?
+  /// From the `companySelector` GraphQL query's `organizationId` field —
+  /// sent back as the `X-Upwork-API-TenantId` header on every GraphQL call
+  /// once the real per-domain services are implemented. Confirmed from
+  /// Upwork's own docs (not guessed, unlike the data-domain schemas the
+  /// stub services deliberately avoid): the header is optional and falls
+  /// back to the user's default org when absent, so a null here (fetch
+  /// failed, or a personal non-org account) degrades gracefully rather
+  /// than breaking the connection.
+  organizationId    String?  @map("organization_id")
+  organizationName  String?  @map("organization_name")
   status            UpworkApiConnectionStatus @default(CONNECTED)
   connectedByUserId String?  @map("connected_by_user_id")
   connectedAt       DateTime @default(now()) @map("connected_at")

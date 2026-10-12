@@ -8,6 +8,7 @@ import { apiPublicUrl } from "../common/api-url";
 import { dashboardUrl } from "../common/cors";
 import { UpworkOAuthClient } from "./upwork-oauth.client";
 import { UpworkOAuthStateStore } from "./upwork-oauth-state.store";
+import { UpworkGraphQLClient } from "./upwork-graphql.client";
 
 /**
  * Owns "connect / status / disconnect" for the single org-wide Upwork API
@@ -32,6 +33,7 @@ export class UpworkApiConnectionService {
     private readonly auditLog: AuditLogService,
     private readonly client: UpworkOAuthClient,
     private readonly oauthState: UpworkOAuthStateStore,
+    private readonly graphql: UpworkGraphQLClient,
   ) {}
 
   private callbackRedirectUri(): string {
@@ -82,6 +84,9 @@ export class UpworkApiConnectionService {
       const { clientId, clientSecret } = this.credentials();
       const token = await this.client.exchangeCodeForToken(clientId, clientSecret, code, this.callbackRedirectUri());
       const tokenExpiresAt = new Date(Date.now() + token.expiresInSec * 1000);
+      // Best-effort — see UpworkGraphQLClient's own docblock for why a
+      // failure here never blocks the connection itself.
+      const org = await this.graphql.getDefaultOrganization(token.accessToken);
 
       await this.prisma.upworkApiConnection.upsert({
         where: { orgId: pending.orgId },
@@ -91,6 +96,8 @@ export class UpworkApiConnectionService {
           refreshTokenEnc: this.encryption.encrypt(token.refreshToken),
           tokenExpiresAt,
           scope: token.scope,
+          organizationId: org?.organizationId,
+          organizationName: org?.title,
           status: "CONNECTED",
           connectedByUserId: pending.userId,
           connectedAt: new Date(),
@@ -101,6 +108,8 @@ export class UpworkApiConnectionService {
           refreshTokenEnc: this.encryption.encrypt(token.refreshToken),
           tokenExpiresAt,
           scope: token.scope,
+          organizationId: org?.organizationId,
+          organizationName: org?.title,
           status: "CONNECTED",
           connectedByUserId: pending.userId,
           connectedAt: new Date(),
@@ -130,6 +139,7 @@ export class UpworkApiConnectionService {
       connected: true as const,
       status: connection.status,
       scope: connection.scope,
+      organizationName: connection.organizationName,
       connectedAt: connection.connectedAt,
       tokenExpiresAt: connection.tokenExpiresAt,
       lastSyncAt: connection.lastSyncAt,
@@ -157,9 +167,13 @@ export class UpworkApiConnectionService {
   /** Decrypts and returns a live, non-expired access token for the org's
    *  connection, refreshing it first if it's within 5 minutes of expiry —
    *  this is what every per-domain service in ./services/ will call once
-   *  its stub is replaced with a real implementation. Throws if there's no
-   *  connected, non-revoked account to use. */
-  async getValidAccessToken(orgId: string): Promise<string> {
+   *  its stub is replaced with a real implementation. Also returns
+   *  organizationId so callers can set it as the X-Upwork-API-TenantId
+   *  header (confirmed from Upwork's docs — see the schema's own docblock
+   *  on UpworkApiConnection); null there just means the header gets
+   *  omitted and Upwork falls back to the user's default org, per the same
+   *  docs. Throws if there's no connected, non-revoked account to use. */
+  async getValidAccessToken(orgId: string): Promise<{ accessToken: string; organizationId: string | null }> {
     const connection = await this.prisma.upworkApiConnection.findUnique({ where: { orgId } });
     if (!connection || connection.status !== "CONNECTED") {
       throw new BadRequestException("No active Upwork API connection — connect one in Settings > Upwork API first.");
@@ -167,7 +181,7 @@ export class UpworkApiConnectionService {
 
     const expiresSoon = connection.tokenExpiresAt.getTime() - Date.now() < 5 * 60 * 1000;
     if (!expiresSoon) {
-      return this.encryption.decrypt(connection.accessTokenEnc);
+      return { accessToken: this.encryption.decrypt(connection.accessTokenEnc), organizationId: connection.organizationId };
     }
 
     const { clientId, clientSecret } = this.credentials();
@@ -184,7 +198,7 @@ export class UpworkApiConnectionService {
           lastSyncError: null,
         },
       });
-      return token.accessToken;
+      return { accessToken: token.accessToken, organizationId: connection.organizationId };
     } catch (err) {
       await this.prisma.upworkApiConnection.update({
         where: { orgId },

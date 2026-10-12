@@ -4,6 +4,7 @@ import { UpworkOAuthCallbackController } from "./upwork-oauth-callback.controlle
 import { UpworkApiConnectionService } from "./upwork-api-connection.service";
 import { UpworkOAuthClient } from "./upwork-oauth.client";
 import { UpworkOAuthStateStore } from "./upwork-oauth-state.store";
+import { UpworkGraphQLClient } from "./upwork-graphql.client";
 import { UpworkAgencyProfileService } from "./services/agency-profile.service";
 import { UpworkInvitesService } from "./services/invites.service";
 import { UpworkBiddingService } from "./services/bidding.service";
@@ -36,8 +37,30 @@ import { UpworkChatMonitoringService } from "./services/chat-monitoring.service"
  *      unverified logic here was explicitly ruled out ("i cannot take any
  *      risk on this one"). Replace each stub's one method with a real call
  *      once the app is approved and the schema is confirmed; the OAuth
- *      plumbing (UpworkOAuthClient, UpworkApiConnectionService) is already
- *      real and doesn't need to change.
+ *      plumbing (UpworkOAuthClient, UpworkApiConnectionService,
+ *      UpworkGraphQLClient) is already real and doesn't need to change.
+ *
+ * Constraints confirmed from Upwork's own docs (developer/documentation/
+ * graphql/api/docs, checked 2026-10-12) that the real implementations must
+ * respect, not just the connect flow:
+ *   - GraphQL endpoint is https://api.upwork.com/graphql; set
+ *     X-Upwork-API-TenantId from UpworkApiConnectionService.getValidAccessToken's
+ *     organizationId (omit it and Upwork silently falls back to the user's
+ *     default org, which is fine for a single-org agency but worth being
+ *     deliberate about).
+ *   - "we don't allow storing data for more than 24 hours" — any new table
+ *     holding synced data needs a TTL/refresh design, not a permanent cache
+ *     (see UpworkApiConnection's own schema docblock).
+ *   - Rate limits: 300 requests/min per IP, 40,000/day — sync workers need
+ *     real backoff on HTTP 429, not just retry-until-it-works.
+ *   - GraphQL errors come back as HTTP 200 with an `errors` array (only
+ *     transport failures are non-200) — a real client must check that
+ *     array, not just response.ok (see UpworkGraphQLClient.getDefaultOrganization
+ *     for the one place this is already done).
+ *   - Upwork supports webhook subscriptions for Job Postings, Offers, Job
+ *     Applications, Milestones, and Contract Feedback — worth using instead
+ *     of a polling sync worker for UpworkJobDiscoveryService/
+ *     UpworkBiddingService specifically, not just defaulting to polling.
  */
 @Module({
   controllers: [UpworkApiController, UpworkOAuthCallbackController],
@@ -45,6 +68,7 @@ import { UpworkChatMonitoringService } from "./services/chat-monitoring.service"
     UpworkApiConnectionService,
     UpworkOAuthClient,
     UpworkOAuthStateStore,
+    UpworkGraphQLClient,
     UpworkAgencyProfileService,
     UpworkInvitesService,
     UpworkBiddingService,

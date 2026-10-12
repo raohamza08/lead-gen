@@ -10,6 +10,7 @@ interface ConnectionStatus {
   connected: boolean;
   status?: "CONNECTED" | "EXPIRED" | "DISCONNECTED" | "ERROR";
   scope?: string;
+  organizationName?: string | null;
   connectedAt?: string;
   tokenExpiresAt?: string;
   lastSyncAt?: string;
@@ -152,6 +153,7 @@ export default function UpworkApiSettingsPage() {
               Connected {status.connectedAt ? new Date(status.connectedAt).toLocaleString() : "—"} · Token expires{" "}
               {status.tokenExpiresAt ? new Date(status.tokenExpiresAt).toLocaleString() : "—"}
             </div>
+            {status.organizationName && <div className="text-xs text-ink/50">Organization: {status.organizationName}</div>}
             {status.scope && <div className="text-xs text-ink/50">Scope: {status.scope}</div>}
             {status.lastSyncError && <div className="mt-1 text-xs text-bad">{status.lastSyncError}</div>}
           </div>
