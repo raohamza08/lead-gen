@@ -201,7 +201,7 @@ const NAV: NavItem[] = [
   { type: "link", href: "/settings", label: "Settings" },
   // Hidden from literally everyone but this one account for now — see the
   // ownerOnlyEmail docblock above and UpworkApiOwnerGuard on the backend.
-  { type: "link", href: "/settings/upwork-api", label: "Upwork API", ownerOnlyEmail: "hamzabadar.euroshub@gmail.com" },
+  { type: "link", href: "/settings/upwork-api", label: "Upwork API", ownerOnlyEmail: "hamza@euroshub.com" },
   // Not a moduleFlag gate — System Logs is restricted to the org's single
   // primary admin (Part: Admin/System Logs, 2026-08-31), distinct from the
   // shared Role.ADMIN. This entry is UX-only; the real enforcement is
