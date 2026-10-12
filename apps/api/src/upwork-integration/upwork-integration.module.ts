@@ -25,10 +25,11 @@ import { UpworkChatMonitoringService } from "./services/chat-monitoring.service"
  *
  * Standing decisions, both explicit user requests, both load-bearing for
  * anyone touching this module next:
- *   1. Hidden from everyone but one named account for now — see
- *      UpworkApiOwnerGuard's docblock, which every route in
- *      UpworkApiController sits behind instead of the usual
- *      ModuleAccessGuard stack.
+ *   1. Gated by the standard upworkApiAccess module flag, same mechanism
+ *      as every other module — see UpworkApiController's own docblock.
+ *      (Briefly hidden from everyone but one hardcoded email instead; that
+ *      was replaced with the standard flag per explicit user request —
+ *      "make the module an access option... rather than hardcoding it".)
  *   2. Every per-domain service under ./services/ (agency profile, invites,
  *      bidding, Connects usage, job discovery, reporting, chat monitoring)
  *      is a deliberate stub that throws ServiceUnavailableException, not a

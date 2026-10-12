@@ -662,7 +662,7 @@ export const api = {
   getMetaAdsAds: (accountId: string, params: Record<string, string> = {}) =>
     request(`/meta-ads/accounts/${accountId}/ads?${new URLSearchParams(params).toString()}`),
 
-  // ---- Upwork API integration (owner-only while hidden, see UpworkApiOwnerGuard) ----
+  // ---- Upwork API integration (gated by upworkApiAccess module flag) ----
   getUpworkApiCallbackUrl: () => request("/upwork-api/callback-url") as Promise<{ callbackUrl: string }>,
   getUpworkApiOAuthUrl: () => request("/upwork-api/connect") as Promise<{ url: string }>,
   getUpworkApiStatus: () => request("/upwork-api/status"),

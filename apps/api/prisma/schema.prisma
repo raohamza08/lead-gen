@@ -279,6 +279,17 @@ model User {
   /// reasoning as upworkAccess above: every existing user keeps access
   /// rather than an admin having to grant it by hand the moment this ships.
   metaAdsAccess Boolean @default(true) @map("meta_ads_access")
+  /// New module (Part: Upwork API integration, 2026-10-12) — unlike
+  /// upworkAccess/metaAdsAccess above, this does NOT default true: those
+  /// retrofit an access flag onto a module everyone already used, while
+  /// this one is genuinely new and not yet usable (every per-domain
+  /// service is still a stub pending Upwork's app approval). Starts false
+  /// for everyone except via the standard ADMIN bypass (ModuleAccessGuard
+  /// never gates ADMIN) — explicitly granted per-person from there.
+  /// Replaced the previous hardcoded-email guard (UpworkApiOwnerGuard) —
+  /// explicit user request, 2026-10-12: "make the module an access option
+  /// so i can give anyone the access... rather than hardcoding it".
+  upworkApiAccess Boolean @default(false) @map("upwork_api_access")
   /// The org's single authorized administrator (Part: Notification Center &
   /// Admin/Audit, 2026-08-31) — distinct from Role.ADMIN, which any admin can
   /// already grant to any other user. This flag gates System Logs and

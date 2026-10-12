@@ -9,7 +9,8 @@ export type AccessModule =
   | "SOCIAL_ENGAGEMENT"
   | "UPWORK"
   | "UPWORK_REQUESTS"
-  | "META_ADS";
+  | "META_ADS"
+  | "UPWORK_API";
 
 /** Attach to a controller/route: @RequiresModule("EMAIL_HUB"). Enforced by
  *  ModuleAccessGuard. Pass an array for OR semantics — access.

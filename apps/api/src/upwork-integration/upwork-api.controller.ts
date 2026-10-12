@@ -1,8 +1,11 @@
 import { Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
-import { UpworkApiOwnerGuard } from "../common/guards/upwork-api-owner.guard";
+import { RolesGuard } from "../common/guards/roles.guard";
+import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { Roles } from "../common/decorators/roles.decorator";
+import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
-import { JwtClaims } from "@leadgen/types";
+import { JwtClaims, Role } from "@leadgen/types";
 import { UpworkApiConnectionService } from "./upwork-api-connection.service";
 import { UpworkAgencyProfileService } from "./services/agency-profile.service";
 import { UpworkInvitesService } from "./services/invites.service";
@@ -13,14 +16,24 @@ import { UpworkReportingService } from "./services/reporting.service";
 import { UpworkChatMonitoringService } from "./services/chat-monitoring.service";
 
 /**
- * Every route here sits behind UpworkApiOwnerGuard, not the usual
- * JwtAuthGuard + RolesGuard + ModuleAccessGuard stack — see that guard's
- * own docblock for why (standing decision: hidden from literally everyone
- * but one named account for now, including other ADMIN-role users, until
- * it's deliberately opened up later).
+ * Standard JwtAuthGuard + RolesGuard + ModuleAccessGuard stack, same as
+ * every other module in this app (Part: Upwork API integration, 2026-10-12
+ * — replaced an earlier hardcoded-single-email UpworkApiOwnerGuard, explicit
+ * user request: "make the module an access option so i can give anyone the
+ * access... rather than hardcoding it"). Granted per-person from
+ * Settings > Team via upworkApiAccess, same as metaAdsAccess etc. — see
+ * that flag's own schema docblock for why it defaults false here, unlike
+ * most other module flags. Note the standard ADMIN-bypass still applies
+ * (ModuleAccessGuard never gates Role.ADMIN): every admin sees this
+ * immediately, same as every other module.
+ *
+ * connect/disconnect stay ADMIN-only on top of the module flag — same
+ * reasoning as MetaAdsController's own connect/disconnect: this is a
+ * privileged, org-wide credential action, not a per-user preference.
  */
 @Controller("upwork-api")
-@UseGuards(JwtAuthGuard, UpworkApiOwnerGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+@RequiresModule("UPWORK_API")
 export class UpworkApiController {
   constructor(
     private readonly connection: UpworkApiConnectionService,
@@ -39,6 +52,7 @@ export class UpworkApiController {
   }
 
   @Get("connect")
+  @Roles(Role.ADMIN)
   connect(@CurrentUser() user: JwtClaims) {
     return this.connection.initiateConnect(user);
   }
@@ -49,6 +63,7 @@ export class UpworkApiController {
   }
 
   @Delete("connection")
+  @Roles(Role.ADMIN)
   disconnect(@CurrentUser() user: JwtClaims) {
     return this.connection.disconnect(user);
   }

@@ -16,11 +16,12 @@ import { UpworkGraphQLClient } from "./upwork-graphql.client";
  * data sync left to per-domain services once Upwork approves the app and
  * each one's real implementation can be written against a confirmed schema).
  *
- * Every route that reaches this service is already behind
- * UpworkApiOwnerGuard (see upwork-api.controller.ts) — no additional
- * role/ownership re-check here beyond what MetaAdsService itself re-checks
- * at its callback (the connecting user's session could still have been
- * deactivated while the browser was off on Upwork's consent screen).
+ * Every route that reaches this service is already behind the standard
+ * JwtAuthGuard + RolesGuard + ModuleAccessGuard stack (see
+ * upwork-api.controller.ts) — no additional role/ownership re-check here
+ * beyond what MetaAdsService itself re-checks at its callback (the
+ * connecting user's session could still have been deactivated while the
+ * browser was off on Upwork's consent screen).
  */
 @Injectable()
 export class UpworkApiConnectionService {

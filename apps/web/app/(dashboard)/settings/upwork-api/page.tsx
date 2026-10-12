@@ -35,10 +35,11 @@ function StatusBadge({ status }: { status: ConnectionStatus["status"] }) {
 
 /**
  * Connect/manage the Upwork API integration (Part: Upwork API integration,
- * 2026-10-12). Deliberately hidden from the nav for everyone but the one
- * account this was built for — see sidebar-nav.tsx's ownerOnlyEmail check —
- * and every route this page calls sits behind UpworkApiOwnerGuard on the
- * backend regardless of whether someone finds this URL directly.
+ * 2026-10-12). Gated by the standard upworkApiAccess module flag, same as
+ * every other module — hidden from the nav (sidebar-nav.tsx) until granted
+ * from Settings > Team, and every route this page calls is re-gated by
+ * ModuleAccessGuard on the backend regardless of whether someone finds
+ * this URL directly.
  *
  * Only "connect / status / disconnect" actually does anything right now.
  * The seven domain cards below mirror the application's own capability

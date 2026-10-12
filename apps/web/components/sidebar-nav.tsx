@@ -45,7 +45,8 @@ type ModuleFlag =
   | "upworkBiddingAccess"
   | "upworkInviteAccess"
   | "upworkRequestsAccess"
-  | "metaAdsAccess";
+  | "metaAdsAccess"
+  | "upworkApiAccess";
 
 type NavItem =
   // moduleFlag accepts an array for OR semantics (Part: narrow Social Inbox
@@ -68,14 +69,6 @@ type NavItem =
        *  @Roles), so the nav link needs the same role check or every other
        *  role reaches a shell whose API calls all 403. */
       allowedRoles?: string[];
-      /** Restricts this link to one specific signed-in email, independent
-       *  of role or moduleFlag (Part: Upwork API integration, 2026-10-12,
-       *  explicit user request — "hide it from anyone else for now... for
-       *  now i will use it only"). Fails closed like allowedRoles above,
-       *  not open like moduleFlag — this must never flash visible to
-       *  anyone else even briefly while GET /users/me is loading. UX-only:
-       *  the real enforcement is UpworkApiOwnerGuard on the backend route. */
-      ownerOnlyEmail?: string;
     }
   | { type: "group"; label: string; links: NavLink[] };
 
@@ -199,9 +192,13 @@ const NAV: NavItem[] = [
   // 2026-09-01) — it moved into HeaderUserMenu's dropdown, which is now the
   // only place it's reachable from; it used to be duplicated here too.
   { type: "link", href: "/settings", label: "Settings" },
-  // Hidden from literally everyone but this one account for now — see the
-  // ownerOnlyEmail docblock above and UpworkApiOwnerGuard on the backend.
-  { type: "link", href: "/settings/upwork-api", label: "Upwork API", ownerOnlyEmail: "hamza@euroshub.com" },
+  // Standard module-flag gate (Part: Upwork API integration, 2026-10-12) —
+  // replaces an earlier hardcoded-single-email lock, explicit user request:
+  // "make the module an access option so i can give anyone the access".
+  // Defaults false on every user (see upworkApiAccess's own schema
+  // docblock), so it stays hidden until granted from Settings > Team — any
+  // ADMIN sees it immediately regardless, same as every other module here.
+  { type: "link", href: "/settings/upwork-api", label: "Upwork API", moduleFlag: "upworkApiAccess" },
   // Not a moduleFlag gate — System Logs is restricted to the org's single
   // primary admin (Part: Admin/System Logs, 2026-08-31), distinct from the
   // shared Role.ADMIN. This entry is UX-only; the real enforcement is
@@ -269,6 +266,7 @@ export function SidebarNav({
           upworkInviteAccess: boolean;
           upworkRequestsAccess: boolean;
           metaAdsAccess: boolean;
+          upworkApiAccess: boolean;
           isPrimaryAdmin: boolean;
         };
         setModuleAccess({
@@ -281,6 +279,7 @@ export function SidebarNav({
           upworkInviteAccess: m.upworkInviteAccess,
           upworkRequestsAccess: m.upworkRequestsAccess,
           metaAdsAccess: m.metaAdsAccess,
+          upworkApiAccess: m.upworkApiAccess,
         });
         setIsPrimaryAdmin(m.isPrimaryAdmin);
       })
@@ -320,10 +319,6 @@ export function SidebarNav({
     if (item.type === "link" && item.allowedRoles) {
       const role = getCurrentUser()?.role;
       return role ? item.allowedRoles.includes(role) : false;
-    }
-    if (item.type === "link" && item.ownerOnlyEmail) {
-      const email = getCurrentUser()?.email;
-      return email ? email.toLowerCase() === item.ownerOnlyEmail.toLowerCase() : false;
     }
     if (item.type === "group") {
       const flag = MODULE_FLAG_BY_GROUP[item.label];

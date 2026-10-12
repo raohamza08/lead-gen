@@ -11,6 +11,7 @@ export class UpdateUserModulesDto {
   @IsOptional() @IsBoolean() upworkInviteAccess?: boolean;
   @IsOptional() @IsBoolean() upworkRequestsAccess?: boolean;
   @IsOptional() @IsBoolean() metaAdsAccess?: boolean;
+  @IsOptional() @IsBoolean() upworkApiAccess?: boolean;
 }
 
 export class UpdateUserEmailAccountAccessDto {

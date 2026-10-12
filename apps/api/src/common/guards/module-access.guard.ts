@@ -7,7 +7,14 @@ import { PermissionDenialLogger } from "./permission-denial-logger.service";
 
 const FIELD_BY_MODULE: Record<
   AccessModule,
-  "leadGenAccess" | "emailHubAccess" | "socialMediaAccess" | "socialEngagementAccess" | "upworkAccess" | "upworkRequestsAccess" | "metaAdsAccess"
+  | "leadGenAccess"
+  | "emailHubAccess"
+  | "socialMediaAccess"
+  | "socialEngagementAccess"
+  | "upworkAccess"
+  | "upworkRequestsAccess"
+  | "metaAdsAccess"
+  | "upworkApiAccess"
 > = {
   LEAD_GENERATION: "leadGenAccess",
   EMAIL_HUB: "emailHubAccess",
@@ -21,6 +28,12 @@ const FIELD_BY_MODULE: Record<
   // to socialMediaAccess.
   UPWORK_REQUESTS: "upworkRequestsAccess",
   META_ADS: "metaAdsAccess",
+  // Replaces the hardcoded-email UpworkApiOwnerGuard (Part: Upwork API
+  // integration, 2026-10-12, explicit user request — "make the module an
+  // access option so i can give anyone the access... rather than
+  // hardcoding it"). Defaults false on the User model, unlike most other
+  // flags here — see that column's own schema docblock for why.
+  UPWORK_API: "upworkApiAccess",
 };
 
 /**
