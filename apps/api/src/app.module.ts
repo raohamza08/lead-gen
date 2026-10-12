@@ -35,6 +35,7 @@ import { PreparationModule } from "./preparation/preparation.module";
 import { UpworkModule } from "./upwork/upwork.module";
 import { AgentOptimizationModule } from "./optimization/agent-optimization.module";
 import { MetaAdsModule } from "./meta-ads/meta-ads.module";
+import { UpworkIntegrationModule } from "./upwork-integration/upwork-integration.module";
 import { DashboardCenterModule } from "./dashboard-center/dashboard-center.module";
 
 @Module({
@@ -74,6 +75,7 @@ import { DashboardCenterModule } from "./dashboard-center/dashboard-center.modul
     UpworkModule,
     AgentOptimizationModule,
     MetaAdsModule,
+    UpworkIntegrationModule,
     DashboardCenterModule,
   ],
   providers: [

@@ -662,6 +662,12 @@ export const api = {
   getMetaAdsAds: (accountId: string, params: Record<string, string> = {}) =>
     request(`/meta-ads/accounts/${accountId}/ads?${new URLSearchParams(params).toString()}`),
 
+  // ---- Upwork API integration (owner-only while hidden, see UpworkApiOwnerGuard) ----
+  getUpworkApiCallbackUrl: () => request("/upwork-api/callback-url") as Promise<{ callbackUrl: string }>,
+  getUpworkApiOAuthUrl: () => request("/upwork-api/connect") as Promise<{ url: string }>,
+  getUpworkApiStatus: () => request("/upwork-api/status"),
+  disconnectUpworkApi: () => request("/upwork-api/connection", { method: "DELETE" }),
+
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
   getDashboardOverview: (params: Record<string, string> = {}) =>
     request(`/dashboard-center/overview?${new URLSearchParams(params).toString()}`),

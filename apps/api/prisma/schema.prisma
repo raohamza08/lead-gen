@@ -223,6 +223,7 @@ model Organization {
   leadStageHistory LeadStageHistory[]
   upworkConnectPurchases UpworkConnectPurchase[]
   benchmarks      Benchmark[]
+  upworkApiConnection UpworkApiConnection?
   upworkRequests  UpworkRequest[]
 
   @@map("organizations")
@@ -1790,6 +1791,52 @@ model UpworkProfileAccess {
 
   @@unique([userId, profileName])
   @@map("upwork_profile_access")
+}
+
+enum UpworkApiConnectionStatus {
+  CONNECTED
+  EXPIRED
+  DISCONNECTED
+  ERROR
+}
+
+/// Real Upwork API OAuth connection (Part: Upwork API integration,
+/// 2026-10-12) — distinct from UpworkProposal/UpworkRequest above, which are
+/// this app's own internal tracking tables, not a live connection to
+/// Upwork's actual API. One row per org (agency-wide single connection, same
+/// reasoning as a single Meta Ads Business Manager login) — unlike
+/// SocialAccount there's no multi-account picker here because Upwork's OAuth
+/// authorizes one agency/freelancer identity per login, not a list to choose
+/// from.
+///
+/// Deliberately minimal at this stage: only what's needed to complete and
+/// hold an OAuth connection. Per-domain synced data (jobs, proposals,
+/// invites, Connects usage, financial reports, client-chat monitoring) has
+/// no tables yet — those land once the app is approved and each service's
+/// stub is replaced with a real implementation against Upwork's confirmed
+/// API schema, not guessed ahead of time.
+model UpworkApiConnection {
+  id                String   @id @default(uuid())
+  orgId             String   @unique @map("org_id")
+  org               Organization @relation(fields: [orgId], references: [id])
+  /// Encrypted at rest (EncryptionService), same convention as every other
+  /// OAuth credential in this codebase — never plaintext.
+  accessTokenEnc    String   @map("access_token_enc")
+  refreshTokenEnc   String   @map("refresh_token_enc")
+  tokenExpiresAt    DateTime @map("token_expires_at")
+  /// Space-separated scope string exactly as Upwork's token response
+  /// returned it — kept verbatim rather than parsed into a String[] since
+  /// we don't yet know Upwork's exact scope vocabulary to validate against.
+  scope             String?
+  status            UpworkApiConnectionStatus @default(CONNECTED)
+  connectedByUserId String?  @map("connected_by_user_id")
+  connectedAt       DateTime @default(now()) @map("connected_at")
+  lastSyncAt        DateTime? @map("last_sync_at")
+  lastSyncError     String?  @map("last_sync_error")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@map("upwork_api_connections")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every
