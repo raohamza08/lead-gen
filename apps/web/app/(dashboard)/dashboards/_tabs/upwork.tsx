@@ -40,9 +40,7 @@ interface UpworkKpis {
   connectUnitCost: number;
   connectCost?: number;
   costPerBid?: number;
-  costPerClient?: number;
-  costPerInvite?: number;
-  bidsPerClient?: number;
+  costPerClientBids?: number;
   connectsPerClient?: number;
   avgConnectsPerBid?: number;
   conversionRate?: number;
@@ -321,22 +319,17 @@ export function UpworkTab() {
             detail={<MetricDetail definition="INVITE proposals with status In Discussion — the closest existing status to an interview stage." rows={[{ label: "In discussion", value: num(kpis.invitesInDiscussion) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
           />
           <StatTile
-            label="Invites Accepted"
-            value={num(kpis.invitesAccepted)}
-            detail={<MetricDetail definition="Invites with status Accepted, In Discussion, Follow-up 1/2, or Won." rows={[{ label: "Accepted", value: num(kpis.invitesAccepted) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
-          />
-          <StatTile
-            label="Connects Used"
+            label="Connects Used — Bids"
             value={num(kpis.connectsUsed)}
-            detail={<MetricDetail definition="Sum of UpworkProposal.connects across every proposal submitted in the selected period." rows={[{ label: "Connects used", value: num(kpis.connectsUsed) }]} />}
+            detail={<MetricDetail definition="Sum of UpworkProposal.connects across every bid submitted in the selected period — invites never consume connects, so this is bidding usage specifically." rows={[{ label: "Connects used", value: num(kpis.connectsUsed) }]} />}
           />
           <StatTile
-            label="Bids / Client"
-            value={num(kpis.bidsPerClient)}
-            detail={<MetricDetail definition="Total bids divided by clients won — how many bids it typically takes to land one client." rows={[{ label: "Bids", value: num(kpis.totalBids) }, { label: "Clients won", value: num(kpis.clientsWon) }]} />}
+            label="Average Connects / Bid"
+            value={num(kpis.avgConnectsPerBid)}
+            detail={<MetricDetail definition="Connects used divided by total bids." rows={[{ label: "Connects used", value: num(kpis.connectsUsed) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
           />
           <StatTile
-            label="Connect Cost"
+            label="Connect Cost — Bids"
             value={money(kpis.connectCost)}
             hint={
               kpis.connectCostBasis === "actual_purchases"
@@ -366,16 +359,10 @@ export function UpworkTab() {
             detail={<MetricDetail definition="Connect cost divided by total bids." rows={[{ label: "Connect cost", value: money(kpis.connectCost) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
           />
           <StatTile
-            label="Cost / Client"
-            value={money(kpis.costPerClient)}
+            label="Cost / Client — Bids"
+            value={money(kpis.costPerClientBids)}
             hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-            detail={<MetricDetail definition="Connect cost divided by clients won." rows={[{ label: "Connect cost", value: money(kpis.connectCost) }, { label: "Clients won", value: num(kpis.clientsWon) }]} />}
-          />
-          <StatTile
-            label="Cost / Invite"
-            value={money(kpis.costPerInvite)}
-            hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-            detail={<MetricDetail definition="Connect cost divided by total invites." rows={[{ label: "Connect cost", value: money(kpis.connectCost) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
+            detail={<MetricDetail definition="Connect cost divided by clients won through bidding specifically — invites cost no connects, so blending in invite-won clients would understate this." rows={[{ label: "Connect cost", value: money(kpis.connectCost) }, { label: "Clients won (bids)", value: num(kpis.wonBids) }]} />}
           />
         </div>
       )}

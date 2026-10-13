@@ -228,9 +228,13 @@ export class UpworkDashboardService {
       connectUnitCost: costPerConnect,
       connectCost,
       costPerBid: safeDivide(connectCost, totalBids),
-      costPerClient: safeDivide(connectCost, won),
-      costPerInvite: safeDivide(connectCost, totalInvites),
-      bidsPerClient: safeDivide(totalBids, won),
+      // Scoped to wonBids, not the combined clientsWon (Part: Upwork
+      // Dashboard KPI cleanup, 2026-10-13, explicit user request) — connects
+      // are bid-only, so blending this cost against invite wins too (the
+      // old costPerClient) overstated how cheap each bid-won client was.
+      // Replaces costPerClient/costPerInvite/bidsPerClient, all removed:
+      // confirmed via a repo-wide search that nothing else read them.
+      costPerClientBids: safeDivide(connectCost, wonBids),
       connectsPerClient: safeDivide(connectsUsed, won),
       avgConnectsPerBid: safeDivide(connectsUsed, totalBids),
       conversionRate: safeRate(won, totalBids + totalInvites),
