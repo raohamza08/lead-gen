@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
+import { Response } from "express";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { UpworkProposalAccessGuard } from "./upwork-proposal-access.guard";
@@ -43,6 +44,22 @@ export class UpworkController {
   @Get()
   findAll(@CurrentUser() user: JwtClaims, @Query() query: QueryUpworkProposalsDto) {
     return this.upwork.findAll(user.orgId, query);
+  }
+
+  // Must come before ":id" — otherwise Nest matches "export" as the :id
+  // param and this route is never reached (same gotcha as LeadsController's
+  // own export route).
+  @Get("export")
+  @Roles(Role.ADMIN)
+  async exportCsv(@CurrentUser() user: JwtClaims, @Query() query: QueryUpworkProposalsDto, @Res() res: Response) {
+    const csv = await this.upwork.exportCsv(user.orgId, query);
+    const label = query.type === "INVITE" ? "invite" : query.type === "BIDDING" ? "bidding" : "proposals";
+    res
+      .set({
+        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Disposition": `attachment; filename="upwork-${label}-${new Date().toISOString().slice(0, 10)}.csv"`,
+      })
+      .send(csv);
   }
 
   @Get(":id")

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api, getCurrentUser } from "../lib/api-client";
+import { api, getCurrentUser, downloadUpworkProposalsCsv } from "../lib/api-client";
 import { DataTable, type TableColumn } from "./chart-kit";
 import { UpworkPicklistManager } from "./upwork-picklist-manager";
 import { Modal } from "./ui/modal";
@@ -87,6 +87,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [followUpTarget, setFollowUpTarget] = useState<UpworkProposal | null>(null);
@@ -131,6 +132,24 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   // two effects back to back, each triggering its own fetch.
   function setStatusFilterAndReset(v: UpworkProposalStatus | "") { setStatusFilter(v); setPage(1); }
   function setSearchAndReset(v: string) { setSearch(v); setPage(1); }
+
+  /** Exports whatever's currently filtered on screen, not always everything
+   *  — same type/status/search the list view itself is using. */
+  async function exportCsv() {
+    setExporting(true);
+    setError(null);
+    try {
+      await downloadUpworkProposalsCsv({
+        type,
+        ...(statusFilter ? { status: statusFilter } : {}),
+        ...(search.trim() ? { search: search.trim() } : {}),
+      });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function resetForm() {
     setProfileName(""); setJobCategory(""); setJobLink(""); setCoverLetter("");
@@ -296,12 +315,24 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
               : "Proposals submitted in response to a client invite — no connects involved."}
           </p>
         </div>
-        <button
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-ink/5"
-        >
-          {showForm ? "Cancel" : "Log a proposal"}
-        </button>
+        <div className="flex items-center gap-2">
+          {isAdmin && (
+            <button
+              onClick={exportCsv}
+              disabled={exporting}
+              className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-ink/5 disabled:opacity-50"
+              title={`Export ${type === "BIDDING" ? "bidding" : "invite"} proposals matching the current filters as CSV`}
+            >
+              {exporting ? "Exporting…" : "Export CSV"}
+            </button>
+          )}
+          <button
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-ink/5"
+          >
+            {showForm ? "Cancel" : "Log a proposal"}
+          </button>
+        </div>
       </div>
 
       <UpworkPicklistManager />

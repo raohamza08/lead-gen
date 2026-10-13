@@ -206,6 +206,37 @@ export async function downloadLeadsCsv(): Promise<void> {
 }
 
 /**
+ * Admin-only CSV export for the Upwork Bidding/Invite tabs (Part: Upwork
+ * Proposals CSV export, 2026-10-13) — same bypass-`request()` reasoning as
+ * downloadLeadsCsv above (the response is a file, not JSON). Takes whatever
+ * filters the caller currently has applied (type/status/search/from/to) so
+ * the export matches what's on screen, not always everything.
+ */
+export async function downloadUpworkProposalsCsv(params: Record<string, string> = {}): Promise<void> {
+  const token = getAccessToken();
+  const res = await fetch(`${API_BASE_URL}/upwork/proposals/export?${new URLSearchParams(params).toString()}`, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.message ?? `Export failed with ${res.status}`);
+  }
+
+  const disposition = res.headers.get("Content-Disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "upwork-proposals.csv";
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/**
  * Same bypass-`request()` reasoning as downloadLeadsCsv above, but opens the
  * blob in a new tab instead of forcing a save — the browser's native PDF/
  * image viewer handles "view", and its own download button (or a save

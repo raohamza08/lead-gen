@@ -51,11 +51,11 @@ export class UpworkService {
     });
   }
 
-  async findAll(orgId: string, query: QueryUpworkProposalsDto) {
-    const page = Math.max(1, parseInt(query.page ?? "1", 10) || 1);
-    const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize ?? "50", 10) || 50));
-
-    const where: Prisma.UpworkProposalWhereInput = {
+  /** Shared by findAll (paginated) and exportCsv (unpaginated, everything
+   *  matching) — kept in one place so the two never drift on what "matches
+   *  the current filters" means. */
+  private buildWhere(orgId: string, query: QueryUpworkProposalsDto): Prisma.UpworkProposalWhereInput {
+    return {
       orgId,
       ...(query.type ? { type: query.type } : {}),
       ...(query.status ? { status: query.status } : {}),
@@ -78,6 +78,12 @@ export class UpworkService {
           }
         : {}),
     };
+  }
+
+  async findAll(orgId: string, query: QueryUpworkProposalsDto) {
+    const page = Math.max(1, parseInt(query.page ?? "1", 10) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(query.pageSize ?? "50", 10) || 50));
+    const where = this.buildWhere(orgId, query);
 
     const [total, items] = await Promise.all([
       this.prisma.upworkProposal.count({ where }),
@@ -90,6 +96,54 @@ export class UpworkService {
     ]);
 
     return { items, total, page, pageSize };
+  }
+
+  /** Admin-only CSV export (Part: Upwork Proposals CSV export, 2026-10-13,
+   *  explicit user request) — respects whatever filters the admin currently
+   *  has applied on the Bidding/Invite tab (same `where` findAll builds),
+   *  but unpaginated: every matching row, not just the current page. One
+   *  shared column set covers both types — BIDDING-only columns
+   *  (Connects, Account Type) are simply blank on INVITE rows, mirroring
+   *  how the table itself stores them as null for that type. */
+  async exportCsv(orgId: string, query: QueryUpworkProposalsDto): Promise<string> {
+    const where = this.buildWhere(orgId, query);
+    const proposals = await this.prisma.upworkProposal.findMany({ where, orderBy: { createdAt: "desc" } });
+
+    const columns = [
+      "Type", "Date", "Profile", "Job Category", "Job Link", "Connects", "Account Type",
+      "Client Name", "Submitted By", "Status", "Closed By", "Project Hours", "Cover Letter",
+      "ClickUp Task ID", "Accepted At", "Onboarded At",
+    ];
+
+    // Same RFC 4180 convention as LeadsService.exportCsv — always quote,
+    // double internal quotes, since cover letters routinely contain commas
+    // and newlines that would otherwise break the file.
+    const escape = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+
+    const rows = proposals.map((p) =>
+      [
+        p.type,
+        p.createdAt.toISOString().slice(0, 10),
+        p.profileName,
+        p.jobCategory,
+        p.jobLink,
+        p.connects,
+        p.accountType,
+        p.clientName,
+        p.submittedBy,
+        p.status,
+        p.closedBy,
+        p.projectHours,
+        p.coverLetter,
+        p.clickupTaskId,
+        p.acceptedAt?.toISOString() ?? "",
+        p.onboardedAt?.toISOString() ?? "",
+      ]
+        .map(escape)
+        .join(","),
+    );
+
+    return "﻿" + [columns.map(escape).join(","), ...rows].join("\r\n");
   }
 
   async findOne(orgId: string, id: string) {
