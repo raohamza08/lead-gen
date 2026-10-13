@@ -25,6 +25,15 @@ interface UpworkKpis {
   previousClientsWon?: number;
   clientsWonDeltaPct: number | null;
   clientsLost: number;
+  wonBids: number;
+  wonInvites: number;
+  lostBids: number;
+  lostInvites: number;
+  conversionRateBidding?: number;
+  conversionRateInvites?: number;
+  bidsViewed: number;
+  bidsInDiscussion: number;
+  invitesInDiscussion: number;
   connectsUsed: number;
   connectCostAvailable: boolean;
   connectCostBasis: "actual_purchases" | "flat_rate_estimate";
@@ -231,6 +240,12 @@ export function UpworkTab() {
             detail={<MetricDetail definition="Proposals of type BIDDING submitted in the selected period." rows={[{ label: "Bids", value: num(kpis.totalBids) }]} />}
           />
           <StatTile
+            label="Clients Won — Bids"
+            value={num(kpis.wonBids)}
+            tone="good"
+            detail={<MetricDetail definition="BIDDING proposals with status WON in the selected period." rows={[{ label: "Won (bids)", value: num(kpis.wonBids) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
+          />
+          <StatTile
             label="Total Invites"
             value={num(kpis.totalInvites)}
             detail={
@@ -245,36 +260,70 @@ export function UpworkTab() {
             }
           />
           <StatTile
-            label="Invites Accepted"
-            value={num(kpis.invitesAccepted)}
-            detail={<MetricDetail definition="Invites with status Accepted, In Discussion, Follow-up 1/2, or Won." rows={[{ label: "Accepted", value: num(kpis.invitesAccepted) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
-          />
-          <StatTile
-            label="Clients Won"
-            value={num(kpis.clientsWon)}
+            label="Clients Won — Invites"
+            value={num(kpis.wonInvites)}
             tone="good"
-            hint={<ComparisonHint deltaPct={kpis.clientsWonDeltaPct} previousValue={kpis.previousClientsWon !== undefined ? num(kpis.previousClientsWon) : undefined} />}
-            detail={<MetricDetail definition="Proposals (bids or invites) with status WON in the selected period." rows={[{ label: "Won", value: num(kpis.clientsWon) }]} />}
+            detail={<MetricDetail definition="INVITE proposals with status WON in the selected period." rows={[{ label: "Won (invites)", value: num(kpis.wonInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
           />
           <StatTile
-            label="Clients Lost"
-            value={num(kpis.clientsLost)}
+            label="Clients Lost — Bids"
+            value={num(kpis.lostBids)}
             tone="bad"
-            detail={<MetricDetail definition="Proposals (bids or invites) with status LOST in the selected period." rows={[{ label: "Lost", value: num(kpis.clientsLost) }]} />}
+            detail={<MetricDetail definition="BIDDING proposals with status LOST in the selected period." rows={[{ label: "Lost (bids)", value: num(kpis.lostBids) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
           />
           <StatTile
-            label="Conversion Rate"
-            value={pct(kpis.conversionRate)}
+            label="Clients Lost — Invites"
+            value={num(kpis.lostInvites)}
+            tone="bad"
+            detail={<MetricDetail definition="INVITE proposals with status LOST in the selected period." rows={[{ label: "Lost (invites)", value: num(kpis.lostInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
+          />
+          <StatTile
+            label="Conversion Rate — Bidding"
+            value={pct(kpis.conversionRateBidding)}
             detail={
               <MetricDetail
-                definition="Won divided by (bids + invites)."
+                definition="Bids won divided by total bids."
                 rows={[
-                  { label: "Won", value: num(kpis.clientsWon) },
-                  { label: "Bids + invites", value: num(kpis.totalBids + kpis.totalInvites) },
-                  { label: "Rate", value: pct(kpis.conversionRate) },
+                  { label: "Won", value: num(kpis.wonBids) },
+                  { label: "Total bids", value: num(kpis.totalBids) },
+                  { label: "Rate", value: pct(kpis.conversionRateBidding) },
                 ]}
               />
             }
+          />
+          <StatTile
+            label="Conversion Rate — Invites"
+            value={pct(kpis.conversionRateInvites)}
+            detail={
+              <MetricDetail
+                definition="Invites won divided by total invites."
+                rows={[
+                  { label: "Won", value: num(kpis.wonInvites) },
+                  { label: "Total invites", value: num(kpis.totalInvites) },
+                  { label: "Rate", value: pct(kpis.conversionRateInvites) },
+                ]}
+              />
+            }
+          />
+          <StatTile
+            label="Bids Viewed"
+            value={num(kpis.bidsViewed)}
+            detail={<MetricDetail definition="BIDDING proposals with status Viewed (client opened the proposal, no further action yet)." rows={[{ label: "Viewed", value: num(kpis.bidsViewed) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
+          />
+          <StatTile
+            label="Bids In Interview"
+            value={num(kpis.bidsInDiscussion)}
+            detail={<MetricDetail definition="BIDDING proposals with status In Discussion — the closest existing status to an interview stage." rows={[{ label: "In discussion", value: num(kpis.bidsInDiscussion) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
+          />
+          <StatTile
+            label="Invites In Interview"
+            value={num(kpis.invitesInDiscussion)}
+            detail={<MetricDetail definition="INVITE proposals with status In Discussion — the closest existing status to an interview stage." rows={[{ label: "In discussion", value: num(kpis.invitesInDiscussion) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
+          />
+          <StatTile
+            label="Invites Accepted"
+            value={num(kpis.invitesAccepted)}
+            detail={<MetricDetail definition="Invites with status Accepted, In Discussion, Follow-up 1/2, or Won." rows={[{ label: "Accepted", value: num(kpis.invitesAccepted) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
           />
           <StatTile
             label="Connects Used"

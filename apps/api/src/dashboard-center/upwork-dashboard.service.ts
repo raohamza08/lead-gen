@@ -157,7 +157,10 @@ export class UpworkDashboardService {
     const { current, previous } = resolveDashboardRange(query);
     const where = { orgId, createdAt: { gte: current.from, lte: current.to } };
 
-    const [totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, connectsAgg, hasAnyPurchase, previousWon, previousBids] = await Promise.all([
+    const [
+      totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, connectsAgg, hasAnyPurchase, previousWon, previousBids,
+      wonBids, wonInvites, lostBids, lostInvites, bidsViewed, bidsInDiscussion, invitesInDiscussion,
+    ] = await Promise.all([
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: { in: ["ACCEPTED", "IN_DISCUSSION", "FOLLOW_UP_1", "FOLLOW_UP_2", "WON"] } } }),
@@ -168,6 +171,22 @@ export class UpworkDashboardService {
       this.prisma.upworkConnectPurchase.count({ where: { orgId } }),
       previous ? this.prisma.upworkProposal.count({ where: { orgId, status: "WON", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
       previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "BIDDING", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      // Per-type win/loss/pipeline breakdown (Part: Upwork Dashboard KPI
+      // split, 2026-10-13, explicit user request) — everything below is
+      // additive to the combined clientsWon/clientsLost/conversionRate
+      // above, which stay as-is for anything already reading them.
+      this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING", status: "WON" } }),
+      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "WON" } }),
+      this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING", status: "LOST" } }),
+      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "LOST" } }),
+      this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING", status: "VIEWED" } }),
+      // "In interview" has no dedicated status in UpworkProposalStatus —
+      // mapped to IN_DISCUSSION, the stage between VIEWED/ACCEPTED and a
+      // final WON/LOST outcome, which is the closest existing match. Flag
+      // this mapping if "interview" was meant to mean something more
+      // specific than ongoing back-and-forth.
+      this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING", status: "IN_DISCUSSION" } }),
+      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "IN_DISCUSSION" } }),
     ]);
 
     const connectsUsed = connectsAgg._sum.connects ?? 0;
@@ -189,6 +208,15 @@ export class UpworkDashboardService {
       previousClientsWon: previous ? previousWon : undefined,
       clientsWonDeltaPct: previous ? percentDelta(won, previousWon) : null,
       clientsLost: lost,
+      wonBids,
+      wonInvites,
+      lostBids,
+      lostInvites,
+      conversionRateBidding: safeRate(wonBids, totalBids),
+      conversionRateInvites: safeRate(wonInvites, totalInvites),
+      bidsViewed,
+      bidsInDiscussion,
+      invitesInDiscussion,
       connectsUsed,
       previousTotalBids: previous ? previousBids : undefined,
       totalBidsDeltaPct: previous ? percentDelta(totalBids, previousBids) : null,
