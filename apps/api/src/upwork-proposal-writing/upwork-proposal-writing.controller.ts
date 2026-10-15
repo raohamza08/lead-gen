@@ -9,9 +9,11 @@ import { JwtClaims, Role } from "@leadgen/types";
 import { ProposalWritingService } from "./services/proposal-writing.service";
 import { ProposalWritingSettingsService } from "./services/proposal-writing-settings.service";
 import { FreelancerProfilesService } from "./services/freelancer-profiles.service";
+import { DiscoveredJobsService } from "./services/discovered-jobs.service";
 import { GenerateCoverLetterDto } from "./dto/generate-cover-letter.dto";
 import { UpdateProposalWritingSettingsDto } from "./dto/update-proposal-writing-settings.dto";
 import { CreateFreelancerProfileDto, UpdateFreelancerProfileDto } from "./dto/freelancer-profile.dto";
+import { IngestDiscoveredJobsDto } from "./dto/discovered-job.dto";
 
 /**
  * Standard JwtAuthGuard + RolesGuard + ModuleAccessGuard stack, same as
@@ -36,6 +38,7 @@ export class UpworkProposalWritingController {
     private readonly proposalWriting: ProposalWritingService,
     private readonly settings: ProposalWritingSettingsService,
     private readonly freelancerProfiles: FreelancerProfilesService,
+    private readonly discoveredJobs: DiscoveredJobsService,
   ) {}
 
   @Post("generate")
@@ -82,5 +85,15 @@ export class UpworkProposalWritingController {
   @Delete("freelancer-profiles/:id")
   deleteFreelancerProfile(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.freelancerProfiles.delete(user.orgId, id);
+  }
+
+  @Get("discovered-jobs")
+  listDiscoveredJobs(@CurrentUser() user: JwtClaims) {
+    return this.discoveredJobs.list(user.orgId);
+  }
+
+  @Post("discovered-jobs/ingest")
+  ingestDiscoveredJobs(@CurrentUser() user: JwtClaims, @Body() dto: IngestDiscoveredJobsDto) {
+    return this.discoveredJobs.ingest(user.orgId, dto.jobs);
   }
 }

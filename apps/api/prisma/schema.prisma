@@ -228,6 +228,7 @@ model Organization {
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
   upworkFreelancerProfiles      UpworkFreelancerProfile[]
+  upworkDiscoveredJobs          UpworkDiscoveredJob[]
 
   @@map("organizations")
 }
@@ -2815,6 +2816,50 @@ model UpworkFreelancerProfile {
 
   @@index([orgId, active])
   @@map("upwork_freelancer_profiles")
+}
+
+/// One row per job surfaced by a listing scan (Part: Upwork Bidding SOP,
+/// explicit user request — "the jobs must be listed in the system... give
+/// the recommendation... next to the job title"). Upserted on (orgId,
+/// jobUrl) so re-scanning the same search doesn't duplicate entries, just
+/// refreshes them. `postedAt` is stored as the real timestamp (not a
+/// frozen "minutes ago") so the list endpoint can recompute how stale a
+/// posting is on every read rather than trusting a number that goes wrong
+/// the moment the page sits open.
+model UpworkDiscoveredJob {
+  id    String       @id @default(uuid())
+  orgId String       @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+
+  jobUrl   String    @map("job_url")
+  title    String?
+  /// ISO datetime if known (full job page gave a real JSON-LD datePosted);
+  /// null when only a relative "posted X ago" string was available and
+  /// the extension already converted it to an approximate ISO value at
+  /// scrape time — either way this column is always a real timestamp, not
+  /// pre-computed minutes.
+  postedAt DateTime? @map("posted_at")
+  facts    Json?
+  client   Json?
+  skills   String[]  @default([])
+
+  /// Static-at-discovery-time signals (country/spend/duration/hourly don't
+  /// change on their own) — the one time-sensitive factor (posting age vs
+  /// the 15-minute window) is recomputed fresh on every GET instead of
+  /// trusted from here; see DiscoveredJobsService.list.
+  spendTier  String?  @map("spend_tier")
+  isLongTerm Boolean? @map("is_long_term")
+  isHourly   Boolean? @map("is_hourly")
+
+  recommendation String   @default("MAYBE")
+  reasons        String[] @default([])
+
+  discoveredAt DateTime @default(now()) @map("discovered_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([orgId, jobUrl])
+  @@index([orgId, discoveredAt])
+  @@map("upwork_discovered_jobs")
 }
 
 /// One row per generated cover letter (Part: Upwork Proposal Writing) — an

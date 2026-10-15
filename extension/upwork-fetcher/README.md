@@ -23,6 +23,10 @@ Done. You'll see "Outly Upwork Fetcher" in your extensions list.
 
 If a job has closed/expired, the tab will say so and close the same way — you'll see that reflected in the result.
 
+## Job Feed (scanning a search page)
+
+On the **Job Feed** page, paste an Upwork search or category URL and click **Scan**. The extension opens that page, reads the list of jobs on it, then opens each one (up to 10, one at a time) the same way as a single Generate — reading details, closing automatically — and reports a BID/MAYBE/SKIP recommendation next to each title once done. This takes longer than a single job (several tabs in sequence), by design — it's paced like someone actually clicking through results.
+
 ## Updating
 
 If Outly ships a new version of this extension, repeat the download + unzip + "Load unpacked" steps (or use "Reload" on the extension card at `chrome://extensions` if you just replaced the files in place).

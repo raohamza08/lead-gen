@@ -9,6 +9,7 @@
  */
 
 export type SpendTier = "PRIORITY" | "RARE_LOW_RESPONSE" | "NEW_CLIENT_OK" | "STANDARD" | "UNKNOWN";
+export type Recommendation = "BID" | "MAYBE" | "SKIP";
 
 /** "$42K total spent" -> 42000, "$1.2M" -> 1200000, "$5.00" -> 5. Returns
  *  null if no dollar amount is found anywhere in the string. */
@@ -80,6 +81,55 @@ export function minutesSincePosted(postedAtIso: string | undefined): number | nu
   const posted = new Date(postedAtIso);
   if (Number.isNaN(posted.getTime())) return null;
   return Math.round((Date.now() - posted.getTime()) / 60_000);
+}
+
+/** Explicit user preference — hourly jobs over fixed-price. Reads whichever
+ *  fact key/value pair carries the rate type (e.g. `facts["Hourly"]` or a
+ *  job-listing card's "Hourly"/"Fixed-price" label); null when neither is
+ *  present in what was scraped. */
+export function isHourly(facts: Record<string, string>): boolean | null {
+  const keys = Object.keys(facts);
+  if (keys.some((k) => /hourly/i.test(k))) return true;
+  if (keys.some((k) => /fixed/i.test(k))) return false;
+  const values = Object.values(facts);
+  if (values.some((v) => /hourly/i.test(v))) return true;
+  if (values.some((v) => /fixed/i.test(v))) return false;
+  return null;
+}
+
+export interface RecommendationSignals {
+  isExcludedCountry: boolean;
+  spendTier: SpendTier;
+  isLongTerm: boolean | null;
+  isHourly: boolean | null;
+  postedMinutesAgo: number | null;
+}
+
+/** Bidding SOP Part 6 ("is this a job where we have a realistic chance")
+ *  turned into a list-view verdict — deterministic, same reasoning as
+ *  every other signal in this file: a hard exclusion (client country) is
+ *  the only thing that produces SKIP; everything else just downgrades BID
+ *  to MAYBE with a stated reason, never silently drops a job from view. */
+export function computeRecommendation(signals: RecommendationSignals): { recommendation: Recommendation; reasons: string[] } {
+  if (signals.isExcludedCountry) {
+    return { recommendation: "SKIP", reasons: ["Client is in an excluded country."] };
+  }
+
+  const reasons: string[] = [];
+  if (signals.spendTier === "RARE_LOW_RESPONSE") {
+    reasons.push("Client has spent over $5M — historically low response rate.");
+  }
+  if (signals.isLongTerm === false) {
+    reasons.push("Looks like short-term/one-off work, not ongoing.");
+  }
+  if (signals.postedMinutesAgo !== null && signals.postedMinutesAgo > 15) {
+    reasons.push(`Posted ${signals.postedMinutesAgo} minutes ago — outside the 15-minute bidding window.`);
+  }
+  if (signals.isHourly === false) {
+    reasons.push("Fixed-price — hourly jobs are preferred.");
+  }
+
+  return { recommendation: reasons.length === 0 ? "BID" : "MAYBE", reasons };
 }
 
 /** Bidding SOP Part 2 — scans the scraped facts for a dollar figure (the

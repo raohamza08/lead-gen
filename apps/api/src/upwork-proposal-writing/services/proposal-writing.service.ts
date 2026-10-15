@@ -227,8 +227,8 @@ export class ProposalWritingService {
     if (excludedCountry) {
       warnings.push(`Client is based in ${clientCountry}, which is on your excluded-countries list.`);
     }
-    if (postedMinutesAgo !== null && postedMinutesAgo > 10) {
-      warnings.push(`Posted ${postedMinutesAgo} minutes ago — outside the 10-minute bidding window.`);
+    if (postedMinutesAgo !== null && postedMinutesAgo > 15) {
+      warnings.push(`Posted ${postedMinutesAgo} minutes ago — outside the 15-minute bidding window.`);
     }
 
     const systemPrompt = buildSystemPrompt(

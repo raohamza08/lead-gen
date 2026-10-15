@@ -89,11 +89,75 @@
     }
   }
 
-  // Only run the extraction (and hold up the tab doing so) when this page
-  // was actually opened by the extension for that purpose -- avoids doing
+  // "Posted 20 hours ago" / "Posted 5 minutes ago" / "Posted just now" ->
+  // an approximate ISO timestamp. Listing cards only ever show relative
+  // text (verified live, no exact datetime attribute anywhere on them),
+  // unlike a full job page's real JSON-LD datePosted.
+  function parseRelativePostedAt(text) {
+    if (/just now/i.test(text)) return new Date().toISOString();
+    const match = text.match(/(\d+)\s+(minute|hour|day|week|month)s?\s+ago/i);
+    if (!match) return null;
+    const amount = parseInt(match[1], 10);
+    const unitMs = {
+      minute: 60_000,
+      hour: 3_600_000,
+      day: 86_400_000,
+      week: 604_800_000,
+      month: 2_629_800_000,
+    }[match[2].toLowerCase()];
+    if (!unitMs) return null;
+    return new Date(Date.now() - amount * unitMs).toISOString();
+  }
+
+  // Listing/search-results pages (Part: Upwork Bidding SOP, explicit user
+  // request — "the jobs must be listed in the system"). Verified live:
+  // each card is `section[data-qa="job-tile"]`, title+href live on
+  // `[data-qa="job-title"]`, and two `small.text-muted-on-inverse` spans
+  // carry "Hourly"/"Fixed-price" and "Posted X ago" respectively. These
+  // cards never show client country/spend — that still needs opening the
+  // full job page, which background.js does next for each one found here.
+  function extractJobList() {
+    return Array.from(document.querySelectorAll('section[data-qa="job-tile"]'))
+      .map((card) => {
+        const titleEl = card.querySelector('[data-qa="job-title"]');
+        if (!titleEl || !titleEl.href) return null;
+        const smalls = Array.from(card.querySelectorAll("small.text-muted-on-inverse")).map((s) => s.textContent.trim());
+        const rateText = smalls.find((t) => /hourly|fixed/i.test(t)) || "";
+        const postedText = smalls.find((t) => /posted/i.test(t)) || "";
+        return {
+          url: titleEl.href,
+          title: titleEl.textContent.trim(),
+          isHourly: /hourly/i.test(rateText) ? true : /fixed/i.test(rateText) ? false : null,
+          postedAt: parseRelativePostedAt(postedText),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function attemptListing(retriesLeft) {
+    const jobs = extractJobList();
+    if (jobs.length > 0) {
+      chrome.runtime.sendMessage({ type: "OUTLY_JOB_LIST_SCRAPED", url: location.href, jobs });
+      return;
+    }
+    if (retriesLeft > 0) {
+      setTimeout(() => attemptListing(retriesLeft - 1), 700);
+    } else {
+      chrome.runtime.sendMessage({
+        type: "OUTLY_JOB_LIST_SCRAPE_FAILED",
+        url: location.href,
+        error: "No jobs found on that page.",
+      });
+    }
+  }
+
+  // Only run extraction (and hold up the tab doing so) when this page was
+  // actually opened by the extension for that purpose -- avoids doing
   // unnecessary work, or sending messages nobody asked for, on normal
-  // everyday Upwork browsing.
-  chrome.runtime.sendMessage({ type: "OUTLY_PING_IS_REQUESTED", url: location.href }, (isRequested) => {
-    if (isRequested) attempt(8);
+  // everyday Upwork browsing. The background worker's response tells us
+  // which kind of page it's expecting (a single job, or a listing).
+  chrome.runtime.sendMessage({ type: "OUTLY_PING_IS_REQUESTED", url: location.href }, (mode) => {
+    if (mode === "JOB") attempt(8);
+    else if (mode === "LISTING") attemptListing(8);
   });
 })();

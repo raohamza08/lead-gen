@@ -224,7 +224,7 @@ function SignalBadges({ result }: { result: GenerateResult }) {
     });
   }
   if (result.postedMinutesAgo !== undefined && result.postedMinutesAgo !== null) {
-    const within = result.postedMinutesAgo <= 10;
+    const within = result.postedMinutesAgo <= 15;
     badges.push({
       key: "posted",
       node: (
@@ -294,6 +294,11 @@ export default function UpworkProposalWritingPage() {
 
   useEffect(() => {
     setExtensionInstalled(isExtensionInstalled());
+    // Pre-fill from the Job Feed page's "Generate" link
+    // (/upwork/proposal-writing?url=...) — doesn't auto-submit, just saves
+    // retyping the link.
+    const prefill = new URLSearchParams(window.location.search).get("url");
+    if (prefill) setJobUrl(prefill);
   }, []);
 
   const draftsQuery = useQuery({

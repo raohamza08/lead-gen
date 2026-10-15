@@ -739,6 +739,9 @@ export const api = {
     request(`/upwork-proposal-writing/freelancer-profiles/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteUpworkFreelancerProfile: (id: string) =>
     request(`/upwork-proposal-writing/freelancer-profiles/${id}`, { method: "DELETE" }),
+  getUpworkDiscoveredJobs: () => request("/upwork-proposal-writing/discovered-jobs"),
+  ingestUpworkDiscoveredJobs: (jobs: unknown[]) =>
+    request("/upwork-proposal-writing/discovered-jobs/ingest", { method: "POST", body: JSON.stringify({ jobs }) }),
 
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
   getDashboardOverview: (params: Record<string, string> = {}) =>
