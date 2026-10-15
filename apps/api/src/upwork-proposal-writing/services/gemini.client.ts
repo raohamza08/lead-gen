@@ -20,6 +20,17 @@ export interface CoverLetterResult {
   clientNeeds: string;
   niche: string;
   coverLetter: string;
+  /// Bidding SOP Part 1 — which word-limit band the model decided this job
+  /// falls into and wrote to; purely the model's own judgment call, unlike
+  /// the deterministic signals computed in bidding-criteria.util.ts.
+  jobType: "TECHNICAL" | "NON_TECHNICAL";
+  /// Null when no freelancer profiles are configured, or the model couldn't
+  /// find a reasonable match among the ones given.
+  suggestedProfile: string | null;
+  profileReason: string | null;
+  /// Short synthesis answering "how good is this job to bid on" — written
+  /// to reference the deterministic signals passed in, not contradict them.
+  overallAssessment: string;
 }
 
 class GeminiRateLimitError extends Error {
@@ -159,6 +170,10 @@ export class GeminiClient {
       clientNeeds: parsed.clientNeeds ?? "",
       niche: parsed.niche ?? "",
       coverLetter: parsed.coverLetter,
+      jobType: parsed.jobType === "NON_TECHNICAL" ? "NON_TECHNICAL" : "TECHNICAL",
+      suggestedProfile: parsed.suggestedProfile ?? null,
+      profileReason: parsed.profileReason ?? null,
+      overallAssessment: parsed.overallAssessment ?? "",
     };
   }
 

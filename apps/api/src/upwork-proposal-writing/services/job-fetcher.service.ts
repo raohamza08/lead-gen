@@ -154,7 +154,6 @@ export class UpworkJobFetcherService {
         const client: Record<string, string> = {};
         const clientFieldMap: Record<string, string> = {
           "client-contract-date": "Member since",
-          "client-location": "Location",
           "client-spend": "Total spent",
           "client-hires": "Hires",
           "client-hours": "Hours",
@@ -166,6 +165,19 @@ export class UpworkJobFetcherService {
           const text = el?.textContent?.trim();
           if (text) client[label] = text;
         });
+        // Split out separately from the fields above — verified live that
+        // `[data-qa="client-location"]` has the country in its own `strong`
+        // child, distinct from a city/local-time `div` — needed as its own
+        // clean field for the excluded-country check (Part: Upwork Bidding
+        // SOP), not a mashed "CountryCityTime" string.
+        const locationEl = document.querySelector('[data-qa="client-location"]');
+        const country = locationEl?.querySelector("strong")?.textContent?.trim();
+        if (country) client["Country"] = country;
+        const cityTime = Array.from(locationEl?.querySelectorAll(".nowrap") ?? [])
+          .map((el) => el.textContent?.trim())
+          .filter(Boolean)
+          .join(", ");
+        if (cityTime) client["Location"] = cityTime;
         const paymentVerified = /payment method verified/i.test(document.body.innerText);
 
         return {

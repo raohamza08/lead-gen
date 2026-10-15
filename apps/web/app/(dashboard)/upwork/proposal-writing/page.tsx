@@ -6,6 +6,9 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
 import { Spinner } from "../../../../components/spinner";
 
+type JobType = "TECHNICAL" | "NON_TECHNICAL";
+type SpendTier = "PRIORITY" | "RARE_LOW_RESPONSE" | "NEW_CLIENT_OK" | "STANDARD" | "UNKNOWN";
+
 interface GenerateResult {
   draftId: string;
   fetchStatus: "SUCCESS" | "PARTIAL" | "FAILED";
@@ -15,6 +18,15 @@ interface GenerateResult {
   clientNeeds?: string;
   niche?: string;
   coverLetter?: string;
+  jobType?: JobType;
+  suggestedProfile?: string | null;
+  profileReason?: string | null;
+  suggestedBidAmount?: string | null;
+  spendTier?: SpendTier;
+  isLongTerm?: boolean | null;
+  postedMinutesAgo?: number | null;
+  warnings?: string[];
+  overallAssessment?: string;
 }
 
 interface DraftRow {
@@ -26,8 +38,17 @@ interface DraftRow {
   coverLetter: string;
   fetchStatus: "SUCCESS" | "PARTIAL" | "FAILED";
   fetchError: string | null;
+  warnings: string[];
   createdAt: string;
 }
+
+const SPEND_TIER_LABEL: Record<SpendTier, string> = {
+  PRIORITY: "Priority client ($1K–$5K spent)",
+  RARE_LOW_RESPONSE: "Very high spend (>$5M) — historically low response rate",
+  NEW_CLIENT_OK: "New client, no history yet — worth a shot",
+  STANDARD: "Standard spend range",
+  UNKNOWN: "Client spend unknown",
+};
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -47,13 +68,49 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+function Badge({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "good" | "bad" }) {
+  const toneClass =
+    tone === "good" ? "bg-good/15 text-good" : tone === "bad" ? "bg-bad/15 text-bad" : "bg-ink/8 text-ink/65";
+  return <span className={`rounded-full px-2.5 py-1 text-xs ${toneClass}`}>{children}</span>;
+}
+
+function SignalBadges({ result }: { result: GenerateResult }) {
+  const badges: { key: string; node: React.ReactNode }[] = [];
+  if (result.jobType) badges.push({ key: "jobType", node: <Badge>{result.jobType === "TECHNICAL" ? "Technical" : "Non-technical"}</Badge> });
+  if (result.spendTier) {
+    const tone = result.spendTier === "PRIORITY" ? "good" : result.spendTier === "RARE_LOW_RESPONSE" ? "bad" : "default";
+    badges.push({ key: "spend", node: <Badge tone={tone}>{SPEND_TIER_LABEL[result.spendTier]}</Badge> });
+  }
+  if (result.isLongTerm !== undefined && result.isLongTerm !== null) {
+    badges.push({
+      key: "duration",
+      node: <Badge tone={result.isLongTerm ? "good" : "default"}>{result.isLongTerm ? "Long-term / ongoing" : "Short-term"}</Badge>,
+    });
+  }
+  if (result.postedMinutesAgo !== undefined && result.postedMinutesAgo !== null) {
+    const within = result.postedMinutesAgo <= 10;
+    badges.push({
+      key: "posted",
+      node: (
+        <Badge tone={within ? "good" : "bad"}>
+          Posted {result.postedMinutesAgo} min ago {within ? "— within the 10-min window" : "— outside the 10-min window"}
+        </Badge>
+      ),
+    });
+  }
+  if (badges.length === 0) return null;
+  return <div className="flex flex-wrap gap-1.5">{badges.map((b) => b.node)}</div>;
+}
+
 /**
- * Paste an Upwork job link, get back what the client needs, the niche, and
- * a ready-to-paste cover letter (Part: Upwork Proposal Writing, explicit
- * user request). Fetching is a real headless-browser request server-side —
- * it can fail (Upwork blocking the automatic fetch, or the job having
- * closed/expired) and that's surfaced here as a real error, not retried
- * silently, since each attempt costs real time/resources.
+ * Paste an Upwork job link, get back the Bidding SOP evaluation (how good
+ * the job is to bid on, client-criteria warnings, suggested bid amount and
+ * freelancer profile) plus a ready-to-paste cover letter (Part: Upwork
+ * Proposal Writing / Bidding SOP). Fetching is a real headless-browser
+ * request server-side — it can fail (Upwork blocking the automatic fetch,
+ * or the job having closed/expired) and that's surfaced here as a real
+ * error, not retried silently. Criteria warnings never block generation —
+ * explicit user decision: this stays advisory, the call to bid is yours.
  */
 export default function UpworkProposalWritingPage() {
   const queryClient = useQueryClient();
@@ -84,7 +141,8 @@ export default function UpworkProposalWritingPage() {
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Proposal Writing</h1>
         <p className="mt-0.5 text-xs text-ink/50">
-          Paste an Upwork job link — the system fetches the job and client details and writes a cover letter from it.
+          Paste an Upwork job link — the system fetches the job and client details, evaluates it against the Bidding SOP, and writes a cover
+          letter from it.
         </p>
       </div>
 
@@ -125,6 +183,43 @@ export default function UpworkProposalWritingPage() {
           {result?.fetchStatus === "SUCCESS" && (
             <div className="flex flex-col gap-4 rounded-lg border border-[var(--line)] p-4">
               {result.jobTitle && <div className="text-sm font-medium">{result.jobTitle}</div>}
+
+              {result.warnings && result.warnings.length > 0 && (
+                <div className="flex flex-col gap-1 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2">
+                  {result.warnings.map((w) => (
+                    <div key={w} className="text-sm text-bad">
+                      ⚠ {w}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <SignalBadges result={result} />
+
+              {result.overallAssessment && (
+                <div>
+                  <div className="text-label uppercase text-ink/50">Is this worth bidding on?</div>
+                  <p className="mt-1 text-sm text-ink/80">{result.overallAssessment}</p>
+                </div>
+              )}
+
+              <div className="flex flex-wrap gap-6">
+                {result.suggestedBidAmount && (
+                  <div>
+                    <div className="text-label uppercase text-ink/50">Suggested bid</div>
+                    <p className="mt-1 text-sm text-ink/80">{result.suggestedBidAmount}</p>
+                  </div>
+                )}
+                {result.suggestedProfile && (
+                  <div>
+                    <div className="text-label uppercase text-ink/50">Best-fit profile</div>
+                    <p className="mt-1 text-sm text-ink/80">
+                      <span className="font-medium">{result.suggestedProfile}</span>
+                      {result.profileReason && <span className="text-ink/60"> — {result.profileReason}</span>}
+                    </p>
+                  </div>
+                )}
+              </div>
 
               {result.niche && (
                 <div>
@@ -172,7 +267,10 @@ export default function UpworkProposalWritingPage() {
                 {d.fetchStatus === "FAILED" ? (
                   <span className="text-xs text-bad">{d.fetchError}</span>
                 ) : (
-                  <span className="text-xs text-ink/50">{d.niche}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-ink/50">{d.niche}</span>
+                    {d.warnings?.length > 0 && <span className="text-xs text-bad">⚠ {d.warnings.length} warning(s)</span>}
+                  </div>
                 )}
               </div>
             ))}

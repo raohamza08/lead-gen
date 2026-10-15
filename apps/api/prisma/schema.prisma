@@ -227,6 +227,7 @@ model Organization {
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
+  upworkFreelancerProfiles      UpworkFreelancerProfile[]
 
   @@map("organizations")
 }
@@ -2761,22 +2762,59 @@ model UpworkProposalWritingSettings {
   /// Blank until an admin fills it in; the generator still works without
   /// it (just more generic), same "works with defaults, better once
   /// configured" posture as other settings in this app.
-  agencyBackground String @default("") @map("agency_background") @db.Text
+  agencyBackground      String   @default("") @map("agency_background") @db.Text
   /// The main editable prompt — tone, structure, must-include rules, things
   /// to avoid. Pre-seeded with a sensible default on creation (see
   /// UpworkProposalWritingSettingsService) so there's something reasonable
   /// before anyone touches Settings, exactly like every other "ships with a
   /// default, editable anytime" config in this app.
-  instructions     String @map("instructions") @db.Text
-  /// Soft target the prompt is told to aim for, not a hard cutoff enforced
-  /// in code — matches how real cover letters vary in length by job.
-  wordCountTarget  Int    @default(150) @map("word_count_target")
+  instructions          String   @map("instructions") @db.Text
+  /// Bidding SOP, Part 1 (Proposal Length) — split by job type since the
+  /// SOP gives genuinely different targets, not one generic length. The
+  /// model self-classifies each job as technical vs non-technical/graphics
+  /// and is told to write within whichever limit applies; still a soft
+  /// target, not a hard cutoff enforced in code.
+  technicalWordLimit    Int      @default(400) @map("technical_word_limit")
+  nonTechnicalWordLimit Int      @default(100) @map("non_technical_word_limit")
+  /// Bidding SOP, Part 3/6 — client criteria. Countries whose clients we
+  /// don't bid on; checked against the client's country as scraped from
+  /// the job page. A hard rule per the SOP, but surfaced as a warning, not
+  /// an outright block (explicit user decision — "warn clearly, but still
+  /// let me generate").
+  excludedCountries     String[] @default(["India", "Pakistan", "Philippines"]) @map("excluded_countries")
 
   updatedByUserId String?  @map("updated_by_user_id")
   updatedAt       DateTime @updatedAt @map("updated_at")
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@map("upwork_proposal_writing_settings")
+}
+
+/// One named individual freelancer profile (Part: Upwork Bidding SOP,
+/// explicit user request — "the bidding is not from the agency, it should
+/// be as an individual freelancer... option to add multiple freelancers
+/// name and their profile niche, so the system can suggest which freelancer
+/// profile would be best to send this bid from"). Org-scoped, not tied to a
+/// User row — these are Upwork profile identities, which may or may not
+/// correspond 1:1 to a person with a login here (mirrors
+/// UpworkProposal.profileName/UpworkProfileAccess's own precedent of
+/// treating Upwork profile identity as a plain string, not a User FK).
+model UpworkFreelancerProfile {
+  id    String       @id @default(uuid())
+  orgId String       @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+
+  name   String
+  /// Free text describing this profile's specialty/niche — what the model
+  /// matches job content against to suggest the best-fit profile.
+  niche  String  @db.Text
+  active Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([orgId, active])
+  @@map("upwork_freelancer_profiles")
 }
 
 /// One row per generated cover letter (Part: Upwork Proposal Writing) — an
@@ -2805,6 +2843,28 @@ model UpworkProposalDraft {
   clientNeeds String @map("client_needs") @db.Text
   niche       String @map("niche")
   coverLetter String @map("cover_letter") @db.Text
+
+  /// Bidding SOP signals (Part: Upwork Bidding SOP) — computed
+  /// deterministically in ProposalWritingService from scraped job/client
+  /// data, not left to the model to invent, so they stay verifiable against
+  /// the actual numbers. The model only classifies jobType and suggests the
+  /// freelancer profile/bid amount; everything else here is plain arithmetic
+  /// over `clientInfo`/`facts`.
+  jobType            String?  @map("job_type")
+  suggestedProfile   String?  @map("suggested_profile")
+  profileReason      String?  @map("profile_reason") @db.Text
+  suggestedBidAmount String?  @map("suggested_bid_amount")
+  spendTier          String?  @map("spend_tier")
+  isLongTerm         Boolean? @map("is_long_term")
+  postedMinutesAgo   Int?     @map("posted_minutes_ago")
+  /// Non-blocking criteria flags (e.g. "Client is in an excluded country") —
+  /// shown prominently but never prevent generation (explicit user
+  /// decision — "warn clearly, but still let me generate").
+  warnings           String[] @default([]) @map("warnings")
+  /// Short model-written synthesis answering "how good is this job to bid
+  /// on" (explicit user request) — references the deterministic signals
+  /// above rather than contradicting them.
+  overallAssessment  String?  @map("overall_assessment") @db.Text
 
   fetchStatus UpworkProposalDraftFetchStatus @default(SUCCESS) @map("fetch_status")
   /// Set when fetchStatus is PARTIAL/FAILED — e.g. "Upwork blocked the

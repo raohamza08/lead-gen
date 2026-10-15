@@ -704,8 +704,20 @@ export const api = {
     request("/upwork-proposal-writing/generate", { method: "POST", body: JSON.stringify({ jobUrl }) }),
   getUpworkProposalWritingDrafts: () => request("/upwork-proposal-writing/drafts"),
   getUpworkProposalWritingSettings: () => request("/upwork-proposal-writing/settings"),
-  updateUpworkProposalWritingSettings: (body: { agencyBackground?: string; instructions?: string; wordCountTarget?: number }) =>
-    request("/upwork-proposal-writing/settings", { method: "PUT", body: JSON.stringify(body) }),
+  updateUpworkProposalWritingSettings: (body: {
+    agencyBackground?: string;
+    instructions?: string;
+    technicalWordLimit?: number;
+    nonTechnicalWordLimit?: number;
+    excludedCountries?: string[];
+  }) => request("/upwork-proposal-writing/settings", { method: "PUT", body: JSON.stringify(body) }),
+  getUpworkFreelancerProfiles: () => request("/upwork-proposal-writing/freelancer-profiles"),
+  createUpworkFreelancerProfile: (body: { name: string; niche: string }) =>
+    request("/upwork-proposal-writing/freelancer-profiles", { method: "POST", body: JSON.stringify(body) }),
+  updateUpworkFreelancerProfile: (id: string, body: { name?: string; niche?: string; active?: boolean }) =>
+    request(`/upwork-proposal-writing/freelancer-profiles/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  deleteUpworkFreelancerProfile: (id: string) =>
+    request(`/upwork-proposal-writing/freelancer-profiles/${id}`, { method: "DELETE" }),
 
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
   getDashboardOverview: (params: Record<string, string> = {}) =>

@@ -7,9 +7,9 @@ import { PrismaService } from "../../common/prisma/prisma.service";
  *  other configurable prompt in this app. */
 const DEFAULT_INSTRUCTIONS = `Write in a confident, warm, concise tone — never generic or robotic.
 Open by referencing something specific from this job post, not a generic greeting.
-Get straight to how we'd approach their specific need instead of restating the job post back at them.
+Get straight to how I'd approach their specific need instead of restating the job post back at them.
 Avoid clichés like "I am excited to apply" or "I have carefully read your job posting".
-No filler, no generic agency boilerplate, no claiming experience/clients/numbers that aren't in the agency background below.
+No filler, no generic boilerplate, no claiming experience/numbers that aren't in the background below.
 End with a simple, low-pressure call to action (e.g. offering a quick call or a couple of clarifying questions), not a hard sell.`;
 
 @Injectable()
@@ -27,7 +27,13 @@ export class ProposalWritingSettingsService {
   async update(
     orgId: string,
     actorId: string,
-    input: { agencyBackground?: string; instructions?: string; wordCountTarget?: number },
+    input: {
+      agencyBackground?: string;
+      instructions?: string;
+      technicalWordLimit?: number;
+      nonTechnicalWordLimit?: number;
+      excludedCountries?: string[];
+    },
   ) {
     await this.get(orgId); // ensure a row exists before updating it
     return this.prisma.upworkProposalWritingSettings.update({
