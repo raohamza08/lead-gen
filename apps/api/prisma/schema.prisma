@@ -2871,6 +2871,13 @@ model UpworkProposalDraft {
   orgId           String       @map("org_id")
   org             Organization @relation(fields: [orgId], references: [id])
   createdByUserId String       @map("created_by_user_id")
+  /// Denormalized at creation time (Part: Upwork Bidding SOP, explicit
+  /// user request — "the user name... should come on the right corner so
+  /// others can see who created this proposal"). A plain snapshot string,
+  /// not a live join — same "submitter identity as a string" precedent as
+  /// UpworkProposal.submittedBy; a later name change shouldn't rewrite
+  /// history on old drafts.
+  createdByName   String?      @map("created_by_name")
 
   jobUrl         String  @map("job_url")
   jobTitle       String? @map("job_title")

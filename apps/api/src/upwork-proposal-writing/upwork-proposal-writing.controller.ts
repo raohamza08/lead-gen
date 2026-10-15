@@ -19,9 +19,12 @@ import { IngestDiscoveredJobsDto } from "./dto/discovered-job.dto";
  * Standard JwtAuthGuard + RolesGuard + ModuleAccessGuard stack, same as
  * every other module (Part: Upwork Proposal Writing).
  *
- * Settings (instructions/word limits/excluded countries) writes are
- * ADMIN-only — shared SOP governance, same reasoning as UpworkApiController's
- * connect/disconnect.
+ * Settings (instructions/word limits/excluded countries) are ADMIN-only
+ * for both read and write — shared SOP governance, not something every
+ * granted user should even see, let alone edit (same reasoning as
+ * UpworkApiController's connect/disconnect, extended to viewing too after
+ * an explicit correction — "the settings are visible to every user... it
+ * shouldn't be").
  *
  * Freelancer-profile CRUD is deliberately NOT role-restricted beyond the
  * module flag itself (Part: same day, real-world correction — granting a
@@ -52,7 +55,13 @@ export class UpworkProposalWritingController {
     return this.proposalWriting.listDrafts(user.orgId);
   }
 
+  // ADMIN-only to even view (Part: same day, explicit correction —
+  // "the settings are visible to every user... it shouldn't be"). This is
+  // the shared SOP-governance config (instructions/word limits/excluded
+  // countries); Freelancer Profiles below is deliberately NOT gated this
+  // way, see that section's own docblock.
   @Get("settings")
+  @Roles(Role.ADMIN)
   getSettings(@CurrentUser() user: JwtClaims) {
     return this.settings.get(user.orgId);
   }

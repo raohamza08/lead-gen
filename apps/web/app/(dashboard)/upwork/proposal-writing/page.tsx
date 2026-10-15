@@ -27,6 +27,8 @@ interface GenerateResult {
   postedMinutesAgo?: number | null;
   warnings?: string[];
   overallAssessment?: string;
+  createdByName?: string | null;
+  duplicateOf?: { createdByName: string; createdAt: string } | null;
 }
 
 interface DraftRow {
@@ -47,6 +49,7 @@ interface DraftRow {
   postedMinutesAgo: number | null;
   warnings: string[];
   overallAssessment: string | null;
+  createdByName: string | null;
   createdAt: string;
 }
 
@@ -69,7 +72,124 @@ function draftToResult(d: DraftRow): GenerateResult {
     postedMinutesAgo: d.postedMinutesAgo,
     warnings: d.warnings,
     overallAssessment: d.overallAssessment ?? undefined,
+    createdByName: d.createdByName,
   };
+}
+
+interface FreelancerProfile {
+  id: string;
+  name: string;
+  niche: string;
+  active: boolean;
+}
+
+/** Lives here rather than under Settings (Part: same day, explicit
+ *  correction — "the settings are visible to every user... it shouldn't
+ *  be") — Settings is now ADMIN-only to even view, but profile management
+ *  is an operational roster every granted user needs (confirmed earlier
+ *  the same day: a BUSINESS_DEVELOPER getting 403'd adding a profile
+ *  wasn't the intent either). */
+function FreelancerProfilesSection() {
+  const queryClient = useQueryClient();
+  const profilesQuery = useQuery({
+    queryKey: ["upwork-freelancer-profiles"],
+    queryFn: () => api.getUpworkFreelancerProfiles() as Promise<FreelancerProfile[]>,
+  });
+  const [name, setName] = useState("");
+  const [niche, setNiche] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["upwork-freelancer-profiles"] });
+  }
+
+  const createMutation = useMutation({
+    mutationFn: () => api.createUpworkFreelancerProfile({ name, niche }),
+    onSuccess: () => {
+      setName("");
+      setNiche("");
+      refresh();
+    },
+    onError: (err) => setError((err as Error).message),
+  });
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => api.updateUpworkFreelancerProfile(id, { active }),
+    onSuccess: refresh,
+  });
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.deleteUpworkFreelancerProfile(id),
+    onSuccess: refresh,
+  });
+
+  return (
+    <SectionCard title="Freelancer profiles">
+      <p className="mb-2 text-xs text-ink/55">
+        Individual freelancer identities and their niches — the generator suggests which one best fits each job. Inactive profiles are kept but
+        never suggested.
+      </p>
+      {error && <div className="mb-2 text-xs text-bad">{error}</div>}
+      {profilesQuery.isLoading ? (
+        <Spinner className="h-4 w-4" />
+      ) : (
+        <div className="flex flex-col gap-2">
+          {profilesQuery.data?.map((p) => (
+            <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--line)] px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-sm font-medium">{p.name}</div>
+                <div className="truncate text-xs text-ink/50">{p.niche}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-ink/60">
+                  <input
+                    type="checkbox"
+                    checked={p.active}
+                    onChange={(e) => toggleMutation.mutate({ id: p.id, active: e.target.checked })}
+                  />
+                  Active
+                </label>
+                <button
+                  type="button"
+                  onClick={() => deleteMutation.mutate(p.id)}
+                  className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-ink/50 hover:border-bad hover:text-bad"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+          {profilesQuery.data?.length === 0 && <p className="text-sm text-ink/50">No freelancer profiles yet.</p>}
+        </div>
+      )}
+
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Name"
+          className="w-40 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+        <input
+          type="text"
+          value={niche}
+          onChange={(e) => setNiche(e.target.value)}
+          placeholder="Niche (e.g. Shopify & e-commerce design)"
+          className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+        <button
+          type="button"
+          onClick={() => {
+            setError(null);
+            createMutation.mutate();
+          }}
+          disabled={createMutation.isPending || !name.trim() || !niche.trim()}
+          className="rounded-md bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-50"
+        >
+          Add
+        </button>
+      </div>
+    </SectionCard>
+  );
 }
 
 const SPEND_TIER_LABEL: Record<SpendTier, string> = {
@@ -425,9 +545,23 @@ export default function UpworkProposalWritingPage() {
 
           {(result?.fetchStatus === "SUCCESS" || result?.fetchStatus === "PARTIAL") && (
             <div className="flex flex-col gap-4 rounded-lg border border-[var(--line)] p-4">
-              {result.jobTitle && <div className="text-sm font-medium">{result.jobTitle}</div>}
+              <div className="flex items-start justify-between gap-2">
+                {result.jobTitle && <div className="text-sm font-medium">{result.jobTitle}</div>}
+                {result.createdByName && (
+                  <span className="shrink-0 text-xs text-ink/50">
+                    Generated by <span className="font-medium text-ink/70">{result.createdByName}</span>
+                  </span>
+                )}
+              </div>
               {result.fetchStatus === "PARTIAL" && (
                 <Badge>From manually entered details — not an automatic fetch</Badge>
+              )}
+
+              {result.duplicateOf && (
+                <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
+                  ⚠ Already generated by <span className="font-medium">{result.duplicateOf.createdByName}</span> on{" "}
+                  {new Date(result.duplicateOf.createdAt).toLocaleString()} — check before bidding twice on the same job.
+                </div>
               )}
 
               {result.warnings && result.warnings.length > 0 && (
@@ -536,6 +670,7 @@ export default function UpworkProposalWritingPage() {
                 ) : (
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-ink/50">{d.niche}</span>
+                    {d.createdByName && <span className="text-xs text-ink/40">by {d.createdByName}</span>}
                     {d.warnings?.length > 0 && <span className="text-xs text-bad">⚠ {d.warnings.length} warning(s)</span>}
                   </div>
                 )}
@@ -544,6 +679,8 @@ export default function UpworkProposalWritingPage() {
           </div>
         )}
       </SectionCard>
+
+      <FreelancerProfilesSection />
     </div>
   );
 }

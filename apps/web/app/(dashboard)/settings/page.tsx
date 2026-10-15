@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { TeamSection } from "../../../components/team-section";
 import { OrgBrandingSection } from "../../../components/org-branding-section";
+import { getCurrentUser } from "../../../lib/api-client";
 
 /**
  * General settings — the only things genuinely shared across every module
@@ -13,6 +14,8 @@ import { OrgBrandingSection } from "../../../components/org-branding-section";
  * mailboxes, access, tags).
  */
 export default function SettingsPage() {
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -50,15 +53,17 @@ export default function SettingsPage() {
             Per-account defaults, approval requirements, and who can publish or approve.
           </p>
         </Link>
-        <Link
-          href="/settings/upwork-proposal-writing"
-          className="card card-interactive p-5"
-        >
-          <h2 className="text-sm font-semibold tracking-tight">Proposal Writing Settings</h2>
-          <p className="mt-1 text-xs text-ink/50">
-            Agency background, tone/instructions, and target length for the AI cover-letter generator.
-          </p>
-        </Link>
+        {isAdmin && (
+          <Link
+            href="/settings/upwork-proposal-writing"
+            className="card card-interactive p-5"
+          >
+            <h2 className="text-sm font-semibold tracking-tight">Proposal Writing Settings</h2>
+            <p className="mt-1 text-xs text-ink/50">
+              Agency background, tone/instructions, and target length for the AI cover-letter generator.
+            </p>
+          </Link>
+        )}
       </section>
 
       <TeamSection />

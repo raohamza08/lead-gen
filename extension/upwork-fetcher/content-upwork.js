@@ -110,13 +110,28 @@
   }
 
   // Listing/search-results pages (Part: Upwork Bidding SOP, explicit user
-  // request — "the jobs must be listed in the system"). Verified live:
-  // each card is `section[data-qa="job-tile"]`, title+href live on
-  // `[data-qa="job-title"]`, and two `small.text-muted-on-inverse` spans
-  // carry "Hourly"/"Fixed-price" and "Posted X ago" respectively. These
-  // cards never show client country/spend — that still needs opening the
-  // full job page, which background.js does next for each one found here.
-  function extractJobList() {
+  // request — "the jobs must be listed in the system"). Upwork runs (at
+  // least) two different page templates for this, confirmed live:
+  //   - category browse pages (/freelance-jobs/<category>/): cards are
+  //     `section[data-qa="job-tile"]`, title+href on `[data-qa="job-title"]`,
+  //     rate/posted-time in `small.text-muted-on-inverse` spans.
+  //   - the actual search UI (/nx/search/jobs/?q=...), which is what people
+  //     really use to search: cards are `[data-test="JobTile"]` (exact —
+  //     contains-match would also catch unrelated "JobTileHeader" etc.),
+  //     title+href on `a[data-test*="job-tile-title-link"]` (its data-test
+  //     is multi-token, needs a contains-match), rate on
+  //     `[data-test*="job-type-label"]`, posted-time on
+  //     `[data-test*="job-pubilshed-date"]` (sic — that's Upwork's own
+  //     typo, seen live; matched alongside the correct spelling in case
+  //     they fix it). This template was also seen rendering with raw i18n
+  //     keys leaking into the text (e.g. "usnuxt_Posted_286 5 days ago") —
+  //     harmless here since the regex/substring checks below don't anchor
+  //     to the start of the string, so the real "5 days ago"/"Hourly" part
+  //     still matches regardless of what's glued in front of it.
+  // Neither template shows client country/spend on the card itself — that
+  // still needs opening the full job page, which background.js does next
+  // for each one found here.
+  function extractJobListLegacy() {
     return Array.from(document.querySelectorAll('section[data-qa="job-tile"]'))
       .map((card) => {
         const titleEl = card.querySelector('[data-qa="job-title"]');
@@ -132,6 +147,31 @@
         };
       })
       .filter(Boolean);
+  }
+
+  function extractJobListModern() {
+    return Array.from(document.querySelectorAll('[data-test="JobTile"]'))
+      .map((card) => {
+        const titleLink = card.querySelector('a[data-test*="job-tile-title-link"]');
+        if (!titleLink || !titleLink.href) return null;
+        const typeEl = card.querySelector('[data-test*="job-type-label"]');
+        const postedEl = card.querySelector('[data-test*="job-pubilshed-date"], [data-test*="job-published-date"]');
+        const rateText = typeEl ? typeEl.textContent.trim() : "";
+        const postedText = postedEl ? postedEl.textContent.trim() : "";
+        return {
+          url: titleLink.href,
+          title: titleLink.textContent.trim(),
+          isHourly: /hourly/i.test(rateText) ? true : /fixed/i.test(rateText) ? false : null,
+          postedAt: parseRelativePostedAt(postedText),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function extractJobList() {
+    const legacy = extractJobListLegacy();
+    if (legacy.length > 0) return legacy;
+    return extractJobListModern();
   }
 
   function attemptListing(retriesLeft) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
 import { Spinner } from "../../../../components/spinner";
@@ -12,13 +12,6 @@ interface Settings {
   technicalWordLimit: number;
   nonTechnicalWordLimit: number;
   excludedCountries: string[];
-}
-
-interface FreelancerProfile {
-  id: string;
-  name: string;
-  niche: string;
-  active: boolean;
 }
 
 function ExcludedCountries({ countries, onChange }: { countries: string[]; onChange: (next: string[]) => void }) {
@@ -62,121 +55,21 @@ function ExcludedCountries({ countries, onChange }: { countries: string[]; onCha
   );
 }
 
-function FreelancerProfilesSection() {
-  const queryClient = useQueryClient();
-  const profilesQuery = useQuery({
-    queryKey: ["upwork-freelancer-profiles"],
-    queryFn: () => api.getUpworkFreelancerProfiles() as Promise<FreelancerProfile[]>,
-  });
-  const [name, setName] = useState("");
-  const [niche, setNiche] = useState("");
-  const [error, setError] = useState<string | null>(null);
-
-  function refresh() {
-    queryClient.invalidateQueries({ queryKey: ["upwork-freelancer-profiles"] });
-  }
-
-  const createMutation = useMutation({
-    mutationFn: () => api.createUpworkFreelancerProfile({ name, niche }),
-    onSuccess: () => {
-      setName("");
-      setNiche("");
-      refresh();
-    },
-    onError: (err) => setError((err as Error).message),
-  });
-  const toggleMutation = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) => api.updateUpworkFreelancerProfile(id, { active }),
-    onSuccess: refresh,
-  });
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.deleteUpworkFreelancerProfile(id),
-    onSuccess: refresh,
-  });
-
-  return (
-    <SectionCard title="Freelancer profiles">
-      <p className="mb-2 text-xs text-ink/55">
-        Individual freelancer identities and their niches — the generator suggests which one best fits each job. Inactive profiles are kept but
-        never suggested.
-      </p>
-      {error && <div className="mb-2 text-xs text-bad">{error}</div>}
-      {profilesQuery.isLoading ? (
-        <Spinner className="h-4 w-4" />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {profilesQuery.data?.map((p) => (
-            <div key={p.id} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--line)] px-3 py-2">
-              <div className="min-w-0">
-                <div className="text-sm font-medium">{p.name}</div>
-                <div className="truncate text-xs text-ink/50">{p.niche}</div>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <label className="flex items-center gap-1.5 text-xs text-ink/60">
-                  <input
-                    type="checkbox"
-                    checked={p.active}
-                    onChange={(e) => toggleMutation.mutate({ id: p.id, active: e.target.checked })}
-                  />
-                  Active
-                </label>
-                <button
-                  type="button"
-                  onClick={() => deleteMutation.mutate(p.id)}
-                  className="rounded-md border border-[var(--line)] px-2 py-1 text-xs text-ink/50 hover:border-bad hover:text-bad"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          ))}
-          {profilesQuery.data?.length === 0 && <p className="text-sm text-ink/50">No freelancer profiles yet.</p>}
-        </div>
-      )}
-
-      <div className="mt-3 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Name"
-          className="w-40 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
-        />
-        <input
-          type="text"
-          value={niche}
-          onChange={(e) => setNiche(e.target.value)}
-          placeholder="Niche (e.g. Shopify & e-commerce design)"
-          className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
-        />
-        <button
-          type="button"
-          onClick={() => {
-            setError(null);
-            createMutation.mutate();
-          }}
-          disabled={createMutation.isPending || !name.trim() || !niche.trim()}
-          className="rounded-md bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-50"
-        >
-          Add
-        </button>
-      </div>
-    </SectionCard>
-  );
-}
-
 /**
  * Admin-editable prompt parameters the cover-letter generator is built from
- * (Part: Upwork Proposal Writing / Bidding SOP). Anyone with the module
- * flag can view this page; saving is ADMIN-only, enforced server-side
- * (same as Upwork API's connect/disconnect) — this edits shared, org-wide
- * configuration, not a per-user preference.
+ * (Part: Upwork Proposal Writing / Bidding SOP). ADMIN-only for both
+ * viewing and saving (explicit correction — "the settings are visible to
+ * every user... it shouldn't be"), enforced server-side; a non-admin who
+ * somehow lands here just sees the 403 below, not the form. Freelancer
+ * Profiles management lives on the Proposal Writing page instead — every
+ * granted user needs that, not just admins.
  */
 export default function UpworkProposalWritingSettingsPage() {
   const queryClient = useQueryClient();
   const settingsQuery = useQuery({
     queryKey: ["upwork-proposal-writing-settings"],
     queryFn: () => api.getUpworkProposalWritingSettings() as Promise<Settings>,
+    retry: false,
   });
 
   const [form, setForm] = useState<Settings | null>(null);
@@ -202,6 +95,15 @@ export default function UpworkProposalWritingSettingsPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  if (settingsQuery.isError) {
+    return (
+      <div className="flex flex-col gap-2">
+        <h1 className="text-lg font-semibold tracking-tight">Proposal Writing Settings</h1>
+        <p className="text-sm text-ink/55">This section is restricted to admins.</p>
+      </div>
+    );
   }
 
   return (
@@ -303,8 +205,6 @@ export default function UpworkProposalWritingSettingsPage() {
               {saving ? "Saving…" : "Save changes"}
             </button>
           </div>
-
-          <FreelancerProfilesSection />
         </>
       )}
     </div>

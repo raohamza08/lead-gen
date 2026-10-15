@@ -209,6 +209,22 @@ export class ProposalWritingService {
 
     const settings = await this.settingsService.get(orgId);
     const profiles = await this.freelancerProfiles.listActive(orgId);
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { name: true } });
+
+    // Duplicate-bidding check (Part: Upwork Bidding SOP, explicit user
+    // request — "if a duplicate comes up, it should highlight it") — any
+    // prior successful/manual draft for this exact job, regardless of who
+    // created it, so one teammate doesn't unknowingly re-bid a job another
+    // already generated a letter for. Non-blocking, same "warn, don't
+    // block" posture as every other criteria check here.
+    const existingDraft = await this.prisma.upworkProposalDraft.findFirst({
+      where: { orgId, jobUrl, fetchStatus: { in: ["SUCCESS", "PARTIAL"] } },
+      orderBy: { createdAt: "desc" },
+      select: { createdByName: true, createdAt: true },
+    });
+    const duplicateOf = existingDraft
+      ? { createdByName: existingDraft.createdByName ?? "someone", createdAt: existingDraft.createdAt }
+      : null;
 
     // Bidding SOP signals — computed here, not by the model (see
     // bidding-criteria.util.ts's own docblock for why).
@@ -251,6 +267,7 @@ export class ProposalWritingService {
       data: {
         orgId,
         createdByUserId: userId,
+        createdByName: user?.name,
         jobUrl,
         jobTitle: job.title,
         jobDescription: job.description,
@@ -280,6 +297,7 @@ export class ProposalWritingService {
       fetchStatus: draft.fetchStatus,
       jobTitle: job.title,
       jobUrl: draft.jobUrl,
+      createdByName: draft.createdByName,
       clientNeeds: result.clientNeeds,
       niche: result.niche,
       coverLetter: result.coverLetter,
@@ -292,6 +310,7 @@ export class ProposalWritingService {
       postedMinutesAgo,
       warnings,
       overallAssessment: result.overallAssessment,
+      duplicateOf,
     };
   }
 
