@@ -10,7 +10,7 @@ Open by referencing something specific from this job post, not a generic greetin
 Get straight to how I'd approach their specific need instead of restating the job post back at them.
 Avoid clichés like "I am excited to apply" or "I have carefully read your job posting".
 No filler, no generic boilerplate, no claiming experience/numbers that aren't in the background below.
-End with a simple, low-pressure call to action (e.g. offering a quick call or a couple of clarifying questions), not a hard sell.`;
+End with a simple, low-pressure call to action — offer a call/meeting at their preferred time, or just invite questions — keep it natural and low-pressure, never a hard sell, and never anything unusual or oddly specific like a "recorded meeting" or a named platform/tool.`;
 
 @Injectable()
 export class ProposalWritingSettingsService {
