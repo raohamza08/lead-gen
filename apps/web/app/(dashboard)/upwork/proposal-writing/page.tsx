@@ -38,8 +38,38 @@ interface DraftRow {
   coverLetter: string;
   fetchStatus: "SUCCESS" | "PARTIAL" | "FAILED";
   fetchError: string | null;
+  jobType: JobType | null;
+  suggestedProfile: string | null;
+  profileReason: string | null;
+  suggestedBidAmount: string | null;
+  spendTier: SpendTier | null;
+  isLongTerm: boolean | null;
+  postedMinutesAgo: number | null;
   warnings: string[];
+  overallAssessment: string | null;
   createdAt: string;
+}
+
+function draftToResult(d: DraftRow): GenerateResult {
+  return {
+    draftId: d.id,
+    fetchStatus: d.fetchStatus,
+    error: d.fetchError ?? undefined,
+    jobTitle: d.jobTitle ?? undefined,
+    jobUrl: d.jobUrl,
+    clientNeeds: d.clientNeeds,
+    niche: d.niche,
+    coverLetter: d.coverLetter,
+    jobType: d.jobType ?? undefined,
+    suggestedProfile: d.suggestedProfile,
+    profileReason: d.profileReason,
+    suggestedBidAmount: d.suggestedBidAmount,
+    spendTier: d.spendTier ?? undefined,
+    isLongTerm: d.isLongTerm,
+    postedMinutesAgo: d.postedMinutesAgo,
+    warnings: d.warnings,
+    overallAssessment: d.overallAssessment ?? undefined,
+  };
 }
 
 const SPEND_TIER_LABEL: Record<SpendTier, string> = {
@@ -462,12 +492,33 @@ export default function UpworkProposalWritingPage() {
         ) : (
           <div className="flex flex-col divide-y divide-[var(--line)]">
             {draftsQuery.data.map((d) => (
-              <div key={d.id} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
+              <button
+                key={d.id}
+                type="button"
+                onClick={() => {
+                  if (d.fetchStatus === "FAILED") return;
+                  setResult(draftToResult(d));
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }}
+                disabled={d.fetchStatus === "FAILED"}
+                className={`flex flex-col gap-1 py-3 text-left first:pt-0 last:pb-0 ${
+                  d.fetchStatus === "FAILED" ? "cursor-default" : "cursor-pointer hover:bg-ink/5"
+                } rounded-md px-2 -mx-2`}
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <a href={d.jobUrl} target="_blank" rel="noreferrer" className="truncate text-sm font-medium text-accent hover:underline">
-                    {d.jobTitle ?? d.jobUrl}
-                  </a>
-                  <span className="shrink-0 text-xs text-ink/40">{new Date(d.createdAt).toLocaleString()}</span>
+                  <span className="truncate text-sm font-medium">{d.jobTitle ?? d.jobUrl}</span>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="text-xs text-ink/40">{new Date(d.createdAt).toLocaleString()}</span>
+                    <a
+                      href={d.jobUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="text-xs text-accent hover:underline"
+                    >
+                      Open job ↗
+                    </a>
+                  </div>
                 </div>
                 {d.fetchStatus === "FAILED" ? (
                   <span className="text-xs text-bad">{d.fetchError}</span>
@@ -477,7 +528,7 @@ export default function UpworkProposalWritingPage() {
                     {d.warnings?.length > 0 && <span className="text-xs text-bad">⚠ {d.warnings.length} warning(s)</span>}
                   </div>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}
