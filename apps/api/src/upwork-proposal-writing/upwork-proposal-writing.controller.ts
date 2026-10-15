@@ -15,11 +15,18 @@ import { CreateFreelancerProfileDto, UpdateFreelancerProfileDto } from "./dto/fr
 
 /**
  * Standard JwtAuthGuard + RolesGuard + ModuleAccessGuard stack, same as
- * every other module (Part: Upwork Proposal Writing). Settings/freelancer-
- * profile reads are available to anyone with the module flag (so they can
- * see what the generator is working from); writes are ADMIN-only, same
- * reasoning as UpworkApiController's connect/disconnect — these edit a
- * shared, org-wide configuration, not a per-user preference.
+ * every other module (Part: Upwork Proposal Writing).
+ *
+ * Settings (instructions/word limits/excluded countries) writes are
+ * ADMIN-only — shared SOP governance, same reasoning as UpworkApiController's
+ * connect/disconnect.
+ *
+ * Freelancer-profile CRUD is deliberately NOT role-restricted beyond the
+ * module flag itself (Part: same day, real-world correction — granting a
+ * BUSINESS_DEVELOPER the module flag and then having "Add profile" 403 for
+ * them because it was ADMIN-only wasn't the intent). Profiles are an
+ * operational roster anyone with access to this module maintains, not
+ * org-wide policy like the settings above.
  */
 @Controller("upwork-proposal-writing")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
@@ -58,13 +65,11 @@ export class UpworkProposalWritingController {
   }
 
   @Post("freelancer-profiles")
-  @Roles(Role.ADMIN)
   createFreelancerProfile(@CurrentUser() user: JwtClaims, @Body() dto: CreateFreelancerProfileDto) {
     return this.freelancerProfiles.create(user.orgId, dto);
   }
 
   @Put("freelancer-profiles/:id")
-  @Roles(Role.ADMIN)
   updateFreelancerProfile(
     @CurrentUser() user: JwtClaims,
     @Param("id") id: string,
@@ -74,7 +79,6 @@ export class UpworkProposalWritingController {
   }
 
   @Delete("freelancer-profiles/:id")
-  @Roles(Role.ADMIN)
   deleteFreelancerProfile(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.freelancerProfiles.delete(user.orgId, id);
   }

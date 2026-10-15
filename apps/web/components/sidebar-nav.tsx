@@ -308,6 +308,15 @@ export function SidebarNav({
 
   function flagGranted(flag: ModuleFlag | ModuleFlag[] | undefined): boolean {
     if (!flag || !moduleAccess) return true;
+    // ADMIN bypass (Part: same-day correction — the backend's
+    // ModuleAccessGuard already bypasses Role.ADMIN unconditionally for
+    // every module flag; this nav-visibility check never mirrored that, so
+    // a brand-new module defaulting its flag to false hid the link from
+    // admins too, including the org's own owner, until someone manually
+    // toggled it on — not the intent). Matches the backend exactly: an
+    // admin's real access was never actually gated by these flags, only
+    // what the sidebar showed was.
+    if (getCurrentUser()?.role === "ADMIN") return true;
     // Array means OR: any one of the listed flags being granted is enough
     // (mirrors ModuleAccessGuard's own array handling on the backend).
     return Array.isArray(flag) ? flag.some((f) => moduleAccess[f]) : moduleAccess[flag];
