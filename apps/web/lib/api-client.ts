@@ -710,7 +710,19 @@ export const api = {
       manualClientTotalSpent?: string;
       manualPostedMinutesAgo?: number;
     },
-  ) => request("/upwork-proposal-writing/generate", { method: "POST", body: JSON.stringify({ jobUrl, ...manual }) }),
+    extractedJob?: {
+      title?: string;
+      description?: string;
+      postedAt?: string;
+      facts?: Record<string, string>;
+      client?: Record<string, string>;
+      skills?: string[];
+    },
+  ) =>
+    request("/upwork-proposal-writing/generate", {
+      method: "POST",
+      body: JSON.stringify({ jobUrl, ...manual, ...(extractedJob ? { extractedJob } : {}) }),
+    }),
   getUpworkProposalWritingDrafts: () => request("/upwork-proposal-writing/drafts"),
   getUpworkProposalWritingSettings: () => request("/upwork-proposal-writing/settings"),
   updateUpworkProposalWritingSettings: (body: {

@@ -1,15 +1,32 @@
-import { IsInt, IsOptional, IsString, IsUrl, Min, MinLength } from "class-validator";
+import { Type } from "class-transformer";
+import { IsArray, IsInt, IsObject, IsOptional, IsString, IsUrl, Min, MinLength, ValidateNested } from "class-validator";
+
+/// Shape the browser-extension content script sends after scraping a job
+/// page in the user's own real browser (Part: Upwork Bidding SOP, real-
+/// world correction — Upwork's Cloudflare WAF hard-blocks this app's
+/// server IP outright, confirmed by direct testing; the user's own browser
+/// never gets flagged since it's a real residential session). Mirrors
+/// FetchedJob's shape so it runs through the exact same SUCCESS pipeline
+/// as a (hypothetical) server-side fetch would have.
+export class ExtractedJobDto {
+  @IsOptional() @IsString() title?: string;
+  @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsString() postedAt?: string;
+  @IsOptional() @IsObject() facts?: Record<string, string>;
+  @IsOptional() @IsObject() client?: Record<string, string>;
+  @IsOptional() @IsArray() @IsString({ each: true }) skills?: string[];
+}
 
 export class GenerateCoverLetterDto {
   @IsString() @IsUrl({ require_protocol: true }) jobUrl!: string;
 
-  /// Manual-entry fallback (Part: Upwork Bidding SOP, real-world correction
-  /// — Upwork's Cloudflare bot detection hard-blocks this app's VPS IP
-  /// outright, confirmed by direct testing from that exact server; no
-  /// browser-fingerprint tweak fixes an IP-reputation block). When
-  /// `manualDescription` is present, ProposalWritingService skips the
-  /// Playwright fetch entirely and builds the job from these fields
-  /// instead, so a blocked automatic fetch doesn't leave the user stuck.
+  @IsOptional() @ValidateNested() @Type(() => ExtractedJobDto) extractedJob?: ExtractedJobDto;
+
+  /// Manual-entry fallback (Part: Upwork Bidding SOP) — a human-typed
+  /// substitute for when neither the server fetch nor the browser
+  /// extension are available/installed. Kept alongside extractedJob above,
+  /// not replaced by it — the extension needs installing first, so this
+  /// stays the zero-setup fallback.
   @IsOptional() @IsString() manualTitle?: string;
   @IsOptional() @IsString() @MinLength(20) manualDescription?: string;
   @IsOptional() @IsString() manualBudget?: string;

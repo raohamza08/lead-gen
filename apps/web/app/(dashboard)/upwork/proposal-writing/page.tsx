@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
@@ -218,10 +218,53 @@ function SignalBadges({ result }: { result: GenerateResult }) {
  * error, not retried silently. Criteria warnings never block generation —
  * explicit user decision: this stays advisory, the call to bid is yours.
  */
+interface ExtractedJobPayload {
+  title?: string;
+  description?: string;
+  postedAt?: string;
+  facts?: Record<string, string>;
+  client?: Record<string, string>;
+  skills?: string[];
+}
+
+/** True once the Outly Upwork Fetcher extension's content script has run
+ *  on this page — it sets this attribute immediately on load, before any
+ *  message round-trip, so presence can be checked synchronously. */
+function isExtensionInstalled(): boolean {
+  return document.documentElement.getAttribute("data-outly-upwork-fetcher") === "installed";
+}
+
+/** Asks the extension to open the job in a real, visible tab under the
+ *  user's own session, scrape it there, and close it — the only approach
+ *  that actually gets past Upwork's WAF block on this app's server IP
+ *  (confirmed directly, not assumed; see job-fetcher.service.ts's own
+ *  docblock). Resolves once the extension's background worker relays a
+ *  result back via content-app.js's window.postMessage bridge. */
+function fetchJobViaExtension(jobUrl: string): Promise<{ ok: boolean; job?: ExtractedJobPayload; error?: string }> {
+  return new Promise((resolve) => {
+    const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    function handleMessage(event: MessageEvent) {
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      const data = event.data;
+      if (!data || data.source !== "outly-upwork-extension" || data.type !== "OUTLY_JOB_RESULT" || data.requestId !== requestId) return;
+      window.removeEventListener("message", handleMessage);
+      resolve({ ok: data.ok, job: data.job, error: data.error });
+    }
+    window.addEventListener("message", handleMessage);
+    window.postMessage({ source: "outly-app", type: "OUTLY_FETCH_JOB", url: jobUrl, requestId }, window.location.origin);
+  });
+}
+
 export default function UpworkProposalWritingPage() {
   const queryClient = useQueryClient();
   const [jobUrl, setJobUrl] = useState("");
   const [result, setResult] = useState<GenerateResult | null>(null);
+  const [viaExtension, setViaExtension] = useState(false);
+  const [extensionInstalled, setExtensionInstalled] = useState(true); // optimistic until checked, avoids a flash of the install hint
+
+  useEffect(() => {
+    setExtensionInstalled(isExtensionInstalled());
+  }, []);
 
   const draftsQuery = useQuery({
     queryKey: ["upwork-proposal-writing-drafts"],
@@ -229,7 +272,7 @@ export default function UpworkProposalWritingPage() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: ({ url, manual }: { url: string; manual?: ManualFields }) => {
+    mutationFn: ({ url, manual, extractedJob }: { url: string; manual?: ManualFields; extractedJob?: ExtractedJobPayload }) => {
       const manualPayload = manual
         ? {
             manualTitle: manual.manualTitle || undefined,
@@ -240,7 +283,7 @@ export default function UpworkProposalWritingPage() {
             manualPostedMinutesAgo: manual.manualPostedMinutesAgo ? Number(manual.manualPostedMinutesAgo) : undefined,
           }
         : undefined;
-      return api.generateUpworkCoverLetter(url, manualPayload) as Promise<GenerateResult>;
+      return api.generateUpworkCoverLetter(url, manualPayload, extractedJob) as Promise<GenerateResult>;
     },
     onSuccess: (data) => {
       setResult(data);
@@ -248,10 +291,27 @@ export default function UpworkProposalWritingPage() {
     },
   });
 
-  function submit() {
-    if (!jobUrl.trim()) return;
+  async function submit() {
+    const url = jobUrl.trim();
+    if (!url) return;
     setResult(null);
-    generateMutation.mutate({ url: jobUrl.trim() });
+
+    if (isExtensionInstalled()) {
+      setViaExtension(true);
+      try {
+        const scraped = await fetchJobViaExtension(url);
+        if (scraped.ok && scraped.job) {
+          generateMutation.mutate({ url, extractedJob: scraped.job });
+        } else {
+          setResult({ draftId: "", fetchStatus: "FAILED", error: scraped.error ?? "Couldn't read that job's details." });
+        }
+      } finally {
+        setViaExtension(false);
+      }
+      return;
+    }
+
+    generateMutation.mutate({ url });
   }
 
   function submitManual(manual: ManualFields) {
@@ -284,13 +344,28 @@ export default function UpworkProposalWritingPage() {
             <button
               type="button"
               onClick={submit}
-              disabled={generateMutation.isPending || !jobUrl.trim()}
+              disabled={viaExtension || generateMutation.isPending || !jobUrl.trim()}
               className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
             >
-              {generateMutation.isPending && <Spinner className="h-3.5 w-3.5" />}
-              {generateMutation.isPending ? "Generating…" : "Generate"}
+              {(viaExtension || generateMutation.isPending) && <Spinner className="h-3.5 w-3.5" />}
+              {viaExtension ? "Reading job…" : generateMutation.isPending ? "Generating…" : "Generate"}
             </button>
           </div>
+
+          {viaExtension && (
+            <p className="text-xs text-ink/50">Opened the job in a new tab to read it — it&apos;ll close automatically once done.</p>
+          )}
+
+          {!extensionInstalled && (
+            <p className="text-xs text-ink/50">
+              Tip: install the{" "}
+              <a href="/extension/upwork-fetcher.zip" className="text-accent hover:underline">
+                Outly Upwork Fetcher
+              </a>{" "}
+              browser extension for fully automatic fetching — otherwise you&apos;ll need to paste details manually if Upwork blocks the
+              automatic attempt.
+            </p>
+          )}
 
           {generateMutation.isError && (
             <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">

@@ -137,6 +137,34 @@ function buildManualJob(manual: ManualJobInput): FetchedJob {
   };
 }
 
+export interface ExtractedJobInput {
+  title?: string;
+  description?: string;
+  postedAt?: string;
+  facts?: Record<string, string>;
+  client?: Record<string, string>;
+  skills?: string[];
+}
+
+/** Builds a FetchedJob from the browser extension's scrape (Part: Upwork
+ *  Bidding SOP — the extension runs the exact same extraction logic as the
+ *  (now largely bypassed) Playwright fetcher, just inside the user's own
+ *  real browser, which Upwork's WAF never flags). Treated as full SUCCESS
+ *  data, not a degraded fallback — it's the same fidelity a server-side
+ *  fetch would have produced, just sourced differently. */
+function buildExtractedJob(extracted: ExtractedJobInput): FetchedJob {
+  return {
+    status: "SUCCESS",
+    finalUrl: "",
+    title: extracted.title,
+    description: extracted.description,
+    postedAt: extracted.postedAt,
+    facts: extracted.facts ?? {},
+    client: extracted.client ?? {},
+    skills: extracted.skills ?? [],
+  };
+}
+
 @Injectable()
 export class ProposalWritingService {
   constructor(
@@ -147,9 +175,19 @@ export class ProposalWritingService {
     private readonly freelancerProfiles: FreelancerProfilesService,
   ) {}
 
-  async generate(orgId: string, userId: string, jobUrl: string, manual?: ManualJobInput) {
-    const isManual = Boolean(manual?.manualDescription);
-    const job = isManual ? buildManualJob(manual!) : await this.jobFetcher.fetchJob(jobUrl);
+  async generate(
+    orgId: string,
+    userId: string,
+    jobUrl: string,
+    options?: { extractedJob?: ExtractedJobInput; manual?: ManualJobInput },
+  ) {
+    const hasExtracted = Boolean(options?.extractedJob?.description);
+    const isManual = !hasExtracted && Boolean(options?.manual?.manualDescription);
+    const job = hasExtracted
+      ? buildExtractedJob(options!.extractedJob!)
+      : isManual
+        ? buildManualJob(options!.manual!)
+        : await this.jobFetcher.fetchJob(jobUrl);
 
     if (job.status === "FAILED") {
       // No Gemini call on a failed fetch — don't burn free-tier requests
@@ -182,7 +220,7 @@ export class ProposalWritingService {
     const longTerm = isLongTermJob(job.facts ?? {});
     // Manual entry gives minutes-ago directly rather than a postedAt
     // timestamp to compute it from.
-    const postedMinutesAgo = isManual ? manual!.manualPostedMinutesAgo ?? null : minutesSincePosted(job.postedAt);
+    const postedMinutesAgo = isManual ? options!.manual!.manualPostedMinutesAgo ?? null : minutesSincePosted(job.postedAt);
     const bidSuggestion = suggestBidAmount(job.facts ?? {});
 
     const warnings: string[] = [];
