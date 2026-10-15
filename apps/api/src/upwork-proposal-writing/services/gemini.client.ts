@@ -2,15 +2,19 @@ import { Injectable, Logger, ServiceUnavailableException } from "@nestjs/common"
 import { ConfigService } from "@nestjs/config";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
-/** `gemini-2.0-flash` is the safest well-documented default as of this
- *  writing — Google's free-tier model lineup churns fast (new Flash
- *  generations roughly every few months, older ones moved to
- *  access-limited/legacy). **Confirm the current free-tier model name in
- *  Google AI Studio (aistudio.google.com) when generating the API key** —
- *  its own code-snippet view shows the exact current id — and set
- *  `GEMINI_MODEL` in `.env` if it's moved on from this default. Don't trust
- *  this constant blindly months from now. */
-const DEFAULT_MODEL = "gemini-2.0-flash";
+/** `gemini-flash-lite-latest` — verified live against a real key (2026-10-15)
+ *  after `gemini-2.0-flash` (the original default) started 404ing: Google
+ *  had deprecated it. Also tried `gemini-2.5-flash` (404, "no longer
+ *  available to new users") and `gemini-3.8-flash`/`gemini-flash-latest`
+ *  (both valid but consistently 503 "high demand" on the free tier at the
+ *  time of testing — the newer flash aliases are popular enough to be
+ *  oversubscribed). flash-lite is the one that actually returned a real
+ *  response. Google's free-tier model lineup churns every few months —
+ *  if this starts 404ing/503ing persistently again, re-run
+ *  `GET /v1beta/models?key=...` with a real key to see what's actually
+ *  live and available before guessing a replacement; don't just swap in
+ *  whatever name sounds newest. */
+const DEFAULT_MODEL = "gemini-flash-lite-latest";
 /** Used when a 429 doesn't tell us how long to wait (no RetryInfo, message
  *  doesn't look daily) — generous enough for a per-minute/RPM-style limit
  *  without hammering a key that just got throttled. */
