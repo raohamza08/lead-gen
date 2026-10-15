@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "../../../../lib/api-client";
@@ -88,6 +88,11 @@ export default function UpworkJobFeedPage() {
   });
 
   const [scanning, setScanning] = useState(false);
+  const [extensionInstalled, setExtensionInstalled] = useState(true); // optimistic until checked, avoids a flash of the install hint
+
+  useEffect(() => {
+    setExtensionInstalled(isExtensionInstalled());
+  }, []);
 
   async function scan() {
     const url = searchUrl.trim();
@@ -138,6 +143,18 @@ export default function UpworkJobFeedPage() {
 
       <SectionCard title="Scan a search page">
         <div className="flex flex-col gap-3">
+          {!extensionInstalled && (
+            <div className="rounded-lg border border-[var(--line)] bg-ink/5 px-3 py-2 text-xs text-ink/70">
+              This needs the{" "}
+              <a href="/extension/upwork-fetcher.zip" className="text-accent hover:underline">
+                Outly Upwork Fetcher
+              </a>{" "}
+              browser extension installed — there&apos;s no other way to search jobs (the official Upwork search API isn&apos;t connected, and a
+              server-side search would hit the same block single-job fetching already did). Download the zip, unzip it, then in Chrome go to{" "}
+              <code className="rounded bg-ink/10 px-1">chrome://extensions</code> → turn on Developer mode → <strong>Load unpacked</strong> →
+              pick the unzipped folder. Refresh this page once it&apos;s installed.
+            </div>
+          )}
           <div className="flex gap-2">
             <input
               type="url"
@@ -150,7 +167,7 @@ export default function UpworkJobFeedPage() {
             <button
               type="button"
               onClick={scan}
-              disabled={scanning || ingestMutation.isPending || !searchUrl.trim()}
+              disabled={scanning || ingestMutation.isPending || !searchUrl.trim() || !extensionInstalled}
               className="flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
             >
               {(scanning || ingestMutation.isPending) && <Spinner className="h-3.5 w-3.5" />}
