@@ -700,8 +700,17 @@ export const api = {
   disconnectUpworkApi: () => request("/upwork-api/connection", { method: "DELETE" }),
 
   // ---- Upwork Proposal Writing (gated by upworkProposalWritingAccess module flag) ----
-  generateUpworkCoverLetter: (jobUrl: string) =>
-    request("/upwork-proposal-writing/generate", { method: "POST", body: JSON.stringify({ jobUrl }) }),
+  generateUpworkCoverLetter: (
+    jobUrl: string,
+    manual?: {
+      manualTitle?: string;
+      manualDescription?: string;
+      manualBudget?: string;
+      manualClientCountry?: string;
+      manualClientTotalSpent?: string;
+      manualPostedMinutesAgo?: number;
+    },
+  ) => request("/upwork-proposal-writing/generate", { method: "POST", body: JSON.stringify({ jobUrl, ...manual }) }),
   getUpworkProposalWritingDrafts: () => request("/upwork-proposal-writing/drafts"),
   getUpworkProposalWritingSettings: () => request("/upwork-proposal-writing/settings"),
   updateUpworkProposalWritingSettings: (body: {

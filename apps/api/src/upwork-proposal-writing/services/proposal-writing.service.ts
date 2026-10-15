@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { UpworkJobFetcherService } from "./job-fetcher.service";
+import { FetchedJob, UpworkJobFetcherService } from "./job-fetcher.service";
 import { GeminiClient } from "./gemini.client";
 import { ProposalWritingSettingsService } from "./proposal-writing-settings.service";
 import { FreelancerProfilesService } from "./freelancer-profiles.service";
@@ -104,6 +104,39 @@ function buildJobBrief(
   return lines.join("\n");
 }
 
+export interface ManualJobInput {
+  manualTitle?: string;
+  manualDescription?: string;
+  manualBudget?: string;
+  manualClientCountry?: string;
+  manualClientTotalSpent?: string;
+  manualPostedMinutesAgo?: number;
+}
+
+/** Builds a FetchedJob-shaped object from manually-entered fields (Part:
+ *  Upwork Bidding SOP, real-world correction — Upwork's Cloudflare bot
+ *  detection hard-blocks this app's VPS IP outright, confirmed by testing
+ *  directly from that server; no browser-fingerprint tweak fixes an
+ *  IP-reputation block). Lets generation proceed from what the user can
+ *  see in their own browser instead of leaving them stuck when the
+ *  automatic fetch is blocked. */
+function buildManualJob(manual: ManualJobInput): FetchedJob {
+  const facts: Record<string, string> = {};
+  if (manual.manualBudget) facts["Budget"] = manual.manualBudget;
+  const client: Record<string, string> = {};
+  if (manual.manualClientCountry) client["Country"] = manual.manualClientCountry;
+  if (manual.manualClientTotalSpent) client["Total spent"] = manual.manualClientTotalSpent;
+
+  return {
+    status: "SUCCESS",
+    finalUrl: "",
+    title: manual.manualTitle,
+    description: manual.manualDescription,
+    facts,
+    client,
+  };
+}
+
 @Injectable()
 export class ProposalWritingService {
   constructor(
@@ -114,8 +147,9 @@ export class ProposalWritingService {
     private readonly freelancerProfiles: FreelancerProfilesService,
   ) {}
 
-  async generate(orgId: string, userId: string, jobUrl: string) {
-    const job = await this.jobFetcher.fetchJob(jobUrl);
+  async generate(orgId: string, userId: string, jobUrl: string, manual?: ManualJobInput) {
+    const isManual = Boolean(manual?.manualDescription);
+    const job = isManual ? buildManualJob(manual!) : await this.jobFetcher.fetchJob(jobUrl);
 
     if (job.status === "FAILED") {
       // No Gemini call on a failed fetch — don't burn free-tier requests
@@ -146,7 +180,9 @@ export class ProposalWritingService {
     const clientCountry = job.client?.["Country"];
     const excludedCountry = isExcludedCountry(clientCountry, settings.excludedCountries);
     const longTerm = isLongTermJob(job.facts ?? {});
-    const postedMinutesAgo = minutesSincePosted(job.postedAt);
+    // Manual entry gives minutes-ago directly rather than a postedAt
+    // timestamp to compute it from.
+    const postedMinutesAgo = isManual ? manual!.manualPostedMinutesAgo ?? null : minutesSincePosted(job.postedAt);
     const bidSuggestion = suggestBidAmount(job.facts ?? {});
 
     const warnings: string[] = [];
@@ -193,7 +229,11 @@ export class ProposalWritingService {
         postedMinutesAgo,
         warnings,
         overallAssessment: result.overallAssessment,
-        fetchStatus: "SUCCESS",
+        // PARTIAL marks "came from manual entry, not a real automatic
+        // fetch" — distinct from SUCCESS so the history list stays honest
+        // about which drafts are a full scrape vs. what the user typed in
+        // after Upwork blocked the fetch.
+        fetchStatus: isManual ? "PARTIAL" : "SUCCESS",
       },
     });
 

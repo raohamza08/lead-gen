@@ -40,7 +40,8 @@ export class UpworkProposalWritingController {
 
   @Post("generate")
   generate(@CurrentUser() user: JwtClaims, @Body() dto: GenerateCoverLetterDto) {
-    return this.proposalWriting.generate(user.orgId, user.sub, dto.jobUrl);
+    const { jobUrl, ...manual } = dto;
+    return this.proposalWriting.generate(user.orgId, user.sub, jobUrl, manual);
   }
 
   @Get("drafts")

@@ -68,6 +68,112 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+interface ManualFields {
+  manualTitle: string;
+  manualDescription: string;
+  manualBudget: string;
+  manualClientCountry: string;
+  manualClientTotalSpent: string;
+  manualPostedMinutesAgo: string;
+}
+
+const EMPTY_MANUAL: ManualFields = {
+  manualTitle: "",
+  manualDescription: "",
+  manualBudget: "",
+  manualClientCountry: "",
+  manualClientTotalSpent: "",
+  manualPostedMinutesAgo: "",
+};
+
+/**
+ * Shown when the automatic fetch fails — most often Upwork's Cloudflare
+ * bot detection blocking the server outright (confirmed directly against
+ * this app's own VPS, not a fingerprint/timing issue a code tweak fixes).
+ * Lets the user paste what they can already see in their own browser
+ * instead of being stuck. Only the description is required; everything
+ * else just sharpens the Bidding SOP signals if filled in.
+ */
+function ManualEntryForm({ onSubmit, pending }: { onSubmit: (fields: ManualFields) => void; pending: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [fields, setFields] = useState<ManualFields>(EMPTY_MANUAL);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="self-start text-sm text-accent hover:underline">
+        Paste the job details manually instead →
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-[var(--line)] p-3">
+      <p className="text-xs text-ink/55">
+        Copy what you can see on the job page yourself. Only the description is required — the rest just sharpens the bid signals below.
+      </p>
+      <textarea
+        value={fields.manualDescription}
+        onChange={(e) => setFields({ ...fields, manualDescription: e.target.value })}
+        rows={6}
+        placeholder="Full job description (required)…"
+        className="w-full rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+      />
+      <div className="flex flex-wrap gap-2">
+        <input
+          type="text"
+          value={fields.manualTitle}
+          onChange={(e) => setFields({ ...fields, manualTitle: e.target.value })}
+          placeholder="Job title"
+          className="w-56 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+        <input
+          type="text"
+          value={fields.manualBudget}
+          onChange={(e) => setFields({ ...fields, manualBudget: e.target.value })}
+          placeholder="Budget (e.g. $500 or $15/hr)"
+          className="w-48 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+        <input
+          type="text"
+          value={fields.manualClientCountry}
+          onChange={(e) => setFields({ ...fields, manualClientCountry: e.target.value })}
+          placeholder="Client country"
+          className="w-40 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+        <input
+          type="text"
+          value={fields.manualClientTotalSpent}
+          onChange={(e) => setFields({ ...fields, manualClientTotalSpent: e.target.value })}
+          placeholder="Client total spent (e.g. $3K)"
+          className="w-48 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+        <input
+          type="number"
+          min={0}
+          value={fields.manualPostedMinutesAgo}
+          onChange={(e) => setFields({ ...fields, manualPostedMinutesAgo: e.target.value })}
+          placeholder="Posted how many min ago"
+          className="w-48 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
+        />
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={() => onSubmit(fields)}
+          disabled={pending || fields.manualDescription.trim().length < 20}
+          className="flex items-center gap-2 rounded-md bg-accent px-3 py-1.5 text-sm text-white disabled:opacity-50"
+        >
+          {pending && <Spinner className="h-3.5 w-3.5" />}
+          Generate from these details
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="rounded-md px-3 py-1.5 text-sm text-ink/55 hover:bg-ink/5">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Badge({ children, tone = "default" }: { children: React.ReactNode; tone?: "default" | "good" | "bad" }) {
   const toneClass =
     tone === "good" ? "bg-good/15 text-good" : tone === "bad" ? "bg-bad/15 text-bad" : "bg-ink/8 text-ink/65";
@@ -123,7 +229,19 @@ export default function UpworkProposalWritingPage() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: (url: string) => api.generateUpworkCoverLetter(url) as Promise<GenerateResult>,
+    mutationFn: ({ url, manual }: { url: string; manual?: ManualFields }) => {
+      const manualPayload = manual
+        ? {
+            manualTitle: manual.manualTitle || undefined,
+            manualDescription: manual.manualDescription,
+            manualBudget: manual.manualBudget || undefined,
+            manualClientCountry: manual.manualClientCountry || undefined,
+            manualClientTotalSpent: manual.manualClientTotalSpent || undefined,
+            manualPostedMinutesAgo: manual.manualPostedMinutesAgo ? Number(manual.manualPostedMinutesAgo) : undefined,
+          }
+        : undefined;
+      return api.generateUpworkCoverLetter(url, manualPayload) as Promise<GenerateResult>;
+    },
     onSuccess: (data) => {
       setResult(data);
       queryClient.invalidateQueries({ queryKey: ["upwork-proposal-writing-drafts"] });
@@ -133,7 +251,13 @@ export default function UpworkProposalWritingPage() {
   function submit() {
     if (!jobUrl.trim()) return;
     setResult(null);
-    generateMutation.mutate(jobUrl.trim());
+    generateMutation.mutate({ url: jobUrl.trim() });
+  }
+
+  function submitManual(manual: ManualFields) {
+    if (!jobUrl.trim() || manual.manualDescription.trim().length < 20) return;
+    setResult(null);
+    generateMutation.mutate({ url: jobUrl.trim(), manual });
   }
 
   return (
@@ -175,14 +299,20 @@ export default function UpworkProposalWritingPage() {
           )}
 
           {result?.fetchStatus === "FAILED" && (
-            <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
-              {result.error ?? "Couldn't fetch that job."}
-            </div>
+            <>
+              <div className="rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
+                {result.error ?? "Couldn't fetch that job."}
+              </div>
+              <ManualEntryForm onSubmit={submitManual} pending={generateMutation.isPending} />
+            </>
           )}
 
-          {result?.fetchStatus === "SUCCESS" && (
+          {(result?.fetchStatus === "SUCCESS" || result?.fetchStatus === "PARTIAL") && (
             <div className="flex flex-col gap-4 rounded-lg border border-[var(--line)] p-4">
               {result.jobTitle && <div className="text-sm font-medium">{result.jobTitle}</div>}
+              {result.fetchStatus === "PARTIAL" && (
+                <Badge>From manually entered details — not an automatic fetch</Badge>
+              )}
 
               {result.warnings && result.warnings.length > 0 && (
                 <div className="flex flex-col gap-1 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2">
