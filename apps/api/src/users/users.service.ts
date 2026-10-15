@@ -60,6 +60,7 @@ export class UsersService {
         upworkAccess: true,
         metaAdsAccess: true,
         upworkApiAccess: true,
+        upworkProposalWritingAccess: true,
         isPrimaryAdmin: true,
         displayName: true,
         avatarStorageKey: true,
@@ -189,6 +190,7 @@ export class UsersService {
         upworkRequestsAccess: true,
         metaAdsAccess: true,
         upworkApiAccess: true,
+        upworkProposalWritingAccess: true,
       },
     });
     if (!targetUser) throw new NotFoundException("User not found");
@@ -234,6 +236,7 @@ export class UsersService {
         upworkRequestsAccess: targetUser.upworkRequestsAccess,
         metaAdsAccess: targetUser.metaAdsAccess,
         upworkApiAccess: targetUser.upworkApiAccess,
+        upworkProposalWritingAccess: targetUser.upworkProposalWritingAccess,
       },
       emailAccounts: emailAccounts.map((a) => {
         const grant = emailGrantByAccount.get(a.id);
@@ -334,6 +337,7 @@ export class UsersService {
         upworkRequestsAccess: true,
         metaAdsAccess: true,
         upworkApiAccess: true,
+        upworkProposalWritingAccess: true,
         isPrimaryAdmin: true,
         displayName: true,
         jobTitle: true,

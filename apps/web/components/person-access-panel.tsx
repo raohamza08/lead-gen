@@ -14,6 +14,7 @@ interface ModuleFlags {
   upworkRequestsAccess: boolean;
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
+  upworkProposalWritingAccess: boolean;
 }
 
 interface EmailAccountRow {
@@ -68,6 +69,11 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
     key: "upworkApiAccess",
     label: "Upwork API",
     hint: "Still pending Upwork's app approval — every data module behind this flag currently returns \"not live yet\". Safe to grant early since there's nothing live to expose.",
+  },
+  {
+    key: "upworkProposalWritingAccess",
+    label: "Upwork — Proposal Writing",
+    hint: "Paste a job link and get an AI-generated cover letter. Separate from Bidding/Invite/Requests above.",
   },
 ];
 

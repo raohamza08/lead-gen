@@ -699,6 +699,14 @@ export const api = {
   getUpworkApiStatus: () => request("/upwork-api/status"),
   disconnectUpworkApi: () => request("/upwork-api/connection", { method: "DELETE" }),
 
+  // ---- Upwork Proposal Writing (gated by upworkProposalWritingAccess module flag) ----
+  generateUpworkCoverLetter: (jobUrl: string) =>
+    request("/upwork-proposal-writing/generate", { method: "POST", body: JSON.stringify({ jobUrl }) }),
+  getUpworkProposalWritingDrafts: () => request("/upwork-proposal-writing/drafts"),
+  getUpworkProposalWritingSettings: () => request("/upwork-proposal-writing/settings"),
+  updateUpworkProposalWritingSettings: (body: { agencyBackground?: string; instructions?: string; wordCountTarget?: number }) =>
+    request("/upwork-proposal-writing/settings", { method: "PUT", body: JSON.stringify(body) }),
+
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
   getDashboardOverview: (params: Record<string, string> = {}) =>
     request(`/dashboard-center/overview?${new URLSearchParams(params).toString()}`),

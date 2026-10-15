@@ -46,7 +46,8 @@ type ModuleFlag =
   | "upworkInviteAccess"
   | "upworkRequestsAccess"
   | "metaAdsAccess"
-  | "upworkApiAccess";
+  | "upworkApiAccess"
+  | "upworkProposalWritingAccess";
 
 type NavItem =
   // moduleFlag accepts an array for OR semantics (Part: narrow Social Inbox
@@ -172,6 +173,12 @@ const NAV: NavItem[] = [
       { href: "/upwork/bidding", label: "Bidding", moduleFlag: "upworkBiddingAccess" },
       { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess" },
       { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess" },
+      { href: "/upwork/proposal-writing", label: "Proposal Writing", moduleFlag: "upworkProposalWritingAccess" },
+      {
+        href: "/settings/upwork-proposal-writing",
+        label: "Proposal Writing Settings",
+        moduleFlag: "upworkProposalWritingAccess",
+      },
     ],
   },
   {
@@ -267,6 +274,7 @@ export function SidebarNav({
           upworkRequestsAccess: boolean;
           metaAdsAccess: boolean;
           upworkApiAccess: boolean;
+          upworkProposalWritingAccess: boolean;
           isPrimaryAdmin: boolean;
         };
         setModuleAccess({
@@ -280,6 +288,7 @@ export function SidebarNav({
           upworkRequestsAccess: m.upworkRequestsAccess,
           metaAdsAccess: m.metaAdsAccess,
           upworkApiAccess: m.upworkApiAccess,
+          upworkProposalWritingAccess: m.upworkProposalWritingAccess,
         });
         setIsPrimaryAdmin(m.isPrimaryAdmin);
       })

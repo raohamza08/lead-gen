@@ -15,6 +15,7 @@ const FIELD_BY_MODULE: Record<
   | "upworkRequestsAccess"
   | "metaAdsAccess"
   | "upworkApiAccess"
+  | "upworkProposalWritingAccess"
 > = {
   LEAD_GENERATION: "leadGenAccess",
   EMAIL_HUB: "emailHubAccess",
@@ -34,6 +35,10 @@ const FIELD_BY_MODULE: Record<
   // hardcoding it"). Defaults false on the User model, unlike most other
   // flags here — see that column's own schema docblock for why.
   UPWORK_API: "upworkApiAccess",
+  // Generates AI cover letters from a pasted Upwork job link (Part: Upwork
+  // Proposal Writing) — a separate module from UPWORK/UPWORK_REQUESTS
+  // above, same "not everyone needs everything" per-flag reasoning.
+  UPWORK_PROPOSAL_WRITING: "upworkProposalWritingAccess",
 };
 
 /**

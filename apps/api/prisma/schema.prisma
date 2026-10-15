@@ -1,6 +1,6 @@
 // Prisma schema — implements the ERD in Part B4 of lead-gen-system-architecture.md
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // "native" covers the developer's own machine. The musl target is required
   // for the Alpine-based container image: Prisma's default `linux-musl` engine
   // links against libssl.so.1.1, but Alpine 3.19+ (what node:20-alpine is built
@@ -186,65 +186,67 @@ enum LinkedinStatus {
 }
 
 model Organization {
-  id           String   @id @default(uuid())
-  name         String
-  settings     Json     @default("{}")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id        String   @id @default(uuid())
+  name      String
+  settings  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  users        User[]
-  nicheFilters NicheFilter[]
-  leads        Lead[]
-  emailAccounts EmailAccount[]
-  caseStudies  CaseStudy[]
-  suppressionEntries SuppressionEntry[]
-  agentRuns    AgentRun[]
-  campaigns    Campaign[]
-  notifications Notification[]
-  aiInsightSnapshot AiInsightSnapshot?
-  inboundEmailThreads InboundEmailThread[]
-  emailTags    EmailTag[]
-  ignoredSenders IgnoredSender[]
-  socialAccounts   SocialAccount[]
-  socialOAuthApps  SocialOAuthApp[]
-  socialPosts      SocialPost[]
-  mediaAssets      MediaAsset[]
-  mediaFolders     MediaFolder[]
-  hashtagGroups    HashtagGroup[]
-  contentTemplates ContentTemplate[]
-  socialAutomations SocialAutomation[]
-  hubEmailOpenTracking HubEmailOpenTracking[]
-  auditLogs    AuditLog[]
-  sendingSessions SendingSession[]
-  sendingSchedule SendingSchedule?
-  leadImports     LeadImport[]
-  upworkProposals UpworkProposal[]
-  agentOptimizationCycles AgentOptimizationCycle[]
-  metaAdAccounts  MetaAdAccount[]
-  leadStageHistory LeadStageHistory[]
-  upworkConnectPurchases UpworkConnectPurchase[]
-  benchmarks      Benchmark[]
-  upworkApiConnection UpworkApiConnection?
-  upworkRequests  UpworkRequest[]
+  users                         User[]
+  nicheFilters                  NicheFilter[]
+  leads                         Lead[]
+  emailAccounts                 EmailAccount[]
+  caseStudies                   CaseStudy[]
+  suppressionEntries            SuppressionEntry[]
+  agentRuns                     AgentRun[]
+  campaigns                     Campaign[]
+  notifications                 Notification[]
+  aiInsightSnapshot             AiInsightSnapshot?
+  inboundEmailThreads           InboundEmailThread[]
+  emailTags                     EmailTag[]
+  ignoredSenders                IgnoredSender[]
+  socialAccounts                SocialAccount[]
+  socialOAuthApps               SocialOAuthApp[]
+  socialPosts                   SocialPost[]
+  mediaAssets                   MediaAsset[]
+  mediaFolders                  MediaFolder[]
+  hashtagGroups                 HashtagGroup[]
+  contentTemplates              ContentTemplate[]
+  socialAutomations             SocialAutomation[]
+  hubEmailOpenTracking          HubEmailOpenTracking[]
+  auditLogs                     AuditLog[]
+  sendingSessions               SendingSession[]
+  sendingSchedule               SendingSchedule?
+  leadImports                   LeadImport[]
+  upworkProposals               UpworkProposal[]
+  agentOptimizationCycles       AgentOptimizationCycle[]
+  metaAdAccounts                MetaAdAccount[]
+  leadStageHistory              LeadStageHistory[]
+  upworkConnectPurchases        UpworkConnectPurchase[]
+  benchmarks                    Benchmark[]
+  upworkApiConnection           UpworkApiConnection?
+  upworkRequests                UpworkRequest[]
+  upworkProposalWritingSettings UpworkProposalWritingSettings?
+  upworkProposalDrafts          UpworkProposalDraft[]
 
   @@map("organizations")
 }
 
 model User {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  org       Organization @relation(fields: [orgId], references: [id])
-  email     String   @unique
-  name      String
-  passwordHash String  @map("password_hash")
-  role      Role     @default(VIEWER)
-  active    Boolean  @default(true)
+  id                          String       @id @default(uuid())
+  orgId                       String       @map("org_id")
+  org                         Organization @relation(fields: [orgId], references: [id])
+  email                       String       @unique
+  name                        String
+  passwordHash                String       @map("password_hash")
+  role                        Role         @default(VIEWER)
+  active                      Boolean      @default(true)
   /// Per-module on/off, checked by ModuleAccessGuard (ADMIN always bypasses
   /// regardless of these). Default true so no existing user is retroactively
   /// locked out by this migration — this is a way to narrow access below a
   /// role's normal reach, not a second role system.
-  leadGenAccess     Boolean @default(true) @map("lead_gen_access")
-  emailHubAccess    Boolean @default(true) @map("email_hub_access")
-  socialMediaAccess Boolean @default(true) @map("social_media_access")
+  leadGenAccess               Boolean      @default(true) @map("lead_gen_access")
+  emailHubAccess              Boolean      @default(true) @map("email_hub_access")
+  socialMediaAccess           Boolean      @default(true) @map("social_media_access")
   /// Narrower than socialMediaAccess (Part: narrow Social Inbox +
   /// Engagement-only access, 2026-09-07) — grants ONLY Social Inbox +
   /// Engagement Center (comments/DMs), not the rest of the Social Media Hub
@@ -254,7 +256,7 @@ model User {
   /// one too. Defaults false, unlike the other three: this is a deliberate,
   /// narrower grant an admin turns on for a specific person (e.g. a
   /// community manager), not an inherited default like the others.
-  socialEngagementAccess Boolean @default(false) @map("social_engagement_access")
+  socialEngagementAccess      Boolean      @default(false) @map("social_engagement_access")
   /// New module (Part: Upwork Proposals, 2026-09-29) — same default-true
   /// retrofit reasoning as leadGenAccess/emailHubAccess/socialMediaAccess
   /// above: every existing user keeps access rather than an admin having to
@@ -265,20 +267,20 @@ model User {
   /// a column (not dropped) since nothing else needs removing it, but
   /// ModuleAccessGuard/UpworkController no longer check it — the three
   /// per-tab flags are now the only real gate for this module.
-  upworkAccess Boolean @default(true) @map("upwork_access")
+  upworkAccess                Boolean      @default(true) @map("upwork_access")
   /// Per-tab grant within Upwork Proposals (Part: Upwork Requests,
   /// 2026-10-01) — independent of the other two below, same "not everyone
   /// needs everything" reasoning the user gave explicitly. All three default
   /// true so nothing changes for any existing user until an admin
   /// deliberately narrows one of these for a specific person (e.g. a
   /// Project Manager who should only see Requests, not Bidding/Invite).
-  upworkBiddingAccess Boolean @default(true) @map("upwork_bidding_access")
-  upworkInviteAccess Boolean @default(true) @map("upwork_invite_access")
-  upworkRequestsAccess Boolean @default(true) @map("upwork_requests_access")
+  upworkBiddingAccess         Boolean      @default(true) @map("upwork_bidding_access")
+  upworkInviteAccess          Boolean      @default(true) @map("upwork_invite_access")
+  upworkRequestsAccess        Boolean      @default(true) @map("upwork_requests_access")
   /// New module (Part: Meta Ads, 2026-09-30) — same default-true retrofit
   /// reasoning as upworkAccess above: every existing user keeps access
   /// rather than an admin having to grant it by hand the moment this ships.
-  metaAdsAccess Boolean @default(true) @map("meta_ads_access")
+  metaAdsAccess               Boolean      @default(true) @map("meta_ads_access")
   /// New module (Part: Upwork API integration, 2026-10-12) — unlike
   /// upworkAccess/metaAdsAccess above, this does NOT default true: those
   /// retrofit an access flag onto a module everyone already used, while
@@ -289,7 +291,12 @@ model User {
   /// Replaced the previous hardcoded-email guard (UpworkApiOwnerGuard) —
   /// explicit user request, 2026-10-12: "make the module an access option
   /// so i can give anyone the access... rather than hardcoding it".
-  upworkApiAccess Boolean @default(false) @map("upwork_api_access")
+  upworkApiAccess             Boolean      @default(false) @map("upwork_api_access")
+  /// New module (Part: Upwork Proposal Writing) — generates AI cover
+  /// letters from a pasted Upwork job link. Defaults false like
+  /// upworkApiAccess above (genuinely new, not a retrofit onto something
+  /// everyone already used) — granted per-person from Settings > Team.
+  upworkProposalWritingAccess Boolean      @default(false) @map("upwork_proposal_writing_access")
   /// The org's single authorized administrator (Part: Notification Center &
   /// Admin/Audit, 2026-08-31) — distinct from Role.ADMIN, which any admin can
   /// already grant to any other user. This flag gates System Logs and
@@ -300,48 +307,48 @@ model User {
   /// service layer, not a DB constraint (a partial unique index would work
   /// too, but the transfer is already transactional at the application
   /// layer where the invariant is easier to express and test).
-  isPrimaryAdmin    Boolean @default(false) @map("is_primary_admin")
+  isPrimaryAdmin              Boolean      @default(false) @map("is_primary_admin")
   /// Personal profile fields (Part: User Profile, 2026-08-31) — all optional,
   /// unlike `name` (set at account creation, required). `avatarStorageKey`
   /// is the disk key from LocalDiskMediaStorageService, not a public URL —
   /// the servable URL is computed on read (GET /users/:id/avatar) the same
   /// way social media's MediaAsset does it, so changing the storage backend
   /// later doesn't mean rewriting stored URLs.
-  displayName    String? @map("display_name")
-  jobTitle       String? @map("job_title")
-  phone          String?
-  avatarStorageKey String? @map("avatar_storage_key")
-  avatarMimeType   String? @map("avatar_mime_type")
-  createdAt DateTime @default(now()) @map("created_at")
+  displayName                 String?      @map("display_name")
+  jobTitle                    String?      @map("job_title")
+  phone                       String?
+  avatarStorageKey            String?      @map("avatar_storage_key")
+  avatarMimeType              String?      @map("avatar_mime_type")
+  createdAt                   DateTime     @default(now()) @map("created_at")
 
-  assignedLeads Lead[] @relation("AssignedUser")
-  reviewNotes   ReviewNote[]
-  linkedinActivities LinkedinActivity[]
-  auditLogs     AuditLog[]
-  refreshTokens RefreshToken[]
-  emailAccountAccess EmailAccountAccess[]
-  socialAccountAccess SocialAccountAccess[]
-  assignedConversations SocialConversation[]
-  assignedComments      SocialComment[]
-  socialInternalNotes   SocialInternalNote[]
-  notificationStates    NotificationUserState[]
-  notificationPreference NotificationPreference?
+  assignedLeads                 Lead[]                  @relation("AssignedUser")
+  reviewNotes                   ReviewNote[]
+  linkedinActivities            LinkedinActivity[]
+  auditLogs                     AuditLog[]
+  refreshTokens                 RefreshToken[]
+  emailAccountAccess            EmailAccountAccess[]
+  socialAccountAccess           SocialAccountAccess[]
+  assignedConversations         SocialConversation[]
+  assignedComments              SocialComment[]
+  socialInternalNotes           SocialInternalNote[]
+  notificationStates            NotificationUserState[]
+  notificationPreference        NotificationPreference?
   /// Part: Lead Upload Analytics / Email Performance / Ignore Groups,
   /// 2026-09-01 — the attribution axis for per-user lead/email stats. Never
   /// set for an AI-discovered lead (niche filter/extraction run); only a
   /// human "+Add lead" or CSV import stamps this.
-  uploadedLeads         Lead[] @relation("UploadedByUser")
-  leadImports           LeadImport[]
-  ignoredSenderRules    IgnoredSender[]
-  leadStageChanges      LeadStageHistory[]
+  uploadedLeads                 Lead[]                  @relation("UploadedByUser")
+  leadImports                   LeadImport[]
+  ignoredSenderRules            IgnoredSender[]
+  leadStageChanges              LeadStageHistory[]
   upworkConnectPurchasesCreated UpworkConnectPurchase[]
-  benchmarksUpdated     Benchmark[]
+  benchmarksUpdated             Benchmark[]
   /// Requests this person created as a Project Manager (Part: Upwork
   /// Requests, 2026-10-01) — distinct from upworkRequestsReviewed below,
   /// which is the same person acting as a reviewer on someone else's request.
-  upworkRequestsAsPM     UpworkRequest[] @relation("UpworkRequestsByPM")
-  upworkRequestsReviewed UpworkRequest[] @relation("UpworkRequestsReviewed")
-  upworkProfileAccess    UpworkProfileAccess[]
+  upworkRequestsAsPM            UpworkRequest[]         @relation("UpworkRequestsByPM")
+  upworkRequestsReviewed        UpworkRequest[]         @relation("UpworkRequestsReviewed")
+  upworkProfileAccess           UpworkProfileAccess[]
 
   @@map("users")
 }
@@ -358,59 +365,59 @@ model User {
 /// NotificationsService) keeps one taxonomy instead of two that could drift
 /// apart.
 model NotificationPreference {
-  id             String  @id @default(uuid())
-  userId         String  @unique @map("user_id")
-  user           User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  inAppEnabled   Boolean @default(true) @map("in_app_enabled")
+  id                 String   @id @default(uuid())
+  userId             String   @unique @map("user_id")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inAppEnabled       Boolean  @default(true) @map("in_app_enabled")
   /// Off by default — requires explicit opt-in, same reasoning as email
   /// tracking's default-off checkbox: no surprise OS-level popups.
-  desktopEnabled Boolean @default(false) @map("desktop_enabled")
-  soundEnabled   Boolean @default(true) @map("sound_enabled")
+  desktopEnabled     Boolean  @default(false) @map("desktop_enabled")
+  soundEnabled       Boolean  @default(true) @map("sound_enabled")
   /// DEFAULT | SOFT | PROFESSIONAL | MINIMAL | ALERT | NONE
-  soundTone      String  @default("DEFAULT") @map("sound_tone")
-  emailEnabled       Boolean @default(true) @map("email_enabled")
-  leadsEnabled       Boolean @default(true) @map("leads_enabled")
-  agentsEnabled      Boolean @default(true) @map("agents_enabled")
-  automationsEnabled Boolean @default(true) @map("automations_enabled")
-  socialEnabled      Boolean @default(true) @map("social_enabled")
-  systemEnabled      Boolean @default(true) @map("system_enabled")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  soundTone          String   @default("DEFAULT") @map("sound_tone")
+  emailEnabled       Boolean  @default(true) @map("email_enabled")
+  leadsEnabled       Boolean  @default(true) @map("leads_enabled")
+  agentsEnabled      Boolean  @default(true) @map("agents_enabled")
+  automationsEnabled Boolean  @default(true) @map("automations_enabled")
+  socialEnabled      Boolean  @default(true) @map("social_enabled")
+  systemEnabled      Boolean  @default(true) @map("system_enabled")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("notification_preferences")
 }
 
 model RefreshToken {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  tokenHash  String   @map("token_hash")
-  revoked    Boolean  @default(false)
-  expiresAt  DateTime @map("expires_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @map("token_hash")
+  revoked   Boolean  @default(false)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@index([userId])
   @@map("refresh_tokens")
 }
 
 model NicheFilter {
-  id             String   @id @default(uuid())
-  orgId          String   @map("org_id")
-  org            Organization @relation(fields: [orgId], references: [id])
-  niche          String
-  subNiche       String?  @map("sub_niche")
-  countries      String[] @default([])
-  cities         String[] @default([])
-  companySizeMin Int?     @map("company_size_min")
-  companySizeMax Int?     @map("company_size_max")
-  revenueBandMin String?  @map("revenue_band_min")
-  revenueBandMax String?  @map("revenue_band_max")
-  employeeCountMin Int?   @map("employee_count_min")
-  employeeCountMax Int?   @map("employee_count_max")
-  jobTitles      String[] @default([])
-  technologies   String[] @default([])
-  fundingStage   String?  @map("funding_stage")
-  businessModel  String?  @map("business_model")
-  b2bOrB2c       String?  @map("b2b_or_b2c")
+  id               String       @id @default(uuid())
+  orgId            String       @map("org_id")
+  org              Organization @relation(fields: [orgId], references: [id])
+  niche            String
+  subNiche         String?      @map("sub_niche")
+  countries        String[]     @default([])
+  cities           String[]     @default([])
+  companySizeMin   Int?         @map("company_size_min")
+  companySizeMax   Int?         @map("company_size_max")
+  revenueBandMin   String?      @map("revenue_band_min")
+  revenueBandMax   String?      @map("revenue_band_max")
+  employeeCountMin Int?         @map("employee_count_min")
+  employeeCountMax Int?         @map("employee_count_max")
+  jobTitles        String[]     @default([])
+  technologies     String[]     @default([])
+  fundingStage     String?      @map("funding_stage")
+  businessModel    String?      @map("business_model")
+  b2bOrB2c         String?      @map("b2b_or_b2c")
 
   // Targeting filters. Values are constrained to the catalogues in
   // packages/types/src/filter-taxonomy.ts, which the DTO validates against and
@@ -461,14 +468,14 @@ model NicheFilter {
 }
 
 model ExtractionRun {
-  id                String   @id @default(uuid())
-  filterId          String   @map("filter_id")
-  filter            NicheFilter @relation(fields: [filterId], references: [id])
-  startedAt         DateTime @default(now()) @map("started_at")
-  finishedAt        DateTime? @map("finished_at")
-  leadsFound        Int      @default(0) @map("leads_found")
-  leadsVerified     Int      @default(0) @map("leads_verified")
-  duplicatesSkipped Int      @default(0) @map("duplicates_skipped")
+  id                String              @id @default(uuid())
+  filterId          String              @map("filter_id")
+  filter            NicheFilter         @relation(fields: [filterId], references: [id])
+  startedAt         DateTime            @default(now()) @map("started_at")
+  finishedAt        DateTime?           @map("finished_at")
+  leadsFound        Int                 @default(0) @map("leads_found")
+  leadsVerified     Int                 @default(0) @map("leads_verified")
+  duplicatesSkipped Int                 @default(0) @map("duplicates_skipped")
   status            ExtractionRunStatus @default(RUNNING)
   // Why a FAILED run failed. Without it the dashboard can report that a run
   // broke but never what broke, which is the first thing an operator asks.
@@ -476,9 +483,9 @@ model ExtractionRun {
   /// Leads produced per priority band, for checking the 40/40/20 mix actually
   /// held. A run that hit its total but produced only high-priority leads has
   /// spent no exploration budget, and the targeting stops improving.
-  priorityMix       Json     @default("{}") @map("priority_mix")
+  priorityMix       Json                @default("{}") @map("priority_mix")
 
-  leads             Lead[]
+  leads Lead[]
 
   @@map("extraction_runs")
 }
@@ -488,30 +495,30 @@ model ExtractionRun {
 /// unanswerable — every lead looks the same to analytics, and the learning loop
 /// has nothing to compare against.
 model Campaign {
-  id            String   @id @default(uuid())
-  orgId         String   @map("org_id")
-  org           Organization @relation(fields: [orgId], references: [id])
-  name          String
-  niche         String
-  country       String?
+  id               String       @id @default(uuid())
+  orgId            String       @map("org_id")
+  org              Organization @relation(fields: [orgId], references: [id])
+  name             String
+  niche            String
+  country          String?
   /// What is being sold in this campaign, in the operator's own words. Feeds
   /// the email prompts, so it is a real input, not a label.
-  offer         String?
-  caseStudy     String?  @map("case_study")
-  goal          String?
-  targetLeads   Int      @default(100) @map("target_leads")
+  offer            String?
+  caseStudy        String?      @map("case_study")
+  goal             String?
+  targetLeads      Int          @default(100) @map("target_leads")
   /// Per-step subject/angle overrides. Empty means use the default sequence.
-  emailSequence Json     @default("[]") @map("email_sequence")
-  linkedinSequence Json  @default("[]") @map("linkedin_sequence")
+  emailSequence    Json         @default("[]") @map("email_sequence")
+  linkedinSequence Json         @default("[]") @map("linkedin_sequence")
   /// Optional niche filter that feeds this campaign.
-  filterId      String?  @map("filter_id")
-  filter        NicheFilter? @relation(fields: [filterId], references: [id])
-  active        Boolean  @default(true)
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  filterId         String?      @map("filter_id")
+  filter           NicheFilter? @relation(fields: [filterId], references: [id])
+  active           Boolean      @default(true)
+  createdAt        DateTime     @default(now()) @map("created_at")
+  updatedAt        DateTime     @updatedAt @map("updated_at")
 
-  leads         Lead[]
-  socialPosts   SocialPost[]
+  leads       Lead[]
+  socialPosts SocialPost[]
 
   @@index([orgId, active])
   @@map("campaigns")
@@ -523,23 +530,23 @@ model Campaign {
 /// Without this the agent architecture is unobservable, and an agent degrading
 /// silently looks identical to one working.
 model AgentRun {
-  id         String   @id @default(uuid())
-  orgId      String   @map("org_id")
+  id         String       @id @default(uuid())
+  orgId      String       @map("org_id")
   org        Organization @relation(fields: [orgId], references: [id])
   /// The extraction run this belonged to, when there was one.
-  runId      String?  @map("run_id")
+  runId      String?      @map("run_id")
   /// The lead this execution touched, when the candidate survived long enough
   /// to become one. Null for a candidate an earlier agent rejected (discovery
   /// dead-end, verification failure) — there is no lead to attach that run to.
-  leadId     String?  @map("lead_id")
-  lead       Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  leadId     String?      @map("lead_id")
+  lead       Lead?        @relation(fields: [leadId], references: [id], onDelete: SetNull)
   agent      String
   status     String
-  durationMs Int      @map("duration_ms")
-  attempts   Int      @default(1)
+  durationMs Int          @map("duration_ms")
+  attempts   Int          @default(1)
   error      String?
-  notes      Json     @default("[]")
-  startedAt  DateTime @default(now()) @map("started_at")
+  notes      Json         @default("[]")
+  startedAt  DateTime     @default(now()) @map("started_at")
 
   @@index([orgId, startedAt])
   @@index([orgId, agent, status])
@@ -555,28 +562,28 @@ model AgentRun {
 /// linkedin_draft) so a retry can be replayed by re-adding `payload` to that
 /// same queue. One row per (leadId, agent) — a fresh dispatch upserts it.
 model AgentExecution {
-  id            String   @id @default(uuid())
-  leadId        String   @map("lead_id")
-  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id            String               @id @default(uuid())
+  leadId        String               @map("lead_id")
+  lead          Lead                 @relation(fields: [leadId], references: [id], onDelete: Cascade)
   agent         String
   /// Identifies which attempt last wrote this row — a success/failure report
   /// carrying a stale executionId (a slow response from an attempt already
   /// superseded by a newer retry) is ignored rather than corrupting the
   /// current attempt's state.
-  executionId   String   @map("execution_id")
+  executionId   String               @map("execution_id")
   status        AgentExecutionStatus @default(RUNNING)
-  attempt       Int      @default(1)
+  attempt       Int                  @default(1)
   /// Short, human-readable ("Claude limit reached") — shown on the lead
   /// card. Full exception/traceback goes in errorDetail, server logs only.
-  errorSummary  String?  @map("error_summary")
-  errorDetail   String?  @map("error_detail")
+  errorSummary  String?              @map("error_summary")
+  errorDetail   String?              @map("error_detail")
   /// Exact extra fields AgentDispatchQueue needs to redispatch this agent
   /// (e.g. email_draft's step/orgContext/caseStudy) — the retry sweep does
   /// `agentDispatch.add({ kind: agent, leadId, orgId, ...payload })`.
   payload       Json?
-  startedAt     DateTime @default(now()) @map("started_at")
-  lastAttemptAt DateTime @default(now()) @map("last_attempt_at")
-  nextRetryAt   DateTime? @map("next_retry_at")
+  startedAt     DateTime             @default(now()) @map("started_at")
+  lastAttemptAt DateTime             @default(now()) @map("last_attempt_at")
+  nextRetryAt   DateTime?            @map("next_retry_at")
 
   @@unique([leadId, agent])
   @@index([status, nextRetryAt])
@@ -588,15 +595,15 @@ model AgentExecution {
 /// next "Run analysis" click. One row per org — each run overwrites the
 /// last, since this is "what should we do next", not a growing history.
 model AiInsightSnapshot {
-  id                String   @id @default(uuid())
-  orgId             String   @unique @map("org_id")
+  id                String       @id @default(uuid())
+  orgId             String       @unique @map("org_id")
   org               Organization @relation(fields: [orgId], references: [id])
-  generatedAt       DateTime @default(now()) @map("generated_at")
-  insights          Json     @default("{}")
-  recommendations   Json     @default("{}")
+  generatedAt       DateTime     @default(now()) @map("generated_at")
+  insights          Json         @default("{}")
+  recommendations   Json         @default("{}")
   /// Copy-level feedback tied to real sent-email excerpts (opened-without-
   /// reply vs. replied), not just aggregate rates — see LearningAgent.
-  emailImprovements Json     @default("[]") @map("email_improvements")
+  emailImprovements Json         @default("[]") @map("email_improvements")
 
   @@map("ai_insight_snapshots")
 }
@@ -612,31 +619,31 @@ model AiInsightSnapshot {
 /// Notification so a human can catch and revert something that looks wrong
 /// before the next cycle's own comparison would.
 model AgentOptimizationCycle {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  org       Organization @relation(fields: [orgId], references: [id])
-  runAt     DateTime @default(now()) @map("run_at")
+  id    String       @id @default(uuid())
+  orgId String       @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+  runAt DateTime     @default(now()) @map("run_at")
 
   /// openRate/replyRate/winRate/sampleSize plus the resulting weighted
   /// score — see AgentOptimizationService.WEIGHTS for the exact formula.
-  metrics   Json     @map("metrics")
-  score     Float
+  metrics       Json    @map("metrics")
+  score         Float
   /// Null only for an org's very first cycle, which has nothing to compare against.
-  previousScore Float? @map("previous_score")
+  previousScore Float?  @map("previous_score")
   /// IMPROVED | WORSENED | FLAT | FIRST_RUN — verdict on THIS cycle's score
   /// versus the previous cycle, i.e. judging whether the previous cycle's
   /// applied changes helped. Null until the next cycle computes it.
-  verdict   String?
+  verdict       String?
 
   /// [{agent, promptBefore, promptAfter, rationale, confidence}] — every
   /// email_step_N prompt this cycle actually rewrote. Empty when the
   /// LearningAgent had nothing to recommend at MEDIUM+ confidence.
-  changesApplied Json @default("[]") @map("changes_applied")
+  changesApplied Json    @default("[]") @map("changes_applied")
   /// True once this cycle's changesApplied have been rolled back — either
   /// automatically (the next cycle judged WORSENED) or manually via the
   /// revert endpoint. A reverted cycle's prompts no longer reflect
   /// changesApplied's `promptAfter`.
-  reverted  Boolean  @default(false)
+  reverted       Boolean @default(false)
 
   /// The full raw LearningAgent response for this cycle, kept for audit —
   /// changesApplied above is only the subset that met the confidence bar.
@@ -658,94 +665,94 @@ enum LeadImportSourceMethod {
 /// always sum to it. Kept even if every row in it later gets deleted — this
 /// is a historical record of the upload event itself, not a live join table.
 model LeadImport {
-  id                 String   @id @default(uuid())
-  orgId              String   @map("org_id")
-  org                Organization @relation(fields: [orgId], references: [id])
+  id                String                 @id @default(uuid())
+  orgId             String                 @map("org_id")
+  org               Organization           @relation(fields: [orgId], references: [id])
   // Nullable (Part: delete user, 2026-09-17) -- this row is a historical
   // record of the upload event itself, meant to outlive the leads it
   // produced (see this model's own docblock); it must equally outlive the
   // uploader if that user account is later deleted, not block the deletion.
-  uploadedByUserId   String?  @map("uploaded_by_user_id")
-  uploadedByUser     User?    @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
-  sourceMethod       LeadImportSourceMethod @default(CSV) @map("source_method")
-  fileName           String?  @map("file_name")
-  totalRecords       Int      @map("total_records")
-  successfulRecords  Int      @default(0) @map("successful_records")
-  duplicateRecords   Int      @default(0) @map("duplicate_records")
-  invalidRecords     Int      @default(0) @map("invalid_records")
-  createdAt          DateTime @default(now()) @map("created_at")
+  uploadedByUserId  String?                @map("uploaded_by_user_id")
+  uploadedByUser    User?                  @relation(fields: [uploadedByUserId], references: [id], onDelete: SetNull)
+  sourceMethod      LeadImportSourceMethod @default(CSV) @map("source_method")
+  fileName          String?                @map("file_name")
+  totalRecords      Int                    @map("total_records")
+  successfulRecords Int                    @default(0) @map("successful_records")
+  duplicateRecords  Int                    @default(0) @map("duplicate_records")
+  invalidRecords    Int                    @default(0) @map("invalid_records")
+  createdAt         DateTime               @default(now()) @map("created_at")
 
-  leads              Lead[]
+  leads Lead[]
 
   @@index([orgId, createdAt])
   @@map("lead_imports")
 }
 
 model Lead {
-  id                  String   @id @default(uuid())
-  orgId               String   @map("org_id")
-  org                 Organization @relation(fields: [orgId], references: [id])
-  runId               String?  @map("run_id")
-  run                 ExtractionRun? @relation(fields: [runId], references: [id])
-  filterId            String?  @map("filter_id")
-  filter              NicheFilter? @relation(fields: [filterId], references: [id])
-  campaignId          String?  @map("campaign_id")
-  campaign            Campaign? @relation(fields: [campaignId], references: [id])
-  assignedUserId       String?  @map("assigned_user_id")
-  assignedUser         User?    @relation("AssignedUser", fields: [assignedUserId], references: [id])
+  id               String         @id @default(uuid())
+  orgId            String         @map("org_id")
+  org              Organization   @relation(fields: [orgId], references: [id])
+  runId            String?        @map("run_id")
+  run              ExtractionRun? @relation(fields: [runId], references: [id])
+  filterId         String?        @map("filter_id")
+  filter           NicheFilter?   @relation(fields: [filterId], references: [id])
+  campaignId       String?        @map("campaign_id")
+  campaign         Campaign?      @relation(fields: [campaignId], references: [id])
+  assignedUserId   String?        @map("assigned_user_id")
+  assignedUser     User?          @relation("AssignedUser", fields: [assignedUserId], references: [id])
   /// Who uploaded/imported this lead (Part: Lead Upload Analytics,
   /// 2026-09-01) — null for an AI-discovered lead (niche filter/extraction
   /// run); only a human "+Add lead" or CSV import sets this. This, not
   /// `assignedUserId` (declared in the schema but never written by any
   /// endpoint), is the attribution axis for per-user lead/email stats.
-  uploadedByUserId    String?  @map("uploaded_by_user_id")
-  uploadedByUser      User?    @relation("UploadedByUser", fields: [uploadedByUserId], references: [id])
-  importId            String?  @map("import_id")
-  leadImport          LeadImport? @relation(fields: [importId], references: [id])
+  uploadedByUserId String?        @map("uploaded_by_user_id")
+  uploadedByUser   User?          @relation("UploadedByUser", fields: [uploadedByUserId], references: [id])
+  importId         String?        @map("import_id")
+  leadImport       LeadImport?    @relation(fields: [importId], references: [id])
 
-  companyName         String   @map("company_name")
+  companyName         String          @map("company_name")
   /// Which method found this lead. Set once at creation, never changed after.
   sourceLayer         LeadSourceLayer @default(SURFACE_WEB) @map("source_layer")
   // Normalised forms used ONLY for duplicate detection, written on insert.
   // Comparing normalised values has to happen in the database, so the
   // normalisation must be persisted — computing it in TypeScript and then
   // querying on the raw column silently defeats itself.
-  companyNameKey      String?  @map("company_name_key")
-  linkedinSlug        String?  @map("linkedin_slug")
+  companyNameKey      String?         @map("company_name_key")
+  linkedinSlug        String?         @map("linkedin_slug")
   website             String?
-  websiteDomain       String?  @map("website_domain")
-  linkedinUrl         String?  @map("linkedin_url")
-  contactName         String?  @map("contact_name")
-  jobTitle            String?  @map("job_title")
+  websiteDomain       String?         @map("website_domain")
+  linkedinUrl         String?         @map("linkedin_url")
+  contactName         String?         @map("contact_name")
+  jobTitle            String?         @map("job_title")
   email               String?
-  personalEmail       String?  @map("personal_email")
+  personalEmail       String?         @map("personal_email")
   phone               String?
   industry            String?
-  subNiche            String?  @map("sub_niche")
+  subNiche            String?         @map("sub_niche")
   country             String?
   city                String?
-  companySize         String?  @map("company_size")
-  revenueBand         String?  @map("revenue_band")
-  employeeCount       Int?     @map("employee_count")
-  techStack           Json     @default("[]") @map("tech_stack")
-  businessModel       String?  @map("business_model")
-  b2bOrB2c            String?  @map("b2b_or_b2c")
-  businessDescription String?  @map("business_description")
-  currentCrm          String?  @map("current_crm")
+  companySize         String?         @map("company_size")
+  revenueBand         String?         @map("revenue_band")
+  employeeCount       Int?            @map("employee_count")
+  techStack           Json            @default("[]") @map("tech_stack")
+  businessModel       String?         @map("business_model")
+  b2bOrB2c            String?         @map("b2b_or_b2c")
+  businessDescription String?         @map("business_description")
+  currentCrm          String?         @map("current_crm")
 
   // Contact's own LinkedIn, distinct from `linkedinUrl` above which is the
   // company page. Conflating the two loses the ability to research the person.
-  contactLinkedinUrl  String?  @map("contact_linkedin_url")
-  estimatedRevenue    String?  @map("estimated_revenue")
-  websitePlatform     String?  @map("website_platform")
-  automationTools     Json     @default("[]") @map("automation_tools")
-  aiUsage             String?  @map("ai_usage")
+  contactLinkedinUrl String? @map("contact_linkedin_url")
+  estimatedRevenue   String? @map("estimated_revenue")
+  websitePlatform    String? @map("website_platform")
+  automationTools    Json    @default("[]") @map("automation_tools")
+  aiUsage            String? @map("ai_usage")
 
   // Business intelligence gathered during discovery. Stored on the lead rather
   // than only in the review note, because these come from the AI's research and
   // exist before any human review — the reviewer edits them, they aren't
   // reviewer-authored.
-  growthSignals           Json   @default("[]") @map("growth_signals")
+  growthSignals           Json    @default("[]") @map("growth_signals")
   painPoints              String? @map("pain_points")
   aiOpportunities         String? @map("ai_opportunities")
   automationOpportunities String? @map("automation_opportunities")
@@ -753,27 +760,27 @@ model Lead {
   researchEvidence        String? @map("research_evidence")
 
   // Company Intelligence Agent output.
-  swotAnalysis            Json    @default("{}") @map("swot_analysis")
-  competitors             Json    @default("[]")
-  recentNews              Json    @default("[]") @map("recent_news")
-  marketingStack          Json    @default("[]") @map("marketing_stack")
+  swotAnalysis   Json @default("{}") @map("swot_analysis")
+  competitors    Json @default("[]")
+  recentNews     Json @default("[]") @map("recent_news")
+  marketingStack Json @default("[]") @map("marketing_stack")
 
   // Website Audit Agent output. Kept on the lead rather than only in the score
   // because a reviewer quotes these back to the prospect — they are evidence,
   // not just inputs to a number.
-  uxIssues                String? @map("ux_issues")
-  seoIssues               String? @map("seo_issues")
+  uxIssues  String? @map("ux_issues")
+  seoIssues String? @map("seo_issues")
 
   // Buyer Intelligence Agent output.
-  buyerPersona            String? @map("buyer_persona")
+  buyerPersona String? @map("buyer_persona")
 
-  verifiedEmail       Boolean  @default(false) @map("verified_email")
-  verifiedLinkedin    Boolean  @default(false) @map("verified_linkedin")
-  verifiedWebsite     Boolean  @default(false) @map("verified_website")
-  possibleDuplicate   Boolean  @default(false) @map("possible_duplicate")
+  verifiedEmail     Boolean @default(false) @map("verified_email")
+  verifiedLinkedin  Boolean @default(false) @map("verified_linkedin")
+  verifiedWebsite   Boolean @default(false) @map("verified_website")
+  possibleDuplicate Boolean @default(false) @map("possible_duplicate")
 
-  createdAt           DateTime @default(now()) @map("created_at")
-  lastActivityAt      DateTime? @map("last_activity_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  lastActivityAt DateTime? @map("last_activity_at")
 
   score               LeadScore?
   reviewNote          ReviewNote?
@@ -811,42 +818,42 @@ model Lead {
 }
 
 model LeadScore {
-  id                    String   @id @default(uuid())
-  leadId                String   @unique @map("lead_id")
-  lead                  Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  leadScore             Int      @map("lead_score")
-  confidenceScore       Int      @map("confidence_score")
-  aiOpportunityScore    Int      @map("ai_opportunity_score")
-  automationScore       Int      @map("automation_score")
-  crmReadinessScore     Int      @map("crm_readiness_score")
-  websiteQualityScore   Int      @map("website_quality_score")
+  id                  String @id @default(uuid())
+  leadId              String @unique @map("lead_id")
+  lead                Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadScore           Int    @map("lead_score")
+  confidenceScore     Int    @map("confidence_score")
+  aiOpportunityScore  Int    @map("ai_opportunity_score")
+  automationScore     Int    @map("automation_score")
+  crmReadinessScore   Int    @map("crm_readiness_score")
+  websiteQualityScore Int    @map("website_quality_score")
 
   // The scoring rubric's remaining dimensions. Kept as separate columns rather
   // than folded into leadScore so a reviewer can see *why* a lead ranked where
   // it did — a single opaque number is not reviewable, and reviewer feedback is
   // what the scoring loop is meant to improve on.
-  businessFitScore      Int?     @map("business_fit_score")
-  buyingIntentScore     Int?     @map("buying_intent_score")
-  budgetScore           Int?     @map("budget_score")
-  technologyGapScore    Int?     @map("technology_gap_score")
-  decisionMakerAccessScore Int?  @map("decision_maker_access_score")
+  businessFitScore         Int? @map("business_fit_score")
+  buyingIntentScore        Int? @map("buying_intent_score")
+  budgetScore              Int? @map("budget_score")
+  technologyGapScore       Int? @map("technology_gap_score")
+  decisionMakerAccessScore Int? @map("decision_maker_access_score")
   // Weighted roll-up of the six dimensions; what the pipeline sorts on.
-  leadPriorityScore     Int?     @map("lead_priority_score")
+  leadPriorityScore        Int? @map("lead_priority_score")
 
   // Maturity scores from the Company Intelligence Agent, and buyer scores from
   // the Buyer Intelligence Agent. Separate from the six rubric dimensions
   // because they describe the company and the person, not the fit of the deal.
-  digitalMaturityScore      Int?  @map("digital_maturity_score")
-  aiReadinessScore          Int?  @map("ai_readiness_score")
-  automationOpportunityScore Int? @map("automation_opportunity_score")
-  authorityScore            Int?  @map("authority_score")
-  engagementScore           Int?  @map("engagement_score")
-  projectComplexity         String? @map("project_complexity")
-  fitReason             String?  @map("fit_reason")
-  suggestedServices     String?  @map("suggested_services")
-  expectedValue         Decimal? @map("expected_value")
-  priority              Priority?
-  scoredAt              DateTime @default(now()) @map("scored_at")
+  digitalMaturityScore       Int?      @map("digital_maturity_score")
+  aiReadinessScore           Int?      @map("ai_readiness_score")
+  automationOpportunityScore Int?      @map("automation_opportunity_score")
+  authorityScore             Int?      @map("authority_score")
+  engagementScore            Int?      @map("engagement_score")
+  projectComplexity          String?   @map("project_complexity")
+  fitReason                  String?   @map("fit_reason")
+  suggestedServices          String?   @map("suggested_services")
+  expectedValue              Decimal?  @map("expected_value")
+  priority                   Priority?
+  scoredAt                   DateTime  @default(now()) @map("scored_at")
 
   // The pipeline ranks by priority score, so make that ordering cheap. Was
   // hand-written SQL (DESC NULLS LAST) never declared here, and got silently
@@ -859,28 +866,28 @@ model LeadScore {
 }
 
 model ReviewNote {
-  id                       String   @id @default(uuid())
-  leadId                   String   @unique @map("lead_id")
-  lead                     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  reviewerId               String?  @map("reviewer_id")
-  reviewer                 User?    @relation(fields: [reviewerId], references: [id])
-  websiteIssues            String?  @map("website_issues")
-  businessProblems         String?  @map("business_problems")
-  opportunities            String?
-  automationOpportunities  String?  @map("automation_opportunities")
-  crmIssues                String?  @map("crm_issues")
-  salesIssues              String?  @map("sales_issues")
-  marketingIssues          String?  @map("marketing_issues")
-  operationalIssues        String?  @map("operational_issues")
-  suggestedService         String?  @map("suggested_service")
-  suggestedOffer           String?  @map("suggested_offer")
-  suggestedCaseStudy       String?  @map("suggested_case_study")
-  suggestedHook            String?  @map("suggested_hook")
-  painPoints               String?  @map("pain_points")
-  urgencyLevel             UrgencyLevel? @map("urgency_level")
-  expectedValue            Decimal? @map("expected_value")
-  notes                    String?
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  id                      String        @id @default(uuid())
+  leadId                  String        @unique @map("lead_id")
+  lead                    Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  reviewerId              String?       @map("reviewer_id")
+  reviewer                User?         @relation(fields: [reviewerId], references: [id])
+  websiteIssues           String?       @map("website_issues")
+  businessProblems        String?       @map("business_problems")
+  opportunities           String?
+  automationOpportunities String?       @map("automation_opportunities")
+  crmIssues               String?       @map("crm_issues")
+  salesIssues             String?       @map("sales_issues")
+  marketingIssues         String?       @map("marketing_issues")
+  operationalIssues       String?       @map("operational_issues")
+  suggestedService        String?       @map("suggested_service")
+  suggestedOffer          String?       @map("suggested_offer")
+  suggestedCaseStudy      String?       @map("suggested_case_study")
+  suggestedHook           String?       @map("suggested_hook")
+  painPoints              String?       @map("pain_points")
+  urgencyLevel            UrgencyLevel? @map("urgency_level")
+  expectedValue           Decimal?      @map("expected_value")
+  notes                   String?
+  updatedAt               DateTime      @updatedAt @map("updated_at")
 
   @@map("review_notes")
 }
@@ -891,47 +898,47 @@ model ReviewNote {
 /// (agree, correct, or override) instead of a blank form, and is what a
 /// manually-added lead gets in place of a human's review until one happens.
 model AgentReview {
-  id                       String   @id @default(uuid())
-  leadId                   String   @unique @map("lead_id")
-  lead                     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  websiteIssues            String?  @map("website_issues")
-  businessProblems         String?  @map("business_problems")
-  opportunities            String?
-  automationOpportunities  String?  @map("automation_opportunities")
-  crmIssues                String?  @map("crm_issues")
-  salesIssues              String?  @map("sales_issues")
-  marketingIssues          String?  @map("marketing_issues")
-  operationalIssues        String?  @map("operational_issues")
-  suggestedService         String?  @map("suggested_service")
-  suggestedOffer           String?  @map("suggested_offer")
-  suggestedCaseStudy       String?  @map("suggested_case_study")
-  suggestedHook            String?  @map("suggested_hook")
-  painPoints               String?  @map("pain_points")
-  urgencyLevel             UrgencyLevel? @map("urgency_level")
-  expectedValue            Decimal? @map("expected_value")
-  notes                    String?
-  generatedAt              DateTime @default(now()) @map("generated_at")
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  id                      String        @id @default(uuid())
+  leadId                  String        @unique @map("lead_id")
+  lead                    Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  websiteIssues           String?       @map("website_issues")
+  businessProblems        String?       @map("business_problems")
+  opportunities           String?
+  automationOpportunities String?       @map("automation_opportunities")
+  crmIssues               String?       @map("crm_issues")
+  salesIssues             String?       @map("sales_issues")
+  marketingIssues         String?       @map("marketing_issues")
+  operationalIssues       String?       @map("operational_issues")
+  suggestedService        String?       @map("suggested_service")
+  suggestedOffer          String?       @map("suggested_offer")
+  suggestedCaseStudy      String?       @map("suggested_case_study")
+  suggestedHook           String?       @map("suggested_hook")
+  painPoints              String?       @map("pain_points")
+  urgencyLevel            UrgencyLevel? @map("urgency_level")
+  expectedValue           Decimal?      @map("expected_value")
+  notes                   String?
+  generatedAt             DateTime      @default(now()) @map("generated_at")
+  updatedAt               DateTime      @updatedAt @map("updated_at")
 
   @@map("agent_reviews")
 }
 
 model PipelineState {
-  leadId          String   @id @map("lead_id")
-  lead            Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  stage           PipelineStage @default(READY_FOR_OUTREACH)
-  enteredStageAt  DateTime @default(now()) @map("entered_stage_at")
-  nextActionAt    DateTime? @map("next_action_at")
+  leadId         String         @id @map("lead_id")
+  lead           Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  stage          PipelineStage  @default(READY_FOR_OUTREACH)
+  enteredStageAt DateTime       @default(now()) @map("entered_stage_at")
+  nextActionAt   DateTime?      @map("next_action_at")
   // BullMQ delayed-job id for the pending wait-timer (Part C6). Lets the
   // sequencer cancel an in-flight "wait 2 days" job the instant a reply or
   // manual stage change makes it moot, instead of letting it fire anyway.
-  waitJobId       String?  @map("wait_job_id")
+  waitJobId      String?        @map("wait_job_id")
   // One level of undo: the stage this lead was in immediately before the
   // current one. "Back" swaps stage<->previousStage rather than replaying full
   // history, which is enough for correcting a wrong drag or retrying a stage
   // whose automation failed (e.g. no mailbox configured yet) without needing a
   // separate retry mechanism.
-  previousStage   PipelineStage? @map("previous_stage")
+  previousStage  PipelineStage? @map("previous_stage")
 
   /// Aggregate readiness of the CURRENT sequence step's required agents
   /// (Part: Preparation Pipeline, 2026-09-01) — one lead only ever prepares
@@ -941,8 +948,8 @@ model PipelineState {
   /// never set directly anywhere else.
   preparationStatus      PreparationStatus @default(NOT_STARTED) @map("preparation_status")
   /// Which sequence step (1-5) preparationStatus currently describes.
-  preparationStep        Int?     @map("preparation_step")
-  preparationCompletedAt DateTime? @map("preparation_completed_at")
+  preparationStep        Int?              @map("preparation_step")
+  preparationCompletedAt DateTime?         @map("preparation_completed_at")
 
   @@map("pipeline_states")
 }
@@ -960,26 +967,26 @@ model PipelineState {
 /// must note that coverage boundary rather than imply full automated-stage
 /// timing.
 model LeadStageHistory {
-  id     String @id @default(uuid())
-  orgId  String @map("org_id")
+  id     String       @id @default(uuid())
+  orgId  String       @map("org_id")
   org    Organization @relation(fields: [orgId], references: [id])
-  leadId String @map("lead_id")
-  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  leadId String       @map("lead_id")
+  lead   Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   /// Null for the row marking initial pipeline entry (nothing came before it).
-  fromStage PipelineStage? @map("from_stage")
-  toStage   PipelineStage  @map("to_stage")
+  fromStage       PipelineStage? @map("from_stage")
+  toStage         PipelineStage  @map("to_stage")
   /// When this transition happened -- also when dwell time in fromStage
   /// ended, letting "average time in stage" be computed as a self-join over
   /// consecutive rows for the same lead without needing a separate duration
   /// column that could drift out of sync with the raw timestamps.
-  transitionedAt DateTime @default(now()) @map("transitioned_at")
+  transitionedAt  DateTime       @default(now()) @map("transitioned_at")
   /// Null means system/automation-driven (e.g. promoteToPipeline's bulk
   /// entry), not a missing value -- distinguishing "a person did this" from
   /// "automation did this" is itself part of what the Activity/Audit
   /// dashboard needs to show honestly.
-  changedByUserId String? @map("changed_by_user_id")
-  changedByUser   User?   @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
+  changedByUserId String?        @map("changed_by_user_id")
+  changedByUser   User?          @relation(fields: [changedByUserId], references: [id], onDelete: SetNull)
 
   @@index([leadId, transitionedAt])
   @@index([orgId, toStage, transitionedAt])
@@ -999,17 +1006,17 @@ model LeadStageHistory {
 /// about actual money spent, just not attributing a specific used connect to
 /// a specific purchase lot.
 model UpworkConnectPurchase {
-  id             String   @id @default(uuid())
-  orgId          String   @map("org_id")
-  org            Organization @relation(fields: [orgId], references: [id])
-  purchasedAt    DateTime @map("purchased_at")
-  connectsAmount Int      @map("connects_amount")
-  totalCost      Float    @map("total_cost")
-  currency       String   @default("USD")
-  notes          String?
-  createdByUserId String? @map("created_by_user_id")
-  createdByUser   User?   @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
-  createdAt      DateTime @default(now()) @map("created_at")
+  id              String       @id @default(uuid())
+  orgId           String       @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  purchasedAt     DateTime     @map("purchased_at")
+  connectsAmount  Int          @map("connects_amount")
+  totalCost       Float        @map("total_cost")
+  currency        String       @default("USD")
+  notes           String?
+  createdByUserId String?      @map("created_by_user_id")
+  createdByUser   User?        @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  createdAt       DateTime     @default(now()) @map("created_at")
 
   /// Upwork's own "Transaction ID" for this purchase's fee row, when the
   /// row came from an uploaded transaction-report CSV rather than manual
@@ -1019,8 +1026,8 @@ model UpworkConnectPurchase {
   /// entered by hand through the form.
   sourceTransactionId String? @map("source_transaction_id")
 
-  @@index([orgId, purchasedAt])
   @@unique([orgId, sourceTransactionId])
+  @@index([orgId, purchasedAt])
   @@map("upwork_connect_purchases")
 }
 
@@ -1035,33 +1042,33 @@ model UpworkConnectPurchase {
 /// actual vs. this value vs. the difference — never a bare "good/bad" label,
 /// per the spec's explicit "do not imply performance judgments" rule.
 model Benchmark {
-  id              String   @id @default(uuid())
-  orgId           String   @map("org_id")
+  id              String       @id @default(uuid())
+  orgId           String       @map("org_id")
   org             Organization @relation(fields: [orgId], references: [id])
-  metricKey       String   @map("metric_key")
-  targetValue     Float    @map("target_value")
-  updatedByUserId String?  @map("updated_by_user_id")
-  updatedByUser   User?    @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  metricKey       String       @map("metric_key")
+  targetValue     Float        @map("target_value")
+  updatedByUserId String?      @map("updated_by_user_id")
+  updatedByUser   User?        @relation(fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  updatedAt       DateTime     @updatedAt @map("updated_at")
 
   @@unique([orgId, metricKey])
   @@map("benchmarks")
 }
 
 model EmailAccount {
-  id           String   @id @default(uuid())
-  orgId        String   @map("org_id")
-  org          Organization @relation(fields: [orgId], references: [id])
-  provider     EmailProvider
-  address      String   @unique
+  id             String             @id @default(uuid())
+  orgId          String             @map("org_id")
+  org            Organization       @relation(fields: [orgId], references: [id])
+  provider       EmailProvider
+  address        String             @unique
   /// Shown as the From display name in the recipient's inbox (e.g. "EurosHub
   /// Sales" instead of the bare mailbox address). Falls back to the org-wide
   /// sender name (Settings > Email branding) when unset.
-  displayName  String?  @map("display_name")
-  dailyLimit   Int      @default(30) @map("daily_limit")
-  hourlyLimit  Int      @default(5) @map("hourly_limit")
-  warmupActive Boolean  @default(true) @map("warmup_active")
-  status       EmailAccountStatus @default(ACTIVE)
+  displayName    String?            @map("display_name")
+  dailyLimit     Int                @default(30) @map("daily_limit")
+  hourlyLimit    Int                @default(5) @map("hourly_limit")
+  warmupActive   Boolean            @default(true) @map("warmup_active")
+  status         EmailAccountStatus @default(ACTIVE)
   /// Explicit opt-in for the outbound rotation (EmailProviderService.
   /// pickAvailableAccount) — `status: ACTIVE` alone used to be enough to be
   /// picked, which meant a mailbox added only for reading (or added before
@@ -1071,13 +1078,13 @@ model EmailAccount {
   /// SmtpProvider/GmailProvider), and a lead's whole sequence was marked
   /// SENT with nothing ever delivered. Defaults false — an admin must
   /// explicitly turn this on per mailbox now.
-  sendingEnabled Boolean @default(false) @map("sending_enabled")
+  sendingEnabled Boolean            @default(false) @map("sending_enabled")
   /// When this account most recently entered SUSPENDED (Part: email account
   /// auto-resume agent, 2026-09-08) — the resume sweep's cooldown clock.
   /// Cleared back to null on resume, so a later re-suspension always starts
   /// a fresh cooldown rather than reading a stale timestamp.
-  suspendedAt    DateTime? @map("suspended_at")
-  createdAt    DateTime @default(now()) @map("created_at")
+  suspendedAt    DateTime?          @map("suspended_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
 
   // GMAIL: OAuth2 refresh token for this mailbox (gmail.send + gmail.readonly
   // scopes — Part G1). Obtained out-of-band via a one-time consent flow, not
@@ -1107,31 +1114,31 @@ model EmailAccount {
   // most accounts will be both, but e.g. a pure notification mailbox might
   // only ever be read. Kept on the same row rather than a separate model:
   // one EmailAccount is still one mailbox, just capable of more now.
-  imapHost           String?  @map("imap_host")
-  imapPort           Int?     @map("imap_port")
+  imapHost           String? @map("imap_host")
+  imapPort           Int?    @map("imap_port")
   /// "SSL" | "STARTTLS" | "NONE"
-  imapEncryption     String?  @map("imap_encryption")
-  imapUsername       String?  @map("imap_username")
+  imapEncryption     String? @map("imap_encryption")
+  imapUsername       String? @map("imap_username")
   /// Encrypted at rest (EncryptionService) — never plaintext, unlike the
   /// legacy smtpPassword/oauthRefreshToken columns above.
-  imapPasswordEnc    String?  @map("imap_password_enc")
+  imapPasswordEnc    String? @map("imap_password_enc")
   /// IMAP UID of the last message the sync worker has already processed for
   /// this account's INBOX — the poll cursor. Null means "never synced yet."
-  lastImapUid        Int?     @map("last_imap_uid")
+  lastImapUid        Int?    @map("last_imap_uid")
   /// Same cursor, scoped to the account's Sent folder — a separate field
   /// because IMAP UIDs are only unique per-mailbox, so INBOX and Sent need
   /// independent cursors even though they're polled in the same tick. Null
   /// also covers "no Sent-equivalent folder found on this provider," not
   /// just "never synced" — see ImapReaderProvider.findSentMailbox.
-  lastImapUidSent    Int?     @map("last_imap_uid_sent")
+  lastImapUidSent    Int?    @map("last_imap_uid_sent")
   /// Internal display name for this mailbox in the Email Hub UI — distinct
   /// from `displayName` above, which is the outbound From name a *recipient*
   /// sees. Falls back to `address` when unset.
-  mailboxLabel       String?  @map("mailbox_label")
+  mailboxLabel       String? @map("mailbox_label")
   /// Whether the sync worker should poll this account at all — off by
   /// default so adding sending-only credentials never silently starts an
   /// inbox sync nobody asked for.
-  inboundSyncEnabled Boolean  @default(false) @map("inbound_sync_enabled")
+  inboundSyncEnabled Boolean @default(false) @map("inbound_sync_enabled")
 
   emailMessages   EmailMessage[]
   inboundThreads  InboundEmailThread[]
@@ -1155,19 +1162,19 @@ enum SendingSessionStatus {
 /// `successful`/`failed` are running counters updated per-message by
 /// SendingWorker so a partial failure never fails the batch as a whole.
 model SendingSession {
-  id           String   @id @default(uuid())
-  orgId        String   @map("org_id")
-  org          Organization @relation(fields: [orgId], references: [id])
-  createdAt    DateTime @default(now()) @map("created_at")
-  scheduledAt  DateTime? @map("scheduled_at")
-  startedAt    DateTime? @map("started_at")
-  completedAt  DateTime? @map("completed_at")
-  status       SendingSessionStatus @default(PENDING)
-  totalLeads   Int      @default(0) @map("total_leads")
-  successful   Int      @default(0)
-  failed       Int      @default(0)
+  id          String               @id @default(uuid())
+  orgId       String               @map("org_id")
+  org         Organization         @relation(fields: [orgId], references: [id])
+  createdAt   DateTime             @default(now()) @map("created_at")
+  scheduledAt DateTime?            @map("scheduled_at")
+  startedAt   DateTime?            @map("started_at")
+  completedAt DateTime?            @map("completed_at")
+  status      SendingSessionStatus @default(PENDING)
+  totalLeads  Int                  @default(0) @map("total_leads")
+  successful  Int                  @default(0)
+  failed      Int                  @default(0)
 
-  messages     EmailMessage[]
+  messages EmailMessage[]
 
   @@map("sending_sessions")
 }
@@ -1184,70 +1191,70 @@ enum SendingScheduleFrequency {
 /// Disabled (the default) means "send immediately after preparation
 /// completes" — a schedule is opt-in, never required.
 model SendingSchedule {
-  id              String   @id @default(uuid())
-  orgId           String   @unique @map("org_id")
-  org             Organization @relation(fields: [orgId], references: [id])
-  enabled         Boolean  @default(false)
+  id              String                   @id @default(uuid())
+  orgId           String                   @unique @map("org_id")
+  org             Organization             @relation(fields: [orgId], references: [id])
+  enabled         Boolean                  @default(false)
   frequency       SendingScheduleFrequency @default(DAILY)
   /// "HH:mm", interpreted in `timezone`.
-  sendTime        String   @default("09:00") @map("send_time")
-  timezone        String   @default("UTC")
+  sendTime        String                   @default("09:00") @map("send_time")
+  timezone        String                   @default("UTC")
   /// Only set/read when frequency = ONE_TIME. "YYYY-MM-DD".
-  oneTimeDate     String?  @map("one_time_date")
-  lastTriggeredAt DateTime? @map("last_triggered_at")
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  oneTimeDate     String?                  @map("one_time_date")
+  lastTriggeredAt DateTime?                @map("last_triggered_at")
+  createdAt       DateTime                 @default(now()) @map("created_at")
+  updatedAt       DateTime                 @updatedAt @map("updated_at")
 
   @@map("sending_schedules")
 }
 
 model EmailMessage {
-  id            String   @id @default(uuid())
-  leadId        String   @map("lead_id")
-  lead          Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  accountId     String?  @map("account_id")
-  account       EmailAccount? @relation(fields: [accountId], references: [id])
-  sequenceStep  Int      @map("sequence_step")
-  subject       String
-  bodyHtml      String   @map("body_html")
-  rationale     Json?
-  generatedBy   GeneratedBy @map("generated_by")
-  status        EmailMessageStatus @default(DRAFT)
+  id               String             @id @default(uuid())
+  leadId           String             @map("lead_id")
+  lead             Lead               @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  accountId        String?            @map("account_id")
+  account          EmailAccount?      @relation(fields: [accountId], references: [id])
+  sequenceStep     Int                @map("sequence_step")
+  subject          String
+  bodyHtml         String             @map("body_html")
+  rationale        Json?
+  generatedBy      GeneratedBy        @map("generated_by")
+  status           EmailMessageStatus @default(DRAFT)
   /// Was always dead (never written) before Part: Preparation Pipeline /
   /// Sending Queue, 2026-09-01 — repurposed rather than adding a duplicate
   /// column. Now the computed fire time for WAITING_FOR_SCHEDULE rows (set
   /// by SendingQueueService.enqueue from the org's SendingSchedule); null
   /// once the row leaves WAITING_FOR_SCHEDULE.
-  scheduledAt   DateTime? @map("scheduled_at")
-  sentAt        DateTime? @map("sent_at")
-  sendingSessionId String? @map("sending_session_id")
-  sendingSession    SendingSession? @relation(fields: [sendingSessionId], references: [id])
+  scheduledAt      DateTime?          @map("scheduled_at")
+  sentAt           DateTime?          @map("sent_at")
+  sendingSessionId String?            @map("sending_session_id")
+  sendingSession   SendingSession?    @relation(fields: [sendingSessionId], references: [id])
   /// Number of failed send attempts so far — drives the same capped
   /// exponential backoff shape as AgentExecution.attempt.
-  sendRetryCount    Int       @default(0) @map("send_retry_count")
-  nextSendRetryAt   DateTime? @map("next_send_retry_at")
+  sendRetryCount   Int                @default(0) @map("send_retry_count")
+  nextSendRetryAt  DateTime?          @map("next_send_retry_at")
   /// Set by the atomic compare-and-swap that claims this row into SENDING
   /// (the duplicate-send guard) so a crashed worker's lock can be detected
   /// and reclaimed by the sweep tick, same shape as AgentExecution's stale
   /// RUNNING reclaim.
-  sendingLockedAt   DateTime? @map("sending_locked_at")
+  sendingLockedAt  DateTime?          @map("sending_locked_at")
   /// When this row was drafted. `scheduledAt` above and EmailEventType.QUEUED
   /// both look like they'd answer "send order" but neither is ever written
   /// anywhere in the codebase.
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
   /// Why this send failed (ComplianceGateError message, e.g. "Lead has no
   /// verified email address", or a provider-side error) — set by
   /// EmailProviderService.sendMessageNow at the moment of failure. Without
   /// this, a FAILED row gave no way to tell "recipient unsubscribed" from "no
   /// email on file" from a transient SMTP error apart from reading server
   /// logs by hand.
-  failureReason String? @map("failure_reason")
+  failureReason    String?            @map("failure_reason")
   /// Whether the outreach-tracking pixel should be embedded in this message
   /// (Part: reliability overhaul, 2026-08-31 — tracking used to be injected
   /// unconditionally). Defaults off: a human explicitly opts in when
   /// approving/sending the draft, rather than every outbound email silently
   /// carrying a pixel.
-  trackEmailOpen Boolean @default(false) @map("track_email_open")
+  trackEmailOpen   Boolean            @default(false) @map("track_email_open")
   /// Set once, the first time a real pixel fetch (see EmailEvent, the raw
   /// log) happens at least 180s after `sentAt` (Part: 3-minute open
   /// verification, 2026-09-01). An immediate hit — a proxy/scanner
@@ -1256,9 +1263,9 @@ model EmailMessage {
   /// every consumer (UI, notifications, analytics, open-based automation)
   /// should read instead of checking for EmailEvent{OPENED} existence
   /// directly, which would count those false positives.
-  verifiedOpenedAt DateTime? @map("verified_opened_at")
+  verifiedOpenedAt DateTime?          @map("verified_opened_at")
 
-  events        EmailEvent[]
+  events EmailEvent[]
 
   @@index([leadId])
   @@map("email_messages")
@@ -1272,23 +1279,23 @@ model EmailMessage {
 /// is ever created otherwise, so there is no way for a false "opened" signal
 /// to occur for an untracked send.
 model HubEmailOpenTracking {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  org       Organization @relation(fields: [orgId], references: [id])
-  toAddress String   @map("to_address")
-  subject   String
-  sentAt    DateTime @default(now()) @map("sent_at")
+  id               String       @id @default(uuid())
+  orgId            String       @map("org_id")
+  org              Organization @relation(fields: [orgId], references: [id])
+  toAddress        String       @map("to_address")
+  subject          String
+  sentAt           DateTime     @default(now()) @map("sent_at")
   /// First raw pixel-fetch timestamp, regardless of validity — see
   /// verifiedOpenedAt below (Part: 3-minute open verification, 2026-09-01).
-  openedAt  DateTime? @map("opened_at")
+  openedAt         DateTime?    @map("opened_at")
   /// Every raw pixel fetch, valid or not — Hub tracking has no separate
   /// event-log table (unlike EmailEvent for outreach), so a simple counter
   /// is the "raw tracking events" figure for this row.
-  rawOpenCount Int @default(0) @map("raw_open_count")
+  rawOpenCount     Int          @default(0) @map("raw_open_count")
   /// Set once, the first time a raw fetch happens at least 180s after
   /// sentAt — the authoritative "genuinely opened" signal, same rule as
   /// EmailMessage.verifiedOpenedAt.
-  verifiedOpenedAt DateTime? @map("verified_opened_at")
+  verifiedOpenedAt DateTime?    @map("verified_opened_at")
   /// Correlates this tracking row back to the actual sent InboundEmailMessage
   /// once it syncs in from the account's Sent folder (Part: Email Hub
   /// sent-status timeline, 2026-09-02) — set to an explicitly-generated
@@ -1298,19 +1305,19 @@ model HubEmailOpenTracking {
   /// parses that same raw message back out. Nullable because a send can
   /// fail after this row is created but before the message actually exists
   /// anywhere to match against.
-  messageIdHeader String? @unique @map("message_id_header")
+  messageIdHeader  String?      @unique @map("message_id_header")
 
   @@index([orgId])
   @@map("hub_email_open_tracking")
 }
 
 model EmailEvent {
-  id         String   @id @default(uuid())
-  messageId  String   @map("message_id")
-  message    EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  id         String         @id @default(uuid())
+  messageId  String         @map("message_id")
+  message    EmailMessage   @relation(fields: [messageId], references: [id], onDelete: Cascade)
   eventType  EmailEventType @map("event_type")
-  occurredAt DateTime @default(now()) @map("occurred_at")
-  meta       Json     @default("{}")
+  occurredAt DateTime       @default(now()) @map("occurred_at")
+  meta       Json           @default("{}")
 
   @@map("email_events")
 }
@@ -1328,24 +1335,24 @@ model EmailEvent {
 /// subject when a provider omits them), same idea as any email client's
 /// "conversation view."
 model InboundEmailThread {
-  id            String   @id @default(uuid())
-  orgId         String   @map("org_id")
+  id            String       @id @default(uuid())
+  orgId         String       @map("org_id")
   org           Organization @relation(fields: [orgId], references: [id])
-  accountId     String   @map("account_id")
+  accountId     String       @map("account_id")
   account       EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   subject       String
   /// [{name, email}] snapshot of everyone on the thread — denormalized so the
   /// unified-inbox list can render "From" without a join per row across
   /// what may be thousands of threads.
-  participants  Json     @default("[]")
+  participants  Json         @default("[]")
   /// Set once a human clicks "Add to Lead," or automatically when a reply
   /// arrives from an address that matches an existing lead (Part: Lead
   /// Integration) — reuses LeadsService.findExistingDuplicate, never creates
   /// a second lead for the same person.
-  leadId        String?  @map("lead_id")
-  lead          Lead?    @relation(fields: [leadId], references: [id])
-  lastMessageAt DateTime @map("last_message_at")
-  createdAt     DateTime @default(now()) @map("created_at")
+  leadId        String?      @map("lead_id")
+  lead          Lead?        @relation(fields: [leadId], references: [id])
+  lastMessageAt DateTime     @map("last_message_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
 
   messages InboundEmailMessage[]
 
@@ -1358,47 +1365,47 @@ model InboundEmailThread {
 /// see the section comment — even though both describe "an email that
 /// touched this mailbox."
 model InboundEmailMessage {
-  id                String   @id @default(uuid())
-  threadId          String   @map("thread_id")
-  thread            InboundEmailThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-  accountId         String   @map("account_id")
-  account           EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id                String                   @id @default(uuid())
+  threadId          String                   @map("thread_id")
+  thread            InboundEmailThread       @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  accountId         String                   @map("account_id")
+  account           EmailAccount             @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// The provider's own message id (IMAP UID today; Gmail API message id
   /// once the Phase 2 reader ships) — paired with accountId as the dedupe
   /// key so a sync retry or a re-poll of the same UID never inserts twice.
-  providerMessageId String   @map("provider_message_id")
+  providerMessageId String                   @map("provider_message_id")
   /// RFC 5322 `Message-ID` header — the threading key a later message's
   /// `In-Reply-To`/`References` headers point back to. Not every message has
   /// one (some providers omit it); threading falls back to normalized
   /// subject when absent. See EmailHubSyncWorker.findOrCreateThreadId.
-  messageIdHeader   String?  @map("message_id_header")
-  fromName          String?  @map("from_name")
-  fromEmail         String   @map("from_email")
-  toEmails          String[] @map("to_emails")
-  ccEmails          String[] @map("cc_emails")
-  bccEmails         String[] @map("bcc_emails")
+  messageIdHeader   String?                  @map("message_id_header")
+  fromName          String?                  @map("from_name")
+  fromEmail         String                   @map("from_email")
+  toEmails          String[]                 @map("to_emails")
+  ccEmails          String[]                 @map("cc_emails")
+  bccEmails         String[]                 @map("bcc_emails")
   subject           String
-  bodyText          String   @map("body_text")
-  bodyHtml          String?  @map("body_html")
-  receivedAt        DateTime @map("received_at")
-  folder            String   @default("INBOX")
-  isRead            Boolean  @default(false) @map("is_read")
-  isImportant       Boolean  @default(false) @map("is_important")
+  bodyText          String                   @map("body_text")
+  bodyHtml          String?                  @map("body_html")
+  receivedAt        DateTime                 @map("received_at")
+  folder            String                   @default("INBOX")
+  isRead            Boolean                  @default(false) @map("is_read")
+  isImportant       Boolean                  @default(false) @map("is_important")
   /// Removed from the working inbox view without touching the real mailbox
   /// (Part: Ignore/Noise Management) — a filter flag, never a delete.
-  isIgnored         Boolean  @default(false) @map("is_ignored")
-  hasAttachments    Boolean  @default(false) @map("has_attachments")
+  isIgnored         Boolean                  @default(false) @map("is_ignored")
+  hasAttachments    Boolean                  @default(false) @map("has_attachments")
   /// [{filename, size, contentId}] — metadata only; attachment bytes are
   /// fetched from the mailbox on demand when a human opens one, not stored
   /// here, so a sync never has to move large binaries through Postgres.
-  attachments       Json     @default("[]")
+  attachments       Json                     @default("[]")
   /// AI-ready, unpopulated in V1 (Part: Smart Email Classification) — a
   /// future classification agent writes a suggestion here; nothing reads or
   /// acts on it automatically. See aiSuggestedAction below for the same
   /// contract applied to a proposed next action rather than a category.
-  suggestedCategory String?  @map("suggested_category")
-  aiSuggestedAction String?  @map("ai_suggested_action")
-  createdAt         DateTime @default(now()) @map("created_at")
+  suggestedCategory String?                  @map("suggested_category")
+  aiSuggestedAction String?                  @map("ai_suggested_action")
+  createdAt         DateTime                 @default(now()) @map("created_at")
   /// GENERATED ALWAYS AS (...) STORED column added by raw SQL in this
   /// model's migration — Prisma has no native tsvector type, so it's
   /// declared Unsupported (excluded from the generated client, never
@@ -1420,12 +1427,12 @@ model InboundEmailMessage {
 /// User-defined, never hardcoded (Part: Email Tags) — an org creates its own
 /// tag vocabulary from Settings or inline while tagging a message.
 model EmailTag {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
+  id        String       @id @default(uuid())
+  orgId     String       @map("org_id")
   org       Organization @relation(fields: [orgId], references: [id])
   name      String
-  color     String   @default("#6b7280")
-  createdAt DateTime @default(now()) @map("created_at")
+  color     String       @default("#6b7280")
+  createdAt DateTime     @default(now()) @map("created_at")
 
   messages InboundEmailMessageTag[]
 
@@ -1456,17 +1463,17 @@ enum IgnoreRuleType {
 /// column never conflicts with another null under a multi-column unique
 /// index) without blocking the other rule type from using its own column.
 model IgnoredSender {
-  id              String   @id @default(uuid())
-  orgId           String   @map("org_id")
-  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  id              String         @id @default(uuid())
+  orgId           String         @map("org_id")
+  org             Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
   ruleType        IgnoreRuleType @default(SENDER) @map("rule_type")
-  fromEmail       String?  @map("from_email")
-  senderDomain    String?  @map("sender_domain")
+  fromEmail       String?        @map("from_email")
+  senderDomain    String?        @map("sender_domain")
   /// Who created this rule — null for rows that predate this field (existing
   /// ignores from before Part: Ignore Groups, 2026-09-01), never for a new one.
-  createdByUserId String?  @map("created_by_user_id")
-  createdByUser   User?    @relation(fields: [createdByUserId], references: [id])
-  createdAt       DateTime @default(now()) @map("created_at")
+  createdByUserId String?        @map("created_by_user_id")
+  createdByUser   User?          @relation(fields: [createdByUserId], references: [id])
+  createdAt       DateTime       @default(now()) @map("created_at")
 
   @@unique([orgId, fromEmail])
   @@unique([orgId, senderDomain])
@@ -1474,10 +1481,10 @@ model IgnoredSender {
 }
 
 model InboundEmailMessageTag {
-  messageId String   @map("message_id")
+  messageId String              @map("message_id")
   message   InboundEmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  tagId     String   @map("tag_id")
-  tag       EmailTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tagId     String              @map("tag_id")
+  tag       EmailTag            @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([messageId, tagId])
   @@map("inbound_email_message_tags")
@@ -1488,29 +1495,29 @@ model InboundEmailMessageTag {
 /// non-admin's Email Hub queries are scoped to exactly the accounts they
 /// have a grant for. Absence of a row means no access, not "view-only."
 model EmailAccountAccess {
-  userId    String   @map("user_id")
-  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId String   @map("account_id")
+  userId    String       @map("user_id")
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId String       @map("account_id")
   account   EmailAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  canReply  Boolean  @default(true) @map("can_reply")
-  createdAt DateTime @default(now()) @map("created_at")
+  canReply  Boolean      @default(true) @map("can_reply")
+  createdAt DateTime     @default(now()) @map("created_at")
 
   @@id([userId, accountId])
   @@map("email_account_access")
 }
 
 model LinkedinActivity {
-  id        String   @id @default(uuid())
-  leadId    String   @map("lead_id")
-  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  userId    String?  @map("user_id")
-  user      User?    @relation(fields: [userId], references: [id])
-  status    LinkedinStatus @default(NOT_STARTED)
+  id            String         @id @default(uuid())
+  leadId        String         @map("lead_id")
+  lead          Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  userId        String?        @map("user_id")
+  user          User?          @relation(fields: [userId], references: [id])
+  status        LinkedinStatus @default(NOT_STARTED)
   /// AI-drafted connectionNote/followUpMessage/secondFollowUp for a human to
   /// copy and send manually — LinkedIn automation itself stays out of scope
   /// (ToS/ban risk). Null until "Generate LinkedIn copy" has been used once.
-  draftMessages Json?  @map("draft_messages")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  draftMessages Json?          @map("draft_messages")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
 
   @@map("linkedin_activities")
 }
@@ -1546,9 +1553,9 @@ enum CaseStudyStatus {
 }
 
 model CaseStudy {
-  id       String   @id @default(uuid())
-  orgId    String   @map("org_id")
-  org      Organization @relation(fields: [orgId], references: [id])
+  id    String       @id @default(uuid())
+  orgId String       @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
 
   /// Finalised by the review agent — what Email 3 ("Proof") actually reads.
   /// Starts as a copy of the raw submission and is only ever tightened for
@@ -1558,7 +1565,7 @@ model CaseStudy {
   industry String
   title    String
   summary  String
-  metrics  Json     @default("{}")
+  metrics  Json            @default("{}")
   status   CaseStudyStatus @default(PENDING_REVIEW)
 
   /// The operator's own words, preserved verbatim — what the review agent
@@ -1568,7 +1575,7 @@ model CaseStudy {
   /// What the submitter picked in the niche dropdown — kept even if the
   /// review agent's `industry` above ends up different, so the mismatch
   /// itself (visible in Settings) is evidence, not silently overwritten.
-  submittedIndustry String @map("submitted_industry")
+  submittedIndustry String  @map("submitted_industry")
   /// The review agent's own account of what it changed or flagged — shown
   /// in Settings so "why does this say a different niche than I picked" or
   /// "why is this still Needs attention" has a real answer, not a guess.
@@ -1626,28 +1633,28 @@ enum UpworkProposalStatus {
 }
 
 model UpworkProposal {
-  id    String @id @default(uuid())
-  orgId String @map("org_id")
+  id    String       @id @default(uuid())
+  orgId String       @map("org_id")
   org   Organization @relation(fields: [orgId], references: [id])
 
   type UpworkProposalType
 
   /// The Upwork profile/identity the proposal was submitted under ("ID Name"
   /// / "Invite ID Name" in the source sheet) — not the team member's own name.
-  profileName String @map("profile_name")
-  jobCategory String @map("job_category")
-  jobLink     String @map("job_link")
-  coverLetter String @db.Text @map("cover_letter")
+  profileName  String             @map("profile_name")
+  jobCategory  String             @map("job_category")
+  jobLink      String             @map("job_link")
+  coverLetter  String             @map("cover_letter") @db.Text
   /// Connects spent — BIDDING only, null for INVITE (invites cost no connects).
-  connects    Int?
-  accountType UpworkAccountType? @map("account_type")
+  connects     Int?
+  accountType  UpworkAccountType? @map("account_type")
   /// Hours the project is actually worth (Part: Upwork Requests, 2026-10-01
   /// — "use the actual Project Hours stored against projects, do not
   /// calculate from number of bids/invites"). Optional because it's only
   /// known once a project materializes, not at submission time; the Upwork
   /// Dashboard's onboarded-hours totals sum this field directly, never a
   /// row count.
-  projectHours Float? @map("project_hours")
+  projectHours Float?             @map("project_hours")
 
   /// The team member who submitted this proposal (the sheet's "Submitted by"
   /// / "Invite Submitted by") — a plain name, not a User relation: the sheet
@@ -1656,11 +1663,11 @@ model UpworkProposal {
   /// yet set up with a login.
   submittedBy String @map("submitted_by")
 
-  clickupTaskId String? @map("clickup_task_id")
-  clientName    String? @map("client_name")
+  clickupTaskId String?              @map("clickup_task_id")
+  clientName    String?              @map("client_name")
   status        UpworkProposalStatus @default(SUBMITTED)
   /// Who closed the client, once WON — the sheet's "Client closed by".
-  closedBy      String? @map("closed_by")
+  closedBy      String?              @map("closed_by")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1669,12 +1676,12 @@ model UpworkProposal {
   /// follow-up reminders, 2026-09-30) — the follow-up timer's start line.
   /// Null again if it were ever moved off ACCEPTED back to something else
   /// (doesn't happen today, but keeps the field's meaning exact either way).
-  acceptedAt DateTime? @map("accepted_at")
+  acceptedAt             DateTime? @map("accepted_at")
   /// Who should be nudged to follow up on this one proposal once it's sat
   /// ACCEPTED for a while with no further status change — explicitly
   /// admin-picked per proposal, not a broadcast to a module/role. Paired
   /// 1:1 with Notification.recipientUserIds on the reminders this drives.
-  notifyUserIds String[] @default([]) @map("notify_user_ids")
+  notifyUserIds          String[]  @default([]) @map("notify_user_ids")
   /// Last time a follow-up reminder actually went out for this proposal —
   /// gates the every-2-days cadence in UpworkFollowUpReminderWorker so the
   /// same still-ACCEPTED proposal isn't re-notified more than once per
@@ -1725,8 +1732,8 @@ enum UpworkRequestStatus {
 /// config — the weekly target and Request-vs-Achievement report both query
 /// this directly.
 model UpworkRequest {
-  id    String @id @default(uuid())
-  orgId String @map("org_id")
+  id    String       @id @default(uuid())
+  orgId String       @map("org_id")
   org   Organization @relation(fields: [orgId], references: [id])
 
   projectManagerId String @map("project_manager_id")
@@ -1736,7 +1743,7 @@ model UpworkRequest {
   /// this in on a Friday for next week's work sets this forward. Weekly
   /// reporting (weekly target, Request vs Achievement) buckets by this
   /// field, not `createdAt`.
-  requestDate DateTime @default(now()) @map("request_date")
+  requestDate DateTime            @default(now()) @map("request_date")
   status      UpworkRequestStatus @default(SUBMITTED)
   notes       String?
 
@@ -1746,9 +1753,9 @@ model UpworkRequest {
   /// section 16 — "total hours should be calculated automatically").
   totalRequestedHours Float @default(0) @map("total_requested_hours")
 
-  reviewedByUserId String?  @map("reviewed_by_user_id")
-  reviewedByUser   User?    @relation("UpworkRequestsReviewed", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
-  reviewNotes      String?  @map("review_notes")
+  reviewedByUserId String?   @map("reviewed_by_user_id")
+  reviewedByUser   User?     @relation("UpworkRequestsReviewed", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  reviewNotes      String?   @map("review_notes")
   reviewedAt       DateTime? @map("reviewed_at")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1771,11 +1778,11 @@ model UpworkRequest {
 /// for this feature. Achievement reporting matches this string
 /// case-insensitively against UpworkProposal.profileName.
 model UpworkRequestItem {
-  id             String @id @default(uuid())
-  requestId      String @map("request_id")
+  id             String        @id @default(uuid())
+  requestId      String        @map("request_id")
   request        UpworkRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  profileName    String @map("profile_name")
-  requestedHours Float  @map("requested_hours")
+  profileName    String        @map("profile_name")
+  requestedHours Float         @map("requested_hours")
 
   @@unique([requestId, profileName])
   @@map("upwork_request_items")
@@ -1794,10 +1801,10 @@ model UpworkRequestItem {
 /// least one profile to a user, that becomes a real allow-list and every
 /// other profile is hidden from them.
 model UpworkProfileAccess {
-  id          String @id @default(uuid())
-  userId      String @map("user_id")
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  profileName String @map("profile_name")
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  profileName String   @map("profile_name")
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@unique([userId, profileName])
@@ -1835,14 +1842,14 @@ enum UpworkApiConnectionStatus {
 /// cache. Also note the published rate limits (300 req/min per IP, 40,000
 /// req/day) when building the sync workers.
 model UpworkApiConnection {
-  id                String   @id @default(uuid())
-  orgId             String   @unique @map("org_id")
-  org               Organization @relation(fields: [orgId], references: [id])
+  id                String                    @id @default(uuid())
+  orgId             String                    @unique @map("org_id")
+  org               Organization              @relation(fields: [orgId], references: [id])
   /// Encrypted at rest (EncryptionService), same convention as every other
   /// OAuth credential in this codebase — never plaintext.
-  accessTokenEnc    String   @map("access_token_enc")
-  refreshTokenEnc   String   @map("refresh_token_enc")
-  tokenExpiresAt    DateTime @map("token_expires_at")
+  accessTokenEnc    String                    @map("access_token_enc")
+  refreshTokenEnc   String                    @map("refresh_token_enc")
+  tokenExpiresAt    DateTime                  @map("token_expires_at")
   /// Space-separated scope string exactly as Upwork's token response
   /// returned it — kept verbatim rather than parsed into a String[] since
   /// we don't yet know Upwork's exact scope vocabulary to validate against.
@@ -1855,15 +1862,15 @@ model UpworkApiConnection {
   /// back to the user's default org when absent, so a null here (fetch
   /// failed, or a personal non-org account) degrades gracefully rather
   /// than breaking the connection.
-  organizationId    String?  @map("organization_id")
-  organizationName  String?  @map("organization_name")
+  organizationId    String?                   @map("organization_id")
+  organizationName  String?                   @map("organization_name")
   status            UpworkApiConnectionStatus @default(CONNECTED)
-  connectedByUserId String?  @map("connected_by_user_id")
-  connectedAt       DateTime @default(now()) @map("connected_at")
-  lastSyncAt        DateTime? @map("last_sync_at")
-  lastSyncError     String?  @map("last_sync_error")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  connectedByUserId String?                   @map("connected_by_user_id")
+  connectedAt       DateTime                  @default(now()) @map("connected_at")
+  lastSyncAt        DateTime?                 @map("last_sync_at")
+  lastSyncError     String?                   @map("last_sync_error")
+  createdAt         DateTime                  @default(now()) @map("created_at")
+  updatedAt         DateTime                  @updatedAt @map("updated_at")
 
   @@map("upwork_api_connections")
 }
@@ -1872,12 +1879,12 @@ model UpworkApiConnection {
 // single send, not just at sequence start. Populated from unsubscribe clicks,
 // hard bounces, spam complaints, and manual do-not-contact entries.
 model SuppressionEntry {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
+  id        String       @id @default(uuid())
+  orgId     String       @map("org_id")
   org       Organization @relation(fields: [orgId], references: [id])
   email     String
   reason    String // UNSUBSCRIBED | HARD_BOUNCE | SPAM_COMPLAINT | MANUAL
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime     @default(now()) @map("created_at")
 
   @@unique([orgId, email])
   @@map("suppression_entries")
@@ -1892,26 +1899,26 @@ model SuppressionEntry {
 /// relation/queries; `entityType`/`entityId` is the generic reference for
 /// everything else (a user, a permission check, an agent execution).
 model AuditLog {
-  id        String   @id @default(uuid())
-  orgId     String?  @map("org_id")
-  org       Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
-  leadId    String?  @map("lead_id")
+  id         String        @id @default(uuid())
+  orgId      String?       @map("org_id")
+  org        Organization? @relation(fields: [orgId], references: [id], onDelete: SetNull)
+  leadId     String?       @map("lead_id")
   // SetNull rather than the default: deleting a lead must keep the audit
   // trail entry (who did what, when) even though the row it was about is
   // gone — losing accountability history is worse than an orphaned reference.
-  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
-  actorId   String?  @map("actor_id")
-  actor     User?    @relation(fields: [actorId], references: [id])
-  entityType String? @map("entity_type")
-  entityId   String? @map("entity_id")
-  action    String
+  lead       Lead?         @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  actorId    String?       @map("actor_id")
+  actor      User?         @relation(fields: [actorId], references: [id])
+  entityType String?       @map("entity_type")
+  entityId   String?       @map("entity_id")
+  action     String
   /// SUCCESS | FAILURE — a failed login or a denied permission check is as
   /// important to have on record as a successful mutation.
-  result    String   @default("SUCCESS")
-  ipAddress String?  @map("ip_address")
-  metadata  Json     @default("{}")
-  diff      Json     @default("{}")
-  createdAt DateTime @default(now()) @map("created_at")
+  result     String        @default("SUCCESS")
+  ipAddress  String?       @map("ip_address")
+  metadata   Json          @default("{}")
+  diff       Json          @default("{}")
+  createdAt  DateTime      @default(now()) @map("created_at")
 
   @@index([leadId])
   @@index([orgId, createdAt])
@@ -1949,37 +1956,37 @@ enum NotificationCategory {
 /// replacing the previous org-wide-only design). Read/dismissed state is
 /// per-user — see NotificationUserState.
 model Notification {
-  id        String   @id @default(uuid())
-  orgId     String   @map("org_id")
-  org       Organization @relation(fields: [orgId], references: [id])
-  category  NotificationCategory @default(OTHER)
+  id             String               @id @default(uuid())
+  orgId          String               @map("org_id")
+  org            Organization         @relation(fields: [orgId], references: [id])
+  category       NotificationCategory @default(OTHER)
   /// Short header shown in bold ("Lead Automation Failed") — `message` is
   /// the one-line body underneath it. Existing `type` stays as the specific
   /// machine-readable event key (EMAIL_DRAFT_FAILED, etc.), now purely
   /// informational/for filtering, not the only thing rendered.
-  title     String   @default("")
-  leadId    String?  @map("lead_id")
-  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  title          String               @default("")
+  leadId         String?              @map("lead_id")
+  lead           Lead?                @relation(fields: [leadId], references: [id], onDelete: SetNull)
   /// Set for Social Inbox notifications (new message, assignment) — parallel
   /// to leadId above, same "optional FK per entity type this can be about"
   /// shape rather than a polymorphic target.
-  conversationId String?  @map("conversation_id")
-  conversation   SocialConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
+  conversationId String?              @map("conversation_id")
+  conversation   SocialConversation?  @relation(fields: [conversationId], references: [id], onDelete: SetNull)
   /// Generic entity reference for types leadId/conversationId don't cover
   /// (an inbound email thread, an agent execution) — kept alongside the two
   /// typed FKs above rather than replacing them, since those still back
   /// real relations/queries elsewhere.
-  entityType String? @map("entity_type")
-  entityId   String? @map("entity_id")
+  entityType     String?              @map("entity_type")
+  entityId       String?              @map("entity_id")
   /// Precomputed server-side deep link ("/leads/104") — the frontend
   /// navigates here directly instead of guessing from leadId/conversationId/
   /// type, per "the backend notification record should contain enough
   /// information to reliably identify the related entity."
-  actionUrl String? @map("action_url")
-  type      String
-  severity  String   @default("ERROR") // ERROR | WARNING
-  message   String
-  createdAt DateTime @default(now()) @map("created_at")
+  actionUrl      String?              @map("action_url")
+  type           String
+  severity       String               @default("ERROR") // ERROR | WARNING
+  message        String
+  createdAt      DateTime             @default(now()) @map("created_at")
 
   /// Explicit, admin-picked recipients for this one notification (Part:
   /// Upwork follow-up reminders, 2026-09-30) — overrides the normal
@@ -2005,13 +2012,13 @@ model Notification {
 /// row is created just to represent "unread", only on an actual read or
 /// dismiss action.
 model NotificationUserState {
-  id             String   @id @default(uuid())
-  notificationId String   @map("notification_id")
+  id             String       @id @default(uuid())
+  notificationId String       @map("notification_id")
   notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  userId         String   @map("user_id")
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  readAt         DateTime? @map("read_at")
-  dismissedAt    DateTime? @map("dismissed_at")
+  userId         String       @map("user_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  readAt         DateTime?    @map("read_at")
+  dismissedAt    DateTime?    @map("dismissed_at")
 
   @@unique([notificationId, userId])
   @@index([userId])
@@ -2056,57 +2063,57 @@ enum SocialPostStatus {
 }
 
 model SocialAccount {
-  id                String   @id @default(uuid())
-  orgId             String   @map("org_id")
-  org               Organization @relation(fields: [orgId], references: [id])
+  id                String              @id @default(uuid())
+  orgId             String              @map("org_id")
+  org               Organization        @relation(fields: [orgId], references: [id])
   platform          SocialPlatform
   /// The platform's own account id, set once a real connection exists —
   /// null for an account row created ahead of connecting (Part: Add
   /// Account lets you configure defaults before OAuth even runs).
-  externalAccountId String?  @map("external_account_id")
+  externalAccountId String?             @map("external_account_id")
   /// Handle/username, e.g. "@brand1" — required even pre-connection since
   /// it's how a human tells accounts on the same platform apart.
   username          String
   /// Internal label, distinct from the platform-reported name — same
   /// "mailboxLabel" idea as EmailAccount.
-  displayName       String?  @map("display_name")
-  profileImageUrl   String?  @map("profile_image_url")
+  displayName       String?             @map("display_name")
+  profileImageUrl   String?             @map("profile_image_url")
   /// "business" | "personal" | "page" — platform-reported once connected,
   /// operator-guessed before that; free text since each platform's own
   /// vocabulary differs (Instagram "business/creator" vs LinkedIn "page").
-  accountType       String?  @map("account_type")
+  accountType       String?             @map("account_type")
   status            SocialAccountStatus @default(DISCONNECTED)
   /// Encrypted at rest (EncryptionService) — same convention as
   /// EmailAccount's credential columns, never plaintext.
-  accessTokenEnc    String?  @map("access_token_enc")
-  refreshTokenEnc   String?  @map("refresh_token_enc")
-  tokenExpiresAt    DateTime? @map("token_expires_at")
-  connectedByUserId String?  @map("connected_by_user_id")
-  connectedAt       DateTime? @map("connected_at")
-  lastSyncAt        DateTime? @map("last_sync_at")
-  defaultTimezone   String?  @map("default_timezone")
-  defaultHashtags   String[] @default([]) @map("default_hashtags")
-  defaultCta        String?  @map("default_cta")
-  brandVoice        String?  @map("brand_voice")
+  accessTokenEnc    String?             @map("access_token_enc")
+  refreshTokenEnc   String?             @map("refresh_token_enc")
+  tokenExpiresAt    DateTime?           @map("token_expires_at")
+  connectedByUserId String?             @map("connected_by_user_id")
+  connectedAt       DateTime?           @map("connected_at")
+  lastSyncAt        DateTime?           @map("last_sync_at")
+  defaultTimezone   String?             @map("default_timezone")
+  defaultHashtags   String[]            @default([]) @map("default_hashtags")
+  defaultCta        String?             @map("default_cta")
+  brandVoice        String?             @map("brand_voice")
   /// Whether a post targeting this account must pass PENDING_REVIEW before
   /// it can be scheduled — Part: Approval Workflow, per-account since
   /// different brands/accounts may need different rigor.
-  approvalRequired  Boolean  @default(true) @map("approval_required")
+  approvalRequired  Boolean             @default(true) @map("approval_required")
   /// Which OAuth app this account was connected through (Part: per-account
   /// OAuth app credentials, 2026-09-07) — null means the platform-wide
   /// default app (env vars), the only option that existed before this was
   /// added, so every pre-existing row stays null and keeps working as-is.
   /// Must be reused (not re-picked) on reconnect/refresh: an app can only
   /// exchange/refresh a code or token it originally issued.
-  oauthAppId        String?  @map("oauth_app_id")
-  oauthApp          SocialOAuthApp? @relation(fields: [oauthAppId], references: [id], onDelete: SetNull)
-  createdAt         DateTime @default(now()) @map("created_at")
+  oauthAppId        String?             @map("oauth_app_id")
+  oauthApp          SocialOAuthApp?     @relation(fields: [oauthAppId], references: [id], onDelete: SetNull)
+  createdAt         DateTime            @default(now()) @map("created_at")
 
-  accessGrants  SocialAccountAccess[]
-  postVersions  SocialPostVersion[]
-  conversations SocialConversation[]
+  accessGrants       SocialAccountAccess[]
+  postVersions       SocialPostVersion[]
+  conversations      SocialConversation[]
   analyticsSnapshots SocialAccountAnalyticsSnapshot[]
-  comments      SocialComment[]
+  comments           SocialComment[]
 
   /// One row per (platform, handle) per org — reconnecting the same
   /// account edits this row rather than creating a duplicate.
@@ -2121,20 +2128,20 @@ model SocialAccount {
 /// additive: an org that never creates one of these keeps using the
 /// platform-wide default, unchanged.
 model SocialOAuthApp {
-  id              String   @id @default(uuid())
-  orgId           String   @map("org_id")
-  org             Organization @relation(fields: [orgId], references: [id])
+  id              String         @id @default(uuid())
+  orgId           String         @map("org_id")
+  org             Organization   @relation(fields: [orgId], references: [id])
   platform        SocialPlatform
   /// Operator-facing label only ("Client Brand X's Meta app") — never sent
   /// to the platform.
   name            String
-  clientId        String   @map("client_id")
+  clientId        String         @map("client_id")
   /// Encrypted at rest (EncryptionService) — same convention as
   /// SocialAccount's own token columns, never plaintext, never returned to
   /// the frontend once saved.
-  clientSecretEnc String   @map("client_secret_enc")
-  createdByUserId String?  @map("created_by_user_id")
-  createdAt       DateTime @default(now()) @map("created_at")
+  clientSecretEnc String         @map("client_secret_enc")
+  createdByUserId String?        @map("created_by_user_id")
+  createdAt       DateTime       @default(now()) @map("created_at")
 
   accounts SocialAccount[]
 
@@ -2144,9 +2151,9 @@ model SocialOAuthApp {
 /// Account-level permission grant — same shape and same "absence means no
 /// access, not read-only" contract as EmailAccountAccess.
 model SocialAccountAccess {
-  userId     String  @map("user_id")
-  user       User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  accountId  String  @map("account_id")
+  userId     String        @map("user_id")
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId  String        @map("account_id")
   account    SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
   /// Gates whether this account's conversations show up in the user's
   /// Social Inbox filter (Part: Unified Social Media DM Monitoring) —
@@ -2155,10 +2162,10 @@ model SocialAccountAccess {
   /// row: creating a grant at all already implies "this person should see
   /// this account," same reasoning canPublish/canApprove default false
   /// (an explicit elevated capability) while this one defaults open.
-  canView    Boolean @default(true) @map("can_view")
-  canPublish Boolean @default(false) @map("can_publish")
-  canApprove Boolean @default(false) @map("can_approve")
-  createdAt  DateTime @default(now()) @map("created_at")
+  canView    Boolean       @default(true) @map("can_view")
+  canPublish Boolean       @default(false) @map("can_publish")
+  canApprove Boolean       @default(false) @map("can_approve")
+  createdAt  DateTime      @default(now()) @map("created_at")
 
   @@id([userId, accountId])
   @@map("social_account_access")
@@ -2174,20 +2181,20 @@ model SocialAccountAccess {
 /// account at that time (see SocialPlatformProvider.getAccountInsights);
 /// a platform with capabilities.analytics === false never gets a row.
 model SocialAccountAnalyticsSnapshot {
-  id             String   @id @default(uuid())
-  accountId      String   @map("account_id")
+  id             String        @id @default(uuid())
+  accountId      String        @map("account_id")
   account        SocialAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  capturedAt     DateTime @default(now()) @map("captured_at")
-  followerCount  Int?     @map("follower_count")
-  followingCount Int?     @map("following_count")
-  postsCount     Int?     @map("posts_count")
+  capturedAt     DateTime      @default(now()) @map("captured_at")
+  followerCount  Int?          @map("follower_count")
+  followingCount Int?          @map("following_count")
+  postsCount     Int?          @map("posts_count")
   reach          Int?
   impressions    Int?
-  engagementRate Float?   @map("engagement_rate")
-  likeCount      Int?     @map("like_count")
-  commentCount   Int?     @map("comment_count")
-  shareCount     Int?     @map("share_count")
-  saveCount      Int?     @map("save_count")
+  engagementRate Float?        @map("engagement_rate")
+  likeCount      Int?          @map("like_count")
+  commentCount   Int?          @map("comment_count")
+  shareCount     Int?          @map("share_count")
+  saveCount      Int?          @map("save_count")
 
   @@index([accountId, capturedAt])
   @@map("social_account_analytics_snapshots")
@@ -2210,25 +2217,25 @@ enum ConversationStatus {
 /// webhook receiver and, as a reconciliation fallback, SocialInboxSyncWorker.
 /// Never written to by anything in the Lead Generation module.
 model SocialConversation {
-  id                     String   @id @default(uuid())
-  socialAccountId        String   @map("social_account_id")
-  socialAccount          SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
-  externalConversationId String   @map("external_conversation_id")
-  contactExternalId      String?  @map("contact_external_id")
-  contactName            String?  @map("contact_name")
-  contactUsername        String?  @map("contact_username")
-  contactProfileImageUrl String?  @map("contact_profile_image_url")
-  lastMessage            String?  @map("last_message")
-  lastMessageAt          DateTime @map("last_message_at")
-  unreadCount            Int      @default(0) @map("unread_count")
+  id                     String             @id @default(uuid())
+  socialAccountId        String             @map("social_account_id")
+  socialAccount          SocialAccount      @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  externalConversationId String             @map("external_conversation_id")
+  contactExternalId      String?            @map("contact_external_id")
+  contactName            String?            @map("contact_name")
+  contactUsername        String?            @map("contact_username")
+  contactProfileImageUrl String?            @map("contact_profile_image_url")
+  lastMessage            String?            @map("last_message")
+  lastMessageAt          DateTime           @map("last_message_at")
+  unreadCount            Int                @default(0) @map("unread_count")
   status                 ConversationStatus @default(OPEN)
-  assignedToUserId       String?  @map("assigned_to_user_id")
-  assignedToUser         User?    @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
-  createdAt              DateTime @default(now()) @map("created_at")
-  updatedAt              DateTime @updatedAt @map("updated_at")
+  assignedToUserId       String?            @map("assigned_to_user_id")
+  assignedToUser         User?              @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
 
-  messages     SocialMessage[]
-  notes        SocialInternalNote[]
+  messages      SocialMessage[]
+  notes         SocialInternalNote[]
   notifications Notification[]
 
   /// Dedup key — a webhook retry or the reconciliation poll re-observing
@@ -2243,20 +2250,20 @@ model SocialConversation {
 }
 
 model SocialMessage {
-  id                String   @id @default(uuid())
-  conversationId    String   @map("conversation_id")
+  id                String             @id @default(uuid())
+  conversationId    String             @map("conversation_id")
   conversation      SocialConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  externalMessageId String   @map("external_message_id")
+  externalMessageId String             @map("external_message_id")
   /// true = we sent it (via the reply box), false = the contact sent it.
   /// Same field the provider's ConversationMessage.fromUs already reports —
   /// stored as-is rather than translated into a separate direction/
   /// sender_type pair that would just say the same thing twice.
-  fromUs            Boolean  @map("from_us")
-  senderName        String?  @map("sender_name")
-  messageText       String?  @map("message_text")
-  mediaUrl          String?  @map("media_url")
-  sentAt            DateTime @map("sent_at")
-  createdAt         DateTime @default(now()) @map("created_at")
+  fromUs            Boolean            @map("from_us")
+  senderName        String?            @map("sender_name")
+  messageText       String?            @map("message_text")
+  mediaUrl          String?            @map("media_url")
+  sentAt            DateTime           @map("sent_at")
+  createdAt         DateTime           @default(now()) @map("created_at")
 
   /// Dedup key — the same message re-delivered by a webhook retry or seen
   /// again by the reconciliation poll must not insert twice.
@@ -2269,17 +2276,17 @@ model SocialMessage {
 /// as its own table rather than a message with a flag so there's no way
 /// for a future bug to accidentally include one in an outbound payload.
 model SocialInternalNote {
-  id             String   @id @default(uuid())
-  conversationId String   @map("conversation_id")
+  id             String             @id @default(uuid())
+  conversationId String             @map("conversation_id")
   conversation   SocialConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   // Nullable (Part: delete user, 2026-09-17) -- the note's text is real
   // conversation context worth keeping even after its author's account is
   // deleted, same reasoning as AuditLog.actorId/ReviewNote.reviewerId.
-  userId         String?  @map("user_id")
-  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId         String?            @map("user_id")
+  user           User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   note           String
-  createdAt      DateTime @default(now()) @map("created_at")
-  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
 
   @@index([conversationId])
   @@map("social_internal_notes")
@@ -2305,31 +2312,31 @@ enum EngagementStatus {
 }
 
 model SocialComment {
-  id                    String   @id @default(uuid())
-  socialAccountId       String   @map("social_account_id")
-  socialAccount         SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  id                    String           @id @default(uuid())
+  socialAccountId       String           @map("social_account_id")
+  socialAccount         SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
   /// The platform's own post/media id this comment was left on — not a
   /// foreign key to SocialPostVersion, since a comment can land on a post
   /// that was published before this feature existed (no local row to link
   /// to) or one published directly on the platform, outside this app.
-  externalPostId        String   @map("external_post_id")
-  externalCommentId     String   @map("external_comment_id")
+  externalPostId        String           @map("external_post_id")
+  externalCommentId     String           @map("external_comment_id")
   /// Set when this comment is itself a reply to another comment (a nested
   /// thread) — null for a top-level comment.
-  parentCommentId       String?  @map("parent_comment_id")
-  authorExternalId      String?  @map("author_external_id")
-  authorName            String?  @map("author_name")
-  authorProfileImageUrl String?  @map("author_profile_image_url")
+  parentCommentId       String?          @map("parent_comment_id")
+  authorExternalId      String?          @map("author_external_id")
+  authorName            String?          @map("author_name")
+  authorProfileImageUrl String?          @map("author_profile_image_url")
   text                  String?
-  postedAt              DateTime @map("posted_at")
+  postedAt              DateTime         @map("posted_at")
   /// True for a reply *we* posted through this system (SocialEngagementService.reply)
   /// — never true for an inbound comment, same "ours vs theirs" split
   /// SocialMessage.fromUs already uses for DMs.
-  fromUs                Boolean  @default(false) @map("from_us")
+  fromUs                Boolean          @default(false) @map("from_us")
   status                EngagementStatus @default(NEW)
-  assignedToUserId      String?  @map("assigned_to_user_id")
-  assignedToUser        User?    @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
-  createdAt             DateTime @default(now()) @map("created_at")
+  assignedToUserId      String?          @map("assigned_to_user_id")
+  assignedToUser        User?            @relation(fields: [assignedToUserId], references: [id], onDelete: SetNull)
+  createdAt             DateTime         @default(now()) @map("created_at")
 
   @@unique([socialAccountId, externalCommentId])
   @@index([socialAccountId, postedAt])
@@ -2343,28 +2350,28 @@ model SocialComment {
 /// targeted account, since the spec explicitly forbids blindly
 /// duplicating identical content across platforms.
 model SocialPost {
-  id               String   @id @default(uuid())
-  orgId            String   @map("org_id")
-  org              Organization @relation(fields: [orgId], references: [id])
-  createdByUserId  String   @map("created_by_user_id")
+  id               String           @id @default(uuid())
+  orgId            String           @map("org_id")
+  org              Organization     @relation(fields: [orgId], references: [id])
+  createdByUserId  String           @map("created_by_user_id")
   /// Optional link into the existing lead-gen Campaign entity, for
   /// cross-module reporting — new relation, no prior pattern to match
   /// (only Lead.campaignId existed before this).
-  campaignId       String?  @map("campaign_id")
-  campaign         Campaign? @relation(fields: [campaignId], references: [id])
+  campaignId       String?          @map("campaign_id")
+  campaign         Campaign?        @relation(fields: [campaignId], references: [id])
   status           SocialPostStatus @default(DRAFT)
-  scheduledAt      DateTime? @map("scheduled_at")
+  scheduledAt      DateTime?        @map("scheduled_at")
   timezone         String?
   /// {frequency, daysOfWeek, endDate} — null means one-off. Recurrence
   /// materializes concrete future SocialPost rows (Part: Recurring
   /// Posts) rather than being evaluated live, so each occurrence stays
   /// independently editable/skippable/cancellable.
-  recurrenceRule   Json?    @map("recurrence_rule")
-  approvedByUserId String?  @map("approved_by_user_id")
-  approvedAt       DateTime? @map("approved_at")
-  rejectionReason  String?  @map("rejection_reason")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  recurrenceRule   Json?            @map("recurrence_rule")
+  approvedByUserId String?          @map("approved_by_user_id")
+  approvedAt       DateTime?        @map("approved_at")
+  rejectionReason  String?          @map("rejection_reason")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
 
   versions SocialPostVersion[]
   media    SocialPostMedia[]
@@ -2375,48 +2382,48 @@ model SocialPost {
 }
 
 model SocialPostVersion {
-  id             String   @id @default(uuid())
-  postId         String   @map("post_id")
-  post           SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  id             String         @id @default(uuid())
+  postId         String         @map("post_id")
+  post           SocialPost     @relation(fields: [postId], references: [id], onDelete: Cascade)
   /// Nullable so deleting a SocialAccount (Part: Settings > Social Accounts
   /// delete) doesn't get blocked by post history -- SetNull mirrors
   /// EmailAccountsService.remove's "keep the record, drop the link" pattern.
   /// The publish worker treats accountId === null as a permanent failure,
   /// never as "nothing to do".
-  accountId      String?  @map("account_id")
+  accountId      String?        @map("account_id")
   account        SocialAccount? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   content        String
-  hashtags       String[] @default([])
+  hashtags       String[]       @default([])
   /// Set once actually published through the provider — the platform's
   /// own post id, for building a permalink / fetching performance later.
-  externalPostId String?  @map("external_post_id")
-  publishedAt    DateTime? @map("published_at")
+  externalPostId String?        @map("external_post_id")
+  publishedAt    DateTime?      @map("published_at")
   /// Why the last publish attempt failed (provider error, or "not
   /// connected" if the account has no real credentials yet) — Part:
   /// Failed Publishing's explicit "do not silently mark as published."
-  publishError   String?  @map("publish_error")
-  lastAttemptAt  DateTime? @map("last_attempt_at")
+  publishError   String?        @map("publish_error")
+  lastAttemptAt  DateTime?      @map("last_attempt_at")
 
   @@unique([postId, accountId])
   @@map("social_post_versions")
 }
 
 model MediaAsset {
-  id               String   @id @default(uuid())
-  orgId            String   @map("org_id")
+  id               String       @id @default(uuid())
+  orgId            String       @map("org_id")
   org              Organization @relation(fields: [orgId], references: [id])
-  uploadedByUserId String   @map("uploaded_by_user_id")
-  folderId         String?  @map("folder_id")
+  uploadedByUserId String       @map("uploaded_by_user_id")
+  folderId         String?      @map("folder_id")
   folder           MediaFolder? @relation(fields: [folderId], references: [id])
   filename         String
   /// Opaque locator MediaStorageService understands — a relative disk
   /// path in the V1 local implementation, an S3/R2 key if that's ever
   /// swapped in later. Never a full URL (that's derived, not stored).
-  storageKey       String   @map("storage_key")
-  mimeType         String   @map("mime_type")
-  sizeBytes        Int      @map("size_bytes")
-  tags             String[] @default([])
-  createdAt        DateTime @default(now()) @map("created_at")
+  storageKey       String       @map("storage_key")
+  mimeType         String       @map("mime_type")
+  sizeBytes        Int          @map("size_bytes")
+  tags             String[]     @default([])
+  createdAt        DateTime     @default(now()) @map("created_at")
 
   posts SocialPostMedia[]
 
@@ -2425,11 +2432,11 @@ model MediaAsset {
 }
 
 model MediaFolder {
-  id       String  @id @default(uuid())
-  orgId    String  @map("org_id")
+  id       String       @id @default(uuid())
+  orgId    String       @map("org_id")
   org      Organization @relation(fields: [orgId], references: [id])
   name     String
-  parentId String? @map("parent_id")
+  parentId String?      @map("parent_id")
 
   assets MediaAsset[]
 
@@ -2437,9 +2444,9 @@ model MediaFolder {
 }
 
 model SocialPostMedia {
-  postId  String @map("post_id")
+  postId  String     @map("post_id")
   post    SocialPost @relation(fields: [postId], references: [id], onDelete: Cascade)
-  mediaId String @map("media_id")
+  mediaId String     @map("media_id")
   media   MediaAsset @relation(fields: [mediaId], references: [id])
 
   @@id([postId, mediaId])
@@ -2449,12 +2456,12 @@ model SocialPostMedia {
 /// Reusable, user-defined hashtag sets (Part: Hashtag / Content
 /// Organization) — never hardcoded, same philosophy as EmailTag.
 model HashtagGroup {
-  id       String   @id @default(uuid())
-  orgId    String   @map("org_id")
-  org      Organization @relation(fields: [orgId], references: [id])
-  name     String
-  hashtags String[]
-  createdAt DateTime @default(now()) @map("created_at")
+  id        String       @id @default(uuid())
+  orgId     String       @map("org_id")
+  org       Organization @relation(fields: [orgId], references: [id])
+  name      String
+  hashtags  String[]
+  createdAt DateTime     @default(now()) @map("created_at")
 
   @@unique([orgId, name])
   @@map("hashtag_groups")
@@ -2464,13 +2471,13 @@ model HashtagGroup {
 /// Announcement," "Testimonial," etc. `bodyTemplate` is plain text with
 /// placeholders a human fills in, not executable.
 model ContentTemplate {
-  id           String   @id @default(uuid())
-  orgId        String   @map("org_id")
+  id           String       @id @default(uuid())
+  orgId        String       @map("org_id")
   org          Organization @relation(fields: [orgId], references: [id])
   name         String
   category     String
-  bodyTemplate String   @map("body_template")
-  createdAt    DateTime @default(now()) @map("created_at")
+  bodyTemplate String       @map("body_template")
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   @@map("content_templates")
 }
@@ -2482,19 +2489,19 @@ model ContentTemplate {
 /// no source module to fire from yet, so they're not represented here
 /// rather than being faked.
 model SocialAutomation {
-  id              String   @id @default(uuid())
-  orgId           String   @map("org_id")
+  id              String       @id @default(uuid())
+  orgId           String       @map("org_id")
   org             Organization @relation(fields: [orgId], references: [id])
   name            String
-  triggerType     String   @map("trigger_type")
-  conditions      Json     @default("{}")
+  triggerType     String       @map("trigger_type")
+  conditions      Json         @default("{}")
   /// [{type: "CREATE_DRAFT", platforms: [...], templateId?}, {type:
   /// "NOTIFY", userId}] — a short, fixed action vocabulary, not a
   /// scripting language.
   actions         Json
-  active          Boolean  @default(true)
-  createdByUserId String   @map("created_by_user_id")
-  createdAt       DateTime @default(now()) @map("created_at")
+  active          Boolean      @default(true)
+  createdByUserId String       @map("created_by_user_id")
+  createdAt       DateTime     @default(now()) @map("created_at")
 
   runs SocialAutomationRun[]
 
@@ -2504,16 +2511,16 @@ model SocialAutomation {
 /// One row per time an automation actually fired — the execution log a
 /// human can audit ("why did this draft appear").
 model SocialAutomationRun {
-  id           String   @id @default(uuid())
-  automationId String   @map("automation_id")
+  id           String           @id @default(uuid())
+  automationId String           @map("automation_id")
   automation   SocialAutomation @relation(fields: [automationId], references: [id], onDelete: Cascade)
   /// Free-text reference to whatever triggered this (e.g. a Lead id) —
   /// not a hard FK, since the whole point of the trigger vocabulary is to
   /// grow to sources this table shouldn't need to know about individually.
-  triggerRef   String?  @map("trigger_ref")
-  status       String   // OK | FAILED
-  resultNote   String?  @map("result_note")
-  createdAt    DateTime @default(now()) @map("created_at")
+  triggerRef   String?          @map("trigger_ref")
+  status       String // OK | FAILED
+  resultNote   String?          @map("result_note")
+  createdAt    DateTime         @default(now()) @map("created_at")
 
   @@map("social_automation_runs")
 }
@@ -2565,18 +2572,18 @@ enum MetaAdAccountStatus {
 }
 
 model MetaAdAccount {
-  id    String @id @default(uuid())
-  orgId String @map("org_id")
+  id    String       @id @default(uuid())
+  orgId String       @map("org_id")
   org   Organization @relation(fields: [orgId], references: [id])
 
   /// Meta's own id, e.g. "act_1234567890" — used verbatim as the path
   /// segment on every Marketing API call for this account.
-  externalAccountId String @map("external_account_id")
+  externalAccountId String              @map("external_account_id")
   name              String
   currency          String?
-  timezoneName      String? @map("timezone_name")
-  businessId        String? @map("business_id")
-  businessName      String? @map("business_name")
+  timezoneName      String?             @map("timezone_name")
+  businessId        String?             @map("business_id")
+  businessName      String?             @map("business_name")
   status            MetaAdAccountStatus @default(DISCONNECTED)
 
   /// Long-lived (~60 day) user access token — encrypted at rest
@@ -2606,11 +2613,11 @@ model MetaAdAccount {
 }
 
 model MetaCampaign {
-  id          String @id @default(uuid())
-  adAccountId String @map("ad_account_id")
+  id          String        @id @default(uuid())
+  adAccountId String        @map("ad_account_id")
   adAccount   MetaAdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
 
-  externalCampaignId String @map("external_campaign_id")
+  externalCampaignId String    @map("external_campaign_id")
   name               String
   /// Meta's effective_status verbatim ("ACTIVE", "PAUSED", "ARCHIVED",
   /// "DELETED", ...) — free text like SocialAccount.accountType, since
@@ -2635,8 +2642,8 @@ model MetaCampaign {
 }
 
 model MetaAdSet {
-  id         String @id @default(uuid())
-  campaignId String @map("campaign_id")
+  id         String       @id @default(uuid())
+  campaignId String       @map("campaign_id")
   campaign   MetaCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
 
   externalAdSetId  String    @map("external_ad_set_id")
@@ -2660,8 +2667,8 @@ model MetaAdSet {
 }
 
 model MetaAd {
-  id      String @id @default(uuid())
-  adSetId String @map("ad_set_id")
+  id      String    @id @default(uuid())
+  adSetId String    @map("ad_set_id")
   adSet   MetaAdSet @relation(fields: [adSetId], references: [id], onDelete: Cascade)
 
   externalAdId String   @map("external_ad_id")
@@ -2686,41 +2693,41 @@ model MetaAdInsightDaily {
   /// campaign) so account/campaign/ad-set rollup queries never need a join
   /// through three tables just to filter — same tradeoff SocialAuditLog's
   /// own accountId/postId columns already make.
-  adAccountId String  @map("ad_account_id")
+  adAccountId String        @map("ad_account_id")
   adAccount   MetaAdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
-  campaignId  String? @map("campaign_id")
+  campaignId  String?       @map("campaign_id")
   campaign    MetaCampaign? @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  adSetId     String? @map("ad_set_id")
-  adSet       MetaAdSet? @relation(fields: [adSetId], references: [id], onDelete: Cascade)
-  adId        String? @map("ad_id")
-  ad          MetaAd? @relation(fields: [adId], references: [id], onDelete: Cascade)
+  adSetId     String?       @map("ad_set_id")
+  adSet       MetaAdSet?    @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+  adId        String?       @map("ad_id")
+  ad          MetaAd?       @relation(fields: [adId], references: [id], onDelete: Cascade)
 
   date DateTime @db.Date
 
-  impressions Int    @default(0)
-  reach       Int    @default(0)
-  frequency   Float?
-  clicks      Int    @default(0)
-  linkClicks  Int?   @map("link_clicks")
-  spend       Float  @default(0)
-  ctr         Float?
-  cpc         Float?
-  cpm         Float?
-  videoViews         Int? @map("video_views")
-  landingPageViews   Int? @map("landing_page_views")
+  impressions      Int    @default(0)
+  reach            Int    @default(0)
+  frequency        Float?
+  clicks           Int    @default(0)
+  linkClicks       Int?   @map("link_clicks")
+  spend            Float  @default(0)
+  ctr              Float?
+  cpc              Float?
+  cpm              Float?
+  videoViews       Int?   @map("video_views")
+  landingPageViews Int?   @map("landing_page_views")
 
   /// Meta's raw `actions` array verbatim (one entry per action_type: link
   /// click, purchase, lead, add_to_cart, ...) — stored as-is rather than one
   /// column per action type (Part: "do not hard-code metrics Meta doesn't
   /// return"). The dashboard reads named actions out of this dynamically, so
   /// a new/renamed Meta action type needs no migration here.
-  actions           Json? @map("actions")
-  actionValues      Json? @map("action_values")
-  costPerActionType Json? @map("cost_per_action_type")
+  actions           Json?   @map("actions")
+  actionValues      Json?   @map("action_values")
+  costPerActionType Json?   @map("cost_per_action_type")
   /// Meta's `purchase_roas` array verbatim — only present when Meta actually
   /// returns it (purchase-optimized campaigns with a connected catalog/
   /// pixel), never fabricated for campaigns without it.
-  purchaseRoas      Json? @map("purchase_roas")
+  purchaseRoas      Json?   @map("purchase_roas")
   currency          String?
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -2735,4 +2742,87 @@ model MetaAdInsightDaily {
   @@index([campaignId, date])
   @@index([adSetId, date])
   @@map("meta_ad_insights_daily")
+}
+
+/// One row per org (Part: Upwork Proposal Writing) — the editable prompt
+/// parameters the cover-letter generator is built from, so the person
+/// running this agency can tune tone/background/length "anytime" (explicit
+/// user request) without a code change. A real settings row rather than a
+/// JSON blob on Organization.settings (unlike e.g. upworkPicklists there)
+/// because this is a single clearly-owned concern worth its own migration
+/// path, not a grab-bag key.
+model UpworkProposalWritingSettings {
+  id    String       @id @default(uuid())
+  orgId String       @unique @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+
+  /// Free-form description of the agency/freelancer(s) this should sound
+  /// like it's coming from — services offered, strengths, differentiators.
+  /// Blank until an admin fills it in; the generator still works without
+  /// it (just more generic), same "works with defaults, better once
+  /// configured" posture as other settings in this app.
+  agencyBackground String @default("") @map("agency_background") @db.Text
+  /// The main editable prompt — tone, structure, must-include rules, things
+  /// to avoid. Pre-seeded with a sensible default on creation (see
+  /// UpworkProposalWritingSettingsService) so there's something reasonable
+  /// before anyone touches Settings, exactly like every other "ships with a
+  /// default, editable anytime" config in this app.
+  instructions     String @map("instructions") @db.Text
+  /// Soft target the prompt is told to aim for, not a hard cutoff enforced
+  /// in code — matches how real cover letters vary in length by job.
+  wordCountTarget  Int    @default(150) @map("word_count_target")
+
+  updatedByUserId String?  @map("updated_by_user_id")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("upwork_proposal_writing_settings")
+}
+
+/// One row per generated cover letter (Part: Upwork Proposal Writing) — an
+/// audit/history trail, same reasoning as UpworkConnectPurchase/AuditLog:
+/// anything that cost a real API call (OpenAI tokens, a headless-browser
+/// fetch) is worth keeping, not thrown away once displayed once.
+model UpworkProposalDraft {
+  id              String       @id @default(uuid())
+  orgId           String       @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  createdByUserId String       @map("created_by_user_id")
+
+  jobUrl         String  @map("job_url")
+  jobTitle       String? @map("job_title")
+  jobDescription String? @map("job_description") @db.Text
+  /// Client-side facts as fetched (country, rating, total spent, hire rate,
+  /// payment verified, etc.) — stored as Upwork returns them, not normalized
+  /// into columns, same "don't hard-code a shape someone else owns"
+  /// reasoning as MetaAdInsightDaily.actions above.
+  clientInfo     Json?   @map("client_info")
+
+  /// The three things the user explicitly asked this module to always show
+  /// (Part: Upwork Proposal Writing, explicit user request) — kept as
+  /// separate columns, not folded into coverLetter, so the UI can render
+  /// them as distinct sections.
+  clientNeeds String @map("client_needs") @db.Text
+  niche       String @map("niche")
+  coverLetter String @map("cover_letter") @db.Text
+
+  fetchStatus UpworkProposalDraftFetchStatus @default(SUCCESS) @map("fetch_status")
+  /// Set when fetchStatus is PARTIAL/FAILED — e.g. "Upwork blocked the
+  /// automatic fetch" — surfaced back to the user rather than swallowed.
+  fetchError  String?                        @map("fetch_error")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@map("upwork_proposal_drafts")
+}
+
+/// SUCCESS: the headless-browser fetch got real job details. PARTIAL: some
+/// fields came back empty but there was enough to generate from. FAILED:
+/// Upwork blocked the fetch entirely (bot detection) — no model call was
+/// made, and the draft row exists only to record the attempt.
+enum UpworkProposalDraftFetchStatus {
+  SUCCESS
+  PARTIAL
+  FAILED
 }

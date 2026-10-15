@@ -16,6 +16,7 @@ export interface UserAccessSnapshot {
   upworkRequestsAccess: boolean;
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
+  upworkProposalWritingAccess: boolean;
   isPrimaryAdmin: boolean;
 }
 
@@ -69,6 +70,7 @@ export class UserAccessCacheService {
           upworkRequestsAccess: true,
           metaAdsAccess: true,
           upworkApiAccess: true,
+          upworkProposalWritingAccess: true,
           isPrimaryAdmin: true,
         },
       });

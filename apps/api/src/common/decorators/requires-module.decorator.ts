@@ -10,7 +10,8 @@ export type AccessModule =
   | "UPWORK"
   | "UPWORK_REQUESTS"
   | "META_ADS"
-  | "UPWORK_API";
+  | "UPWORK_API"
+  | "UPWORK_PROPOSAL_WRITING";
 
 /** Attach to a controller/route: @RequiresModule("EMAIL_HUB"). Enforced by
  *  ModuleAccessGuard. Pass an array for OR semantics — access.

@@ -37,6 +37,7 @@ import { AgentOptimizationModule } from "./optimization/agent-optimization.modul
 import { MetaAdsModule } from "./meta-ads/meta-ads.module";
 import { UpworkIntegrationModule } from "./upwork-integration/upwork-integration.module";
 import { DashboardCenterModule } from "./dashboard-center/dashboard-center.module";
+import { UpworkProposalWritingModule } from "./upwork-proposal-writing/upwork-proposal-writing.module";
 
 @Module({
   imports: [
@@ -77,6 +78,7 @@ import { DashboardCenterModule } from "./dashboard-center/dashboard-center.modul
     MetaAdsModule,
     UpworkIntegrationModule,
     DashboardCenterModule,
+    UpworkProposalWritingModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },
