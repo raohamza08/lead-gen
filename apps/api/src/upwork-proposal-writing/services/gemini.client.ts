@@ -95,7 +95,11 @@ export class GeminiClient {
   }
 
   private model(): string {
-    return this.config.get<string>("GEMINI_MODEL") ?? DEFAULT_MODEL;
+    // `?? DEFAULT_MODEL` alone doesn't catch an empty-but-present
+    // GEMINI_MODEL= in .env (empty string isn't nullish) — confirmed this
+    // was live on the VPS and would have silently sent an empty model
+    // segment in the URL regardless of what DEFAULT_MODEL was set to.
+    return this.config.get<string>("GEMINI_MODEL")?.trim() || DEFAULT_MODEL;
   }
 
   private maskKey(key: string): string {
