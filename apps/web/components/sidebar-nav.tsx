@@ -174,11 +174,6 @@ const NAV: NavItem[] = [
       { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess" },
       { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess" },
       { href: "/upwork/proposal-writing", label: "Proposal Writing", moduleFlag: "upworkProposalWritingAccess" },
-      {
-        href: "/settings/upwork-proposal-writing",
-        label: "Proposal Writing Settings",
-        moduleFlag: "upworkProposalWritingAccess",
-      },
     ],
   },
   {

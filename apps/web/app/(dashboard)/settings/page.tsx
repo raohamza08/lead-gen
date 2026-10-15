@@ -50,6 +50,15 @@ export default function SettingsPage() {
             Per-account defaults, approval requirements, and who can publish or approve.
           </p>
         </Link>
+        <Link
+          href="/settings/upwork-proposal-writing"
+          className="card card-interactive p-5"
+        >
+          <h2 className="text-sm font-semibold tracking-tight">Proposal Writing Settings</h2>
+          <p className="mt-1 text-xs text-ink/50">
+            Agency background, tone/instructions, and target length for the AI cover-letter generator.
+          </p>
+        </Link>
       </section>
 
       <TeamSection />
