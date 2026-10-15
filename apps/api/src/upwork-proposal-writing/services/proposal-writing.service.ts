@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { UpworkJobFetcherService } from "./job-fetcher.service";
-import { OpenAiClient } from "./openai.client";
+import { GeminiClient } from "./gemini.client";
 import { ProposalWritingSettingsService } from "./proposal-writing-settings.service";
 
 function buildSystemPrompt(instructions: string, agencyBackground: string, wordCountTarget: number): string {
@@ -43,7 +43,7 @@ export class ProposalWritingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jobFetcher: UpworkJobFetcherService,
-    private readonly openAi: OpenAiClient,
+    private readonly gemini: GeminiClient,
     private readonly settingsService: ProposalWritingSettingsService,
   ) {}
 
@@ -51,8 +51,8 @@ export class ProposalWritingService {
     const job = await this.jobFetcher.fetchJob(jobUrl);
 
     if (job.status === "FAILED") {
-      // No OpenAI call on a failed fetch — don't spend tokens generating a
-      // cover letter from job details we don't actually have.
+      // No Gemini call on a failed fetch — don't burn free-tier requests
+      // generating a cover letter from job details we don't actually have.
       const draft = await this.prisma.upworkProposalDraft.create({
         data: {
           orgId,
@@ -71,7 +71,7 @@ export class ProposalWritingService {
     const settings = await this.settingsService.get(orgId);
     const systemPrompt = buildSystemPrompt(settings.instructions, settings.agencyBackground, settings.wordCountTarget);
     const jobBrief = buildJobBrief(job);
-    const result = await this.openAi.generateCoverLetter(systemPrompt, jobBrief);
+    const result = await this.gemini.generateCoverLetter(systemPrompt, jobBrief);
 
     const draft = await this.prisma.upworkProposalDraft.create({
       data: {
