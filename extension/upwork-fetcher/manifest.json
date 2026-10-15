@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Outly Upwork Fetcher",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Fetches Upwork job details for Outly's Proposal Writing tool using your own logged-in browser session -- Upwork blocks server-side automated fetches, this runs in your real browser instead.",
   "permissions": ["tabs", "scripting"],
   "host_permissions": [

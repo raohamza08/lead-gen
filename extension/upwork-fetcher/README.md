@@ -17,7 +17,7 @@ Done. You'll see "Outly Upwork Fetcher" in your extensions list.
 ## How it works
 
 1. On the Proposal Writing page, paste a job link and click **Generate**, same as always.
-2. The extension opens the job in a new tab you can see.
+2. The extension opens the job in a background tab — your current tab stays active, you won't be switched away.
 3. It reads the job details right there, sends them back, and closes the tab automatically.
 4. Your cover letter generates normally.
 

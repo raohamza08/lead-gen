@@ -29,7 +29,12 @@ function finish(tabId, payload) {
 
 function openTab(url, mode, onDone) {
   return new Promise((resolve) => {
-    chrome.tabs.create({ url, active: true }, (tab) => {
+    // active: false (explicit user request) -- the tab opens and loads for
+    // real, but the Outly tab stays focused/visible the whole time. Doesn't
+    // change anything Upwork's server sees (tab focus is a browser-UI
+    // concept, invisible to the page itself) -- purely so the user never
+    // gets yanked away from the app mid-scan.
+    chrome.tabs.create({ url, active: false }, (tab) => {
       const timeoutId = setTimeout(() => {
         finish(tab.id, { ok: false, error: "Timed out waiting for the page to load." });
       }, TIMEOUT_MS);

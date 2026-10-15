@@ -264,12 +264,15 @@ function isExtensionInstalled(): boolean {
   return document.documentElement.getAttribute("data-outly-upwork-fetcher") === "installed";
 }
 
-/** Asks the extension to open the job in a real, visible tab under the
+/** Asks the extension to open the job in a real background tab under the
  *  user's own session, scrape it there, and close it — the only approach
  *  that actually gets past Upwork's WAF block on this app's server IP
  *  (confirmed directly, not assumed; see job-fetcher.service.ts's own
- *  docblock). Resolves once the extension's background worker relays a
- *  result back via content-app.js's window.postMessage bridge. */
+ *  docblock). The tab opens without stealing focus (explicit user
+ *  request) — tab focus is a browser-UI concept, invisible to Upwork's
+ *  server, so this changes nothing about how the request looks to them.
+ *  Resolves once the extension's background worker relays a result back
+ *  via content-app.js's window.postMessage bridge. */
 function fetchJobViaExtension(jobUrl: string): Promise<{ ok: boolean; job?: ExtractedJobPayload; error?: string }> {
   return new Promise((resolve) => {
     const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2)}`;
@@ -388,7 +391,10 @@ export default function UpworkProposalWritingPage() {
           </div>
 
           {viaExtension && (
-            <p className="text-xs text-ink/50">Opened the job in a new tab to read it — it&apos;ll close automatically once done.</p>
+            <p className="text-xs text-ink/50">
+              Opened the job in a background tab to read it — it&apos;ll close automatically once done, and this tab stays active the whole
+              time.
+            </p>
           )}
 
           {!extensionInstalled && (

@@ -176,8 +176,8 @@ export default function UpworkJobFeedPage() {
           </div>
           {scanning && (
             <p className="text-xs text-ink/50">
-              Opening the search page and each job found (up to 10) in a visible tab, one at a time — this takes a little while and closes
-              everything automatically when done.
+              Opening the search page and each job found (up to 10) in a background tab, one at a time — this page stays active the whole
+              time. Takes a little while and closes everything automatically when done.
             </p>
           )}
           {scanError && (
