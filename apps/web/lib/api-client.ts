@@ -731,6 +731,8 @@ export const api = {
     technicalWordLimit?: number;
     nonTechnicalWordLimit?: number;
     excludedCountries?: string[];
+    newClientWindowMonths?: number;
+    minHiresPerYear?: number;
   }) => request("/upwork-proposal-writing/settings", { method: "PUT", body: JSON.stringify(body) }),
   getUpworkFreelancerProfiles: () => request("/upwork-proposal-writing/freelancer-profiles"),
   createUpworkFreelancerProfile: (body: { name: string; niche: string }) =>

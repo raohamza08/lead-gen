@@ -2783,6 +2783,20 @@ model UpworkProposalWritingSettings {
   /// an outright block (explicit user decision — "warn clearly, but still
   /// let me generate").
   excludedCountries     String[] @default(["India", "Pakistan", "Philippines"]) @map("excluded_countries")
+  /// Client-activity criteria, explicit user request 2026-10-16 — "the good
+  /// profile is one who's either created within 2-3 months ago and have 0
+  /// hire rate, or if its created a long ago then it should have more
+  /// projects." A client within this many months of joining gets the
+  /// "brand new, no track record yet" exception (no hires expected); past
+  /// it, they're judged on hires-per-year instead (see
+  /// bidding-criteria.util.ts's computeClientActivity — Upwork's job page
+  /// has no "jobs posted" count, hires-per-year is the closest real proxy
+  /// and is always labeled as that, not as "jobs posted").
+  newClientWindowMonths Int      @default(3) @map("new_client_window_months")
+  /// Below this many hires/year (for a client past the new-client window),
+  /// flagged as low-activity — "doesn't have much work" per the same
+  /// request above.
+  minHiresPerYear       Int      @default(2) @map("min_hires_per_year")
 
   updatedByUserId String?  @map("updated_by_user_id")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -2847,9 +2861,10 @@ model UpworkDiscoveredJob {
   /// change on their own) — the one time-sensitive factor (posting age vs
   /// the 15-minute window) is recomputed fresh on every GET instead of
   /// trusted from here; see DiscoveredJobsService.list.
-  spendTier  String?  @map("spend_tier")
-  isLongTerm Boolean? @map("is_long_term")
-  isHourly   Boolean? @map("is_hourly")
+  spendTier      String?  @map("spend_tier")
+  isLongTerm     Boolean? @map("is_long_term")
+  isHourly       Boolean? @map("is_hourly")
+  clientActivity String?  @map("client_activity")
 
   recommendation String   @default("MAYBE")
   reasons        String[] @default([])
@@ -2909,6 +2924,8 @@ model UpworkProposalDraft {
   spendTier          String?  @map("spend_tier")
   isLongTerm         Boolean? @map("is_long_term")
   postedMinutesAgo   Int?     @map("posted_minutes_ago")
+  clientActivity     String?  @map("client_activity")
+  monthsSinceJoined  Float?   @map("months_since_joined")
   /// Non-blocking criteria flags (e.g. "Client is in an excluded country") —
   /// shown prominently but never prevent generation (explicit user
   /// decision — "warn clearly, but still let me generate").

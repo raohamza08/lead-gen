@@ -8,6 +8,7 @@ import { Spinner } from "../../../../components/spinner";
 
 type JobType = "TECHNICAL" | "NON_TECHNICAL";
 type SpendTier = "PRIORITY" | "RARE_LOW_RESPONSE" | "NEW_CLIENT_OK" | "STANDARD" | "UNKNOWN";
+type ClientActivity = "NEW_PROMISING" | "ACTIVE" | "LOW_ACTIVITY" | "UNKNOWN";
 
 interface GenerateResult {
   draftId: string;
@@ -25,6 +26,8 @@ interface GenerateResult {
   spendTier?: SpendTier;
   isLongTerm?: boolean | null;
   postedMinutesAgo?: number | null;
+  clientActivity?: ClientActivity;
+  monthsSinceJoined?: number | null;
   warnings?: string[];
   overallAssessment?: string;
   createdByName?: string | null;
@@ -47,6 +50,8 @@ interface DraftRow {
   spendTier: SpendTier | null;
   isLongTerm: boolean | null;
   postedMinutesAgo: number | null;
+  clientActivity: ClientActivity | null;
+  monthsSinceJoined: number | null;
   warnings: string[];
   overallAssessment: string | null;
   createdByName: string | null;
@@ -70,6 +75,8 @@ function draftToResult(d: DraftRow): GenerateResult {
     spendTier: d.spendTier ?? undefined,
     isLongTerm: d.isLongTerm,
     postedMinutesAgo: d.postedMinutesAgo,
+    clientActivity: d.clientActivity ?? undefined,
+    monthsSinceJoined: d.monthsSinceJoined,
     warnings: d.warnings,
     overallAssessment: d.overallAssessment ?? undefined,
     createdByName: d.createdByName,
@@ -349,10 +356,20 @@ function SignalBadges({ result }: { result: GenerateResult }) {
       key: "posted",
       node: (
         <Badge tone={within ? "good" : "bad"}>
-          Posted {result.postedMinutesAgo} min ago {within ? "— within the 10-min window" : "— outside the 10-min window"}
+          Posted {result.postedMinutesAgo} min ago {within ? "— within the 15-min window" : "— outside the 15-min window"}
         </Badge>
       ),
     });
+  }
+  if (result.clientActivity && result.clientActivity !== "UNKNOWN") {
+    const tone = result.clientActivity === "LOW_ACTIVITY" ? "bad" : result.clientActivity === "NEW_PROMISING" ? "good" : "default";
+    const label =
+      result.clientActivity === "NEW_PROMISING"
+        ? "New client, no history yet — worth a shot"
+        : result.clientActivity === "LOW_ACTIVITY"
+          ? "Low-activity client — hires rarely for their tenure"
+          : "Active client";
+    badges.push({ key: "activity", node: <Badge tone={tone}>{label}</Badge> });
   }
   if (badges.length === 0) return null;
   return <div className="flex flex-wrap gap-1.5">{badges.map((b) => b.node)}</div>;

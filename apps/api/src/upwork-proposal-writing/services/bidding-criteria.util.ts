@@ -54,19 +54,74 @@ export function isLongTermJob(facts: Record<string, string>): boolean | null {
   return null;
 }
 
+/** Average 30.44-day month — good enough for "roughly how many months
+ *  since this date", not meant to be calendar-exact. */
+export function monthsBetween(from: Date, to: Date): number {
+  return (to.getTime() - from.getTime()) / (1000 * 60 * 60 * 24 * 30.44);
+}
+
 /** Bidding SOP Part 3 — client-spend-based bidding priority. The
  *  "NEW_CLIENT_OK" tier is the explicit exception the user gave: a client
  *  with zero hires and no/zero spend gets treated as viable rather than
  *  penalized for having no track record yet, since there's no real hire
- *  rate to be low. */
-export function computeSpendTier(totalSpentUsd: number | null, totalHires: number | null): SpendTier {
+ *  rate to be low.
+ *
+ *  Fixed 2026-10-16 (explicit user correction): this used to grant
+ *  NEW_CLIENT_OK to ANY zero-spend/zero-hire client regardless of how long
+ *  they'd been a member — a client who joined 5 years ago and never hired
+ *  isn't "new", they're inactive, and got incorrectly treated the same as
+ *  someone who joined last week. Now requires `memberSinceDate` to fall
+ *  within `newClientWindowMonths` (admin-configurable) for the exception
+ *  to apply; otherwise falls through to the normal tiers (effectively
+ *  STANDARD/low-activity territory — see computeClientActivity for the
+ *  explicit "doesn't have much work" signal this case should raise
+ *  instead). */
+export function computeSpendTier(
+  totalSpentUsd: number | null,
+  totalHires: number | null,
+  memberSinceDate: Date | null,
+  newClientWindowMonths: number,
+): SpendTier {
   if (totalSpentUsd === null && totalHires === null) return "UNKNOWN";
   const spend = totalSpentUsd ?? 0;
   const hires = totalHires ?? 0;
-  if (spend === 0 && hires === 0) return "NEW_CLIENT_OK";
+  const isRecentMember = memberSinceDate !== null && monthsBetween(memberSinceDate, new Date()) <= newClientWindowMonths;
+  if (spend === 0 && hires === 0 && isRecentMember) return "NEW_CLIENT_OK";
   if (spend >= 1_000 && spend <= 5_000) return "PRIORITY";
   if (spend > 5_000_000) return "RARE_LOW_RESPONSE";
   return "STANDARD";
+}
+
+export type ClientActivity = "NEW_PROMISING" | "ACTIVE" | "LOW_ACTIVITY" | "UNKNOWN";
+
+/** Bidding SOP, explicit user request — "if the profile is created long
+ *  ago and the jobs are less then this profile is not a good one to bid
+ *  on... the good profile is one who's either created within 2-3 months
+ *  ago and have 0 hire rate, or if its created a long ago then it should
+ *  have more projects."
+ *
+ *  Upwork's job page doesn't expose a "jobs posted" count anywhere —
+ *  verified live, only a "Hires" count is shown. Hires-per-year since
+ *  joining is used as the activity proxy instead; labeled honestly as
+ *  that in every place this surfaces, not claimed to be "jobs posted". */
+export function computeClientActivity(
+  memberSinceDate: Date | null,
+  totalHires: number | null,
+  newClientWindowMonths: number,
+  minHiresPerYear: number,
+): { activity: ClientActivity; monthsSinceJoined: number | null } {
+  if (!memberSinceDate) return { activity: "UNKNOWN", monthsSinceJoined: null };
+  const monthsSinceJoined = monthsBetween(memberSinceDate, new Date());
+  const hires = totalHires ?? 0;
+
+  if (monthsSinceJoined <= newClientWindowMonths && hires === 0) {
+    return { activity: "NEW_PROMISING", monthsSinceJoined };
+  }
+  const hiresPerYear = hires / (monthsSinceJoined / 12);
+  if (hiresPerYear < minHiresPerYear) {
+    return { activity: "LOW_ACTIVITY", monthsSinceJoined };
+  }
+  return { activity: "ACTIVE", monthsSinceJoined };
 }
 
 /** Case-insensitive match against the org's excluded-countries list. */
@@ -103,6 +158,7 @@ export interface RecommendationSignals {
   isLongTerm: boolean | null;
   isHourly: boolean | null;
   postedMinutesAgo: number | null;
+  clientActivity: ClientActivity;
 }
 
 /** Bidding SOP Part 6 ("is this a job where we have a realistic chance")
@@ -127,6 +183,9 @@ export function computeRecommendation(signals: RecommendationSignals): { recomme
   }
   if (signals.isHourly === false) {
     reasons.push("Fixed-price — hourly jobs are preferred.");
+  }
+  if (signals.clientActivity === "LOW_ACTIVITY") {
+    reasons.push("Client has been on Upwork a while but hires rarely — may not have much ongoing work.");
   }
 
   return { recommendation: reasons.length === 0 ? "BID" : "MAYBE", reasons };

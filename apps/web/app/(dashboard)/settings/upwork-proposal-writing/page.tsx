@@ -12,6 +12,8 @@ interface Settings {
   technicalWordLimit: number;
   nonTechnicalWordLimit: number;
   excludedCountries: string[];
+  newClientWindowMonths: number;
+  minHiresPerYear: number;
 }
 
 function ExcludedCountries({ countries, onChange }: { countries: string[]; onChange: (next: string[]) => void }) {
@@ -193,6 +195,44 @@ export default function UpworkProposalWritingSettingsPage() {
               yours.
             </p>
             <ExcludedCountries countries={form.excludedCountries} onChange={(next) => setForm({ ...form, excludedCountries: next })} />
+          </SectionCard>
+
+          <SectionCard title="Client activity criteria">
+            <p className="mb-2 text-xs text-ink/55">
+              A client within the window below with zero hires is treated as brand-new (no track record yet, worth a shot). Past that window,
+              they&apos;re judged on hires per year — Upwork doesn&apos;t expose a &quot;jobs posted&quot; count, so hires/year is the closest
+              real signal of how much work a client actually has.
+            </p>
+            <div className="flex flex-wrap gap-6">
+              <label className="flex flex-col gap-1 text-xs text-ink/60">
+                New-client window
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={24}
+                    value={form.newClientWindowMonths}
+                    onChange={(e) => setForm({ ...form, newClientWindowMonths: Number(e.target.value) })}
+                    className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                  />
+                  <span className="text-sm text-ink/55">months</span>
+                </div>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-ink/60">
+                Minimum activity
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    max={50}
+                    value={form.minHiresPerYear}
+                    onChange={(e) => setForm({ ...form, minHiresPerYear: Number(e.target.value) })}
+                    className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                  />
+                  <span className="text-sm text-ink/55">hires/year, below which flags as low-activity</span>
+                </div>
+              </label>
+            </div>
           </SectionCard>
 
           <div>

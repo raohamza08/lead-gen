@@ -33,6 +33,8 @@ export class ProposalWritingSettingsService {
       technicalWordLimit?: number;
       nonTechnicalWordLimit?: number;
       excludedCountries?: string[];
+      newClientWindowMonths?: number;
+      minHiresPerYear?: number;
     },
   ) {
     await this.get(orgId); // ensure a row exists before updating it

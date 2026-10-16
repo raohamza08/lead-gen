@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { ProposalWritingSettingsService } from "./proposal-writing-settings.service";
 import {
+  computeClientActivity,
   computeRecommendation,
   computeSpendTier,
   isExcludedCountry,
@@ -9,6 +10,7 @@ import {
   isLongTermJob,
   minutesSincePosted,
   parseFirstInt,
+  parseMemberSinceDate,
   parseMoney,
 } from "./bidding-criteria.util";
 import type { DiscoveredJobEntryDto } from "../dto/discovered-job.dto";
@@ -34,7 +36,14 @@ export class DiscoveredJobsService {
       const client = job.client ?? {};
       const totalSpentUsd = parseMoney(client["Total spent"]);
       const totalHires = parseFirstInt(client["Hires"]);
-      const spendTier = computeSpendTier(totalSpentUsd, totalHires);
+      const memberSinceDate = parseMemberSinceDate(client["Member since"]);
+      const spendTier = computeSpendTier(totalSpentUsd, totalHires, memberSinceDate, settings.newClientWindowMonths);
+      const { activity: clientActivity } = computeClientActivity(
+        memberSinceDate,
+        totalHires,
+        settings.newClientWindowMonths,
+        settings.minHiresPerYear,
+      );
       const longTerm = isLongTermJob(facts);
       const hourly = isHourly(facts);
       const excludedCountry = isExcludedCountry(client["Country"], settings.excludedCountries);
@@ -46,6 +55,7 @@ export class DiscoveredJobsService {
         isLongTerm: longTerm,
         isHourly: hourly,
         postedMinutesAgo,
+        clientActivity,
       });
 
       await this.prisma.upworkDiscoveredJob.upsert({
@@ -61,6 +71,7 @@ export class DiscoveredJobsService {
           spendTier,
           isLongTerm: longTerm,
           isHourly: hourly,
+          clientActivity,
           recommendation,
           reasons,
         },
@@ -73,6 +84,7 @@ export class DiscoveredJobsService {
           spendTier,
           isLongTerm: longTerm,
           isHourly: hourly,
+          clientActivity,
           recommendation,
           reasons,
         },
@@ -103,6 +115,11 @@ export class DiscoveredJobsService {
         isLongTerm: row.isLongTerm,
         isHourly: row.isHourly,
         postedMinutesAgo,
+        // Stored as a snapshot at ingest time, not re-derived here --
+        // hires-per-year since joining drifts slowly enough that
+        // recomputing it on every read (like postedMinutesAgo) isn't
+        // worth the complexity.
+        clientActivity: (row.clientActivity as Parameters<typeof computeRecommendation>[0]["clientActivity"]) ?? "UNKNOWN",
       });
       return { ...row, recommendation, reasons, postedMinutesAgo };
     });

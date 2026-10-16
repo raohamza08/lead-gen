@@ -5,11 +5,13 @@ import { GeminiClient } from "./gemini.client";
 import { ProposalWritingSettingsService } from "./proposal-writing-settings.service";
 import { FreelancerProfilesService } from "./freelancer-profiles.service";
 import {
+  computeClientActivity,
   computeSpendTier,
   isExcludedCountry,
   isLongTermJob,
   minutesSincePosted,
   parseFirstInt,
+  parseMemberSinceDate,
   parseMoney,
   suggestBidAmount,
 } from "./bidding-criteria.util";
@@ -78,6 +80,7 @@ function buildJobBrief(
     isLongTerm: boolean | null;
     postedMinutesAgo: number | null;
     suggestedBidAmount: string | null;
+    clientActivity: string;
   },
 ): string {
   const lines: string[] = [];
@@ -98,6 +101,7 @@ function buildJobBrief(
     `  Long-term/ongoing work: ${signals.isLongTerm === null ? "unclear" : signals.isLongTerm ? "yes" : "no, looks short-term"}`,
     `  Minutes since posted: ${signals.postedMinutesAgo === null ? "unknown" : signals.postedMinutesAgo}`,
     `  Suggested bid: ${signals.suggestedBidAmount ?? "no budget figure found in the job facts"}`,
+    `  Client activity (hires/year since joining, not "jobs posted" -- Upwork doesn't expose that): ${signals.clientActivity}`,
   );
 
   lines.push("", "Full job description:", job.description ?? "(none)");
@@ -230,7 +234,14 @@ export class ProposalWritingService {
     // bidding-criteria.util.ts's own docblock for why).
     const totalSpentUsd = parseMoney(job.client?.["Total spent"]);
     const totalHires = parseFirstInt(job.client?.["Hires"]);
-    const spendTier = computeSpendTier(totalSpentUsd, totalHires);
+    const memberSinceDate = parseMemberSinceDate(job.client?.["Member since"]);
+    const spendTier = computeSpendTier(totalSpentUsd, totalHires, memberSinceDate, settings.newClientWindowMonths);
+    const { activity: clientActivity, monthsSinceJoined } = computeClientActivity(
+      memberSinceDate,
+      totalHires,
+      settings.newClientWindowMonths,
+      settings.minHiresPerYear,
+    );
     const clientCountry = job.client?.["Country"];
     const excludedCountry = isExcludedCountry(clientCountry, settings.excludedCountries);
     const longTerm = isLongTermJob(job.facts ?? {});
@@ -246,6 +257,13 @@ export class ProposalWritingService {
     if (postedMinutesAgo !== null && postedMinutesAgo > 15) {
       warnings.push(`Posted ${postedMinutesAgo} minutes ago — outside the 15-minute bidding window.`);
     }
+    if (clientActivity === "LOW_ACTIVITY") {
+      warnings.push(
+        `Client has been on Upwork ${Math.round(monthsSinceJoined ?? 0)} months but hires rarely (~${(
+          (totalHires ?? 0) / ((monthsSinceJoined ?? 1) / 12)
+        ).toFixed(1)}/year) — may not have much ongoing work.`,
+      );
+    }
 
     const systemPrompt = buildSystemPrompt(
       settings.instructions,
@@ -260,6 +278,7 @@ export class ProposalWritingService {
       isLongTerm: longTerm,
       postedMinutesAgo,
       suggestedBidAmount: bidSuggestion,
+      clientActivity,
     });
     const result = await this.gemini.generateCoverLetter(systemPrompt, jobBrief);
 
@@ -282,6 +301,8 @@ export class ProposalWritingService {
         spendTier,
         isLongTerm: longTerm,
         postedMinutesAgo,
+        clientActivity,
+        monthsSinceJoined,
         warnings,
         overallAssessment: result.overallAssessment,
         // PARTIAL marks "came from manual entry, not a real automatic
@@ -308,6 +329,8 @@ export class ProposalWritingService {
       spendTier,
       isLongTerm: longTerm,
       postedMinutesAgo,
+      clientActivity,
+      monthsSinceJoined,
       warnings,
       overallAssessment: result.overallAssessment,
       duplicateOf,

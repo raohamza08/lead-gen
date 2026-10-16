@@ -17,6 +17,7 @@ interface DiscoveredJob {
   spendTier: string | null;
   isLongTerm: boolean | null;
   isHourly: boolean | null;
+  clientActivity: "NEW_PROMISING" | "ACTIVE" | "LOW_ACTIVITY" | "UNKNOWN" | null;
   recommendation: Recommendation;
   reasons: string[];
   discoveredAt: string;
@@ -220,6 +221,8 @@ export default function UpworkJobFeedPage() {
                   {job.postedMinutesAgo !== null && <span>Posted {job.postedMinutesAgo} min ago</span>}
                   {job.isHourly !== null && <span>{job.isHourly ? "Hourly" : "Fixed-price"}</span>}
                   {job.isLongTerm !== null && <span>{job.isLongTerm ? "Long-term" : "Short-term"}</span>}
+                  {job.clientActivity === "NEW_PROMISING" && <span>New client</span>}
+                  {job.clientActivity === "LOW_ACTIVITY" && <span className="text-bad">Low-activity client</span>}
                 </div>
                 {job.reasons.length > 0 && (
                   <div className="text-xs text-ink/55">
