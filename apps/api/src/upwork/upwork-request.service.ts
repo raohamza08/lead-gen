@@ -12,6 +12,19 @@ import { QueryUpworkWeekDto } from "./dto/query-upwork-week.dto";
 
 const REVIEWER_ROLES: Role[] = [Role.ADMIN, Role.BUSINESS_DEVELOPER];
 const CAN_SEE_ALL_ROLES: Role[] = [Role.ADMIN, Role.MANAGER, Role.BUSINESS_DEVELOPER];
+/// Every reporting query below ("requested hours", per-profile Achievement,
+/// the Dashboard Requests card) must count a request the moment it's
+/// APPROVED and keep counting it after it's later marked COMPLETED --
+/// that's the normal end of its lifecycle per this enum's own schema
+/// docblock ("ending at APPROVED+COMPLETED or REJECTED"), not a reason to
+/// drop it. Fixed 2026-10-16: these queries previously matched APPROVED
+/// only, so a request silently vanished from every "requested vs achieved"
+/// number the moment a BD marked it complete -- real bug, not by design,
+/// confirmed by checking production data directly (all of a given week's
+/// rows had already moved to COMPLETED, which is exactly why the
+/// dashboard's per-profile table was empty while the org-wide onboarded
+/// total wasn't).
+const COUNTS_TOWARD_TARGET: UpworkRequestStatus[] = [UpworkRequestStatus.APPROVED, UpworkRequestStatus.COMPLETED];
 
 /**
  * Project Manager hour requests against Upwork profiles/IDs, their review
@@ -412,7 +425,7 @@ export class UpworkRequestService {
       where: {
         request: {
           orgId,
-          status: UpworkRequestStatus.APPROVED,
+          status: { in: COUNTS_TOWARD_TARGET },
           requestDate: { gte: range.from, lte: range.to },
           ...(projectManagerId ? { projectManagerId } : {}),
           ...(businessDeveloperId ? { reviewedByUserId: businessDeveloperId } : {}),
@@ -455,7 +468,7 @@ export class UpworkRequestService {
       where: {
         request: {
           orgId,
-          status: UpworkRequestStatus.APPROVED,
+          status: { in: COUNTS_TOWARD_TARGET },
           requestDate: { gte: range.from, lte: range.to },
           ...(projectManagerId ? { projectManagerId } : {}),
           ...(businessDeveloperId ? { reviewedByUserId: businessDeveloperId } : {}),
@@ -518,16 +531,19 @@ export class UpworkRequestService {
 
     const [approvedAgg, pendingReview, approvedCount, rejectedCount, approvedItems] = await Promise.all([
       this.prisma.upworkRequest.aggregate({
-        where: { orgId, status: UpworkRequestStatus.APPROVED, requestDate: { gte: range.from, lte: range.to } },
+        where: { orgId, status: { in: COUNTS_TOWARD_TARGET }, requestDate: { gte: range.from, lte: range.to } },
         _sum: { totalRequestedHours: true },
       }),
       this.prisma.upworkRequest.count({
         where: { orgId, status: { in: [UpworkRequestStatus.SUBMITTED, UpworkRequestStatus.UNDER_REVIEW] }, requestDate: { gte: range.from, lte: range.to } },
       }),
-      this.prisma.upworkRequest.count({ where: { orgId, status: UpworkRequestStatus.APPROVED, requestDate: { gte: range.from, lte: range.to } } }),
+      // Counts COMPLETED too -- it was approved at some point, same
+      // reasoning as every other query in this method (see
+      // COUNTS_TOWARD_TARGET's own docblock).
+      this.prisma.upworkRequest.count({ where: { orgId, status: { in: COUNTS_TOWARD_TARGET }, requestDate: { gte: range.from, lte: range.to } } }),
       this.prisma.upworkRequest.count({ where: { orgId, status: UpworkRequestStatus.REJECTED, requestDate: { gte: range.from, lte: range.to } } }),
       this.prisma.upworkRequestItem.findMany({
-        where: { request: { orgId, status: UpworkRequestStatus.APPROVED, requestDate: { gte: range.from, lte: range.to } } },
+        where: { request: { orgId, status: { in: COUNTS_TOWARD_TARGET }, requestDate: { gte: range.from, lte: range.to } } },
         include: {
           request: {
             select: {
