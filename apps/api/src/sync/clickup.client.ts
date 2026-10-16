@@ -81,4 +81,39 @@ export class ClickupClient {
       }),
     });
   }
+
+  /** General-purpose task creation (Part: Upwork → ClickUp card automation,
+   *  2026-10-16) — unlike `createTask` above, this doesn't assume the
+   *  lead-gen field shape; callers build their own name/description and
+   *  pass whichever of status/assignees/custom fields they have. Custom
+   *  field values follow ClickUp's own shape per field type (a dropdown
+   *  takes the option's id as a string, a labels field takes an array of
+   *  label ids) — see ClickupCustomFieldValue below. */
+  async createTaskFull(
+    listId: string,
+    params: {
+      name: string;
+      description?: string;
+      status?: string;
+      assignees?: number[];
+      customFields?: { id: string; value: unknown }[];
+    },
+  ): Promise<{ id: string }> {
+    return this.request<{ id: string }>(`/list/${listId}/task`, {
+      method: "POST",
+      body: JSON.stringify({
+        name: params.name,
+        description: params.description,
+        status: params.status,
+        assignees: params.assignees,
+        custom_fields: params.customFields?.map((f) => ({ id: f.id, value: f.value })),
+      }),
+    });
+  }
+
+  async addTagToTask(taskId: string, tagName: string): Promise<void> {
+    // ClickUp creates the tag on the space automatically if it doesn't
+    // already exist — no separate "ensure tag exists" call needed.
+    await this.request(`/task/${taskId}/tag/${encodeURIComponent(tagName)}`, { method: "POST" });
+  }
 }

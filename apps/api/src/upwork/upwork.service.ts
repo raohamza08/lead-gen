@@ -7,6 +7,7 @@ import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
 import { UpdateUpworkPicklistsDto } from "./dto/update-upwork-picklists.dto";
 import { SetNotifyRecipientsDto } from "./dto/set-notify-recipients.dto";
 import { NotificationsService } from "../notifications/notifications.service";
+import { UpworkClickupSyncService } from "./upwork-clickup-sync.service";
 
 interface UpworkPicklists {
   categories: string[];
@@ -26,6 +27,7 @@ export class UpworkService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationsService,
+    private readonly clickupSync: UpworkClickupSyncService,
   ) {}
 
   create(orgId: string, dto: CreateUpworkProposalDto) {
@@ -172,7 +174,15 @@ export class UpworkService {
     // onboardedAt's own schema docblock for why this, not createdAt, is what
     // the weekly bidding/invite hour totals bucket by.
     const justWon = dto.status === UpworkProposalStatus.WON && existing.status !== UpworkProposalStatus.WON;
-    return this.prisma.upworkProposal.update({
+    // Fires the ClickUp card automation on first entry into WON or
+    // TEST_TASK (Part: Upwork → ClickUp card automation, 2026-10-16) — not
+    // re-fired on every save while already in one of those statuses, same
+    // one-way-transition guard as justAccepted/justWon above.
+    const enteringClickupStatus =
+      (dto.status === UpworkProposalStatus.WON || dto.status === UpworkProposalStatus.TEST_TASK) &&
+      dto.status !== existing.status;
+
+    const updated = await this.prisma.upworkProposal.update({
       where: { id },
       data: {
         ...dto,
@@ -180,6 +190,10 @@ export class UpworkService {
         ...(justWon ? { onboardedAt: new Date() } : {}),
       },
     });
+
+    if (enteringClickupStatus) void this.clickupSync.sync(updated);
+
+    return updated;
   }
 
   /** Admin sets who should be nudged to follow up on this one proposal, and
