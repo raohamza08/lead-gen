@@ -116,4 +116,18 @@ export class ClickupClient {
     // already exist — no separate "ensure tag exists" call needed.
     await this.request(`/task/${taskId}/tag/${encodeURIComponent(tagName)}`, { method: "POST" });
   }
+
+  /** Live custom-field definitions (including current dropdown options) for
+   *  a list (Part: Upwork → ClickUp card automation, 2026-10-16 — explicit
+   *  user request to match against "the profile name that is added in the
+   *  system" instead of a hardcoded option-id snapshot, so a dropdown
+   *  option added later in ClickUp just starts working without a code
+   *  change). */
+  async getListFields(listId: string): Promise<{ id: string; name: string; type: string; type_config?: { options?: { id: string; name: string }[] } }[]> {
+    const res = await this.request<{ fields: { id: string; name: string; type: string; type_config?: { options?: { id: string; name: string }[] } }[] }>(
+      `/list/${listId}/field`,
+      { method: "GET" },
+    );
+    return res.fields;
+  }
 }

@@ -17,17 +17,21 @@ export type UpworkClickupFolder = "GRAPHIC" | "TECH" | "WEB";
 export interface UpworkClickupRoute {
   folder: UpworkClickupFolder;
   listId: string;
-  /** ClickUp user id for the task's `assignees`. */
+  /** ClickUp user id for the task's real `assignees`. */
   assigneeUserId: number;
+  /** That same assignee's exact ClickUp account name — used to look up a
+   *  matching "Assigned Members" dropdown option live (explicit user
+   *  request, 2026-10-16: "the assigned member will be ahmad and bilal
+   *  only with their respective folders"). Matched by exact name against
+   *  the field's real options at sync time, not a hardcoded option id —
+   *  if the dropdown has no exact-name match (true for "Ahmad" today),
+   *  the field is left unset rather than picking a different real
+   *  person's name. */
+  assigneeName: string;
   /** "Department" custom field option id. */
   departmentOptionId: string;
   /** "Assigned Team Lead" custom field option id. */
   teamLeadOptionId: string;
-  /** "Assigned Members" custom field option id — undefined where no
-   *  option in that dropdown actually matches the real assignee (the Tech/
-   *  Web assignee "Ahmad" has no corresponding option there; left unset
-   *  rather than picking a different real person's name). */
-  assignedMembersOptionId?: string;
 }
 
 const BILAL_USER_ID = 101573133; // Muhammad Bilal
@@ -45,22 +49,20 @@ const DEPARTMENT_DEVELOPMENT = "a79cfd86-5f87-443c-b49c-2d8f6f25fdd4";
 const TEAM_LEAD_M_BILAL = "bb420542-25ee-496a-9cfe-182b71fbcc5b";
 const TEAM_LEAD_AHMAD = "50a5d5a9-97c6-441e-af86-d4e6e82c10fc"; // "Ahmad " — the plain-Ahmad option, not "M Ahmad"
 
-// "Assigned Members" custom field option id — only Bilal has a clean match.
-const ASSIGNED_MEMBERS_BILAL = "def26e2f-07ef-4635-aa95-e161aba68967"; // "Muhammad Bilal"
-
 const GRAPHIC_ROUTE: UpworkClickupRoute = {
   folder: "GRAPHIC",
   listId: GRAPHIC_LIST_ID,
   assigneeUserId: BILAL_USER_ID,
+  assigneeName: "Muhammad Bilal",
   departmentOptionId: DEPARTMENT_GRAPHICS,
   teamLeadOptionId: TEAM_LEAD_M_BILAL,
-  assignedMembersOptionId: ASSIGNED_MEMBERS_BILAL,
 };
 
 const TECH_ROUTE: UpworkClickupRoute = {
   folder: "TECH",
   listId: TECH_LIST_ID,
   assigneeUserId: AHMAD_USER_ID,
+  assigneeName: "Ahmad",
   departmentOptionId: DEPARTMENT_DEVELOPMENT,
   teamLeadOptionId: TEAM_LEAD_AHMAD,
 };
@@ -69,6 +71,7 @@ const WEB_ROUTE: UpworkClickupRoute = {
   folder: "WEB",
   listId: WEB_LIST_ID,
   assigneeUserId: AHMAD_USER_ID,
+  assigneeName: "Ahmad",
   departmentOptionId: DEPARTMENT_DEVELOPMENT,
   teamLeadOptionId: TEAM_LEAD_AHMAD,
 };
@@ -89,36 +92,15 @@ export function resolveUpworkClickupRoute(profileName: string): UpworkClickupRou
   return firstWord ? PROFILE_ROUTES[firstWord] : undefined;
 }
 
-// "Upwork Profile" custom field option ids (shared field, same id across
-// all 3 lists) — only 16 of the 19 routed profile names have a matching
-// option today; mahnoor/junaid/nadeem have none (confirmed live against
-// the field's real options, not assumed) and are deliberately left unset
-// rather than guessing a near-match.
-const UPWORK_PROFILE_FIELD_ID = "ff83e577-6ce3-44cf-ae58-4683aedeee68";
-const UPWORK_PROFILE_OPTIONS: Record<string, string> = {
-  amna: "c5dff182-bdf4-4b90-9a37-698e8673899a",
-  asif: "61289576-a781-4569-b562-8e34fc31d4c1",
-  ayesha: "a2a15a51-93d8-4527-bf6d-10d0c34b74cd",
-  bilal: "1ef03e01-92d1-456e-ba2e-10ee8629a7f3",
-  jibran: "fe0f1b39-2156-4442-bd05-1ea58d23bc84",
-  kainat: "fee9c268-d955-4741-8273-146b29a0976d",
-  laiba: "cea4c34d-07f6-4d2c-9936-a73379228078",
-  nabeel: "4ee5d8f4-8cec-47d4-9c20-5a6f21dde5d7",
-  saira: "06b41a32-6f6e-46da-938a-3229ee1c81e4",
-  sehrish: "05ad4a77-fa76-4b8f-a7c5-5fd30e39365a",
-  syeda: "2b0ce7e1-ac83-4855-b853-4b601480c1dc",
-  waleed: "25cafe96-1d4a-4ea4-954d-84cd569c012e",
-  waqar: "ed57bd29-dc36-418c-841b-f2fe30377a2d",
-  zaheer: "36ab6452-0ea7-40be-ad6d-4d26488c92ed",
-  zain: "d4b4642e-f9d2-4380-8bb3-c7e7dc8cf6e2",
-  zainab: "6493fddc-543a-4b2e-9c52-9a7530add2e9",
-};
-
-export function buildUpworkProfileCustomField(profileName: string): { id: string; value: unknown } | undefined {
-  const firstWord = profileName.trim().split(/\s+/)[0]?.toLowerCase();
-  const optionId = firstWord ? UPWORK_PROFILE_OPTIONS[firstWord] : undefined;
-  return optionId ? { id: UPWORK_PROFILE_FIELD_ID, value: optionId } : undefined;
-}
+// "Upwork Profile" custom field id (shared field, same id across all 3
+// lists). Its options are matched LIVE against the field's real options at
+// sync time (see UpworkClickupSyncService.resolveProfileOption), not a
+// hardcoded snapshot here — explicit user request, 2026-10-16: "the
+// dropdown for upwork profile should be filled with the profile name that
+// is added in the system, take it from there" — so a name added to
+// ClickUp's dropdown later (e.g. "Mahnoor ID") just starts matching
+// without a code change.
+export const UPWORK_PROFILE_FIELD_ID = "ff83e577-6ce3-44cf-ae58-4683aedeee68";
 
 // "Contract Type" custom field (shared field, same id across all 3 lists) —
 // direct mapping from UpworkProposal.pricingType.
