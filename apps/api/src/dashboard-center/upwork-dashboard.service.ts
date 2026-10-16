@@ -163,7 +163,7 @@ export class UpworkDashboardService {
     ] = await Promise.all([
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE" } }),
-      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: { in: ["ACCEPTED", "IN_DISCUSSION", "FOLLOW_UP_1", "FOLLOW_UP_2", "WON"] } } }),
+      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: { in: ["IN_DISCUSSION", "TEST_TASK", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON"] } } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "LOST" } }),
       this.prisma.upworkProposal.count({ where: { ...where, status: "WON" } }),
       this.prisma.upworkProposal.count({ where: { ...where, status: "LOST" } }),

@@ -9,18 +9,19 @@ import { NotificationsService } from "../notifications/notifications.service";
  *  explicit user request) -- both the minimum age before the first
  *  reminder (measured from `acceptedAt`) and the minimum gap between
  *  repeat reminders (measured from `lastFollowUpNotifiedAt`) for the same
- *  still-ACCEPTED proposal. */
+ *  still-IN_DISCUSSION proposal. */
 export const UPWORK_FOLLOW_UP_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 
 /**
  * Consumes UpworkFollowUpReminderQueue's repeatable tick. Finds every
- * INVITE proposal that's sat at ACCEPTED for at least 2 days with no
+ * INVITE proposal that's sat at IN_DISCUSSION for at least 2 days with no
  * further status change and has admin-picked recipients on file
  * (`notifyUserIds`), and nudges them to follow up -- repeating every 2 days
- * for as long as the status stays ACCEPTED and unattended. Moving the
- * status to anything else (IN_DISCUSSION, WON, LOST, ...) is what actually
+ * for as long as the status stays IN_DISCUSSION and unattended. Moving the
+ * status to anything else (TEST_TASK, WON, LOST, ...) is what actually
  * stops the reminders; there's no separate snooze/dismiss for the
- * underlying condition, only for the notification itself.
+ * underlying condition, only for the notification itself. (Retargeted from
+ * the since-removed ACCEPTED status, 2026-10-16.)
  */
 @Injectable()
 export class UpworkFollowUpReminderWorker implements OnModuleInit, OnModuleDestroy {
@@ -53,7 +54,7 @@ export class UpworkFollowUpReminderWorker implements OnModuleInit, OnModuleDestr
     const due = await this.prisma.upworkProposal.findMany({
       where: {
         type: UpworkProposalType.INVITE,
-        status: UpworkProposalStatus.ACCEPTED,
+        status: UpworkProposalStatus.IN_DISCUSSION,
         acceptedAt: { not: null, lte: dueBefore },
         notifyUserIds: { isEmpty: false },
         OR: [{ lastFollowUpNotifiedAt: null }, { lastFollowUpNotifiedAt: { lte: dueBefore } }],
@@ -68,7 +69,7 @@ export class UpworkFollowUpReminderWorker implements OnModuleInit, OnModuleDestr
           category: NotificationCategory.UPWORK,
           type: "UPWORK_INVITE_FOLLOW_UP",
           title: "Follow up on this Upwork invite",
-          message: `${proposal.clientName ?? "This client"}'s invite (${proposal.profileName}) was accepted ${daysWaiting} day(s) ago with no status update — we're missing a follow-up with them.`,
+          message: `${proposal.clientName ?? "This client"}'s invite (${proposal.profileName}) has been in discussion for ${daysWaiting} day(s) with no status update — we're missing a follow-up with them.`,
           actionUrl: "/upwork/invite",
           severity: "WARNING",
           entityType: "upworkProposal",

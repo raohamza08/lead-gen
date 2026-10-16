@@ -1,4 +1,4 @@
-import { UpworkAccountType, UpworkProposalStatus } from "@prisma/client";
+import { UpworkAccountType, UpworkProjectPricingType, UpworkProposalStatus } from "@prisma/client";
 import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
 
 /** Everything an operator would ever edit after the initial submission.
@@ -17,6 +17,7 @@ export class UpdateUpworkProposalDto {
   @IsOptional() @IsString() clickupTaskId?: string;
   @IsOptional() @IsString() @MinLength(1) coverLetter?: string;
   @IsOptional() @IsNumber() @Min(0) projectHours?: number;
+  @IsOptional() @IsEnum(UpworkProjectPricingType) pricingType?: UpworkProjectPricingType;
 
   @IsOptional() @IsString() @MinLength(1) profileName?: string;
   @IsOptional() @IsString() @MinLength(1) jobCategory?: string;

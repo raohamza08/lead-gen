@@ -45,6 +45,7 @@ export class UpworkService {
         connects: isBidding ? dto.connects ?? null : null,
         accountType: isBidding ? dto.accountType ?? null : null,
         projectHours: dto.projectHours ?? null,
+        pricingType: dto.pricingType ?? undefined,
         clickupTaskId: dto.clickupTaskId,
         clientName: dto.clientName,
       },
@@ -111,7 +112,7 @@ export class UpworkService {
 
     const columns = [
       "Type", "Date", "Profile", "Job Category", "Job Link", "Connects", "Account Type",
-      "Client Name", "Submitted By", "Status", "Closed By", "Project Hours", "Cover Letter",
+      "Client Name", "Submitted By", "Status", "Closed By", "Project Hours", "Pricing Type", "Cover Letter",
       "ClickUp Task ID", "Accepted At", "Onboarded At",
     ];
 
@@ -134,6 +135,7 @@ export class UpworkService {
         p.status,
         p.closedBy,
         p.projectHours,
+        p.pricingType,
         p.coverLetter,
         p.clickupTaskId,
         p.acceptedAt?.toISOString() ?? "",
@@ -156,11 +158,13 @@ export class UpworkService {
     const existing = await this.prisma.upworkProposal.findFirst({ where: { id, orgId } });
     if (!existing) throw new NotFoundException("Proposal not found");
     // Stamps the follow-up timer's start line the moment status first
-    // becomes ACCEPTED (Part: Upwork follow-up reminders, 2026-09-30) —
-    // only on that specific transition, not on every save while already
-    // ACCEPTED, so re-saving an unrelated field (e.g. clientName) never
-    // resets the clock.
-    const justAccepted = dto.status === UpworkProposalStatus.ACCEPTED && existing.status !== UpworkProposalStatus.ACCEPTED;
+    // becomes IN_DISCUSSION (Part: Upwork follow-up reminders, 2026-09-30;
+    // retargeted from the since-removed ACCEPTED status, 2026-10-16) — only
+    // on that specific transition, not on every save while already
+    // IN_DISCUSSION, so re-saving an unrelated field (e.g. clientName) never
+    // resets the clock. Column is still named acceptedAt — see its schema
+    // docblock.
+    const justAccepted = dto.status === UpworkProposalStatus.IN_DISCUSSION && existing.status !== UpworkProposalStatus.IN_DISCUSSION;
     // Stamps the Upwork Dashboard's "onboarded during week X" start line the
     // moment status first becomes WON (Part: Upwork Requests, 2026-10-01) —
     // same one-way-stamp pattern as `justAccepted` above, deliberately
@@ -341,7 +345,7 @@ export class UpworkService {
     for (const row of byTypeRaw) byType[row.type] = row._count._all;
 
     const emptyStatusCounts = (): Record<UpworkProposalStatus, number> => ({
-      SUBMITTED: 0, VIEWED: 0, ACCEPTED: 0, IN_DISCUSSION: 0, FOLLOW_UP_1: 0, FOLLOW_UP_2: 0, WON: 0, LOST: 0,
+      SUBMITTED: 0, VIEWED: 0, IN_DISCUSSION: 0, TEST_TASK: 0, FOLLOW_UP_1: 0, FOLLOW_UP_2: 0, FOLLOW_UP_3: 0, WON: 0, LOST: 0,
     });
     const byStatus = { BIDDING: emptyStatusCounts(), INVITE: emptyStatusCounts() };
     for (const row of byStatusRaw) byStatus[row.type][row.status] = row._count._all;

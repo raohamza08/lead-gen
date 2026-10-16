@@ -9,8 +9,18 @@ import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 
 export type UpworkProposalType = "BIDDING" | "INVITE";
-type UpworkProposalStatus = "SUBMITTED" | "VIEWED" | "ACCEPTED" | "IN_DISCUSSION" | "FOLLOW_UP_1" | "FOLLOW_UP_2" | "WON" | "LOST";
+type UpworkProposalStatus =
+  | "SUBMITTED"
+  | "VIEWED"
+  | "IN_DISCUSSION"
+  | "TEST_TASK"
+  | "FOLLOW_UP_1"
+  | "FOLLOW_UP_2"
+  | "FOLLOW_UP_3"
+  | "WON"
+  | "LOST";
 type UpworkAccountType = "TRAINING" | "LIVE";
+type UpworkProjectPricingType = "HOURLY" | "FIXED";
 
 interface UpworkProposal {
   id: string;
@@ -22,6 +32,7 @@ interface UpworkProposal {
   connects: number | null;
   accountType: UpworkAccountType | null;
   projectHours: number | null;
+  pricingType: UpworkProjectPricingType;
   submittedBy: string;
   clickupTaskId: string | null;
   clientName: string | null;
@@ -41,10 +52,11 @@ interface OrgUser {
 const STATUS_OPTIONS: { value: UpworkProposalStatus; label: string }[] = [
   { value: "SUBMITTED", label: "Submitted" },
   { value: "VIEWED", label: "Viewed" },
-  { value: "ACCEPTED", label: "Accepted" },
   { value: "IN_DISCUSSION", label: "In discussion" },
-  { value: "FOLLOW_UP_1", label: "1st follow-up done" },
-  { value: "FOLLOW_UP_2", label: "2nd follow-up done" },
+  { value: "TEST_TASK", label: "Test task" },
+  { value: "FOLLOW_UP_1", label: "1st follow-up" },
+  { value: "FOLLOW_UP_2", label: "2nd follow-up" },
+  { value: "FOLLOW_UP_3", label: "3rd follow-up" },
   { value: "WON", label: "Client won" },
   { value: "LOST", label: "Lost" },
 ];
@@ -52,10 +64,11 @@ const STATUS_OPTIONS: { value: UpworkProposalStatus; label: string }[] = [
 const STATUS_TONE: Record<UpworkProposalStatus, string> = {
   SUBMITTED: "text-ink/60",
   VIEWED: "text-ink/60",
-  ACCEPTED: "text-gold",
   IN_DISCUSSION: "text-gold",
+  TEST_TASK: "text-gold",
   FOLLOW_UP_1: "text-gold",
   FOLLOW_UP_2: "text-gold",
+  FOLLOW_UP_3: "text-gold",
   WON: "text-good",
   LOST: "text-bad",
 };
@@ -101,6 +114,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [connects, setConnects] = useState("");
   const [accountType, setAccountType] = useState<UpworkAccountType>("LIVE");
   const [projectHours, setProjectHours] = useState("");
+  const [pricingType, setPricingType] = useState<UpworkProjectPricingType>("HOURLY");
   const [clientName, setClientName] = useState("");
 
   const { data: picklists } = useQuery({
@@ -153,7 +167,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
 
   function resetForm() {
     setProfileName(""); setJobCategory(""); setJobLink(""); setCoverLetter("");
-    setSubmittedBy(""); setConnects(""); setAccountType("LIVE"); setProjectHours(""); setClientName("");
+    setSubmittedBy(""); setConnects(""); setAccountType("LIVE"); setProjectHours(""); setPricingType("HOURLY"); setClientName("");
   }
 
   async function submit(e: React.FormEvent) {
@@ -171,6 +185,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         submittedBy,
         clientName: clientName.trim() || undefined,
         projectHours: projectHours ? Number(projectHours) : undefined,
+        pricingType,
         ...(type === "BIDDING"
           ? { connects: connects ? Number(connects) : undefined, accountType }
           : {}),
@@ -230,18 +245,32 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
       <a href={r.jobLink} target="_blank" rel="noreferrer" className="text-accent hover:underline">Open ↗</a>
     ) },
     { key: "projectHours", header: "Project Hours", numeric: true, render: (r) => (
-      <input
-        defaultValue={r.projectHours ?? ""}
-        placeholder="—"
-        type="number"
-        min={0}
-        step="0.5"
-        onBlur={(e) => {
-          const next = e.target.value === "" ? null : Number(e.target.value);
-          if (next !== r.projectHours) updateField(r.id, { projectHours: next });
-        }}
-        className="w-16 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
-      />
+      <div className="flex items-center justify-end gap-1">
+        <select
+          value={r.pricingType}
+          onChange={(e) => updateField(r.id, { pricingType: e.target.value })}
+          className="rounded border border-transparent bg-transparent px-0.5 py-0.5 text-[11px] text-ink/50 hover:border-[var(--line)] focus:border-[var(--line)]"
+        >
+          <option value="HOURLY">Hourly</option>
+          <option value="FIXED">Fixed</option>
+        </select>
+        {r.pricingType === "FIXED" ? (
+          <span className="w-16 px-1 text-xs text-ink/50">Fixed</span>
+        ) : (
+          <input
+            defaultValue={r.projectHours ?? ""}
+            placeholder="—"
+            type="number"
+            min={0}
+            step="0.5"
+            onBlur={(e) => {
+              const next = e.target.value === "" ? null : Number(e.target.value);
+              if (next !== r.projectHours) updateField(r.id, { projectHours: next });
+            }}
+            className="w-16 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
+          />
+        )}
+      </div>
     ) },
     { key: "status", header: "Status", render: (r) => (
       <select
@@ -410,9 +439,18 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
             </>
           )}
           <label className="block">
-            <span className={labelClass}>Project hours (if known)</span>
-            <input value={projectHours} onChange={(e) => setProjectHours(e.target.value)} type="number" min={0} step="0.5" placeholder="e.g. 20" className={inputClass} />
+            <span className={labelClass}>Pricing</span>
+            <select value={pricingType} onChange={(e) => setPricingType(e.target.value as UpworkProjectPricingType)} className={inputClass}>
+              <option value="HOURLY">Hourly</option>
+              <option value="FIXED">Fixed-price</option>
+            </select>
           </label>
+          {pricingType === "HOURLY" && (
+            <label className="block">
+              <span className={labelClass}>Project hours (if known)</span>
+              <input value={projectHours} onChange={(e) => setProjectHours(e.target.value)} type="number" min={0} step="0.5" placeholder="e.g. 20" className={inputClass} />
+            </label>
+          )}
           {type === "BIDDING" && (
             <label className="block">
               <span className={labelClass}>Client name (optional)</span>
@@ -548,6 +586,7 @@ function ProposalDetailModal({
   const [connects, setConnects] = useState(proposal.connects != null ? String(proposal.connects) : "");
   const [accountType, setAccountType] = useState<UpworkAccountType>(proposal.accountType ?? "LIVE");
   const [projectHours, setProjectHours] = useState(proposal.projectHours != null ? String(proposal.projectHours) : "");
+  const [pricingType, setPricingType] = useState<UpworkProjectPricingType>(proposal.pricingType);
   const [clientName, setClientName] = useState(proposal.clientName ?? "");
   const [status, setStatus] = useState<UpworkProposalStatus>(proposal.status);
   const [closedBy, setClosedBy] = useState(proposal.closedBy ?? "");
@@ -576,6 +615,7 @@ function ProposalDetailModal({
         coverLetter,
         submittedBy,
         projectHours: projectHours ? Number(projectHours) : null,
+        pricingType,
         clientName: clientName.trim() || null,
         status,
         ...(type === "BIDDING"
@@ -645,8 +685,11 @@ function ProposalDetailModal({
         )}
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block">
-            <span className={labelClass}>Project hours</span>
-            <input value={projectHours} onChange={(e) => setProjectHours(e.target.value)} type="number" min={0} step="0.5" className={inputClass} />
+            <span className={labelClass}>Pricing</span>
+            <select value={pricingType} onChange={(e) => setPricingType(e.target.value as UpworkProjectPricingType)} className={inputClass}>
+              <option value="HOURLY">Hourly</option>
+              <option value="FIXED">Fixed-price</option>
+            </select>
           </label>
           <label className="block">
             <span className={labelClass}>Status</span>
@@ -655,6 +698,12 @@ function ProposalDetailModal({
             </select>
           </label>
         </div>
+        {pricingType === "HOURLY" && (
+          <label className="block">
+            <span className={labelClass}>Project hours</span>
+            <input value={projectHours} onChange={(e) => setProjectHours(e.target.value)} type="number" min={0} step="0.5" className={inputClass} />
+          </label>
+        )}
         {type === "BIDDING" && (
           <label className="block">
             <span className={labelClass}>Closed by</span>

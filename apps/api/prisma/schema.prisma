@@ -1614,9 +1614,20 @@ enum UpworkAccountType {
   LIVE
 }
 
+/// Part: Upwork Proposals fixed-price option, 2026-10-16.
+enum UpworkProjectPricingType {
+  HOURLY
+  FIXED
+}
+
 /// Outcome tracking (the sheet's manually-updated "Status" column) — starts
 /// at SUBMITTED and is moved forward by whoever is following up, ending at
-/// WON or LOST.
+/// WON or LOST. Pruned to exactly this set per explicit user request
+/// (2026-10-16 — "just keep these statuses only"), which dropped the prior
+/// ACCEPTED value: existing ACCEPTED rows were migrated to IN_DISCUSSION
+/// (see the hand-written migration), and the follow-up reminder timer
+/// (UpworkFollowUpReminderWorker) now starts on first entry into
+/// IN_DISCUSSION instead.
 enum UpworkProposalStatus {
   SUBMITTED
   /// Client opened/viewed the proposal — Bidding only (Upwork surfaces this
@@ -1624,12 +1635,15 @@ enum UpworkProposalStatus {
   /// sheet (2026-09-29), which tracked it as a distinct status rather than
   /// folding it into SUBMITTED.
   VIEWED
-  /// Client accepted the invite — Invite only, the equivalent early signal
-  /// to VIEWED above before real back-and-forth starts. Same reason added.
-  ACCEPTED
   IN_DISCUSSION
+  /// Client asked for a paid/unpaid test task before committing — distinct
+  /// from IN_DISCUSSION (2026-10-16). Also the status that routes a won-ish
+  /// project into ClickUp with "test tasks" instead of "onboarding" (Part:
+  /// Upwork → ClickUp card automation).
+  TEST_TASK
   FOLLOW_UP_1
   FOLLOW_UP_2
+  FOLLOW_UP_3
   WON
   LOST
 }
@@ -1657,6 +1671,13 @@ model UpworkProposal {
   /// Dashboard's onboarded-hours totals sum this field directly, never a
   /// row count.
   projectHours Float?             @map("project_hours")
+  /// Hourly vs fixed-price (explicit user request, 2026-10-16 — "we got
+  /// some projects which are not hourly base... add the option to mark
+  /// them as fixed projects"). Doesn't change what projectHours means for
+  /// an hourly project; for a fixed one it's just not expected to be
+  /// filled in, same "optional, often unknown" posture as projectHours
+  /// itself already had.
+  pricingType  UpworkProjectPricingType @default(HOURLY) @map("pricing_type")
 
   /// The team member who submitted this proposal (the sheet's "Submitted by"
   /// / "Invite Submitted by") — a plain name, not a User relation: the sheet
@@ -1674,13 +1695,15 @@ model UpworkProposal {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  /// Stamped the moment `status` transitions to ACCEPTED (Part: Upwork
-  /// follow-up reminders, 2026-09-30) — the follow-up timer's start line.
-  /// Null again if it were ever moved off ACCEPTED back to something else
-  /// (doesn't happen today, but keeps the field's meaning exact either way).
+  /// Stamped the moment `status` transitions to IN_DISCUSSION (Part: Upwork
+  /// follow-up reminders, 2026-09-30; retargeted from the since-removed
+  /// ACCEPTED status, 2026-10-16 — "just keep these statuses only") — the
+  /// follow-up timer's start line. Column name kept as-is rather than
+  /// renamed, to avoid an unnecessary migration over what's purely an
+  /// internal label.
   acceptedAt             DateTime? @map("accepted_at")
   /// Who should be nudged to follow up on this one proposal once it's sat
-  /// ACCEPTED for a while with no further status change — explicitly
+  /// IN_DISCUSSION for a while with no further status change — explicitly
   /// admin-picked per proposal, not a broadcast to a module/role. Paired
   /// 1:1 with Notification.recipientUserIds on the reminders this drives.
   notifyUserIds          String[]  @default([]) @map("notify_user_ids")

@@ -1,4 +1,4 @@
-import { UpworkAccountType, UpworkProposalType } from "@prisma/client";
+import { UpworkAccountType, UpworkProjectPricingType, UpworkProposalType } from "@prisma/client";
 import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min, MinLength, ValidateIf } from "class-validator";
 
 export class CreateUpworkProposalDto {
@@ -20,6 +20,9 @@ export class CreateUpworkProposalDto {
    *  onboarded-hours totals. Optional since it's often not known yet at
    *  submission time and only becomes real once the project is won. */
   @IsOptional() @IsNumber() @Min(0) projectHours?: number;
+  /** Hourly vs fixed-price (Part: Upwork Proposals fixed-price option,
+   *  2026-10-16) — defaults to HOURLY server-side when omitted. */
+  @IsOptional() @IsEnum(UpworkProjectPricingType) pricingType?: UpworkProjectPricingType;
 
   @IsOptional() @IsString() clickupTaskId?: string;
 
