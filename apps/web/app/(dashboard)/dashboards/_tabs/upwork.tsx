@@ -79,11 +79,13 @@ interface UpworkRequestsSummary {
 
 interface SubmitterRow {
   name: string;
+  profileName: string;
   bids: number;
   invites: number;
   connects: number;
   won: number;
   lost: number;
+  onboardedHours: number;
   conversionRate?: number;
   connectsPerClient?: number;
   estimatedCost: number;
@@ -593,20 +595,26 @@ export function UpworkTab() {
         )}
       </SectionCard>
 
-      <SectionCard title="By submitter" subtitle="Grouped by free-text submitter name — may fragment on typos/casing since it's not a User relation" expandable>
+      <SectionCard
+        title="By submitter"
+        subtitle="Grouped by free-text submitter name + profile — may fragment on typos/casing since it's not a User relation. Onboarded hours lines up against the Requests page's per-profile requested hours."
+        expandable
+      >
         {submittersQuery.isLoading && <SkeletonCard className="h-32" />}
         {submittersQuery.error && <ErrorState message={(submittersQuery.error as Error).message} onRetry={() => submittersQuery.refetch()} />}
         {!submittersQuery.isLoading && submitters.length === 0 && <EmptyState title="No submissions in this period" />}
         {submitters.length > 0 && (
           <DataTable
-            rowKey={(r) => r.name}
+            rowKey={(r) => `${r.name}-${r.profileName}`}
             rows={submitters}
             columns={[
               { key: "name", header: "Submitter", render: (r) => r.name },
+              { key: "profileName", header: "Profile/ID", render: (r) => r.profileName },
               { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
               { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
               { key: "won", header: "Won", render: (r) => num(r.won), numeric: true },
               { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
+              { key: "onboardedHours", header: "Onboarded Hours", render: (r) => num(r.onboardedHours), numeric: true },
               { key: "conversionRate", header: "Conv. Rate", render: (r) => pct(r.conversionRate), numeric: true },
               { key: "estimatedCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedCost), numeric: true },
             ]}

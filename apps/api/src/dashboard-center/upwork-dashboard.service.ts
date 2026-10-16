@@ -295,27 +295,48 @@ export class UpworkDashboardService {
    *  gap-analysis confirmed this via the schema's own comment), so this can
    *  fragment a real person into several rows on a typo/casing difference.
    *  Reported as-is rather than silently guessing a canonical mapping. */
+  /** Grouped by (submitter, profile) — not just submitter (Part: Upwork
+   *  Requests, explicit user request — "add the profile name on which the
+   *  bd has onboarded the project... how many hours were requested on a
+   *  profile and how many we have got by bd team on this profile"). Each
+   *  row now also carries `onboardedHours` (sum of WON proposals'
+   *  projectHours for that submitter+profile) so it can be read directly
+   *  against the Requests page's per-profile "requested" hours — the two
+   *  tables share the same `profileName` string convention (case-
+   *  sensitive match here, same as everywhere else this convention is
+   *  used — see UpworkRequestItem's own docblock). */
   async getSubmitterBreakdown(orgId: string, query: DashboardRangeQuery) {
     const { current } = resolveDashboardRange(query);
     const rows = await this.prisma.upworkProposal.findMany({
       where: { orgId, createdAt: { gte: current.from, lte: current.to } },
-      select: { submittedBy: true, type: true, connects: true, status: true },
+      select: { submittedBy: true, profileName: true, type: true, connects: true, status: true, projectHours: true },
     });
-    const byUser = new Map<string, { name: string; bids: number; invites: number; connects: number; won: number; lost: number }>();
+    const byUserProfile = new Map<
+      string,
+      { name: string; profileName: string; bids: number; invites: number; connects: number; won: number; lost: number; onboardedHours: number }
+    >();
     for (const r of rows) {
-      const bucket = byUser.get(r.submittedBy) ?? { name: r.submittedBy, bids: 0, invites: 0, connects: 0, won: 0, lost: 0 };
+      const key = `${r.submittedBy} ${r.profileName}`;
+      const bucket =
+        byUserProfile.get(key) ??
+        { name: r.submittedBy, profileName: r.profileName, bids: 0, invites: 0, connects: 0, won: 0, lost: 0, onboardedHours: 0 };
       if (r.type === "BIDDING") bucket.bids += 1;
       else bucket.invites += 1;
       bucket.connects += r.connects ?? 0;
-      if (r.status === "WON") bucket.won += 1;
+      if (r.status === "WON") {
+        bucket.won += 1;
+        bucket.onboardedHours += r.projectHours ?? 0;
+      }
       if (r.status === "LOST") bucket.lost += 1;
-      byUser.set(r.submittedBy, bucket);
+      byUserProfile.set(key, bucket);
     }
-    return [...byUser.values()].map((b) => ({
-      ...b,
-      conversionRate: safeRate(b.won, b.bids + b.invites),
-      connectsPerClient: safeDivide(b.connects, b.won),
-      estimatedCost: b.connects * DEFAULT_CONNECT_UNIT_COST_USD,
-    }));
+    return [...byUserProfile.values()]
+      .map((b) => ({
+        ...b,
+        conversionRate: safeRate(b.won, b.bids + b.invites),
+        connectsPerClient: safeDivide(b.connects, b.won),
+        estimatedCost: b.connects * DEFAULT_CONNECT_UNIT_COST_USD,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name) || a.profileName.localeCompare(b.profileName));
   }
 }
