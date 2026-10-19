@@ -7,7 +7,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SectionCard, SINGLE_SERIES, StatTile, TOOLTIP_STYLE } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, DonutBreakdown, GRID_PROPS, KpiStrip, RadialProgress, RadialStrip, SectionCard, SINGLE_SERIES, StatTile, TOOLTIP_STYLE } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -109,6 +109,30 @@ export function SocialTab() {
               detail={<MetricDetail definition="Average time from the first inbound message to the first outbound reply after it, per conversation — computed on the fly, not pre-aggregated." rows={[{ label: "Average", value: minutes(kpis.avgResponseMinutes) }]} />}
             />
           </KpiStrip>
+
+          {/* Real-chart pass, round 2 (Part: Dashboard Center, 2026-10-20,
+              explicit user request — "these are less charts and graphs, I
+              need more"). Replied (CLOSED) and Pending (OPEN/PENDING) are
+              the only two conversation statuses this schema has (per the
+              KpiStrip's own MetricDetail text above), so they exhaust
+              totalConversations exactly -- safe as a two-slice donut. */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SectionCard title="Response Rate">
+              <RadialStrip>
+                <RadialProgress value={kpis.responseRate ?? 0} displayValue={pct(kpis.responseRate)} label="Response Rate" />
+              </RadialStrip>
+            </SectionCard>
+            <SectionCard title="Conversation Status">
+              <DonutBreakdown
+                data={[
+                  { label: "Replied (Closed)", value: kpis.repliedConversations, color: "rgb(var(--good-rgb))" },
+                  { label: "Pending", value: kpis.pendingConversations, color: "var(--series-4)" },
+                ]}
+                centerValue={num(kpis.totalConversations)}
+                centerLabel="Total"
+              />
+            </SectionCard>
+          </div>
 
           {!kpis.leadConversionAvailable && (
             <div className="card px-4 py-3 text-xs text-ink/55">

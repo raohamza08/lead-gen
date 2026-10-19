@@ -8,7 +8,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, dateTime, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, DonutBreakdown, GRID_PROPS, RadialProgress, RadialStrip, SectionCard, SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { KpiStrip, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
@@ -262,6 +262,39 @@ export function LeadsTab() {
               }
             />
           </KpiStrip>
+
+          {/* Real-chart pass, round 2 (Part: Dashboard Center, 2026-10-20,
+              explicit user request — "these are less charts and graphs, I
+              need more"). Active/Converted/Lost are mutually exclusive by
+              the KPIs themselves: "Active" is explicitly defined above as
+              "not yet converted or lost", so charting them as donut slices
+              never double-counts, unlike qualified (which overlaps
+              converted). */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <SectionCard title="Key Rates">
+              <RadialStrip>
+                <RadialProgress
+                  value={kpis.totalLeads ? (kpis.qualified / kpis.totalLeads) * 100 : 0}
+                  displayValue={pct(kpis.totalLeads ? (kpis.qualified / kpis.totalLeads) * 100 : undefined)}
+                  label="Qualified Rate"
+                />
+                {kpis.conversionRate !== undefined && (
+                  <RadialProgress value={kpis.conversionRate} displayValue={pct(kpis.conversionRate)} label="Conversion Rate" color="var(--series-2)" />
+                )}
+              </RadialStrip>
+            </SectionCard>
+            <SectionCard title="Lead Status" subtitle="This period">
+              <DonutBreakdown
+                data={[
+                  { label: "Active", value: kpis.active, color: SERIES[0] },
+                  { label: "Converted", value: kpis.converted, color: "var(--series-2)" },
+                  { label: "Lost", value: kpis.lost, color: SERIES[3] },
+                ]}
+                centerValue={num(kpis.totalLeads)}
+                centerLabel="Total"
+              />
+            </SectionCard>
+          </div>
         </>
       )}
 

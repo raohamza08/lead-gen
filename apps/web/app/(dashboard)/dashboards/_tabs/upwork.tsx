@@ -8,7 +8,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, money, dateTime } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, DonutBreakdown, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -378,6 +378,48 @@ export function UpworkTab() {
         </KpiStrip>
       )}
 
+      {/* Real-chart pass, round 2 (Part: Dashboard Center, 2026-10-20,
+          explicit user request — "these are less charts and graphs, I need
+          more"). Won/Lost/Viewed/In Discussion are each a distinct
+          UpworkProposal status (confirmed by the KPI strip's own
+          MetricDetail text above: "status WON", "status LOST", "status
+          Viewed", "status In Discussion") — mutually exclusive by
+          definition, so safe to chart as a donut. "Other" absorbs every bid
+          not in one of those four named statuses (e.g. freshly submitted,
+          still pending) rather than silently dropping it — the center total
+          always matches totalBids/totalInvites exactly. */}
+      {kpis && kpis.totalBids > 0 && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <SectionCard title="Bidding Status" subtitle={`${num(kpis.totalBids)} bids this period`}>
+            <DonutBreakdown
+              data={[
+                { label: "Won", value: kpis.wonBids, color: "rgb(var(--good-rgb))" },
+                { label: "Lost", value: kpis.lostBids, color: "rgb(var(--bad-rgb))" },
+                { label: "Viewed", value: kpis.bidsViewed, color: SERIES[1] },
+                { label: "In Discussion", value: kpis.bidsInDiscussion, color: SERIES[2] },
+                { label: "Other", value: Math.max(0, kpis.totalBids - kpis.wonBids - kpis.lostBids - kpis.bidsViewed - kpis.bidsInDiscussion), color: SERIES[3] },
+              ]}
+              centerValue={num(kpis.totalBids)}
+              centerLabel="Total bids"
+            />
+          </SectionCard>
+          {kpis.totalInvites > 0 && (
+            <SectionCard title="Invite Status" subtitle={`${num(kpis.totalInvites)} invites this period`}>
+              <DonutBreakdown
+                data={[
+                  { label: "Won", value: kpis.wonInvites, color: "rgb(var(--good-rgb))" },
+                  { label: "Lost", value: kpis.lostInvites, color: "rgb(var(--bad-rgb))" },
+                  { label: "In Discussion", value: kpis.invitesInDiscussion, color: SERIES[2] },
+                  { label: "Other", value: Math.max(0, kpis.totalInvites - kpis.wonInvites - kpis.lostInvites - kpis.invitesInDiscussion), color: SERIES[3] },
+                ]}
+                centerValue={num(kpis.totalInvites)}
+                centerLabel="Total invites"
+              />
+            </SectionCard>
+          )}
+        </div>
+      )}
+
       <SectionCard
         title="Requests"
         subtitle="Project Manager hour requests for the selected period — see the Requests tab under Upwork Proposals to review/approve individual requests."
@@ -647,32 +689,52 @@ export function UpworkTab() {
         />
       )}
 
-      <SectionCard
-        title="By submitter"
-        subtitle="Grouped by free-text submitter name + profile — may fragment on typos/casing since it's not a User relation. Onboarded hours lines up against the Requests page's per-profile requested hours."
-        expandable
-      >
-        {submittersQuery.isLoading && <SkeletonCard className="h-32" />}
-        {submittersQuery.error && <ErrorState message={(submittersQuery.error as Error).message} onRetry={() => submittersQuery.refetch()} />}
-        {!submittersQuery.isLoading && submitters.length === 0 && <EmptyState title="No submissions in this period" />}
-        {submitters.length > 0 && (
-          <DataTable
-            rowKey={(r) => `${r.name}-${r.profileName}`}
-            rows={submitters}
-            columns={[
-              { key: "name", header: "Submitter", render: (r) => r.name },
-              { key: "profileName", header: "Profile/ID", render: (r) => r.profileName },
-              { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
-              { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
-              { key: "won", header: "Won", render: (r) => num(r.won), numeric: true },
-              { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
-              { key: "onboardedHours", header: "Onboarded Hours", render: (r) => num(r.onboardedHours), numeric: true },
-              { key: "conversionRate", header: "Conv. Rate", render: (r) => pct(r.conversionRate), numeric: true },
-              { key: "estimatedCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedCost), numeric: true },
-            ]}
-          />
-        )}
-      </SectionCard>
+      {submittersQuery.isLoading && <SkeletonCard className="h-32" />}
+      {submittersQuery.error && <ErrorState message={(submittersQuery.error as Error).message} onRetry={() => submittersQuery.refetch()} />}
+      {!submittersQuery.isLoading && submitters.length === 0 && (
+        <SectionCard title="By submitter" subtitle="Grouped by free-text submitter name + profile">
+          <EmptyState title="No submissions in this period" />
+        </SectionCard>
+      )}
+      {submitters.length > 0 && (
+        <ChartWithTable
+          title="By submitter"
+          subtitle="Grouped by free-text submitter name + profile — may fragment on typos/casing since it's not a User relation. Onboarded hours lines up against the Requests page's per-profile requested hours."
+          expandable
+          chart={
+            <ResponsiveContainer width="100%" height={Math.max(140, submitters.length * 40)}>
+              <BarChart
+                data={[...submitters].sort((a, b) => b.won - a.won)}
+                layout="vertical"
+                margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+              >
+                <CartesianGrid {...GRID_PROPS} vertical horizontal={false} />
+                <XAxis type="number" allowDecimals={false} {...AXIS_PROPS} />
+                <YAxis type="category" dataKey="name" width={140} {...AXIS_PROPS} />
+                <Tooltip {...TOOLTIP_STYLE} />
+                <Bar dataKey="won" name="Won" fill="rgb(var(--good-rgb))" radius={[0, 4, 4, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
+          }
+          table={
+            <DataTable
+              rowKey={(r) => `${r.name}-${r.profileName}`}
+              rows={submitters}
+              columns={[
+                { key: "name", header: "Submitter", render: (r) => r.name },
+                { key: "profileName", header: "Profile/ID", render: (r) => r.profileName },
+                { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
+                { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
+                { key: "won", header: "Won", render: (r) => num(r.won), numeric: true },
+                { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
+                { key: "onboardedHours", header: "Onboarded Hours", render: (r) => num(r.onboardedHours), numeric: true },
+                { key: "conversionRate", header: "Conv. Rate", render: (r) => pct(r.conversionRate), numeric: true },
+                { key: "estimatedCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedCost), numeric: true },
+              ]}
+            />
+          }
+        />
+      )}
     </DashboardCenterShell>
   );
 }

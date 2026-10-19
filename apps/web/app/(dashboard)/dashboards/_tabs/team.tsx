@@ -6,7 +6,7 @@ import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct } from "../../../../components/dashboard-center/format";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, Legend, SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -48,15 +48,28 @@ export function TeamTab() {
           title="Leads added per team member"
           expandable
           chart={
-            <ResponsiveContainer width="100%" height={Math.max(220, team.length * 36)}>
-              <BarChart data={team} layout="vertical" margin={{ left: 24 }}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis type="number" {...AXIS_PROPS} tickFormatter={formatCompact} />
-                <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={120} />
-                <Tooltip {...TOOLTIP_STYLE} />
-                <Bar dataKey="leadsAdded" fill={SERIES[0]} radius={[0, 3, 3, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <>
+              {/* Converted/Lost added alongside the original leadsAdded bar
+                  (Part: Dashboard Center, 2026-10-20, explicit user request
+                  — "these are less charts and graphs, I need more"). Real,
+                  already-fetched per-member counts that were table-only. */}
+              <Legend items={[
+                { label: "Leads Added", color: SERIES[0] },
+                { label: "Converted", color: "rgb(var(--good-rgb))" },
+                { label: "Lost", color: "rgb(var(--bad-rgb))" },
+              ]} />
+              <ResponsiveContainer width="100%" height={Math.max(220, team.length * 44)}>
+                <BarChart data={team} layout="vertical" margin={{ left: 24 }}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis type="number" {...AXIS_PROPS} tickFormatter={formatCompact} />
+                  <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={120} />
+                  <Tooltip {...TOOLTIP_STYLE} />
+                  <Bar dataKey="leadsAdded" name="Leads Added" fill={SERIES[0]} radius={[0, 3, 3, 0]} />
+                  <Bar dataKey="leadsConverted" name="Converted" fill="rgb(var(--good-rgb))" radius={[0, 3, 3, 0]} />
+                  <Bar dataKey="leadsLost" name="Lost" fill="rgb(var(--bad-rgb))" radius={[0, 3, 3, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
           }
           table={
             <DataTable

@@ -150,30 +150,66 @@ export function PipelineTab() {
         }
       />
 
-      <SectionCard
-        title="Average time in stage"
-        subtitle="Computed from LeadStageHistory, tracked only since 2026-09-30 — stages with a small sample size are shown as-is rather than hidden, so the limited history is visible"
-        expandable
-      >
-        {timingQuery.isLoading && <SkeletonCard className="h-32" />}
-        {timingQuery.error && <ErrorState message={(timingQuery.error as Error).message} onRetry={() => timingQuery.refetch()} />}
-        {!timingQuery.isLoading && timing.length === 0 && (
+      {timingQuery.isLoading && <SkeletonCard className="h-32" />}
+      {timingQuery.error && <ErrorState message={(timingQuery.error as Error).message} onRetry={() => timingQuery.refetch()} />}
+      {!timingQuery.isLoading && timing.length === 0 && (
+        <SectionCard
+          title="Average time in stage"
+          subtitle="Computed from LeadStageHistory, tracked only since 2026-09-30 — stages with a small sample size are shown as-is rather than hidden, so the limited history is visible"
+        >
           <p className="py-6 text-center text-xs text-ink/45">
             Not enough historical data yet — stage-transition history only started being recorded 2026-09-30.
           </p>
-        )}
-        {timing.length > 0 && (
-          <DataTable
-            rowKey={(r) => r.stage}
-            rows={timing}
-            columns={[
-              { key: "stage", header: "Stage", render: (r) => titleCase(r.stage) },
-              { key: "avgMinutesInStage", header: "Avg. Time in Stage", render: (r) => minutes(r.avgMinutesInStage), numeric: true },
-              { key: "sampleSize", header: "Sample Size", render: (r) => num(r.sampleSize), numeric: true },
-            ]}
-          />
-        )}
-      </SectionCard>
+        </SectionCard>
+      )}
+      {timing.length > 0 && (
+        // Real-chart pass, round 2 (Part: Dashboard Center, 2026-10-20,
+        // explicit user request — "these are less charts and graphs, I need
+        // more"). Only rows with a real avgMinutesInStage go into the chart
+        // — a stage with sampleSize>0 but no computed average (filtered
+        // separately below) would otherwise plot as a false zero-minute bar.
+        <ChartWithTable
+          title="Average time in stage"
+          subtitle="Computed from LeadStageHistory, tracked only since 2026-09-30 — stages with a small sample size are shown as-is rather than hidden, so the limited history is visible"
+          expandable
+          chart={
+            timing.filter((t) => t.avgMinutesInStage !== undefined).length === 0 ? (
+              <p className="py-8 text-center text-xs text-ink/45">No stage has a computed average yet.</p>
+            ) : (
+              <ResponsiveContainer
+                width="100%"
+                height={Math.max(140, timing.filter((t) => t.avgMinutesInStage !== undefined).length * 32)}
+              >
+                <BarChart
+                  data={timing
+                    .filter((t) => t.avgMinutesInStage !== undefined)
+                    .map((t) => ({ ...t, stageLabel: titleCase(t.stage) }))
+                    .sort((a, b) => (b.avgMinutesInStage ?? 0) - (a.avgMinutesInStage ?? 0))}
+                  layout="vertical"
+                  margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+                >
+                  <CartesianGrid {...GRID_PROPS} vertical horizontal={false} />
+                  <XAxis type="number" {...AXIS_PROPS} tickFormatter={(v) => minutes(v)} />
+                  <YAxis type="category" dataKey="stageLabel" width={130} {...AXIS_PROPS} />
+                  <Tooltip {...TOOLTIP_STYLE} formatter={(v: number) => minutes(v)} />
+                  <Bar dataKey="avgMinutesInStage" name="Avg. time" fill={SERIES[1]} radius={[0, 4, 4, 0]} maxBarSize={20} />
+                </BarChart>
+              </ResponsiveContainer>
+            )
+          }
+          table={
+            <DataTable
+              rowKey={(r) => r.stage}
+              rows={timing}
+              columns={[
+                { key: "stage", header: "Stage", render: (r) => titleCase(r.stage) },
+                { key: "avgMinutesInStage", header: "Avg. Time in Stage", render: (r) => minutes(r.avgMinutesInStage), numeric: true },
+                { key: "sampleSize", header: "Sample Size", render: (r) => num(r.sampleSize), numeric: true },
+              ]}
+            />
+          }
+        />
+      )}
     </DashboardCenterShell>
   );
 }
