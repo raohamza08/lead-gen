@@ -443,7 +443,11 @@ select, option {
   background: var(--surface);
   padding: 14px 18px;
   font: inherit;
-  text-align: inherit;
+  /* Centered, not inherited (Part: premium dark theme pass v4, 2026-10-19,
+     explicit user request — "center align these tabs", clarified to mean
+     the KPI tiles' own label/value/hint text, not the Dashboard Center
+     tab row centered separately above). */
+  text-align: center;
   color: inherit;
   border: none;
   min-width: 0;
