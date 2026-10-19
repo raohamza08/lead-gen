@@ -33,6 +33,11 @@
      defined here for parity so no var ever resolves empty if something new
      reaches for it. */
   --accent-2-rgb: 91 87 214;
+  /* White text already clears ~6:1 on light mode's teal accent — defined
+     here only so components (e.g. Tabs' active trigger, below) can read one
+     token in both themes instead of branching (Part: premium dark theme
+     pass v4 fix, 2026-10-19). */
+  --accent-contrast-rgb: 255 255 255;
 
   --paper: rgb(var(--paper-rgb));
   --ink: rgb(var(--ink-rgb));
@@ -267,17 +272,23 @@ body {
 }
 
 /* Matte grain (Part: premium dark theme pass v4, 2026-10-19, explicit user
-   request — "add a matt texture where it can be added and looks perfect").
-   A large flat near-black expanse reads as a flat digital rectangle without
-   it; every one of this session's reference images has this same subtle
-   grain, not a clean gradient. One fixed, full-viewport SVG feTurbulence
-   noise layer (tileable, no image request) sits above everything —
-   including modals/dropdowns, where it doubles as the texture real frosted
-   glass has — at low enough opacity (3%) to read as "matte paper," not
-   visible static. `pointer-events:none` so it never intercepts a click;
-   dark-mode only, since the reference material (and this texture) is
-   dark-specific, matching the rest of this theme pass. Static, not
-   animated, so it needs no prefers-reduced-motion handling. */
+   request — "add a matt texture where it can be added and looks perfect";
+   blend mode fixed same day after the user reported not being able to see
+   it at all). A large flat near-black expanse reads as a flat digital
+   rectangle without it; every one of this session's reference images has
+   this same subtle grain, not a clean gradient. One fixed, full-viewport
+   SVG feTurbulence noise layer (tileable, no image request) sits above
+   everything — including modals/dropdowns, where it doubles as the texture
+   real frosted glass has. `pointer-events:none` so it never intercepts a
+   click; dark-mode only, since the reference material (and this texture)
+   is dark-specific. Static, not animated, so it needs no
+   prefers-reduced-motion handling.
+   `mix-blend-mode: overlay` → `screen`: overlay preserves the base layer's
+   own lightness and only really shows on midtones — against a near-black
+   #0b0b0b canvas it was mathematically close to invisible regardless of
+   opacity, not merely subtle. `screen` always adds light, so white noise
+   reads as visible grain against a dark base. Opacity bumped 3% → 6% to
+   compensate now that the blend mode actually contributes something. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) body::after {
     content: "";
@@ -285,8 +296,8 @@ body {
     inset: 0;
     z-index: 999;
     pointer-events: none;
-    opacity: 0.03;
-    mix-blend-mode: overlay;
+    opacity: 0.06;
+    mix-blend-mode: screen;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   }
 }
@@ -296,8 +307,8 @@ body {
   inset: 0;
   z-index: 999;
   pointer-events: none;
-  opacity: 0.03;
-  mix-blend-mode: overlay;
+  opacity: 0.06;
+  mix-blend-mode: screen;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 

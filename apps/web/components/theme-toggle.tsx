@@ -11,12 +11,22 @@ type Theme = "light" | "dark" | "system";
  * off. "system" removes the attribute entirely rather than resolving it to a
  * concrete value, so the OS preference keeps applying when the user changes it
  * later — resolving it once would freeze the choice at whatever it was.
+ *
+ * Defaults to "dark", not "system" (Part: premium dark theme pass v4 fix,
+ * 2026-10-19) — matches app/layout.tsx's THEME_INIT_SCRIPT, which now does
+ * the same for the same reason: "system" meant a default-light browser saw
+ * the old untouched light theme and none of this app's actual dark-mode
+ * design work. Must stay in sync with that script's fallback, or this
+ * effect would overwrite the init script's dark default back to "system"
+ * (and therefore back to light, for most visitors) on every page load.
+ * "system" is still a real, explicit choice available from the toggle —
+ * only the *default before any choice* changed.
  */
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
-    const stored = (window.localStorage.getItem("theme") as Theme) ?? "system";
+    const stored = (window.localStorage.getItem("theme") as Theme) ?? "dark";
     setTheme(stored);
     apply(stored);
   }, []);
@@ -28,7 +38,7 @@ export function ThemeToggle() {
   }
 
   function cycle() {
-    const next: Theme = theme === "system" ? "light" : theme === "light" ? "dark" : "system";
+    const next: Theme = theme === "dark" ? "light" : theme === "light" ? "system" : "dark";
     setTheme(next);
     window.localStorage.setItem("theme", next);
     apply(next);

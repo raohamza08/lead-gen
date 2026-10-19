@@ -95,7 +95,7 @@ function DashboardCenterTabs() {
       </div>
 
       <div className="overflow-x-auto pb-1">
-        <Tabs value={tab} onValueChange={selectTab} tabs={tabDefs} />
+        <Tabs value={tab} onValueChange={selectTab} tabs={tabDefs} center />
       </div>
 
       {tab === "overview" && <OverviewTab />}
