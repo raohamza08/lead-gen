@@ -28,6 +28,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* General Sans (Part: premium dark theme pass v3) — the reference
+            dashboards' rounded geometric display face; wired through
+            tailwind.config.ts's fontFamily.sans so the existing font-sans
+            class on <body> below picks it up everywhere, no per-component
+            changes. */}
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
       </head>
       <body className="min-h-screen font-sans antialiased">{children}</body>
     </html>

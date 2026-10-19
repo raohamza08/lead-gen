@@ -32,6 +32,10 @@ const config: Config = {
         border: "rgb(var(--ink-rgb) / <alpha-value>)",
       },
       fontFamily: {
+        // General Sans first (Part: premium dark theme pass v3) — loaded via
+        // Fontshare in app/layout.tsx's <head>; the rest is Tailwind's own
+        // default sans stack as fallback while the webfont loads/if it fails.
+        sans: ["General Sans", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
       },
       // Typography scale (Part: UI/UX Redesign, 2026-09-01) — names sizes

@@ -77,23 +77,38 @@
    changes further down (surface luminance steps + inset highlight shadows)
    — the two sections together are what produce the "premium" read, neither
    does it alone. */
+/* Premium dark theme pass v3 (2026-10-19) — matched to the product's own
+   reference dashboards (see docs/RESUME.md / memory "dashboard theme
+   reference" for the source images) rather than v2's teal/violet pairing.
+   Paper goes true near-black (was a cool-tinted #0b0d11), ink goes pure
+   white, and both accent slots become the one brand orange (#FF7000 base,
+   a lighter #FF9A3D as --accent-2) instead of two unrelated hues — chosen
+   deliberately so every mechanism already keyed off --accent/--accent-2
+   below (the primary-button gradient, .btn-primary-glow's hover bloom, and
+   body's aurora radial blooms) becomes a warm orange glow system for free,
+   with no component changes. --gold stays a distinct muted amber so warning
+   states remain visually separable from the vivid brand accent. Chart
+   --series-1..4 are untouched: they're validated against this app's
+   surfaces for WCAG/CVD separation (see file-top comment) and the paper
+   shift here is too small to revisit that work. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper-rgb: 11 13 17;
-    --ink-rgb: 237 238 240;
-    --accent-rgb: 56 199 179;
-    --accent-2-rgb: 139 124 246;
+    --paper-rgb: 11 11 11;
+    --ink-rgb: 255 255 255;
+    --accent-rgb: 255 112 0;
+    --accent-2-rgb: 255 154 61;
+    /* Text that sits ON a solid accent fill (Part: premium dark theme pass
+       v3) — white fails contrast against this orange (~2.8:1, needs 4.5:1);
+       the reference's own CTA buttons use dark text on orange, not white.
+       Scoped to dark mode only: light mode's accent is still the old teal,
+       which white text already clears comfortably (~6:1), so it's untouched. */
+    --accent-contrast-rgb: 20 16 13;
     --gold-rgb: 217 174 99;
     --good-rgb: 74 191 124;
     --bad-rgb: 224 112 101;
     --secondary-rgb: 148 163 184;
     --info-rgb: 96 165 250;
     --line: rgb(255 255 255 / 0.08);
-    /* A real teal-to-violet gradient in dark mode (Part: premium dark theme
-       pass v2, 2026-09-02) — the flat single-hue accent read as safe/generic
-       on its own; pairing it with --accent-2 on every primary button (see
-       .btn-primary-glow below) is what gives the theme a second color
-       family instead of one teal doing all the work. */
     --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-2-rgb)));
 
     --chart-grid: #1c1f26;
@@ -115,10 +130,11 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper-rgb: 11 13 17;
-  --ink-rgb: 237 238 240;
-  --accent-rgb: 56 199 179;
-  --accent-2-rgb: 139 124 246;
+  --paper-rgb: 11 11 11;
+  --ink-rgb: 255 255 255;
+  --accent-rgb: 255 112 0;
+  --accent-2-rgb: 255 154 61;
+  --accent-contrast-rgb: 20 16 13;
   --gold-rgb: 217 174 99;
   --good-rgb: 74 191 124;
   --bad-rgb: 224 112 101;
@@ -151,7 +167,12 @@
   --shadow-sm: 0 1px 2px rgb(23 27 33 / 0.06), 0 1px 3px rgb(23 27 33 / 0.04);
   --shadow-md: 0 4px 12px rgb(23 27 33 / 0.08), 0 2px 4px rgb(23 27 33 / 0.04);
   --shadow-lg: 0 12px 32px rgb(23 27 33 / 0.14);
-  --radius: 12px;
+  /* 16px, up from 12px (Part: premium dark theme pass v3) — the reference's
+     cards read noticeably softer/rounder; kept short of its literal 20px
+     since this app's cards run denser (KPI strips, tables) than the
+     reference's spacious panels, and plain Tailwind rounded-lg/xl utilities
+     elsewhere (buttons, inputs) are untouched. */
+  --radius: 16px;
 
   /* Animation tokens (Part: UI/UX Redesign, 2026-09-01) — every transition
      added across the redesign draws from these three durations and three
@@ -177,8 +198,11 @@
        muddy without it. shadow-lg additionally picks up a wide, very-low-
        opacity accent bloom so modals/popovers float rather than just sitting
        on a black drop shadow. */
-    --surface-rgb: 20 23 29;
-    --surface-raised-rgb: 27 31 39;
+    /* #151515 / #1a1a1a (Part: premium dark theme pass v3) — the reference's
+       own card tones, replacing v2's cool blue-tinted greys now that paper
+       is true near-black instead of #0b0d11. */
+    --surface-rgb: 21 21 21;
+    --surface-raised-rgb: 26 26 26;
     --surface: rgb(var(--surface-rgb));
     --surface-raised: rgb(var(--surface-raised-rgb));
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.03);
@@ -188,8 +212,8 @@
 }
 
 :root[data-theme="dark"] {
-  --surface-rgb: 20 23 29;
-  --surface-raised-rgb: 27 31 39;
+  --surface-rgb: 21 21 21;
+  --surface-raised-rgb: 26 26 26;
   --surface: rgb(var(--surface-rgb));
   --surface-raised: rgb(var(--surface-raised-rgb));
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.03);
@@ -200,7 +224,7 @@
 body {
   background: var(--paper);
   color: var(--ink);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "General Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -330,6 +354,33 @@ select, option {
 }
 :root[data-theme="dark"] .btn-primary-glow:hover {
   box-shadow: 0 6px 20px rgb(var(--accent-rgb) / 0.35), 0 2px 10px rgb(var(--accent-2-rgb) / 0.25);
+}
+
+/* Dark-mode contrast fix for every `text-white` set on a solid accent fill
+   (Part: premium dark theme pass v3) — this combination is the shared
+   Button's primary variant plus ~40 hand-rolled `bg-accent ... text-white`
+   buttons/pills/tabs across leads, email-hub, social, settings, sequences
+   etc. Caught live: white on the new orange measures ~2.8:1, below the 4.5:1
+   floor (it was already failing under the old teal in dark mode too, ~2.1:1
+   — not a regression, but worth fixing now that it's being touched).
+   Attribute-selector match on `btn-primary-bg` covers the arbitrary-value
+   `bg-[image:var(--btn-primary-bg)]` class Button's primary variant uses,
+   since attribute matching reads the literal class string, unaffected by
+   the bracket-escaping that class *selectors* need. Specificity (2+ classes)
+   beats Tailwind's single-class `.text-white` regardless of stylesheet
+   order, so this needs no `!important`. Light mode is untouched — its accent
+   is still the old teal, which white text already clears at ~6:1. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .text-white.bg-accent,
+  :root:not([data-theme="light"]) .text-white.bg-primary,
+  :root:not([data-theme="light"]) .text-white[class*="btn-primary-bg"] {
+    color: rgb(var(--accent-contrast-rgb));
+  }
+}
+:root[data-theme="dark"] .text-white.bg-accent,
+:root[data-theme="dark"] .text-white.bg-primary,
+:root[data-theme="dark"] .text-white[class*="btn-primary-bg"] {
+  color: rgb(var(--accent-contrast-rgb));
 }
 
 /* Drag affordances for the pipeline board. */
