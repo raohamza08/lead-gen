@@ -6,7 +6,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, money } from "../../../../components/dashboard-center/format";
 import { ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { SectionCard, StatTile } from "../../../../components/chart-kit";
+import { KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 
@@ -67,7 +67,7 @@ export function OverviewTab() {
       {s && (
         <>
           <SectionCard title="Leads" expandable>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <KpiStrip>
               <StatTile label="Total Leads" value={num(s.leads.total)} detail={<SeeFullDashboard tab="leads" label="Leads" />} />
               <StatTile
                 label="New This Period"
@@ -77,28 +77,28 @@ export function OverviewTab() {
               />
               <StatTile label="Conversion Rate" value={pct(s.leads.conversionRate)} detail={<SeeFullDashboard tab="leads" label="Leads" />} />
               <StatTile label="Active in Pipeline" value={num(s.pipeline.total)} detail={<SeeFullDashboard tab="pipeline" label="Pipeline" />} />
-            </div>
+            </KpiStrip>
           </SectionCard>
 
           <div className="grid gap-4 lg:grid-cols-2">
             <SectionCard title="Email" expandable>
-              <div className="grid grid-cols-2 gap-3">
+              <KpiStrip>
                 <StatTile label="Sent" value={num(s.email.sent)} detail={<SeeFullDashboard tab="email" label="Email Campaign" />} />
                 <StatTile label="Open Rate" value={pct(s.email.openRate)} detail={<SeeFullDashboard tab="email" label="Email Campaign" />} />
                 <StatTile label="Reply Rate" value={pct(s.email.replyRate)} detail={<SeeFullDashboard tab="email" label="Email Campaign" />} />
                 <StatTile label="Bounced" value={num(s.email.bounced)} tone="bad" detail={<SeeFullDashboard tab="email" label="Email Campaign" />} />
-              </div>
+              </KpiStrip>
             </SectionCard>
 
             <SectionCard title="Social Inbox" expandable>
-              <div className="grid grid-cols-2 gap-3">
+              <KpiStrip>
                 <StatTile label="Conversations" value={num(s.social.totalConversations)} detail={<SeeFullDashboard tab="social" label="Social Inbox" />} />
                 <StatTile label="Response Rate" value={pct(s.social.responseRate)} detail={<SeeFullDashboard tab="social" label="Social Inbox" />} />
-              </div>
+              </KpiStrip>
             </SectionCard>
 
             <SectionCard title="Upwork" expandable>
-              <div className="grid grid-cols-2 gap-3">
+              <KpiStrip>
                 <StatTile label="Total Bids" value={num(s.upwork.totalBids)} detail={<SeeFullDashboard tab="upwork" label="Upwork" />} />
                 <StatTile label="Clients Won" value={num(s.upwork.clientsWon)} tone="good" detail={<SeeFullDashboard tab="upwork" label="Upwork" />} />
                 <StatTile label="Conversion Rate" value={pct(s.upwork.conversionRate)} detail={<SeeFullDashboard tab="upwork" label="Upwork" />} />
@@ -108,23 +108,21 @@ export function OverviewTab() {
                   hint={s.upwork.connectCostBasis === "flat_rate_estimate" ? "Estimated at $0.15/connect" : undefined}
                   detail={<SeeFullDashboard tab="upwork" label="Upwork" />}
                 />
-              </div>
+              </KpiStrip>
             </SectionCard>
 
             <SectionCard title="Meta Ads" expandable>
               {s.metaAds.connected ? (
-                <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <StatTile
-                      label="Spend"
-                      value={s.metaAds.mixedCurrencies ? "Mixed currencies" : money(s.metaAds.spend, s.metaAds.currency)}
-                      hint={s.metaAds.mixedCurrencies ? "Connected accounts bill in different currencies — see the Meta Ads tab per account" : undefined}
-                      detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />}
-                    />
-                    <StatTile label="Leads" value={num(s.metaAds.leads)} detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />} />
-                    <StatTile label="Connected Accounts" value={num(s.metaAds.accountCount)} detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />} />
-                  </div>
-                </>
+                <KpiStrip>
+                  <StatTile
+                    label="Spend"
+                    value={s.metaAds.mixedCurrencies ? "Mixed currencies" : money(s.metaAds.spend, s.metaAds.currency)}
+                    hint={s.metaAds.mixedCurrencies ? "Connected accounts bill in different currencies — see the Meta Ads tab per account" : undefined}
+                    detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />}
+                  />
+                  <StatTile label="Leads" value={num(s.metaAds.leads)} detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />} />
+                  <StatTile label="Connected Accounts" value={num(s.metaAds.accountCount)} detail={<SeeFullDashboard tab="meta-ads" label="Meta Ads" />} />
+                </KpiStrip>
               ) : (
                 <p className="py-4 text-center text-xs text-ink/45">
                   No Meta Ads account connected. <a href="/settings/meta-ads" className="text-accent hover:underline">Connect one</a> to see spend and lead data here.
@@ -134,12 +132,12 @@ export function OverviewTab() {
           </div>
 
           <SectionCard title="Pipeline & Team" expandable>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <KpiStrip>
               <StatTile label="Won" value={num(s.pipeline.won)} tone="good" detail={<SeeFullDashboard tab="pipeline" label="Pipeline" />} />
               <StatTile label="Lost" value={num(s.pipeline.lost)} tone="bad" detail={<SeeFullDashboard tab="pipeline" label="Pipeline" />} />
               <StatTile label="Pipeline Conv. Rate" value={pct(s.pipeline.conversionRate)} detail={<SeeFullDashboard tab="pipeline" label="Pipeline" />} />
               <StatTile label="Active Team Members" value={num(s.team.activeMembers)} detail={<SeeFullDashboard tab="team" label="Team Performance" />} />
-            </div>
+            </KpiStrip>
           </SectionCard>
         </>
       )}

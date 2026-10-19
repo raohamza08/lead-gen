@@ -6,7 +6,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, dateTime, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail } from "../../../../components/dashboard-center/metric-detail";
-import { DataTable, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -82,7 +82,7 @@ export function InboxTab() {
       {volumeQuery.isLoading && <SkeletonCard className="h-24" />}
       {volumeQuery.error && <ErrorState message={(volumeQuery.error as Error).message} onRetry={() => volumeQuery.refetch()} />}
       {volume && (
-        <div className="grid grid-cols-3 gap-3">
+        <KpiStrip>
           <StatTile
             label="Received"
             value={num(volume.received)}
@@ -111,7 +111,7 @@ export function InboxTab() {
               />
             }
           />
-        </div>
+        </KpiStrip>
       )}
 
       <SectionCard title="Mailboxes" subtitle="Per-account received/sent/unread and sync health" expandable>

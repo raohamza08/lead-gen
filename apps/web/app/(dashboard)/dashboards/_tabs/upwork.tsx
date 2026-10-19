@@ -7,7 +7,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, money, dateTime } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { DataTable, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -232,7 +232,7 @@ export function UpworkTab() {
       {kpisQuery.error && <ErrorState message={(kpisQuery.error as Error).message} onRetry={() => kpisQuery.refetch()} />}
 
       {kpis && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiStrip>
           <StatTile
             label="Total Bids"
             value={num(kpis.totalBids)}
@@ -366,7 +366,7 @@ export function UpworkTab() {
             hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
             detail={<MetricDetail definition="Connect cost divided by clients won through bidding specifically — invites cost no connects, so blending in invite-won clients would understate this." rows={[{ label: "Connect cost", value: money(kpis.connectCost) }, { label: "Clients won (bids)", value: num(kpis.wonBids) }]} />}
           />
-        </div>
+        </KpiStrip>
       )}
 
       <SectionCard
@@ -378,7 +378,7 @@ export function UpworkTab() {
         {requestsQuery.error && <ErrorState message={(requestsQuery.error as Error).message} onRetry={() => requestsQuery.refetch()} />}
         {requestsQuery.data && (
           <>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+            <KpiStrip>
               <StatTile label="Requested Hours" value={num(requestsQuery.data.requestedHours)} />
               <StatTile label="Bidding Hours" value={num(requestsQuery.data.biddingHours)} />
               <StatTile label="Invite Hours" value={num(requestsQuery.data.inviteHours)} />
@@ -386,7 +386,7 @@ export function UpworkTab() {
               <StatTile label="Remaining Target" value={num(requestsQuery.data.remainingHours)} tone={requestsQuery.data.remainingHours > 0 ? "gold" : "good"} />
               <StatTile label="Pending Review" value={num(requestsQuery.data.pendingReview)} />
               <StatTile label="Approved / Rejected" value={`${num(requestsQuery.data.approvedCount)} / ${num(requestsQuery.data.rejectedCount)}`} />
-            </div>
+            </KpiStrip>
 
             {requestsQuery.data.byBusinessDeveloper.length > 0 && (
               <div className="mt-4">

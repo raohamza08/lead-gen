@@ -56,7 +56,11 @@ export function DashboardCenterShell({
     <div className="flex flex-col gap-6">
       {!compact && (
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
+          {/* text-page-title, not text-lg (Part: Dashboard Center card-format
+              match, 2026-10-19) — the app's existing named scale for this
+              role (profile/page.tsx already uses it), closer to the
+              mockup's 24-26px title than the old 18px. */}
+          <h1 className="text-page-title tracking-tight">{title}</h1>
           {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
         </div>
       )}
@@ -68,11 +72,14 @@ export function DashboardCenterShell({
           {extraFilters}
           {lastUpdated && <span className="text-xs text-ink/45">Last updated {lastUpdated.toLocaleTimeString()}</span>}
           {onRefresh && (
+            // Pill, not a bordered box (Part: Dashboard Center card-format
+            // match, 2026-10-19) — matches the date-range controls above and
+            // the mockup's own Refresh button.
             <button
               type="button"
               onClick={onRefresh}
               disabled={refreshing}
-              className="flex items-center gap-1.5 rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-60"
+              className="flex h-10 items-center gap-1.5 rounded-full border border-[var(--line)] bg-surface-elevated px-[18px] text-sm text-ink/70 transition-colors hover:bg-ink/10 disabled:opacity-60"
             >
               {refreshing && <Spinner className="h-3 w-3" />}
               {refreshing ? "Refreshing…" : "Refresh"}

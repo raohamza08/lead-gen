@@ -6,7 +6,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { DataTable, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -75,7 +75,7 @@ export function SocialTab() {
 
       {kpis && (
         <>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <KpiStrip>
             <StatTile
               label="Conversations"
               value={num(kpis.totalConversations)}
@@ -107,7 +107,7 @@ export function SocialTab() {
               value={minutes(kpis.avgResponseMinutes)}
               detail={<MetricDetail definition="Average time from the first inbound message to the first outbound reply after it, per conversation — computed on the fly, not pre-aggregated." rows={[{ label: "Average", value: minutes(kpis.avgResponseMinutes) }]} />}
             />
-          </div>
+          </KpiStrip>
 
           {!kpis.leadConversionAvailable && (
             <div className="card px-4 py-3 text-xs text-ink/55">

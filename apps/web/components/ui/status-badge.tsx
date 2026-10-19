@@ -1,12 +1,16 @@
 type Tone = "success" | "warning" | "error" | "info" | "neutral" | "accent";
 
+// A thin border at ~30% of the tone's own colour, matching the approved
+// dashboard-preview.html mockup's pill construction (Part: Dashboard Center
+// card-format match, 2026-10-19) — a tinted fill alone read as flatter/less
+// deliberate than the mockup's pills once compared side by side.
 const TONE_CLASSES: Record<Tone, string> = {
-  success: "bg-success/12 text-success",
-  warning: "bg-warning/15 text-warning",
-  error: "bg-error/12 text-error",
-  info: "bg-info/12 text-info",
-  neutral: "bg-ink/8 text-ink/60",
-  accent: "bg-primary/15 text-primary",
+  success: "bg-success/12 text-success border border-success/30",
+  warning: "bg-warning/15 text-warning border border-warning/30",
+  error: "bg-error/12 text-error border border-error/30",
+  info: "bg-info/12 text-info border border-info/30",
+  neutral: "bg-ink/8 text-ink/60 border border-[var(--line)]",
+  accent: "bg-primary/15 text-primary border border-primary/30",
 };
 
 /**

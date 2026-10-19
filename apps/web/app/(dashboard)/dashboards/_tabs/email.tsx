@@ -7,7 +7,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, dateTime, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -111,7 +111,7 @@ export function EmailTab() {
       {kpisQuery.error && <ErrorState message={(kpisQuery.error as Error).message} onRetry={() => kpisQuery.refetch()} />}
 
       {kpis && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <KpiStrip>
           <StatTile
             label="Campaigns"
             value={num(kpis.totalCampaigns)}
@@ -246,7 +246,7 @@ export function EmailTab() {
               />
             }
           />
-        </div>
+        </KpiStrip>
       )}
 
       {series.length > 0 && (

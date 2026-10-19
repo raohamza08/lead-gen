@@ -316,12 +316,105 @@ select, option {
   color: var(--ink);
 }
 
-/* The standard card. Used everywhere so surfaces stay consistent. */
+/* The standard card. Used everywhere so surfaces stay consistent.
+   container-type: inline-size (Part: Dashboard Center card-format match,
+   2026-10-19) — lets the .kpi-strip rules below respond to the CARD's own
+   width via @container rather than the viewport's, since the same StatTile
+   group renders inside cards of very different widths (a full-width section
+   vs. one half of a paired lg:grid-cols-2 row); a viewport media query
+   can't tell those apart. */
 .card {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   box-shadow: var(--shadow-sm);
+  container-type: inline-size;
+}
+
+/* The KPI strip (Part: Dashboard Center card-format match, 2026-10-19) —
+   StatTile's cells divided by a hairline instead of boxed/gapped tiles,
+   ported from the dashboard-preview.html mockup the user approved. Used via
+   chart-kit.tsx's <KpiStrip>/<StatTile>, which together replace every
+   dashboard tab's ad hoc `grid grid-cols-N gap-3` wrapper. Token names here
+   are this app's real ones (--line, not the mockup's --rule; --ink-muted,
+   not --muted) — same pattern, not a copy-pasted stylesheet. */
+.kpi-strip {
+  display: flex;
+  flex-wrap: wrap;
+}
+.kpi-cell {
+  flex: 1 1 0;
+  min-width: 140px;
+  padding: 0 18px;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: inherit;
+  color: inherit;
+}
+.kpi-cell:first-child {
+  padding-left: 0;
+}
+.kpi-cell:last-child {
+  padding-right: 0;
+}
+.kpi-cell + .kpi-cell {
+  border-left: 1px solid var(--line);
+}
+.kpi-cell-interactive {
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+@media (hover: hover) {
+  .kpi-cell-interactive:hover {
+    background: var(--surface-raised);
+  }
+}
+.kpi-cell-active {
+  background: rgb(var(--accent-rgb) / 0.1);
+  border-radius: 8px;
+}
+/* Below the strip's own wrap point (min-width 140px per cell, set above),
+   cells stack two-per-row with a top rule instead of a left one — mirrors
+   the mockup's 760px phone breakpoint without hardcoding a page width here,
+   since StatTile is embedded in cards of very different widths site-wide. */
+@container (max-width: 420px) {
+  .kpi-strip {
+    gap: 14px 0;
+  }
+  .kpi-cell {
+    flex: 0 0 50%;
+    border-left: none !important;
+    padding: 0 10px;
+  }
+  .kpi-cell:nth-child(odd) {
+    padding-left: 0;
+  }
+  .kpi-cell:nth-child(even) {
+    padding-right: 0;
+  }
+  .kpi-cell:nth-child(n + 3) {
+    border-top: 1px solid var(--line);
+    padding-top: 14px;
+  }
+}
+.kpi-label {
+  font-size: 12px;
+  color: var(--ink-muted);
+}
+.kpi-value {
+  margin-top: 4px;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+.kpi-hint {
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--ink-muted);
 }
 
 .card-interactive {

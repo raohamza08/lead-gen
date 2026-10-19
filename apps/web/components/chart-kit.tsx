@@ -97,10 +97,13 @@ export function SectionCard({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <section className="card p-5">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    // p-6 (24px), not p-5 — matches the approved dashboard-preview.html
+    // mockup's --pad token exactly (Part: Dashboard Center card-format
+    // match, 2026-10-19).
+    <section className="card p-6">
+      <div className="mb-[18px] flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight">{title}</h2>
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
           {subtitle ? <p className="mt-0.5 text-xs text-ink/55">{subtitle}</p> : null}
         </div>
         <div className="flex items-center gap-2">
@@ -261,14 +264,49 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
   );
 }
 
+/** Groups StatTiles into one divided strip — a hairline between cells
+ *  instead of boxed/gapped tiles (Part: Dashboard Center card-format match,
+ *  2026-10-19, matching the approved dashboard-preview.html mockup). Every
+ *  dashboard tab's old `<div className="grid grid-cols-N gap-3">` wrapper
+ *  around a run of `<StatTile>`s becomes `<KpiStrip>`; StatTile itself
+ *  renders the `.kpi-cell` the strip divides. */
+export function KpiStrip({ children }: { children: ReactNode }) {
+  return <div className="kpi-strip">{children}</div>;
+}
+
+/** Splits a formatted value like "4.2%" or "$43,255.38" into a bold whole
+ *  part and a dimmed decimal tail — the mockup's balance-figure convention
+ *  (Part: Dashboard Center card-format match, 2026-10-19), applied generally
+ *  here since `format.ts`'s `pct()`/`money()` already produce exactly this
+ *  shape and every call site can keep passing a plain string. Anything that
+ *  isn't "stuff, then a decimal point, then digits, then an optional
+ *  suffix" (a plain integer, a "—" placeholder, a non-numeric string) is
+ *  returned unchanged. */
+function renderValue(value: string | number): ReactNode {
+  if (typeof value === "number") return value;
+  const m = /^(.*\d)(\.\d+)([^\d]*)$/.exec(value);
+  if (!m) return value;
+  const [, whole, decimal, suffix] = m;
+  return (
+    <>
+      {whole}
+      <span className="font-normal text-ink/50">{decimal}</span>
+      {suffix}
+    </>
+  );
+}
+
 /** Label + value, with an optional tone. The number is the chart.
  *
  *  Optionally clickable (Part: Email Campaign dashboard, 2026-09-29) — when
  *  `onClick` is given, the tile renders as a real `<button>` instead of a
- *  `<div>` so it's keyboard/screen-reader operable, and `active` adds a
- *  visible selected ring for tiles that double as tab selectors (e.g. "Sent"
- *  filtering the message-activity list below it). Both are optional and
- *  default to the plain static tile every existing caller already uses. */
+ *  `<div>` so it's keyboard/screen-reader operable, and `active` marks the
+ *  selected tile for ones that double as tab selectors (e.g. "Sent"
+ *  filtering the message-activity list below it) with a tinted background,
+ *  not a ring (Part: Dashboard Center card-format match, 2026-10-19 — a
+ *  ring read as an error/focus state against the new flush, borderless
+ *  cell). Both are optional and default to the plain static tile every
+ *  existing caller already uses. */
 export function StatTile({
   label,
   value,
@@ -298,14 +336,14 @@ export function StatTile({
     tone === "good" ? "text-good" : tone === "bad" ? "text-bad" : tone === "gold" ? "text-gold" : "text-ink";
   const body = (
     <>
-      <div className="text-[11px] uppercase tracking-wide text-ink/55">{label}</div>
+      <div className="kpi-label">{label}</div>
       {/* Proportional figures, not tabular — these are standalone values, not a column. */}
-      <div className={`mt-1 text-2xl font-semibold tracking-tight ${toneClass}`}>{value}</div>
-      {hint ? <div className="mt-0.5 text-[11px] text-ink/45">{hint}</div> : null}
+      <div className={`kpi-value ${toneClass}`}>{renderValue(value)}</div>
+      {hint ? <div className="kpi-hint">{hint}</div> : null}
     </>
   );
   if (!onClick && !detail) {
-    return <div className="card card-interactive px-3.5 py-3">{body}</div>;
+    return <div className="kpi-cell">{body}</div>;
   }
   return (
     <>
@@ -313,9 +351,7 @@ export function StatTile({
         type="button"
         onClick={onClick ?? (() => setOpen(true))}
         aria-pressed={onClick ? active : undefined}
-        className={`card card-interactive w-full px-3.5 py-3 text-left transition-shadow ${
-          active ? "ring-2 ring-[var(--accent)]" : ""
-        }`}
+        className={`kpi-cell kpi-cell-interactive ${active ? "kpi-cell-active" : ""}`}
       >
         {body}
       </button>

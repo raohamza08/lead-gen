@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../../../../lib/api-client";
 import { useSelectedMetaAdAccount } from "../../../../lib/use-meta-ads-account";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SERIES, SINGLE_SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SERIES, SINGLE_SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ComparisonTile } from "../../../../components/meta-ads/comparison-tile";
 import { money, num, pct } from "../../../../components/meta-ads/format";
 import { MetaAdsAccountStatusBar, MetaAdAccountRow } from "../../../../components/meta-ads/account-status-bar";
@@ -113,7 +113,7 @@ export function MetaAdsTab() {
           {data.current.impressions === 0 && data.current.spend === 0 ? (
             <EmptyState title="No data for this period" description="Try a wider date range, or Sync now if this account was just connected." />
           ) : (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+            <KpiStrip>
               <ComparisonTile label="Total Spend" value={money(data.current.spend, currency)} deltaPct={data.deltas?.spend} />
               <ComparisonTile label="Impressions" value={num(data.current.impressions)} deltaPct={data.deltas?.impressions} />
               <ComparisonTile
@@ -134,10 +134,10 @@ export function MetaAdsTab() {
               />
               <ComparisonTile label="ROAS" value={data.current.roas !== undefined ? `${data.current.roas.toFixed(2)}x` : "—"} deltaPct={data.deltas?.roas} />
               <ComparisonTile label="Cost / Conversion" value={money(data.current.costPerConversion, currency)} />
-            </div>
+            </KpiStrip>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+          <KpiStrip>
             <ComparisonTile label="Purchases" value={num(data.current.purchases)} />
             <ComparisonTile label="Leads" value={num(data.current.leads)} />
             <ComparisonTile label="Add to Cart" value={num(data.current.addToCart)} />
@@ -146,7 +146,7 @@ export function MetaAdsTab() {
             <ComparisonTile label="Video Views" value={num(data.current.videoViews)} />
             <ComparisonTile label="Engagements" value={num(data.current.postEngagements)} />
             <ComparisonTile label="Link Clicks" value={num(data.current.linkClicks)} />
-          </div>
+          </KpiStrip>
 
           {Object.keys(data.current.otherActions).length > 0 && (
             <div className="card p-4">

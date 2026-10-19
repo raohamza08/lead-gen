@@ -109,12 +109,16 @@ export function DashboardDateRangeBar({
   value: DashboardDateRange;
   onChange: (range: DashboardDateRange) => void;
 }) {
+  // Pill controls (Part: Dashboard Center card-format match, 2026-10-19) —
+  // rounded-full on a raised fill, matching the approved
+  // dashboard-preview.html mockup's masthead controls, replacing the old
+  // rounded-md/bg-transparent bordered boxes.
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2.5">
       <select
         value={value.range}
         onChange={(e) => onChange({ ...value, range: e.target.value as DashboardDateRangeName })}
-        className="rounded-md border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-sm"
+        className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-[18px] text-sm"
       >
         {PRESETS.map((p) => (
           <option key={p.value} value={p.value}>
@@ -128,14 +132,14 @@ export function DashboardDateRangeBar({
             type="date"
             value={value.from}
             onChange={(e) => onChange({ ...value, from: e.target.value })}
-            className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
+            className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-xs"
           />
           <span className="text-xs text-ink/40">to</span>
           <input
             type="date"
             value={value.to}
             onChange={(e) => onChange({ ...value, to: e.target.value })}
-            className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
+            className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-xs"
           />
         </>
       )}
@@ -147,7 +151,7 @@ export function DashboardDateRangeBar({
         <select
           value={value.compareMode}
           onChange={(e) => onChange({ ...value, compareMode: e.target.value as CompareMode })}
-          className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1.5 text-xs"
+          className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-xs"
         >
           <option value="last_month">Last month</option>
           <option value="previous_period">Previous period (equal length)</option>

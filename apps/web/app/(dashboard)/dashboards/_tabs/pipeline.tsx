@@ -6,7 +6,7 @@ import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 
@@ -68,7 +68,7 @@ export function PipelineTab() {
       {funnelQuery.error && <ErrorState message={(funnelQuery.error as Error).message} onRetry={() => funnelQuery.refetch()} />}
 
       {funnel && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiStrip>
           <StatTile
             label="Total in Pipeline"
             value={num(funnel.total)}
@@ -91,7 +91,7 @@ export function PipelineTab() {
             value={pct(funnel.conversionRate)}
             detail={<MetricDetail definition="Won divided by total in pipeline." rows={[{ label: "Won", value: num(funnel.won) }, { label: "Total", value: num(funnel.total) }, { label: "Rate", value: pct(funnel.conversionRate) }]} />}
           />
-        </div>
+        </KpiStrip>
       )}
 
       {funnel && (

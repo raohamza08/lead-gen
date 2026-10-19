@@ -9,7 +9,7 @@ import { dashboardRangeToQuery } from "../../../../components/dashboard-center/d
 import { num, pct, dateTime, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
 import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
-import { StatTile } from "../../../../components/chart-kit";
+import { KpiStrip, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { Input } from "../../../../components/ui/input";
@@ -122,7 +122,7 @@ export function LeadsTab() {
               summed to the period, which looked like the dashboard was
               counting wrong. All-time total is still shown, but separately
               and clearly labeled. */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <KpiStrip>
             <StatTile
               label="Leads (Selected Period)"
               value={num(kpis.totalLeads)}
@@ -261,7 +261,7 @@ export function LeadsTab() {
                 />
               }
             />
-          </div>
+          </KpiStrip>
         </>
       )}
 
