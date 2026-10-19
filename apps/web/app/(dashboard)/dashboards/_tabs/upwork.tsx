@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, getCurrentUser } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, money, dateTime } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -593,26 +594,58 @@ export function UpworkTab() {
         )}
       </SectionCard>
 
-      <SectionCard title="Monthly trend" subtitle="Last 12 months" expandable>
-        {monthlyQuery.isLoading && <SkeletonCard className="h-32" />}
-        {monthlyQuery.error && <ErrorState message={(monthlyQuery.error as Error).message} onRetry={() => monthlyQuery.refetch()} />}
-        {!monthlyQuery.isLoading && monthly.length === 0 && <EmptyState title="No Upwork activity in the last 12 months" />}
-        {monthly.length > 0 && (
-          <DataTable
-            rowKey={(r) => r.month}
-            rows={monthly}
-            columns={[
-              { key: "month", header: "Month", render: (r) => r.month },
-              { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
-              { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
-              { key: "connectsUsed", header: "Connects Used", render: (r) => num(r.connectsUsed), numeric: true },
-              { key: "clientsWon", header: "Clients Won", render: (r) => num(r.clientsWon), numeric: true },
-              { key: "estimatedUsageCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedUsageCost), numeric: true },
-              { key: "purchaseCost", header: "Actually Invoiced", render: (r) => money(r.purchaseCost), numeric: true },
-            ]}
-          />
-        )}
-      </SectionCard>
+      {monthlyQuery.isLoading && <SkeletonCard className="h-56" />}
+      {monthlyQuery.error && <ErrorState message={(monthlyQuery.error as Error).message} onRetry={() => monthlyQuery.refetch()} />}
+      {!monthlyQuery.isLoading && monthly.length === 0 && (
+        <SectionCard title="Monthly trend" subtitle="Last 12 months">
+          <EmptyState title="No Upwork activity in the last 12 months" />
+        </SectionCard>
+      )}
+      {monthly.length > 0 && (
+        // Real data this whole chart already had: getMonthlyTable's rows,
+        // previously rendered as a table only (Part: premium dark theme
+        // pass v4, 2026-10-19, explicit user request — "add some graphs...
+        // represent the data more better"). Bids/Invites as grouped bars
+        // ("how much per period" -> columns, not a line, since each month
+        // is a discrete count, not a continuous measure) — Clients Won and
+        // the two cost figures stay in the table view rather than crowding
+        // a third/fourth bar onto the same chart.
+        <ChartWithTable
+          title="Monthly trend"
+          subtitle="Last 12 months"
+          expandable
+          chart={
+            <>
+              <Legend items={[{ label: "Bids", color: SERIES[0] }, { label: "Invites", color: SERIES[1] }]} />
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={monthly}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="month" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} tickFormatter={formatCompact} allowDecimals={false} />
+                  <Tooltip {...TOOLTIP_STYLE} />
+                  <Bar dataKey="bids" name="Bids" fill={SERIES[0]} radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="invites" name="Invites" fill={SERIES[1]} radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          }
+          table={
+            <DataTable
+              rowKey={(r) => r.month}
+              rows={monthly}
+              columns={[
+                { key: "month", header: "Month", render: (r) => r.month },
+                { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
+                { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
+                { key: "connectsUsed", header: "Connects Used", render: (r) => num(r.connectsUsed), numeric: true },
+                { key: "clientsWon", header: "Clients Won", render: (r) => num(r.clientsWon), numeric: true },
+                { key: "estimatedUsageCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedUsageCost), numeric: true },
+                { key: "purchaseCost", header: "Actually Invoiced", render: (r) => money(r.purchaseCost), numeric: true },
+              ]}
+            />
+          }
+        />
+      )}
 
       <SectionCard
         title="By submitter"

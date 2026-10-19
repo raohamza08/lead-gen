@@ -1,12 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SectionCard, SINGLE_SERIES, StatTile, TOOLTIP_STYLE } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -119,26 +120,57 @@ export function SocialTab() {
         </>
       )}
 
-      <SectionCard title="By platform" subtitle="Per connected account, this period" expandable>
-        {platformsQuery.isLoading && <SkeletonCard className="h-32" />}
-        {platformsQuery.error && <ErrorState message={(platformsQuery.error as Error).message} onRetry={() => platformsQuery.refetch()} />}
-        {!platformsQuery.isLoading && platforms.length === 0 && <EmptyState title="No social accounts connected" />}
-        {platforms.length > 0 && (
-          <DataTable
-            rowKey={(r) => r.accountId}
-            rows={platforms}
-            columns={[
-              { key: "platform", header: "Platform", render: (r) => titleCase(r.platform) },
-              { key: "username", header: "Account", render: (r) => r.username },
-              { key: "conversations", header: "Total Conv.", render: (r) => num(r.conversations), numeric: true },
-              { key: "newConversations", header: "New", render: (r) => num(r.newConversations), numeric: true },
-              { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true },
-              { key: "messagesIn", header: "In", render: (r) => num(r.messagesIn), numeric: true },
-              { key: "messagesOut", header: "Out", render: (r) => num(r.messagesOut), numeric: true },
-            ]}
-          />
-        )}
-      </SectionCard>
+      {platformsQuery.isLoading && <SkeletonCard className="h-32" />}
+      {platformsQuery.error && <ErrorState message={(platformsQuery.error as Error).message} onRetry={() => platformsQuery.refetch()} />}
+      {!platformsQuery.isLoading && platforms.length === 0 && (
+        <SectionCard title="By platform" subtitle="Per connected account, this period">
+          <EmptyState title="No social accounts connected" />
+        </SectionCard>
+      )}
+      {platforms.length > 0 && (
+        // Real data this card already fetched, previously table-only (Part:
+        // premium dark theme pass v4, 2026-10-19, explicit user request —
+        // "add some graphs... represent the data more better"). A ranking
+        // question ("which account carries the most conversation volume?")
+        // gets a sorted horizontal bar, one hue, matching taste-skill's
+        // "who ranks" chart convention — not a second metric layered on,
+        // which would need a legend for what's otherwise a one-glance chart.
+        <ChartWithTable
+          title="By platform"
+          subtitle="Per connected account, this period"
+          expandable
+          chart={
+            <ResponsiveContainer width="100%" height={Math.max(140, platforms.length * 40)}>
+              <BarChart
+                data={[...platforms].sort((a, b) => b.conversations - a.conversations)}
+                layout="vertical"
+                margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+              >
+                <CartesianGrid {...GRID_PROPS} vertical horizontal={false} />
+                <XAxis type="number" allowDecimals={false} {...AXIS_PROPS} />
+                <YAxis type="category" dataKey="username" width={140} {...AXIS_PROPS} />
+                <Tooltip {...TOOLTIP_STYLE} />
+                <Bar dataKey="conversations" name="Conversations" fill={SINGLE_SERIES} radius={[0, 4, 4, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
+          }
+          table={
+            <DataTable
+              rowKey={(r) => r.accountId}
+              rows={platforms}
+              columns={[
+                { key: "platform", header: "Platform", render: (r) => titleCase(r.platform) },
+                { key: "username", header: "Account", render: (r) => r.username },
+                { key: "conversations", header: "Total Conv.", render: (r) => num(r.conversations), numeric: true },
+                { key: "newConversations", header: "New", render: (r) => num(r.newConversations), numeric: true },
+                { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true },
+                { key: "messagesIn", header: "In", render: (r) => num(r.messagesIn), numeric: true },
+                { key: "messagesOut", header: "Out", render: (r) => num(r.messagesOut), numeric: true },
+              ]}
+            />
+          }
+        />
+      )}
 
       <SectionCard title="Team response performance" subtitle="Only conversations with a real assignedToUserId" expandable>
         {teamQuery.isLoading && <SkeletonCard className="h-32" />}
