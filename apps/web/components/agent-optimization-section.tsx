@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
-import { DataTable, SectionCard, StatTile } from "./chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile } from "./chart-kit";
 
 interface AppliedChange {
   agent: string;
@@ -106,14 +106,16 @@ export function AgentOptimizationSection() {
       )}
 
       {latest && (
-        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatTile label="Current score" value={`${latest.score}%`} />
-          <StatTile
-            label="Last verdict"
-            value={latest.verdict ? (VERDICT_LABEL[latest.verdict] ?? latest.verdict) : "—"}
-            tone={latest.verdict ? VERDICT_TONE[latest.verdict] : undefined}
-          />
-          <StatTile label="Changes this cycle" value={latest.changesApplied.length} />
+        <div className="mb-4">
+          <KpiStrip>
+            <StatTile label="Current score" value={`${latest.score}%`} />
+            <StatTile
+              label="Last verdict"
+              value={latest.verdict ? (VERDICT_LABEL[latest.verdict] ?? latest.verdict) : "—"}
+              tone={latest.verdict ? VERDICT_TONE[latest.verdict] : undefined}
+            />
+            <StatTile label="Changes this cycle" value={latest.changesApplied.length} />
+          </KpiStrip>
         </div>
       )}
 

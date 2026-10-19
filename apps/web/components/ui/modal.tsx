@@ -38,9 +38,14 @@ export function Modal({
   children: ReactNode;
 }) {
   const isDrawer = variant === "drawer-right";
+  // glass-surface (Part: premium dark theme pass v4, 2026-10-19) — a
+  // floating overlay is the one safe place for glassmorphism in a dense
+  // data app; see the rule's own comment in globals.css. bg-surface stays
+  // as the light-mode/pre-hydration base; glass-surface's dark-mode-scoped
+  // rule layers backdrop-blur + translucency on top of it, not instead.
   const structuralClasses = isDrawer
-    ? "modal-content-drawer fixed inset-y-0 right-0 z-50 flex flex-col overflow-y-auto border-l border-[var(--line)] bg-surface shadow-lg focus:outline-none"
-    : "modal-content-center fixed left-1/2 top-1/2 z-50 flex max-h-[97vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none";
+    ? "modal-content-drawer glass-surface fixed inset-y-0 right-0 z-50 flex flex-col overflow-y-auto border-l border-[var(--line)] bg-surface shadow-lg focus:outline-none"
+    : "modal-content-center glass-surface fixed left-1/2 top-1/2 z-50 flex max-h-[97vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-y-auto rounded-[var(--radius)] border border-[var(--line)] bg-surface p-5 shadow-lg focus:outline-none";
   return (
     <DialogPrimitive.Root open={open} onOpenChange={onOpenChange}>
       <DialogPrimitive.Portal>

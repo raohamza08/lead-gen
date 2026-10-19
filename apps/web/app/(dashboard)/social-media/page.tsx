@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
-import { SectionCard, StatTile } from "../../../components/chart-kit";
+import { KpiStrip, SectionCard, StatTile } from "../../../components/chart-kit";
 import { Spinner } from "../../../components/spinner";
 
 interface Stats {
@@ -46,25 +46,27 @@ export default function SocialMediaOverviewPage() {
       ) : !stats ? (
         <p className="text-sm text-ink/50">Loading…</p>
       ) : (
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Link href="/social-media/accounts">
-            <StatTile label="Connected accounts" value={stats.connectedAccounts} />
-          </Link>
-          <Link href="/social-media/posts?status=DRAFT">
-            <StatTile label="Drafts" value={stats.draft} />
-          </Link>
-          <Link href="/social-media/posts?status=PENDING_REVIEW">
-            <StatTile label="Pending review" value={stats.pendingReview} tone={stats.pendingReview > 0 ? "gold" : undefined} />
-          </Link>
-          <Link href="/social-media/posts?status=SCHEDULED">
-            <StatTile label="Scheduled" value={stats.scheduled} />
-          </Link>
-          <Link href="/social-media/posts?status=PUBLISHED">
-            <StatTile label="Published" value={stats.published} tone="good" />
-          </Link>
-          <Link href="/social-media/posts?status=FAILED">
-            <StatTile label="Failed" value={stats.failed} tone={stats.failed > 0 ? "bad" : undefined} />
-          </Link>
+        <section className="card">
+          <KpiStrip>
+            <Link href="/social-media/accounts">
+              <StatTile label="Connected accounts" value={stats.connectedAccounts} />
+            </Link>
+            <Link href="/social-media/posts?status=DRAFT">
+              <StatTile label="Drafts" value={stats.draft} />
+            </Link>
+            <Link href="/social-media/posts?status=PENDING_REVIEW">
+              <StatTile label="Pending review" value={stats.pendingReview} tone={stats.pendingReview > 0 ? "gold" : undefined} />
+            </Link>
+            <Link href="/social-media/posts?status=SCHEDULED">
+              <StatTile label="Scheduled" value={stats.scheduled} />
+            </Link>
+            <Link href="/social-media/posts?status=PUBLISHED">
+              <StatTile label="Published" value={stats.published} tone="good" />
+            </Link>
+            <Link href="/social-media/posts?status=FAILED">
+              <StatTile label="Failed" value={stats.failed} tone={stats.failed > 0 ? "bad" : undefined} />
+            </Link>
+          </KpiStrip>
         </section>
       )}
 

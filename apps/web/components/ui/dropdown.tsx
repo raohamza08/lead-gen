@@ -31,7 +31,9 @@ export function DropdownContent({
       <DropdownMenuPrimitive.Content
         align={align}
         sideOffset={sideOffset}
-        className="dropdown-content z-50 min-w-[10rem] overflow-hidden rounded-[var(--radius)] border border-[var(--line)] bg-surface p-1 shadow-lg"
+        // glass-surface (Part: premium dark theme pass v4, 2026-10-19) — see
+        // globals.css for why overlays specifically get the glass treatment.
+        className="dropdown-content glass-surface z-50 min-w-[10rem] overflow-hidden rounded-[var(--radius)] border border-[var(--line)] bg-surface p-1 shadow-lg"
       >
         {children}
       </DropdownMenuPrimitive.Content>

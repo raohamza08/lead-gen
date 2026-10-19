@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { api } from "../lib/api-client";
-import { StatTile } from "./chart-kit";
+import { KpiStrip, StatTile } from "./chart-kit";
 
 interface ConversationStats {
   total: number;
@@ -55,13 +55,13 @@ export function SocialInboxOverviewSection() {
         <section className="card p-5">
           <h2 className="text-section-title text-ink">Direct messages</h2>
           <p className="mb-4 mt-0.5 text-xs text-ink/50">Every DM conversation across every connected account.</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <KpiStrip>
             <StatTile label="Total" value={conversations.total} />
             <StatTile label="Unread" value={conversations.unread} tone={conversations.unread > 0 ? "gold" : undefined} />
             <StatTile label="Open" value={conversations.open} />
             <StatTile label="Pending" value={conversations.pending} />
             <StatTile label="Closed" value={conversations.closed} />
-          </div>
+          </KpiStrip>
           <Link href="/social-inbox" className="mt-3 inline-block text-xs text-accent hover:underline">
             Open Social Inbox →
           </Link>
@@ -72,12 +72,12 @@ export function SocialInboxOverviewSection() {
         <section className="card p-5">
           <h2 className="text-section-title text-ink">Comments</h2>
           <p className="mb-4 mt-0.5 text-xs text-ink/50">Comments on your posts across every connected account.</p>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <KpiStrip>
             <StatTile label="Total" value={comments.total} />
             <StatTile label="Unanswered" value={comments.unanswered} tone={comments.unanswered > 0 ? "gold" : undefined} />
             <StatTile label="Responded" value={comments.responded} tone="good" />
             <StatTile label="Ignored" value={comments.ignored} />
-          </div>
+          </KpiStrip>
           <Link href="/social-engagement" className="mt-3 inline-block text-xs text-accent hover:underline">
             Open Engagement Center →
           </Link>

@@ -7,7 +7,7 @@ import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { api } from "../lib/api-client";
-import { AXIS_PROPS, DataTable, GRID_PROPS, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE } from "./chart-kit";
+import { AXIS_PROPS, DataTable, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE } from "./chart-kit";
 
 interface SubmitterRow { submittedBy: string; total: number; won: number; lost: number; connectsUsed: number }
 interface CloserRow { closedBy: string; won: number; lost: number; other: number }
@@ -73,14 +73,14 @@ export function UpworkOverviewSection() {
       <section className="card p-5">
         <h2 className="text-section-title text-ink">Upwork Proposals — Overview</h2>
         <p className="mb-4 mt-0.5 text-xs text-ink/50">Bidding and invite proposals combined.</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <KpiStrip>
           <StatTile label="Total proposals" value={stats.total} />
           <StatTile label="Bidding" value={stats.byType.BIDDING} />
           <StatTile label="Invite" value={stats.byType.INVITE} />
           <StatTile label="Won" value={stats.won} tone="good" />
           <StatTile label="Lost" value={stats.lost} tone={stats.lost > 0 ? "bad" : undefined} />
           <StatTile label="Win rate" value={stats.winRate !== null ? `${stats.winRate}%` : "—"} />
-        </div>
+        </KpiStrip>
         <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-ink/55">
           <Link href="/upwork/bidding" className="text-accent hover:underline">Open Bidding →</Link>
           <Link href="/upwork/invite" className="text-accent hover:underline">Open Invite →</Link>
@@ -94,10 +94,10 @@ export function UpworkOverviewSection() {
           dashboard entirely (they&apos;re practice, not real pipeline). Cost is an estimate: set your
           account&apos;s real rate per connect below.
         </p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiStrip>
           <StatTile label="Connects used" value={stats.connectsUsed} />
           <StatTile label="Avg per bid" value={stats.avgConnectsPerBid} />
-        </div>
+        </KpiStrip>
         <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-[var(--line)] pt-3">
           <div>
             <div className="text-[11px] uppercase tracking-wide text-ink/55">Estimated cost</div>

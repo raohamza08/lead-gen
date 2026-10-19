@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { useRealtimeEvent } from "../lib/realtime";
-import { DataTable, SectionCard, StatTile } from "./chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile } from "./chart-kit";
 import { EmailAnalyticsSection } from "./email-analytics-section";
 import type { EmailListItem } from "@leadgen/types";
 
@@ -171,7 +171,7 @@ export function EmailCampaignReportSection() {
         title="Send queue"
         subtitle="What's queued right now and when the next batch actually goes out — live, not a historical stat."
       >
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiStrip>
           <StatTile
             label={scheduleEnabled ? "Waiting for next batch" : "Waiting for schedule"}
             value={waitingForBatch}
@@ -180,7 +180,7 @@ export function EmailCampaignReportSection() {
           <StatTile label="Ready to send now" value={readyToSend} />
           <StatTile label="Sending right now" value={inFlight} tone={inFlight > 0 ? "gold" : undefined} />
           <StatTile label="Retrying after failure" value={retrying} tone={retrying > 0 ? "bad" : "good"} />
-        </div>
+        </KpiStrip>
         <p className="mt-3 text-xs text-ink/55">
           {scheduleEnabled
             ? nextFireAt

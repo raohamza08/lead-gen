@@ -19,6 +19,7 @@ import { api } from "../../../lib/api-client";
 import {
   AXIS_PROPS,
   GRID_PROPS,
+  KpiStrip,
   SINGLE_SERIES,
   TOOLTIP_STYLE,
   formatCompact,
@@ -34,7 +35,13 @@ import { UpworkOverviewSection } from "../../../components/upwork-overview-secti
 
 /** One stat card, reused across this page's several tile grids (main KPIs,
  *  Lead Room, Social Media, Email Overview) instead of duplicating the same
- *  card+label+value markup four times (Part: UI/UX Redesign, 2026-09-01). */
+ *  card+label+value markup four times (Part: UI/UX Redesign, 2026-09-01).
+ *  Restyled onto the shared .kpi-cell classes (Part: premium dark theme
+ *  pass v4, 2026-10-19 — "apply the same theme... to the complete app") so
+ *  this page's tiles match Dashboard Center's divided-strip format exactly,
+ *  not just its colours — uppercase/tracked labels replaced with the same
+ *  sentence-case convention everywhere else now uses. Always used inside a
+ *  <KpiStrip>. */
 function StatTile({
   label,
   value,
@@ -49,16 +56,16 @@ function StatTile({
   const toneClass = tone === "bad" ? "text-error" : tone === "warn" ? "text-warning" : tone === "good" ? "text-success" : "text-ink";
   const body = (
     <>
-      <div className="text-label uppercase text-ink/55">{label}</div>
-      <div className={`mt-1 text-numeric-lg ${toneClass}`}>{value}</div>
+      <div className="kpi-label">{label}</div>
+      <div className={`kpi-value ${toneClass}`}>{value}</div>
     </>
   );
   return href ? (
-    <Link href={href} className="card card-interactive px-4 py-3.5">
+    <Link href={href} className="kpi-cell kpi-cell-interactive">
       {body}
     </Link>
   ) : (
-    <div className="card px-4 py-3.5">{body}</div>
+    <div className="kpi-cell">{body}</div>
   );
 }
 
@@ -274,16 +281,18 @@ export default function OverviewPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {KPIS.map((k) => (
-          <StatTile
-            key={k.label}
-            label={k.label}
-            value={k.value}
-            href={k.href}
-            tone={k.bad ? "bad" : k.warn ? "warn" : k.good ? "good" : "default"}
-          />
-        ))}
+      <section className="card">
+        <KpiStrip>
+          {KPIS.map((k) => (
+            <StatTile
+              key={k.label}
+              label={k.label}
+              value={k.value}
+              href={k.href}
+              tone={k.bad ? "bad" : k.warn ? "warn" : k.good ? "good" : "default"}
+            />
+          ))}
+        </KpiStrip>
       </section>
 
       <div className="grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -350,15 +359,17 @@ export default function OverviewPage() {
         </section>
       </div>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {[
-          ["Today", summary.todaysLeads],
-          ["This week", summary.weeklyLeads],
-          ["Tasks waiting", summary.tasksWaiting],
-          ["Avg AI opportunity", summary.avgAiOpportunityScore],
-        ].map(([label, value]) => (
-          <StatTile key={label as string} label={label as string} value={formatCompact(Number(value))} />
-        ))}
+      <section className="card">
+        <KpiStrip>
+          {[
+            ["Today", summary.todaysLeads],
+            ["This week", summary.weeklyLeads],
+            ["Tasks waiting", summary.tasksWaiting],
+            ["Avg AI opportunity", summary.avgAiOpportunityScore],
+          ].map(([label, value]) => (
+            <StatTile key={label as string} label={label as string} value={formatCompact(Number(value))} />
+          ))}
+        </KpiStrip>
       </section>
 
       <LeadRoomOverviewSection />
@@ -408,11 +419,11 @@ function LeadRoomOverviewSection() {
         Every lead captured so far, from every source. Human-added leads (manual, email, social) wait
         here until you promote them to the Pipeline; AI-discovered leads advance automatically.
       </p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <KpiStrip>
         {tiles.map((t) => (
           <StatTile key={t.label} label={t.label} value={t.value} href={t.href} />
         ))}
-      </div>
+      </KpiStrip>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-[var(--line)] pt-3">
         {Object.entries(breakdown.bySource)
           .filter(([, count]) => count > 0)
@@ -458,11 +469,11 @@ function SocialMediaOverviewSection() {
     <section className="card p-5">
       <h2 className="text-section-title text-ink">Social Media</h2>
       <p className="mb-4 mt-0.5 text-xs text-ink/50">Across every connected account you have access to.</p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <KpiStrip>
         {tiles.map((t) => (
           <StatTile key={t.label} label={t.label} value={t.value} href={t.href} tone={t.warn ? "warn" : "default"} />
         ))}
-      </div>
+      </KpiStrip>
     </section>
   );
 }
@@ -501,11 +512,11 @@ function EmailOverviewSection() {
     <section className="card p-5">
       <h2 className="text-section-title text-ink">Unified Inbox</h2>
       <p className="mb-4 mt-0.5 text-xs text-ink/50">Across every mailbox you have access to.</p>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <KpiStrip>
         {tiles.map((t) => (
           <StatTile key={t.label} label={t.label} value={t.value} href={t.href} />
         ))}
-      </div>
+      </KpiStrip>
     </section>
   );
 }

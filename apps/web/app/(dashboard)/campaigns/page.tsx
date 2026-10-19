@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
-import { DataTable, SectionCard, StatTile, formatCompact } from "../../../components/chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile, formatCompact } from "../../../components/chart-kit";
 import { LoadingRow, Spinner } from "../../../components/spinner";
 
 /**
@@ -154,11 +154,13 @@ export default function CampaignsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center gap-2">{isFetching && <Spinner className="h-3.5 w-3.5" />}</div>
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Campaigns" value={rows.length} />
-        <StatTile label="Leads" value={formatCompact(totals.leads)} />
-        <StatTile label="Meetings" value={totals.meetings} tone={totals.meetings > 0 ? "good" : undefined} />
-        <StatTile label="Pipeline value" value={`$${formatCompact(totals.value)}`} />
+      <section className="card">
+        <KpiStrip>
+          <StatTile label="Campaigns" value={rows.length} />
+          <StatTile label="Leads" value={formatCompact(totals.leads)} />
+          <StatTile label="Meetings" value={totals.meetings} tone={totals.meetings > 0 ? "good" : undefined} />
+          <StatTile label="Pipeline value" value={`$${formatCompact(totals.value)}`} />
+        </KpiStrip>
       </section>
 
       {best && (

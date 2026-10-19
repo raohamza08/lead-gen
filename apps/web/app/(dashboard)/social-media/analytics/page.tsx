@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
-import { SectionCard, StatTile, formatCompact } from "../../../../components/chart-kit";
+import { KpiStrip, SectionCard, StatTile, formatCompact } from "../../../../components/chart-kit";
 import { Spinner } from "../../../../components/spinner";
 
 const PLATFORMS = ["INSTAGRAM", "FACEBOOK", "LINKEDIN", "X", "TIKTOK", "YOUTUBE", "WHATSAPP"] as const;
@@ -105,12 +105,12 @@ export default function SocialAnalyticsPage() {
 
       {rows.length > 0 && (
         <SectionCard title="Across every connected, visible account">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <KpiStrip>
             <StatTile label="Connected accounts" value={rows.length} />
             <StatTile label="Total followers" value={withData.length > 0 ? formatCompact(totals.followers) : "—"} hint={withData.length < rows.length ? `${withData.length}/${rows.length} reporting` : undefined} />
             <StatTile label="Posts published" value={totals.posts} hint="from our own records, every platform" />
             <StatTile label="Not yet synced" value={rows.length - withData.length} />
-          </div>
+          </KpiStrip>
         </SectionCard>
       )}
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { useRealtimeEvent } from "../../../lib/realtime";
-import { DataTable, SectionCard, StatTile } from "../../../components/chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../components/chart-kit";
 import { AgentOptimizationSection } from "../../../components/agent-optimization-section";
 
 /**
@@ -253,23 +253,25 @@ export default function AutomationPage() {
       </div>
 
       <div className={`flex flex-col gap-6 transition-opacity ${refreshing ? "opacity-60" : ""}`}>
-        <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatTile label="Agent runs" value={health.totalRuns} />
-          <StatTile
-            label="Failures"
-            value={health.totalFailures}
-            tone={health.totalFailures > 0 ? "bad" : "good"}
-          />
-          <StatTile
-            label="Failure rate"
-            value={`${failureRate}%`}
-            tone={failureRate > 20 ? "bad" : failureRate > 5 ? "gold" : "good"}
-          />
-          <StatTile
-            label="Slowest agent"
-            value={slowest ? fmtMs(slowest.avgDurationMs) : "—"}
-            hint={slowest?.agent}
-          />
+        <section className="card">
+          <KpiStrip>
+            <StatTile label="Agent runs" value={health.totalRuns} />
+            <StatTile
+              label="Failures"
+              value={health.totalFailures}
+              tone={health.totalFailures > 0 ? "bad" : "good"}
+            />
+            <StatTile
+              label="Failure rate"
+              value={`${failureRate}%`}
+              tone={failureRate > 20 ? "bad" : failureRate > 5 ? "gold" : "good"}
+            />
+            <StatTile
+              label="Slowest agent"
+              value={slowest ? fmtMs(slowest.avgDurationMs) : "—"}
+              hint={slowest?.agent}
+            />
+          </KpiStrip>
         </section>
 
         <SectionCard
@@ -340,7 +342,7 @@ export default function AutomationPage() {
             <div className="flex flex-col gap-5">
               <div>
                 <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Preparation queue</h3>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <KpiStrip>
                   <StatTile label="Preparing" value={prepSendQuery.data.preparation.IN_PROGRESS ?? 0} />
                   <StatTile
                     label="Blocked"
@@ -349,11 +351,11 @@ export default function AutomationPage() {
                   />
                   <StatTile label="Complete" value={prepSendQuery.data.preparation.COMPLETE ?? 0} tone="good" />
                   <StatTile label="Not started" value={prepSendQuery.data.preparation.NOT_STARTED ?? 0} />
-                </div>
+                </KpiStrip>
               </div>
               <div>
                 <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Sending queue</h3>
-                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <KpiStrip>
                   <StatTile label="Waiting for schedule" value={prepSendQuery.data.sending.WAITING_FOR_SCHEDULE ?? 0} />
                   <StatTile label="Ready to send" value={prepSendQuery.data.sending.READY_TO_SEND ?? 0} />
                   <StatTile label="Sending" value={prepSendQuery.data.sending.SENDING ?? 0} />
@@ -362,7 +364,7 @@ export default function AutomationPage() {
                     value={prepSendQuery.data.sending.RETRY_SCHEDULED ?? 0}
                     tone={(prepSendQuery.data.sending.RETRY_SCHEDULED ?? 0) > 0 ? "gold" : "good"}
                   />
-                </div>
+                </KpiStrip>
               </div>
               <div>
                 <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">

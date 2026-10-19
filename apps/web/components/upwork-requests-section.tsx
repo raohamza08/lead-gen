@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, getCurrentUser } from "../lib/api-client";
-import { DataTable, SectionCard, StatTile, type TableColumn } from "./chart-kit";
+import { DataTable, KpiStrip, SectionCard, StatTile, type TableColumn } from "./chart-kit";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -260,13 +260,13 @@ export function UpworkRequestsSection() {
         {targetQuery.isLoading ? (
           <p className="text-xs text-ink/50">Loading…</p>
         ) : target ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+          <KpiStrip>
             <StatTile label="Requested Hours" value={target.requestedHours} />
             <StatTile label="Bidding Hours Onboarded" value={target.biddingHoursOnboarded} />
             <StatTile label="Invite Hours Onboarded" value={target.inviteHoursOnboarded} />
             <StatTile label="Total Hours Onboarded" value={target.totalHoursOnboarded} tone="good" />
             <StatTile label="Remaining Hours" value={target.remainingHours} tone={target.remainingHours > 0 ? "gold" : "good"} />
-          </div>
+          </KpiStrip>
         ) : null}
       </section>
 

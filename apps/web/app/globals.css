@@ -77,29 +77,30 @@
    changes further down (surface luminance steps + inset highlight shadows)
    — the two sections together are what produce the "premium" read, neither
    does it alone. */
-/* Premium dark theme pass v3 (2026-10-19) — matched to the product's own
-   reference dashboards (see docs/RESUME.md / memory "dashboard theme
-   reference" for the source images) rather than v2's teal/violet pairing.
-   Paper goes true near-black (was a cool-tinted #0b0d11), ink goes pure
-   white, and both accent slots become the one brand orange (#FF7000 base,
-   a lighter #FF9A3D as --accent-2) instead of two unrelated hues — chosen
-   deliberately so every mechanism already keyed off --accent/--accent-2
-   below (the primary-button gradient, .btn-primary-glow's hover bloom, and
-   body's aurora radial blooms) becomes a warm orange glow system for free,
-   with no component changes. --gold stays a distinct muted amber so warning
-   states remain visually separable from the vivid brand accent. Chart
-   --series-1..4 are untouched: they're validated against this app's
-   surfaces for WCAG/CVD separation (see file-top comment) and the paper
-   shift here is too small to revisit that work. */
+/* Premium dark theme pass v4 (2026-10-19) — after three reference images
+   gave three different accent hues in one session (a red-orange wallet,
+   a teal fintech dashboard, a light glassmorphic one), the user explicitly
+   handed accent choice to judgment ("any colour that looks good... smooth
+   and eye comforting") rather than picking one. Landed on a soft coral
+   (#F2754A) — warm enough to keep the brand identity the earlier orange/red
+   passes established (and reuse their glow/gradient infrastructure
+   untouched), but less saturated than Vaulto's alarm-adjacent #FF3B00 for
+   something meant to be stared at during long working sessions. Kept
+   deliberately apart from --gold (217,174,99, a khaki-amber) so a warning
+   pill and the brand accent don't read as the same colour. Paper stays
+   true near-black (#0b0b0b, from v3), ink stays pure white. Both accent
+   slots keep feeding the primary-button gradient / .btn-primary-glow hover
+   bloom / body aurora blooms from v3 — only the hue changed, not the
+   mechanism. --series-1..4 untouched (validated against this app's
+   surfaces for WCAG/CVD separation, see file-top comment). */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --paper-rgb: 11 11 11;
     --ink-rgb: 255 255 255;
-    --accent-rgb: 255 112 0;
-    --accent-2-rgb: 255 154 61;
-    /* Text that sits ON a solid accent fill (Part: premium dark theme pass
-       v3) — white fails contrast against this orange (~2.8:1, needs 4.5:1);
-       the reference's own CTA buttons use dark text on orange, not white.
+    --accent-rgb: 242 117 74;
+    --accent-2-rgb: 255 155 115;
+    /* Text that sits ON a solid accent fill — white fails contrast against
+       this coral (computed ~3.3:1, needs 4.5:1); dark text clears ~7:1.
        Scoped to dark mode only: light mode's accent is still the old teal,
        which white text already clears comfortably (~6:1), so it's untouched. */
     --accent-contrast-rgb: 20 16 13;
@@ -132,8 +133,8 @@
   color-scheme: dark;
   --paper-rgb: 11 11 11;
   --ink-rgb: 255 255 255;
-  --accent-rgb: 255 112 0;
-  --accent-2-rgb: 255 154 61;
+  --accent-rgb: 242 117 74;
+  --accent-2-rgb: 255 155 115;
   --accent-contrast-rgb: 20 16 13;
   --gold-rgb: 217 174 99;
   --good-rgb: 74 191 124;
@@ -265,6 +266,69 @@ body {
   to { background-position: 4% 3%, -4% -3%, 0 0; }
 }
 
+/* Matte grain (Part: premium dark theme pass v4, 2026-10-19, explicit user
+   request — "add a matt texture where it can be added and looks perfect").
+   A large flat near-black expanse reads as a flat digital rectangle without
+   it; every one of this session's reference images has this same subtle
+   grain, not a clean gradient. One fixed, full-viewport SVG feTurbulence
+   noise layer (tileable, no image request) sits above everything —
+   including modals/dropdowns, where it doubles as the texture real frosted
+   glass has — at low enough opacity (3%) to read as "matte paper," not
+   visible static. `pointer-events:none` so it never intercepts a click;
+   dark-mode only, since the reference material (and this texture) is
+   dark-specific, matching the rest of this theme pass. Static, not
+   animated, so it needs no prefers-reduced-motion handling. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    pointer-events: none;
+    opacity: 0.03;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  opacity: 0.03;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* Glassmorphism (Part: premium dark theme pass v4, 2026-10-19, explicit user
+   request — "with the glassmorphism concept"). Scoped to true floating
+   overlays only (Modal/Dropdown/Popover, applied below) — NOT the main data
+   cards. This is a dense B2B analytics tool read for long sessions; blurring
+   a KPI strip or a data table to chase the reference images' aesthetic
+   would cost real legibility for no corresponding benefit, since those
+   references are consumer lifestyle/wallet apps glanced at briefly, not
+   worked in. An overlay that already floats above a backdrop (a dialog, a
+   dropdown menu) is the one place glass reads as "this is elevated" rather
+   than "this is translucent for no reason" — the same reasoning real OSes
+   use it for (macOS/Windows menus and panels). Dark-mode only: light-mode
+   glass over a white canvas has far less to blur into and reads as washed
+   out rather than premium. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .glass-surface {
+    background: rgb(var(--surface-rgb) / 0.78);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(20px) saturate(160%);
+    border-color: rgb(255 255 255 / 0.08);
+  }
+}
+:root[data-theme="dark"] .glass-surface {
+  background: rgb(var(--surface-rgb) / 0.78);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  backdrop-filter: blur(20px) saturate(160%);
+  border-color: rgb(255 255 255 / 0.08);
+}
+
 /* Minimal scrollbar (Part: premium dark theme pass, 2026-09-02) — the OS
    default scrollbar is opaque and theme-unaware, and stands out as an
    obviously-unstyled control against a custom-themed dark app. Driven by
@@ -331,39 +395,50 @@ select, option {
   container-type: inline-size;
 }
 
-/* The KPI strip (Part: Dashboard Center card-format match, 2026-10-19) —
-   StatTile's cells divided by a hairline instead of boxed/gapped tiles,
-   ported from the dashboard-preview.html mockup the user approved. Used via
-   chart-kit.tsx's <KpiStrip>/<StatTile>, which together replace every
-   dashboard tab's ad hoc `grid grid-cols-N gap-3` wrapper. Token names here
-   are this app's real ones (--line, not the mockup's --rule; --ink-muted,
-   not --muted) — same pattern, not a copy-pasted stylesheet. */
+/* The KPI strip (Part: Dashboard Center card-format match, 2026-10-19;
+   realigned 2026-10-19 — see below). StatTile's cells divided by a hairline
+   instead of boxed/gapped tiles, ported from the dashboard-preview.html
+   mockup the user approved. Used via chart-kit.tsx's <KpiStrip>/<StatTile>,
+   which together replace every dashboard tab's ad hoc `grid grid-cols-N
+   gap-3` wrapper. Token names here are this app's real ones (--line, not
+   the mockup's --rule; --ink-muted, not --muted) — same pattern, not a
+   copy-pasted stylesheet.
+
+   CSS GRID, not flexbox — a real bug, not a style choice. The first version
+   used `display:flex; flex-wrap:wrap` with `flex:1 1 0` cells, which looks
+   fine for 2-4 tiles (one row, never wraps) but visibly breaks on a tile
+   count that actually wraps: flexbox redistributes each wrapped row's free
+   space independently, so row 2 of e.g. Upwork's 16-tile strip gets wider
+   cells than row 1 and the columns don't line up — confirmed live via a
+   user screenshot of the deployed Upwork tab. A CSS grid with auto-fit
+   columns keeps every row on the SAME column tracks by construction, so
+   wrapped rows always stay aligned regardless of how many tiles a given
+   tab has. Dividers use the grid-gap-as-background trick (gap:1px on a
+   var(--line) background, cells painted var(--surface) over it) instead of
+   border-left + :first-child/:last-child overrides — that approach can't
+   target "first cell of each wrapped row" since auto-fit's column count is
+   responsive, but the gap trick needs no such targeting: it draws a hairline
+   in every gap, row and column alike, with no visible frame around the
+   whole strip (gap only exists *between* tracks, not at the container's own
+   edge), and needs no separate mobile breakpoint — auto-fit already
+   collapses to one column on its own at narrow widths. */
 .kpi-strip {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  gap: 1px;
+  background: var(--line);
 }
 .kpi-cell {
-  flex: 1 1 0;
-  min-width: 140px;
-  padding: 0 18px;
-  background: none;
-  border: none;
+  background: var(--surface);
+  padding: 14px 18px;
   font: inherit;
   text-align: inherit;
   color: inherit;
-}
-.kpi-cell:first-child {
-  padding-left: 0;
-}
-.kpi-cell:last-child {
-  padding-right: 0;
-}
-.kpi-cell + .kpi-cell {
-  border-left: 1px solid var(--line);
+  border: none;
+  min-width: 0;
 }
 .kpi-cell-interactive {
   cursor: pointer;
-  border-radius: 8px;
   transition: background-color var(--duration-fast) var(--ease-standard);
 }
 @media (hover: hover) {
@@ -373,31 +448,6 @@ select, option {
 }
 .kpi-cell-active {
   background: rgb(var(--accent-rgb) / 0.1);
-  border-radius: 8px;
-}
-/* Below the strip's own wrap point (min-width 140px per cell, set above),
-   cells stack two-per-row with a top rule instead of a left one — mirrors
-   the mockup's 760px phone breakpoint without hardcoding a page width here,
-   since StatTile is embedded in cards of very different widths site-wide. */
-@container (max-width: 420px) {
-  .kpi-strip {
-    gap: 14px 0;
-  }
-  .kpi-cell {
-    flex: 0 0 50%;
-    border-left: none !important;
-    padding: 0 10px;
-  }
-  .kpi-cell:nth-child(odd) {
-    padding-left: 0;
-  }
-  .kpi-cell:nth-child(even) {
-    padding-right: 0;
-  }
-  .kpi-cell:nth-child(n + 3) {
-    border-top: 1px solid var(--line);
-    padding-top: 14px;
-  }
 }
 .kpi-label {
   font-size: 12px;
