@@ -138,7 +138,25 @@ class EmailAgent(Agent):
             if merged.get(merged_key):
                 reviewer_notes[prompt_key] = merged[merged_key]
 
-        draft, notes, needs_review = await draft_and_validate(context, org_context, step)
+        try:
+            draft, notes, needs_review = await draft_and_validate(context, org_context, step)
+        except cli_client.ClaudeCliUnavailable as err:
+            # A rate limit/timeout/CLI hiccup is transient, not a missing
+            # precondition — but this agent is `critical=True`, and base.py's
+            # exception handler promotes ANY uncaught exception on a critical
+            # agent to FATAL. FATAL skips the orchestrator's in-process retry
+            # outright and gemini_agent/runner.py then reports it as
+            # non-retryable, so AgentExecutionService marks it
+            # FAILED_TERMINAL on the very first attempt with zero retries
+            # ever attempted (confirmed live, 2026-10-19: 27 leads promoted
+            # to pipeline together all hit this during what was almost
+            # certainly one shared rate-limit/outage window and were
+            # permanently stranded). Returning FAILED here instead keeps
+            # this a real failure (critical=True still stops this pipeline
+            # run) without the FATAL misclassification, so it correctly
+            # re-enters the normal hourly backoff retry.
+            return AgentResult(status=AgentStatus.FAILED, error=str(err))
+
         if not draft:
             return AgentResult(status=AgentStatus.FAILED, error="drafting produced no output", notes=notes)
 
