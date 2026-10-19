@@ -233,38 +233,47 @@ function isActive(pathname: string | null, search: string, link: NavLink): boole
 const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
 
 /**
- * Decorative "roots" background (Part: premium dark theme pass v4,
- * 2026-10-19, explicit user request — "make my navigation panel like this
- * one", pointing at the Vaulto reference's branching flow-diagram lines).
- * Not a data visualization — the sidebar has no flow data to show — so this
- * is purely ambient texture: a handful of organic curved threads rising
- * through the panel, matching that reference's visual language (mostly
- * quiet ink-colored lines, one carrying the brand accent) rather than its
- * literal chart. `aria-hidden` and `pointer-events-none` since it's
- * decoration, not content; absolutely positioned behind `renderNav`'s
- * actual content (z-0 vs content's implicit stacking) so it never competes
- * with nav label legibility. `preserveAspectRatio="none"` so the same path
- * set stretches correctly whether the sidebar is collapsed to icons-only
- * (64px) or expanded (224px), rather than needing two viewBoxes.
+ * "Roots" growing from the active nav item (Part: nav panel fix, 2026-10-19
+ * — explicit user request, twice: "make my navigation panel like this one"
+ * then, after the first pass missed it, "the image has a beautiful sidebar
+ * which has roots showing tabs under it"). The first version drew generic
+ * scattered lines across the whole panel; zooming into the actual Vaulto
+ * crop showed the real pattern — a warm orange glow radiates from the
+ * ACTIVE item specifically (paired with .sidebar-nav-active in globals.css)
+ * and branches downward from that one point, not from everywhere at once.
+ * All paths below start clustered near the top-left (x 10–40, y 0–50) —
+ * where the sidebar's top-level active link actually sits — and fan out
+ * and down from there, instead of floating independently of what's
+ * selected. `aria-hidden`/`pointer-events-none` since it's decoration;
+ * absolutely positioned behind `renderNav`'s content (z-0 vs z-10) so it
+ * never competes with label legibility. `preserveAspectRatio="none"` so
+ * the same path set stretches correctly in both icons-only (64px) and
+ * expanded (224px) sidebar widths.
  */
 function SidebarRoots() {
   return (
     <svg
       aria-hidden
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.07]"
+      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.16]"
       viewBox="0 0 200 800"
       preserveAspectRatio="none"
       fill="none"
     >
-      <path d="M-10 760 C 40 720, 20 650, 70 600 S 60 480, 110 420 S 90 300, 140 240 S 130 120, 190 40"
-        stroke="var(--ink)" strokeWidth="1.2" />
-      <path d="M-10 820 C 30 780, 10 700, 55 660 S 40 560, 85 520 S 70 420, 115 380 S 100 260, 150 200 S 140 100, 210 60"
+      {/* The main root — accent-colored, glowing, thickest near the top where
+          it grows out of the active item, thinning as it travels down. */}
+      <path d="M14 0 C 46 46, 18 110, 64 160 S 44 280, 92 330 S 78 450, 132 500 S 122 620, 182 670"
+        stroke="var(--accent)" strokeWidth="1.6"
+        style={{ filter: "drop-shadow(0 0 4px rgb(var(--accent-rgb) / 0.7))" }} />
+      {/* A short side-branch off the main root, same accent, dimmer. */}
+      <path d="M64 160 C 86 150, 108 168, 128 142" stroke="var(--accent)" strokeWidth="1.1" opacity="0.55" />
+      {/* Quiet ink-colored threads, same top-clustered origin, filling out
+          the rest of the branching structure down the panel. */}
+      <path d="M32 0 C 12 56, 48 122, 14 178 S 38 300, 2 360 S 26 480, -10 540 S 14 660, -14 760"
         stroke="var(--ink)" strokeWidth="1" />
-      <path d="M20 800 C 60 750, 45 680, 90 630 S 75 520, 120 470"
-        stroke="var(--ink)" strokeWidth="1" />
-      <path d="M-10 680 C 35 650, 25 580, 65 540 S 55 440, 100 400 S 95 290, 145 250 S 150 150, 210 110"
-        stroke="var(--accent)" strokeWidth="1.3" style={{ filter: "drop-shadow(0 0 3px rgb(var(--accent-rgb) / 0.6))" }} />
-      <path d="M100 400 C 130 380, 150 390, 180 360" stroke="var(--accent)" strokeWidth="1" opacity="0.6" />
+      <path d="M22 0 C 58 40, 30 104, 72 150 S 52 266, 96 310 S 86 420, 128 460"
+        stroke="var(--ink)" strokeWidth="0.9" opacity="0.8" />
+      <path d="M40 10 C 20 60, 50 130, 20 190 S 40 320, 10 390"
+        stroke="var(--ink)" strokeWidth="0.8" opacity="0.6" />
     </svg>
   );
 }
@@ -444,7 +453,7 @@ export function SidebarNav({
                 title={compact ? item.label : undefined}
                 className={`flex items-center rounded-lg text-sm transition-colors duration-fast ${
                   compact ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2"
-                } ${active ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
+                } ${active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
               >
                 {compact ? (
                   <span aria-hidden className="flex h-5 w-5 items-center justify-center text-xs font-semibold">
@@ -485,7 +494,7 @@ export function SidebarNav({
                         title={compact ? link.label : undefined}
                         className={`flex items-center justify-between rounded-lg text-sm transition-colors duration-fast ${
                           compact ? "justify-center px-2 py-2" : "flex-1 px-3 py-1.5"
-                        } ${active ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
+                        } ${active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
                       >
                         {compact ? (
                           <span aria-hidden className="flex h-5 w-5 items-center justify-center text-xs font-semibold">
@@ -544,7 +553,7 @@ export function SidebarNav({
                                   onClick={onNavigate}
                                   aria-current={childActive ? "page" : undefined}
                                   className={`rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
-                                    childActive ? "bg-primary font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                                    childActive ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                                   }`}
                                 >
                                   {child.label}

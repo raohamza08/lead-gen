@@ -564,6 +564,27 @@ select, option {
   color: rgb(var(--accent-contrast-rgb));
 }
 
+/* Active nav-item glow (Part: nav panel fix, 2026-10-19, explicit user
+   request — "the image has a beautiful sidebar which has roots showing
+   tabs under it"). The Vaulto reference doesn't highlight its active nav
+   item with a flat fill — a warm orange glow radiates FROM it, bleeding
+   down into the branching root-lines below (see .sidebar-roots). This only
+   layers a radial background-image + drop shadow on top of the existing
+   bg-primary/text-white pair (sidebar-nav.tsx's three active-link spots) —
+   the contrast-fix rule above still applies unchanged since bg-primary
+   stays on the element. Dark-mode only, same scope as the rest of this
+   theme pass. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .sidebar-nav-active {
+    background-image: radial-gradient(90px 50px at 16px 50%, rgb(var(--accent-rgb) / 0.95), transparent 75%);
+    box-shadow: 0 10px 26px -8px rgb(var(--accent-rgb) / 0.6);
+  }
+}
+:root[data-theme="dark"] .sidebar-nav-active {
+  background-image: radial-gradient(90px 50px at 16px 50%, rgb(var(--accent-rgb) / 0.95), transparent 75%);
+  box-shadow: 0 10px 26px -8px rgb(var(--accent-rgb) / 0.6);
+}
+
 /* Drag affordances for the pipeline board. */
 .drag-ghost {
   opacity: 0.4;

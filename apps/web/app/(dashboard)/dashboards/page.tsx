@@ -95,7 +95,13 @@ function DashboardCenterTabs() {
       </div>
 
       <div className="overflow-x-auto pb-1">
-        <Tabs value={tab} onValueChange={selectTab} tabs={tabDefs} center />
+        {/* Left-aligned (Part: nav panel fix, 2026-10-19) — reverses the
+            earlier "center" request once the user clarified in the same
+            breath which tabs they meant: the Dashboard Center tab row
+            itself stays left-aligned; it's the KPI label/value pairs
+            *inside* each card ("inner data tabs" in their words) that are
+            centered, via .kpi-cell's own text-align in this file's CSS. */}
+        <Tabs value={tab} onValueChange={selectTab} tabs={tabDefs} />
       </div>
 
       {tab === "overview" && <OverviewTab />}
