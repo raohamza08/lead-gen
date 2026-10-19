@@ -232,52 +232,6 @@ function isActive(pathname: string | null, search: string, link: NavLink): boole
 
 const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
 
-/**
- * "Roots" growing from the active nav item (Part: nav panel fix, 2026-10-19
- * — explicit user request, twice: "make my navigation panel like this one"
- * then, after the first pass missed it, "the image has a beautiful sidebar
- * which has roots showing tabs under it"). The first version drew generic
- * scattered lines across the whole panel; zooming into the actual Vaulto
- * crop showed the real pattern — a warm orange glow radiates from the
- * ACTIVE item specifically (paired with .sidebar-nav-active in globals.css)
- * and branches downward from that one point, not from everywhere at once.
- * All paths below start clustered near the top-left (x 10–40, y 0–50) —
- * where the sidebar's top-level active link actually sits — and fan out
- * and down from there, instead of floating independently of what's
- * selected. `aria-hidden`/`pointer-events-none` since it's decoration;
- * absolutely positioned behind `renderNav`'s content (z-0 vs z-10) so it
- * never competes with label legibility. `preserveAspectRatio="none"` so
- * the same path set stretches correctly in both icons-only (64px) and
- * expanded (224px) sidebar widths.
- */
-function SidebarRoots() {
-  return (
-    <svg
-      aria-hidden
-      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.16]"
-      viewBox="0 0 200 800"
-      preserveAspectRatio="none"
-      fill="none"
-    >
-      {/* The main root — accent-colored, glowing, thickest near the top where
-          it grows out of the active item, thinning as it travels down. */}
-      <path d="M14 0 C 46 46, 18 110, 64 160 S 44 280, 92 330 S 78 450, 132 500 S 122 620, 182 670"
-        stroke="var(--accent)" strokeWidth="1.6"
-        style={{ filter: "drop-shadow(0 0 4px rgb(var(--accent-rgb) / 0.7))" }} />
-      {/* A short side-branch off the main root, same accent, dimmer. */}
-      <path d="M64 160 C 86 150, 108 168, 128 142" stroke="var(--accent)" strokeWidth="1.1" opacity="0.55" />
-      {/* Quiet ink-colored threads, same top-clustered origin, filling out
-          the rest of the branching structure down the panel. */}
-      <path d="M32 0 C 12 56, 48 122, 14 178 S 38 300, 2 360 S 26 480, -10 540 S 14 660, -14 760"
-        stroke="var(--ink)" strokeWidth="1" />
-      <path d="M22 0 C 58 40, 30 104, 72 150 S 52 266, 96 310 S 86 420, 128 460"
-        stroke="var(--ink)" strokeWidth="0.9" opacity="0.8" />
-      <path d="M40 10 C 20 60, 50 130, 20 190 S 40 320, 10 390"
-        stroke="var(--ink)" strokeWidth="0.8" opacity="0.6" />
-    </svg>
-  );
-}
-
 export function SidebarNav({
   mobileOpen,
   onMobileClose,
@@ -522,13 +476,17 @@ export function SidebarNav({
                     // headers aren't, to keep icons-only mode from getting
                     // cluttered with a second level of nesting.
                     if (!link.children || compact) {
-                      return <div key={link.href}>{linkEl}</div>;
+                      return (
+                        <div key={link.href} className={compact ? undefined : "nav-tick"}>
+                          {linkEl}
+                        </div>
+                      );
                     }
 
                     const childOpen = Boolean(expandedLinks[link.href]);
                     return (
                       <div key={link.href} className="flex flex-col">
-                        <div className="flex items-center">
+                        <div className="nav-tick flex items-center">
                           {linkEl}
                           <button
                             type="button"
@@ -552,7 +510,7 @@ export function SidebarNav({
                                   href={child.href}
                                   onClick={onNavigate}
                                   aria-current={childActive ? "page" : undefined}
-                                  className={`rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
+                                  className={`nav-tick rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
                                     childActive ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                                   }`}
                                 >
@@ -583,7 +541,6 @@ export function SidebarNav({
           iconsOnly ? "w-16" : "w-56"
         }`}
       >
-        <SidebarRoots />
         <div className="relative z-10 flex flex-1 flex-col gap-1 overflow-y-auto">{renderNav(iconsOnly)}</div>
         <button
           type="button"
@@ -609,7 +566,6 @@ export function SidebarNav({
             aria-hidden
           />
           <nav className="animate-slide-in-left absolute inset-y-0 left-0 flex w-64 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] bg-surface p-3 shadow-lg">
-            <SidebarRoots />
             <div className="relative z-10 flex flex-1 flex-col gap-1">{renderNav(false, onMobileClose)}</div>
           </nav>
         </div>

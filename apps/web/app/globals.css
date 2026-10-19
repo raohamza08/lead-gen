@@ -564,25 +564,59 @@ select, option {
   color: rgb(var(--accent-contrast-rgb));
 }
 
-/* Active nav-item glow (Part: nav panel fix, 2026-10-19, explicit user
-   request — "the image has a beautiful sidebar which has roots showing
-   tabs under it"). The Vaulto reference doesn't highlight its active nav
-   item with a flat fill — a warm orange glow radiates FROM it, bleeding
-   down into the branching root-lines below (see .sidebar-roots). This only
-   layers a radial background-image + drop shadow on top of the existing
-   bg-primary/text-white pair (sidebar-nav.tsx's three active-link spots) —
-   the contrast-fix rule above still applies unchanged since bg-primary
-   stays on the element. Dark-mode only, same scope as the rest of this
-   theme pass. */
+/* Nav tree connectors — the real "roots" (Part: nav panel fix, 2026-10-19).
+   The first pass misread the reference as ambient flowing background lines
+   (see git history); zooming into the image the user actually meant
+   (0NUYrpkNRYpyylofL.avif, a "Hynex" dashboard) showed something much more
+   literal: a plain tree-view connector — each group's existing vertical
+   `border-l` trunk (sidebar-nav.tsx's `border-l border-[var(--line)] pl-2`
+   wrapper, already present before this pass) gets a short horizontal tick
+   reaching from that trunk into each row, like a file explorer's branch
+   lines. `.nav-tick` goes on the wrapper div/Link around each grouped nav
+   link; `left: -8px` cancels exactly the wrapper's own `pl-2` (8px) so the
+   tick's right edge lands on the row's icon/label start, and `top: 50%`
+   centers it regardless of row height (top-level group rows are py-2,
+   nested child rows are py-1.5). Not scoped to dark mode — this is a
+   structural nav affordance, not a color effect, so it suits both themes. */
+.nav-tick {
+  position: relative;
+}
+.nav-tick::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--line);
+}
+
+/* Active nav-item glow — also corrected against the real Hynex reference:
+   the active row isn't a hard-edged solid fill or a circular radial blob
+   (the first pass's mistake); it's a soft gradient confined to the pill's
+   own rounded shape, with a faint glowing 1px edge, dark enough that white
+   text stays legible across the whole label (unlike a bright solid fill,
+   which needed the separate dark-text contrast fix below .btn-primary-glow
+   — this pill never gets that bright, so it deliberately opts OUT of that
+   fix via the higher-specificity override at the bottom of this block).
+   Dark-mode only, same scope as the rest of this theme pass; light mode
+   keeps its original flat bg-primary pill via sidebar-nav.tsx's unconditional
+   `bg-primary` class, untouched. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .sidebar-nav-active {
-    background-image: radial-gradient(90px 50px at 16px 50%, rgb(var(--accent-rgb) / 0.95), transparent 75%);
-    box-shadow: 0 10px 26px -8px rgb(var(--accent-rgb) / 0.6);
+    background-image: linear-gradient(100deg, rgb(var(--accent-rgb) / 0.38), rgb(var(--accent-rgb) / 0.07) 80%);
+    box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.3), 0 0 16px -4px rgb(var(--accent-rgb) / 0.4);
+  }
+  :root:not([data-theme="light"]) .text-white.sidebar-nav-active {
+    color: #fff;
   }
 }
 :root[data-theme="dark"] .sidebar-nav-active {
-  background-image: radial-gradient(90px 50px at 16px 50%, rgb(var(--accent-rgb) / 0.95), transparent 75%);
-  box-shadow: 0 10px 26px -8px rgb(var(--accent-rgb) / 0.6);
+  background-image: linear-gradient(100deg, rgb(var(--accent-rgb) / 0.38), rgb(var(--accent-rgb) / 0.07) 80%);
+  box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.3), 0 0 16px -4px rgb(var(--accent-rgb) / 0.4);
+}
+:root[data-theme="dark"] .text-white.sidebar-nav-active {
+  color: #fff;
 }
 
 /* Drag affordances for the pipeline board. */
