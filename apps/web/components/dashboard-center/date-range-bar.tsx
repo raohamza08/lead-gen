@@ -9,6 +9,8 @@
 export type DashboardDateRangeName =
   | "TODAY"
   | "YESTERDAY"
+  | "THIS_WEEK"
+  | "LAST_WEEK"
   | "LAST_7_DAYS"
   | "LAST_30_DAYS"
   | "THIS_MONTH"
@@ -30,6 +32,8 @@ export interface DashboardDateRange {
 const PRESETS: { value: DashboardDateRangeName; label: string }[] = [
   { value: "TODAY", label: "Today" },
   { value: "YESTERDAY", label: "Yesterday" },
+  { value: "THIS_WEEK", label: "This week" },
+  { value: "LAST_WEEK", label: "Last week" },
   { value: "LAST_7_DAYS", label: "Last 7 days" },
   { value: "LAST_30_DAYS", label: "Last 30 days" },
   { value: "THIS_MONTH", label: "This month" },
@@ -43,15 +47,34 @@ function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Comparison is ON by default, against last calendar month (Part: Dashboard
- *  Center, 2026-09-30 fix — "the previous period must be selected by the
- *  user, otherwise auto set to last month"). The backend's own default
- *  matches this independently (see resolveDashboardRange), so a plain page
- *  load and an explicit "Last month" selection are indistinguishable. */
+/** Defaults to the current calendar week, not a rolling window (Part:
+ *  Dashboard Center, 2026-10-19, explicit user request — "the dashboards
+ *  should have a date filter set to this week" + "the request hours
+ *  calculations should be week wise... do not shift hours into the next or
+ *  previous week"). A rolling LAST_30_DAYS/LAST_7_DAYS window has no week
+ *  alignment: as days pass, hours drift in and out of it with no respect for
+ *  week boundaries, and the Upwork tab's Requests card (which reuses this
+ *  same shared range — see upwork.tsx) inherited that drift even though its
+ *  own dedicated /upwork/requests page already defaulted to a real
+ *  Monday-start calendar week. THIS_WEEK/LAST_WEEK resolve to non-overlapping
+ *  calendar-week boundaries (see resolveDateRange's startOfWeek), so hours
+ *  stay bucketed to the week they actually belong to.
+ *
+ *  Comparison is still ON by default, against last calendar month (Part:
+ *  Dashboard Center, 2026-09-30 fix — "the previous period must be selected
+ *  by the user, otherwise auto set to last month"). The backend's own
+ *  default matches this independently (see resolveDashboardRange), so a
+ *  plain page load and an explicit "Last month" selection are
+ *  indistinguishable. */
 export function defaultDashboardDateRange(): DashboardDateRange {
   const to = new Date();
-  const from = new Date(to.getTime() - 30 * 24 * 60 * 60 * 1000);
-  return { range: "LAST_30_DAYS", from: isoDate(from), to: isoDate(to), compare: true, compareMode: "last_month" };
+  // Monday-start, mirrors resolveDateRange's startOfWeek on the API side —
+  // only meaningful if the user later switches to CUSTOM, but should still
+  // start from something sensible rather than the old rolling-30-day value.
+  const from = new Date(to);
+  const diff = (from.getDay() + 6) % 7; // days since Monday
+  from.setDate(from.getDate() - diff);
+  return { range: "THIS_WEEK", from: isoDate(from), to: isoDate(to), compare: true, compareMode: "last_month" };
 }
 
 /** Turns the shared date-range control into the {range, from, to, compare,
