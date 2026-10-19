@@ -22,6 +22,24 @@ class PipelineDefinitionError(Exception):
     """A pipeline that cannot possibly succeed, detected before it runs."""
 
 
+class PipelineStoppedError(Exception):
+    """Raised by callers that need a FATAL/critical-FAILED stop to surface as
+    a real failure (Part: reliability overhaul follow-up, 2026-10-19) —
+    Orchestrator.run() itself returns a PipelineResult rather than raising,
+    so a caller that only logs stopped_at/stop_reason and otherwise proceeds
+    (as run_manual_enrichment/run_company_intelligence did) never trips the
+    `except Exception` block that reports the failure to AgentExecutionService,
+    and the lead never enters the automatic-retry system at all. `retryable`
+    is False for FATAL (the orchestrator's own comment: "the precondition for
+    success is absent, not that the call was unlucky") so it goes straight to
+    FAILED_TERMINAL for a human instead of retrying hourly against the same
+    missing precondition."""
+
+    def __init__(self, stop_reason: str, *, retryable: bool) -> None:
+        super().__init__(stop_reason)
+        self.retryable = retryable
+
+
 @dataclass
 class AgentRunRecord:
     """One agent execution, for the dashboard's agent timeline and queue view."""

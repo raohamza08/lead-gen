@@ -1,7 +1,13 @@
 """Specialised agents plus the orchestrator that coordinates them."""
 
 from .base import Agent, AgentContext, AgentResult, AgentStatus
-from .orchestrator import AgentRunRecord, Orchestrator, PipelineDefinitionError, PipelineResult
+from .orchestrator import (
+    AgentRunRecord,
+    Orchestrator,
+    PipelineDefinitionError,
+    PipelineResult,
+    PipelineStoppedError,
+)
 from .registry import (
     AGENTS,
     OPTIONAL_ENRICHMENT,
@@ -20,6 +26,7 @@ __all__ = [
     "Orchestrator",
     "PipelineDefinitionError",
     "PipelineResult",
+    "PipelineStoppedError",
     "AGENTS",
     "OPTIONAL_ENRICHMENT",
     "PIPELINES",

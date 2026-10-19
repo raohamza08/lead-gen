@@ -9,7 +9,7 @@ import time
 
 from config import settings
 from shared import api_client
-from agents import AgentContext, build, build_for_filter
+from agents import AgentContext, PipelineStoppedError, build, build_for_filter
 
 logger = logging.getLogger("claude_agent.runner")
 
@@ -455,7 +455,7 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
         org_id=org_id,
         data={"candidate": candidate, "org_context": org_context},
     )
-    await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
+    result = await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
 
     verification = ctx.get("verification") or {}
     scores = ctx.get("scores") or {}
@@ -486,6 +486,17 @@ async def run_manual_enrichment(lead_id: str, org_id: str, org_context: dict | N
     except Exception:
         logger.exception("failed to apply enrichment results for lead %s", lead_id)
 
+    if result.stopped_at is not None:
+        # Orchestrator.run() only returns stopped_at/stop_reason on a FATAL or
+        # critical-FAILED stop — it never raises. Without this, that stop was
+        # silently swallowed: the caller below only reports a failure from an
+        # `except Exception`, which a normal return never triggers, so the
+        # lead never got an AgentExecution row and never entered the
+        # automatic-retry system (confirmed live, 2026-10-19: ~20 leads stuck
+        # showing a dead-end red status with no retry ever attempted).
+        last_status = result.records[-1].status if result.records else None
+        raise PipelineStoppedError(result.stop_reason or "pipeline stopped", retryable=last_status != "FATAL")
+
 
 async def run_manual_enrichment_in_background(
     lead_id: str, org_id: str, org_context: dict | None = None
@@ -495,6 +506,11 @@ async def run_manual_enrichment_in_background(
         return
     try:
         await run_manual_enrichment(lead_id, org_id, org_context)
+    except PipelineStoppedError as err:
+        logger.error("manual enrichment for lead %s stopped: %s", lead_id, err)
+        await api_client.report_execution_failed(
+            org_id, lead_id, "enrich", execution_id, str(err), retryable=err.retryable
+        )
     except Exception as err:
         # Before this, a failure here (Claude CLI error/timeout) only logged
         # locally — no retry, nothing visible on the lead (the same class of
@@ -544,7 +560,7 @@ async def run_company_intelligence(lead_id: str, org_id: str, org_context: dict 
         org_id=org_id,
         data={"candidate": candidate, "org_context": org_context},
     )
-    await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
+    result = await orchestrator.run(ctx, on_step=stream, on_start=announce_start)
 
     intel = ctx.get("company_intelligence") or {}
     # audit/buyer/opps are deliberately empty — this pipeline doesn't run
@@ -562,6 +578,12 @@ async def run_company_intelligence(lead_id: str, org_id: str, org_context: dict 
     except Exception:
         logger.exception("failed to apply company intelligence results for lead %s", lead_id)
 
+    if result.stopped_at is not None:
+        # See the matching check in run_manual_enrichment for why this is
+        # needed — Orchestrator.run() never raises on its own.
+        last_status = result.records[-1].status if result.records else None
+        raise PipelineStoppedError(result.stop_reason or "pipeline stopped", retryable=last_status != "FATAL")
+
 
 async def run_company_intelligence_in_background(
     lead_id: str, org_id: str, org_context: dict | None = None
@@ -571,6 +593,11 @@ async def run_company_intelligence_in_background(
         return
     try:
         await run_company_intelligence(lead_id, org_id, org_context)
+    except PipelineStoppedError as err:
+        logger.error("company intelligence for lead %s stopped: %s", lead_id, err)
+        await api_client.report_execution_failed(
+            org_id, lead_id, "company_intelligence", execution_id, str(err), retryable=err.retryable
+        )
     except Exception as err:
         logger.exception("company intelligence for lead %s failed", lead_id)
         await api_client.report_execution_failed(org_id, lead_id, "company_intelligence", execution_id, str(err))
