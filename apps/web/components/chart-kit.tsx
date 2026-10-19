@@ -8,6 +8,7 @@
  */
 
 import { ReactNode, useId, useState } from "react";
+import { Cell, Pie, PieChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip } from "recharts";
 import { Modal } from "./ui/modal";
 
 /**
@@ -261,6 +262,119 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
         </li>
       ))}
     </ul>
+  );
+}
+
+/** A single-metric progress ring: a track + an arc filled to `value` percent,
+ *  with the number set in the center rather than beside it (Part: Dashboard
+ *  Center real-chart pass, 2026-10-19, explicit user request — two reference
+ *  images of generic dashboard-template graphics, asked to match the visual
+ *  language with this app's own data and colors, not the reference's
+ *  magenta/cyan palette). Built on recharts' RadialBarChart with a single
+ *  bar rather than a hand-drawn SVG arc, so it inherits the same
+ *  tooltip-free, axis-free simplicity as every other chart-kit primitive.
+ *  `value` drives the fill (0–100, clamped); `displayValue` is the string
+ *  shown in the center and is independent of `value` so a caller can pass a
+ *  formatted value (e.g. "64.2%") that doesn't round-trip cleanly back to a
+ *  fill percentage. Color follows the SAME accent/series tokens as every
+ *  other chart here — never the reference image's own hues. */
+export function RadialProgress({
+  value,
+  displayValue,
+  label,
+  color = SINGLE_SERIES,
+  size = 112,
+}: {
+  value: number;
+  displayValue: string;
+  label: string;
+  color?: string;
+  size?: number;
+}) {
+  const clamped = Math.max(0, Math.min(100, value));
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <div className="relative" style={{ width: size, height: size }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart
+            data={[{ value: clamped }]}
+            innerRadius="74%"
+            outerRadius="100%"
+            startAngle={90}
+            endAngle={-270}
+            barSize={8}
+          >
+            <RadialBar dataKey="value" cornerRadius={6} fill={color} background={{ fill: "var(--chart-grid)" }} isAnimationActive={false} />
+          </RadialBarChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="text-lg font-semibold tracking-tight text-ink">{displayValue}</span>
+        </div>
+      </div>
+      <span className="max-w-[9rem] text-center text-xs text-ink/60">{label}</span>
+    </div>
+  );
+}
+
+/** Groups a run of RadialProgress rings in one evenly-spaced row — the
+ *  "Sales Statistics" / "Balance Statistics" pairing from the reference
+ *  images, generalized to any count. */
+export function RadialStrip({ children }: { children: ReactNode }) {
+  return <div className="flex flex-wrap justify-around gap-6 py-2">{children}</div>;
+}
+
+/** A categorical breakdown as a donut + a value/percentage legend (Part:
+ *  Dashboard Center real-chart pass, 2026-10-19) — the reference images'
+ *  "Trafic Sources" pattern: real counts in `data`, this component computes
+ *  each slice's share of the total itself rather than taking a pre-computed
+ *  percentage, so it can never drift from the numbers shown in the legend
+ *  next to it. Falls back to a plain empty-state message when every value is
+ *  zero (an all-zero donut renders as a meaningless full-circle in the
+ *  track color, worse than just saying so). */
+export function DonutBreakdown({
+  data,
+  centerLabel,
+  centerValue,
+}: {
+  data: { label: string; value: number; color?: string }[];
+  centerLabel?: string;
+  centerValue?: string;
+}) {
+  const total = data.reduce((sum, d) => sum + d.value, 0);
+  if (total <= 0) {
+    return <p className="py-8 text-center text-xs text-ink/45">No data for this period.</p>;
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-6">
+      <div className="relative shrink-0" style={{ width: 150, height: 150 }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={data} dataKey="value" nameKey="label" innerRadius={48} outerRadius={72} paddingAngle={2} strokeWidth={0} isAnimationActive={false}>
+              {data.map((d, i) => (
+                <Cell key={d.label} fill={d.color ?? SERIES[i % SERIES.length]} />
+              ))}
+            </Pie>
+            <Tooltip {...TOOLTIP_STYLE} formatter={(v: number, n: string) => [formatCompact(v), n]} />
+          </PieChart>
+        </ResponsiveContainer>
+        {centerValue && (
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span className="text-base font-semibold tracking-tight text-ink">{centerValue}</span>
+            {centerLabel && <span className="text-[11px] text-ink/55">{centerLabel}</span>}
+          </div>
+        )}
+      </div>
+      <ul className="flex min-w-[10rem] flex-1 flex-col gap-2">
+        {data.map((d, i) => (
+          <li key={d.label} className="flex items-center gap-2 text-xs">
+            <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: d.color ?? SERIES[i % SERIES.length] }} />
+            <span className="text-ink/70">{d.label}</span>
+            <span className="tabular ml-auto font-medium text-ink">{formatCompact(d.value)}</span>
+            <span className="tabular w-10 text-right text-ink/45">{Math.round((d.value / total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

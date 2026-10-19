@@ -1,13 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, dateTime, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, DonutBreakdown, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -254,18 +254,38 @@ export function EmailTab() {
           title="Send activity over time"
           expandable
           chart={
-            <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={series}>
-                <CartesianGrid {...GRID_PROPS} />
-                <XAxis dataKey="date" {...AXIS_PROPS} />
-                <YAxis {...AXIS_PROPS} tickFormatter={formatCompact} />
-                <Tooltip {...TOOLTIP_STYLE} />
-                <Line type="monotone" dataKey="sent" stroke={SERIES[0]} dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="opened" stroke={SERIES[1]} dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="replied" stroke={SERIES[2]} dot={false} strokeWidth={2} />
-                <Line type="monotone" dataKey="bounced" stroke={SERIES[3]} dot={false} strokeWidth={2} />
-              </LineChart>
-            </ResponsiveContainer>
+            <>
+              <Legend items={[
+                { label: "Sent", color: SERIES[0] },
+                { label: "Opened", color: SERIES[1] },
+                { label: "Replied", color: SERIES[2] },
+                { label: "Bounced", color: SERIES[3] },
+              ]} />
+              {/* Gradient-filled area, not a bare line (Part: Dashboard
+                  Center real-chart pass, 2026-10-19, explicit user request —
+                  match the reference images' smooth filled-area style, with
+                  this app's own series colors rather than the reference's). */}
+              <ResponsiveContainer width="100%" height={240}>
+                <AreaChart data={series}>
+                  <defs>
+                    {SERIES.map((color, i) => (
+                      <linearGradient key={color} id={`email-area-${i}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+                        <stop offset="100%" stopColor={color} stopOpacity={0} />
+                      </linearGradient>
+                    ))}
+                  </defs>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis dataKey="date" {...AXIS_PROPS} />
+                  <YAxis {...AXIS_PROPS} tickFormatter={formatCompact} />
+                  <Tooltip {...TOOLTIP_STYLE} />
+                  <Area type="monotone" dataKey="sent" stroke={SERIES[0]} fill="url(#email-area-0)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="opened" stroke={SERIES[1]} fill="url(#email-area-1)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="replied" stroke={SERIES[2]} fill="url(#email-area-2)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="bounced" stroke={SERIES[3]} fill="url(#email-area-3)" strokeWidth={2} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </>
           }
           table={
             <DataTable
@@ -307,14 +327,28 @@ export function EmailTab() {
           {queue.length === 0 ? (
             <EmptyState title="Queue is empty" />
           ) : (
-            <DataTable
-              rowKey={(r) => r.status}
-              rows={queue}
-              columns={[
-                { key: "status", header: "Status", render: (r) => titleCase(r.status) },
-                { key: "count", header: "Count", render: (r) => num(r.count), numeric: true },
-              ]}
-            />
+            <>
+              {/* Real-chart pass (Part: Dashboard Center, 2026-10-19) — each
+                  message has exactly one status, so unlike the sent/opened/
+                  replied/bounced event counts above (which can overlap),
+                  this is a genuinely mutually-exclusive breakdown and safe
+                  to chart as a donut without misrepresenting the numbers. */}
+              <DonutBreakdown
+                data={queue.map((q, i) => ({ label: titleCase(q.status), value: q.count, color: SERIES[i % SERIES.length] }))}
+                centerValue={num(queue.reduce((sum, q) => sum + q.count, 0))}
+                centerLabel="Total"
+              />
+              <div className="mt-4">
+                <DataTable
+                  rowKey={(r) => r.status}
+                  rows={queue}
+                  columns={[
+                    { key: "status", header: "Status", render: (r) => titleCase(r.status) },
+                    { key: "count", header: "Count", render: (r) => num(r.count), numeric: true },
+                  ]}
+                />
+              </div>
+            </>
           )}
         </SectionCard>
 

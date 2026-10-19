@@ -6,7 +6,7 @@ import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { num, pct, minutes, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, DonutBreakdown, GRID_PROPS, KpiStrip, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 
@@ -96,15 +96,26 @@ export function PipelineTab() {
 
       {funnel && (
         <SectionCard title="Stage funnel" subtitle="Current lead count per pipeline stage" expandable>
-          <DataTable
-            rowKey={(r) => r.stage}
-            rows={funnel.stages}
-            columns={[
-              { key: "stage", header: "Stage", render: (r) => titleCase(r.stage) },
-              { key: "count", header: "Leads", render: (r) => num(r.count), numeric: true },
-              { key: "pct", header: "% of pipeline", render: (r) => pct(r.percentage), numeric: true },
-            ]}
+          {/* Real-chart pass (Part: Dashboard Center, 2026-10-19) — the
+              table below is still the source of truth and stays; the donut
+              is the same `funnel.stages` counts, not a separate fetch, so
+              it can never disagree with the table next to it. */}
+          <DonutBreakdown
+            data={funnel.stages.map((s) => ({ label: titleCase(s.stage), value: s.count }))}
+            centerValue={num(funnel.total)}
+            centerLabel="Total"
           />
+          <div className="mt-4">
+            <DataTable
+              rowKey={(r) => r.stage}
+              rows={funnel.stages}
+              columns={[
+                { key: "stage", header: "Stage", render: (r) => titleCase(r.stage) },
+                { key: "count", header: "Leads", render: (r) => num(r.count), numeric: true },
+                { key: "pct", header: "% of pipeline", render: (r) => pct(r.percentage), numeric: true },
+              ]}
+            />
+          </div>
         </SectionCard>
       )}
 

@@ -6,7 +6,7 @@ import { DashboardCenterShell, useDashboardDateRange } from "../../../../compone
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, money } from "../../../../components/dashboard-center/format";
 import { ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { DonutBreakdown, KpiStrip, RadialProgress, RadialStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 
@@ -66,6 +66,47 @@ export function OverviewTab() {
 
       {s && (
         <>
+          {/* Real-chart pass (Part: Dashboard Center, 2026-10-19, explicit
+              user request — two reference images of generic dashboard
+              graphics, "I need these type of graphs... with real numbers").
+              Every rate plotted here is the SAME number already shown as a
+              KpiStrip tile elsewhere on this page (leads.conversionRate
+              etc.) — this just gives the handful of rate metrics an
+              at-a-glance ring instead of requiring a reader to scan four
+              separate cards. Undefined rates (e.g. no Meta Ads connected)
+              are skipped rather than rendered as a 0% ring, which would
+              misread as "zero conversion" instead of "not applicable". */}
+          <SectionCard title="Key Rates" subtitle="The conversion/response rates from every section below, at a glance">
+            <RadialStrip>
+              {s.leads.conversionRate !== undefined && (
+                <RadialProgress value={s.leads.conversionRate} displayValue={pct(s.leads.conversionRate)} label="Lead Conversion" />
+              )}
+              <RadialProgress value={s.email.openRate} displayValue={pct(s.email.openRate)} label="Email Open Rate" color="var(--series-2)" />
+              {s.social.responseRate !== undefined && (
+                <RadialProgress value={s.social.responseRate} displayValue={pct(s.social.responseRate)} label="Social Response Rate" color="var(--series-3)" />
+              )}
+              {s.upwork.conversionRate !== undefined && (
+                <RadialProgress value={s.upwork.conversionRate} displayValue={pct(s.upwork.conversionRate)} label="Upwork Conversion" color="var(--series-4)" />
+              )}
+              {s.pipeline.conversionRate !== undefined && (
+                <RadialProgress value={s.pipeline.conversionRate} displayValue={pct(s.pipeline.conversionRate)} label="Pipeline Conversion" color="rgb(var(--good-rgb))" />
+              )}
+            </RadialStrip>
+          </SectionCard>
+
+          <SectionCard title="Channel Volume" subtitle="Relative activity across every connected channel this period">
+            <DonutBreakdown
+              data={[
+                { label: "Leads", value: s.leads.total, color: "var(--series-1)" },
+                { label: "Email sent", value: s.email.sent, color: "var(--series-2)" },
+                { label: "Social convos", value: s.social.totalConversations, color: "var(--series-3)" },
+                { label: "Upwork bids", value: s.upwork.totalBids, color: "var(--series-4)" },
+              ]}
+              centerValue={num(s.leads.total + s.email.sent + s.social.totalConversations + s.upwork.totalBids)}
+              centerLabel="Total activity"
+            />
+          </SectionCard>
+
           <SectionCard title="Leads" expandable>
             <KpiStrip>
               <StatTile label="Total Leads" value={num(s.leads.total)} detail={<SeeFullDashboard tab="leads" label="Leads" />} />

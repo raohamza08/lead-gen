@@ -1,12 +1,13 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, dateTime, titleCase } from "../../../../components/dashboard-center/format";
 import { MetricDetail } from "../../../../components/dashboard-center/metric-detail";
-import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -114,26 +115,54 @@ export function InboxTab() {
         </KpiStrip>
       )}
 
-      <SectionCard title="Mailboxes" subtitle="Per-account received/sent/unread and sync health" expandable>
-        {accountsQuery.isLoading && <SkeletonCard className="h-32" />}
-        {accountsQuery.error && <ErrorState message={(accountsQuery.error as Error).message} onRetry={() => accountsQuery.refetch()} />}
-        {!accountsQuery.isLoading && accounts.length === 0 && <EmptyState title="No email accounts connected" />}
-        {accounts.length > 0 && (
-          <DataTable
-            rowKey={(r) => r.id}
-            rows={accounts}
-            columns={[
-              { key: "address", header: "Mailbox", render: (r) => r.label ?? r.address },
-              { key: "provider", header: "Provider", render: (r) => titleCase(r.provider) },
-              { key: "status", header: "Status", render: (r) => <StatusBadge tone={statusTone(r.status)} label={titleCase(r.status)} /> },
-              { key: "received", header: "Received", render: (r) => num(r.received), numeric: true },
-              { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true },
-              { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true },
-              { key: "threads", header: "Threads", render: (r) => num(r.threads), numeric: true },
-            ]}
-          />
-        )}
-      </SectionCard>
+      {accountsQuery.isLoading && <SkeletonCard className="h-32" />}
+      {accountsQuery.error && <ErrorState message={(accountsQuery.error as Error).message} onRetry={() => accountsQuery.refetch()} />}
+      {!accountsQuery.isLoading && accounts.length === 0 && (
+        <SectionCard title="Mailboxes" subtitle="Per-account received/sent/unread and sync health">
+          <EmptyState title="No email accounts connected" />
+        </SectionCard>
+      )}
+      {accounts.length > 0 && (
+        // Real-chart pass (Part: Dashboard Center, 2026-10-19) — same
+        // `accounts` rows the table already had, just given a per-mailbox
+        // comparison view alongside it.
+        <ChartWithTable
+          title="Mailboxes"
+          subtitle="Per-account received/sent/unread and sync health"
+          expandable
+          chart={
+            <>
+              <Legend items={[{ label: "Received", color: SERIES[0] }, { label: "Sent", color: SERIES[1] }, { label: "Unread", color: SERIES[2] }]} />
+              <ResponsiveContainer width="100%" height={Math.max(220, accounts.length * 56)}>
+                <BarChart data={accounts} layout="vertical" margin={{ left: 8 }}>
+                  <CartesianGrid {...GRID_PROPS} />
+                  <XAxis type="number" {...AXIS_PROPS} tickFormatter={formatCompact} allowDecimals={false} />
+                  <YAxis type="category" dataKey={(r: AccountRow) => r.label ?? r.address} {...AXIS_PROPS} width={140} />
+                  <Tooltip {...TOOLTIP_STYLE} />
+                  <Bar dataKey="received" name="Received" fill={SERIES[0]} radius={[0, 3, 3, 0]} />
+                  <Bar dataKey="sent" name="Sent" fill={SERIES[1]} radius={[0, 3, 3, 0]} />
+                  <Bar dataKey="unread" name="Unread" fill={SERIES[2]} radius={[0, 3, 3, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </>
+          }
+          table={
+            <DataTable
+              rowKey={(r) => r.id}
+              rows={accounts}
+              columns={[
+                { key: "address", header: "Mailbox", render: (r) => r.label ?? r.address },
+                { key: "provider", header: "Provider", render: (r) => titleCase(r.provider) },
+                { key: "status", header: "Status", render: (r) => <StatusBadge tone={statusTone(r.status)} label={titleCase(r.status)} /> },
+                { key: "received", header: "Received", render: (r) => num(r.received), numeric: true },
+                { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true },
+                { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true },
+                { key: "threads", header: "Threads", render: (r) => num(r.threads), numeric: true },
+              ]}
+            />
+          }
+        />
+      )}
 
       <SectionCard
         title="Leads created from inbound email"

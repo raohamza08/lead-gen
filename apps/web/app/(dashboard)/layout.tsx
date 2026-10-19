@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { SidebarNav } from "../../components/sidebar-nav";
 import { AuthGuard } from "../../components/auth-guard";
 import { ThemeToggle } from "../../components/theme-toggle";
+import { AccentPicker } from "../../components/accent-picker";
 import { NotificationsBell } from "../../components/notifications-bell";
 import { HeaderUserMenu } from "../../components/header-user-menu";
 import { QueryProvider } from "../../components/query-provider";
@@ -42,6 +43,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               </div>
               <div className="flex items-center gap-2">
                 <NotificationsBell />
+                <AccentPicker />
                 <ThemeToggle />
                 <HeaderUserMenu />
               </div>
