@@ -424,20 +424,33 @@ select, option {
    user screenshot of the deployed Upwork tab. A CSS grid with auto-fit
    columns keeps every row on the SAME column tracks by construction, so
    wrapped rows always stay aligned regardless of how many tiles a given
-   tab has. Dividers use the grid-gap-as-background trick (gap:1px on a
-   var(--line) background, cells painted var(--surface) over it) instead of
-   border-left + :first-child/:last-child overrides — that approach can't
-   target "first cell of each wrapped row" since auto-fit's column count is
-   responsive, but the gap trick needs no such targeting: it draws a hairline
-   in every gap, row and column alike, with no visible frame around the
-   whole strip (gap only exists *between* tracks, not at the container's own
-   edge), and needs no separate mobile breakpoint — auto-fit already
-   collapses to one column on its own at narrow widths. */
+   tab has.
+
+   Dividers are per-cell borders (border-right/border-bottom), not the
+   grid-gap-as-background trick this shipped with first — that version
+   painted the strip's own background in every grid GAP, which looks right
+   between two real cells but also bled through on any UNFILLED trailing
+   track (whenever the item count doesn't evenly divide the live,
+   responsive auto-fit column count — e.g. 16 items across 9 columns
+   leaves 2 empty tracks on row 2), rendering as a stray solid block.
+   Reported live with a screenshot. Tried making the last real tile span
+   the remaining tracks via `grid-column-end:-1` first — that only
+   relocates the item to the final column without widening it, since a
+   column-end alone doesn't imply a span back to the item's natural start,
+   which just moved the gap rather than closing it (confirmed in a
+   standalone test render before touching production this time). A
+   per-cell border has no such failure mode: an unfilled track simply has
+   no cell in it, so nothing paints there at all — it reads as blank card
+   space, not as a draw-order artifact. Trade-off: the true last cell in
+   each row that ISN'T the strip's last child keeps its border-right
+   (nothing in pure CSS can detect "last in an auto-generated row" when
+   the column count is responsive), so a row's right edge shows one
+   harmless 1px line trailing into its own unused space — vastly less
+   visible than a multi-hundred-pixel block, and only the strip's true
+   last child needs the explicit overrides below. */
 .kpi-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
-  gap: 1px;
-  background: var(--line);
 }
 .kpi-cell {
   background: var(--surface);
@@ -450,7 +463,17 @@ select, option {
   text-align: center;
   color: inherit;
   border: none;
+  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
   min-width: 0;
+}
+/* `*`, not `.kpi-cell` — some callers (e.g. social-media/page.tsx) wrap
+   StatTile in a Link, making the Link the actual grid item/last-child;
+   these must apply to whichever element that is, not the nested .kpi-cell
+   div one level in. */
+.kpi-strip > *:last-child {
+  border-right: none;
+  border-bottom: none;
 }
 .kpi-cell-interactive {
   cursor: pointer;

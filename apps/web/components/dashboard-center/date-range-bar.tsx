@@ -60,12 +60,18 @@ function isoDate(d: Date): string {
  *  calendar-week boundaries (see resolveDateRange's startOfWeek), so hours
  *  stay bucketed to the week they actually belong to.
  *
- *  Comparison is still ON by default, against last calendar month (Part:
- *  Dashboard Center, 2026-09-30 fix — "the previous period must be selected
- *  by the user, otherwise auto set to last month"). The backend's own
- *  default matches this independently (see resolveDashboardRange), so a
- *  plain page load and an explicit "Last month" selection are
- *  indistinguishable. */
+ *  Comparison defaults OFF (Part: premium dark theme pass v4, 2026-10-19,
+ *  explicit user request — "the compare option should be off by default").
+ *  Reverses a 2026-09-30 decision that deliberately defaulted it ON ("the
+ *  previous period must be selected by the user, otherwise auto set to
+ *  last month") — noted here so a future session doesn't read that old
+ *  comment and "fix" this back without realizing it was already
+ *  reconsidered. compareMode stays "last_month" so flipping the checkbox
+ *  back on needs no further choice. The backend's own default (see
+ *  resolveDashboardRange) is unchanged and still defaults compare ON
+ *  server-side, but doesn't matter here: dashboardRangeToQuery always sends
+ *  an explicit `compare=false` whenever the UI state is off (see below),
+ *  which wins regardless of what the API would otherwise assume. */
 export function defaultDashboardDateRange(): DashboardDateRange {
   const to = new Date();
   // Monday-start, mirrors resolveDateRange's startOfWeek on the API side —
@@ -74,7 +80,7 @@ export function defaultDashboardDateRange(): DashboardDateRange {
   const from = new Date(to);
   const diff = (from.getDay() + 6) % 7; // days since Monday
   from.setDate(from.getDate() - diff);
-  return { range: "THIS_WEEK", from: isoDate(from), to: isoDate(to), compare: true, compareMode: "last_month" };
+  return { range: "THIS_WEEK", from: isoDate(from), to: isoDate(to), compare: false, compareMode: "last_month" };
 }
 
 /** Turns the shared date-range control into the {range, from, to, compare,

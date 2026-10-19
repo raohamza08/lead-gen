@@ -110,6 +110,14 @@ export function UpworkTab() {
   const [draft, setDraft] = useState(EMPTY_PURCHASE);
   const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  // Caps the purchase ledger at 5 rows by default (Part: premium dark
+  // theme pass v4, 2026-10-19, explicit user request — "the purchase
+  // ledger in the upwork tab should be collapsed, it should only show 5
+  // entries by default"), same "cap long lists, View all" convention used
+  // elsewhere in the app rather than always rendering every purchase ever
+  // recorded.
+  const PURCHASE_PAGE_SIZE = 5;
+  const [showAllPurchases, setShowAllPurchases] = useState(false);
 
   const kpisQuery = useQuery({ queryKey: ["dc-upwork-kpis", query], queryFn: () => api.getDashboardUpworkKpis(query) as Promise<UpworkKpis> });
   const monthlyQuery = useQuery({ queryKey: ["dc-upwork-monthly"], queryFn: () => api.getDashboardUpworkMonthly() as Promise<MonthlyRow[]> });
@@ -547,30 +555,41 @@ export function UpworkTab() {
           <EmptyState title="No connect purchases recorded yet" description="Add one above to unlock Upwork's dollar-cost metrics." />
         )}
         {purchases.length > 0 && (
-          <DataTable
-            rowKey={(r) => r.id}
-            rows={purchases}
-            columns={[
-              { key: "purchasedAt", header: "Date", render: (r) => dateTime(r.purchasedAt) },
-              { key: "connectsAmount", header: "Connects", render: (r) => num(r.connectsAmount), numeric: true },
-              { key: "totalCost", header: "Cost", render: (r) => money(r.totalCost, r.currency), numeric: true },
-              { key: "notes", header: "Notes", render: (r) => r.notes ?? "—" },
-              {
-                key: "actions",
-                header: "",
-                render: (r) =>
-                  isAdmin ? (
-                    <button
-                      type="button"
-                      onClick={() => confirm("Delete this purchase record?") && deleteMutation.mutate(r.id)}
-                      className="text-xs text-error hover:underline"
-                    >
-                      Delete
-                    </button>
-                  ) : null,
-              },
-            ]}
-          />
+          <>
+            <DataTable
+              rowKey={(r) => r.id}
+              rows={showAllPurchases ? purchases : purchases.slice(0, PURCHASE_PAGE_SIZE)}
+              columns={[
+                { key: "purchasedAt", header: "Date", render: (r) => dateTime(r.purchasedAt) },
+                { key: "connectsAmount", header: "Connects", render: (r) => num(r.connectsAmount), numeric: true },
+                { key: "totalCost", header: "Cost", render: (r) => money(r.totalCost, r.currency), numeric: true },
+                { key: "notes", header: "Notes", render: (r) => r.notes ?? "—" },
+                {
+                  key: "actions",
+                  header: "",
+                  render: (r) =>
+                    isAdmin ? (
+                      <button
+                        type="button"
+                        onClick={() => confirm("Delete this purchase record?") && deleteMutation.mutate(r.id)}
+                        className="text-xs text-error hover:underline"
+                      >
+                        Delete
+                      </button>
+                    ) : null,
+                },
+              ]}
+            />
+            {purchases.length > PURCHASE_PAGE_SIZE && (
+              <button
+                type="button"
+                onClick={() => setShowAllPurchases((v) => !v)}
+                className="mt-3 text-xs text-accent hover:underline"
+              >
+                {showAllPurchases ? "Show less" : `View all ${purchases.length} →`}
+              </button>
+            )}
+          </>
         )}
       </SectionCard>
 

@@ -232,6 +232,43 @@ function isActive(pathname: string | null, search: string, link: NavLink): boole
 
 const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
 
+/**
+ * Decorative "roots" background (Part: premium dark theme pass v4,
+ * 2026-10-19, explicit user request — "make my navigation panel like this
+ * one", pointing at the Vaulto reference's branching flow-diagram lines).
+ * Not a data visualization — the sidebar has no flow data to show — so this
+ * is purely ambient texture: a handful of organic curved threads rising
+ * through the panel, matching that reference's visual language (mostly
+ * quiet ink-colored lines, one carrying the brand accent) rather than its
+ * literal chart. `aria-hidden` and `pointer-events-none` since it's
+ * decoration, not content; absolutely positioned behind `renderNav`'s
+ * actual content (z-0 vs content's implicit stacking) so it never competes
+ * with nav label legibility. `preserveAspectRatio="none"` so the same path
+ * set stretches correctly whether the sidebar is collapsed to icons-only
+ * (64px) or expanded (224px), rather than needing two viewBoxes.
+ */
+function SidebarRoots() {
+  return (
+    <svg
+      aria-hidden
+      className="pointer-events-none absolute inset-0 h-full w-full opacity-[0.07]"
+      viewBox="0 0 200 800"
+      preserveAspectRatio="none"
+      fill="none"
+    >
+      <path d="M-10 760 C 40 720, 20 650, 70 600 S 60 480, 110 420 S 90 300, 140 240 S 130 120, 190 40"
+        stroke="var(--ink)" strokeWidth="1.2" />
+      <path d="M-10 820 C 30 780, 10 700, 55 660 S 40 560, 85 520 S 70 420, 115 380 S 100 260, 150 200 S 140 100, 210 60"
+        stroke="var(--ink)" strokeWidth="1" />
+      <path d="M20 800 C 60 750, 45 680, 90 630 S 75 520, 120 470"
+        stroke="var(--ink)" strokeWidth="1" />
+      <path d="M-10 680 C 35 650, 25 580, 65 540 S 55 440, 100 400 S 95 290, 145 250 S 150 150, 210 110"
+        stroke="var(--accent)" strokeWidth="1.3" style={{ filter: "drop-shadow(0 0 3px rgb(var(--accent-rgb) / 0.6))" }} />
+      <path d="M100 400 C 130 380, 150 390, 180 360" stroke="var(--accent)" strokeWidth="1" opacity="0.6" />
+    </svg>
+  );
+}
+
 export function SidebarNav({
   mobileOpen,
   onMobileClose,
@@ -533,17 +570,18 @@ export function SidebarNav({
       {/* Desktop: persistent, collapsible to icons-only. Hidden below md,
           where the mobile drawer below takes over instead. */}
       <nav
-        className={`hidden h-full shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3 transition-[width] duration-normal ease-standard md:flex ${
+        className={`relative hidden h-full shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3 transition-[width] duration-normal ease-standard md:flex ${
           iconsOnly ? "w-16" : "w-56"
         }`}
       >
-        <div className="flex flex-1 flex-col gap-1 overflow-y-auto">{renderNav(iconsOnly)}</div>
+        <SidebarRoots />
+        <div className="relative z-10 flex flex-1 flex-col gap-1 overflow-y-auto">{renderNav(iconsOnly)}</div>
         <button
           type="button"
           onClick={toggleIconsOnly}
           aria-label={iconsOnly ? "Expand sidebar" : "Collapse sidebar"}
           title={iconsOnly ? "Expand sidebar" : "Collapse sidebar"}
-          className="mt-1 flex items-center justify-center rounded-lg py-2 text-ink/50 transition-colors duration-fast hover:bg-ink/5 hover:text-ink/80"
+          className="relative z-10 mt-1 flex items-center justify-center rounded-lg py-2 text-ink/50 transition-colors duration-fast hover:bg-ink/5 hover:text-ink/80"
         >
           <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none" className={`transition-transform duration-normal ${iconsOnly ? "rotate-180" : ""}`}>
             <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -562,7 +600,8 @@ export function SidebarNav({
             aria-hidden
           />
           <nav className="animate-slide-in-left absolute inset-y-0 left-0 flex w-64 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] bg-surface p-3 shadow-lg">
-            {renderNav(false, onMobileClose)}
+            <SidebarRoots />
+            <div className="relative z-10 flex flex-1 flex-col gap-1">{renderNav(false, onMobileClose)}</div>
           </nav>
         </div>
       )}
