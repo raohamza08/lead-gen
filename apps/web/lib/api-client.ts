@@ -344,6 +344,10 @@ export const api = {
     }),
   restoreAgentPrompt: (name: string) =>
     request(`/settings/organization/agent-prompts/${name}`, { method: "DELETE" }),
+  getOrgAccentColor: () => request("/settings/organization/accent-color"),
+  updateOrgAccentColor: (hex: string) =>
+    request("/settings/organization/accent-color", { method: "PATCH", body: JSON.stringify({ hex }) }),
+  resetOrgAccentColor: () => request("/settings/organization/accent-color", { method: "DELETE" }),
   deleteEmailAccount: (id: string) => request(`/settings/email-accounts/${id}`, { method: "DELETE" }),
   getEmailFunnel: () => request("/analytics/email-funnel"),
   getEmailList: (event: "OPENED" | "REPLIED" | "FAILED" | "SENT") => request(`/analytics/emails?event=${event}`),

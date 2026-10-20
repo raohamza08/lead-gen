@@ -1,35 +1,26 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 
 /**
- * Private accent-color override, visible only to the org's primary admin
- * (Part: Dashboard Center, 2026-10-19, explicit user request — "add an
- * option for me only to change the accent color... make sure it doesn't
- * show to anyone else"). Two independent layers make this actually private,
- * not just hidden-by-default:
+ * Org-wide accent-color override (Part: Dashboard Center, 2026-10-20 —
+ * corrected after the user clarified the original request: "the color
+ * option... is the color that when i change, it will be changed on
+ * everyone's end". The first pass stored the choice in localStorage, which
+ * only ever affected the one browser that set it — not what was asked.
  *
- * 1. The control itself only renders once `/users/me` confirms
- *    `isPrimaryAdmin` — the same org-scoped, exactly-one-person flag
- *    sidebar-nav.tsx already gates "System Logs" behind. Same caveat as
- *    that check: a client-side gate is UX only, not a security boundary.
- * 2. The chosen color is written to `localStorage`, not any backend field —
- *    so even if it DID leak into view for someone else, there's nothing
- *    server-side to leak. Each browser applies its own stored override (or
- *    none), independent of what any other user's browser does. This is
- *    also why it's genuinely "the whole system" from the one admin's own
- *    seat without ever touching what anyone else sees.
- *
- * Overrides exactly the three CSS custom properties every accent-dependent
- * style in globals.css already keys off (--accent-rgb, --accent-2-rgb,
- * --accent-contrast-rgb — confirmed by grep, nothing else hardcodes a color
- * independently of these) via inline styles on <html>, which win over both
- * the light- and dark-mode stylesheet blocks regardless of which is active.
+ * Two independent things, not one:
+ * 1. WHO CAN CHANGE IT — gated to the org's primary admin only (the same
+ *    exactly-one-person flag sidebar-nav.tsx already gates "System Logs"
+ *    behind), enforced server-side by PrimaryAdminGuard on the PATCH/DELETE
+ *    routes, not just hidden client-side.
+ * 2. WHO SEES THE RESULT — every logged-in user. `colorQuery` below runs
+ *    unconditionally (not gated on isPrimaryAdmin) so the override applies
+ *    for everyone; only the swatch BUTTON that opens the picker is hidden
+ *    from non-primary-admins, via the early `return null`.
  */
-const STORAGE_KEY = "accent-override-hex";
-
 const SWATCHES = [
   "#f2754a", // this app's current default dark-mode accent
   "#e0392a",
@@ -89,20 +80,25 @@ function applyAccent(hex: string | null) {
 }
 
 export function AccentPicker() {
+  const queryClient = useQueryClient();
   const meQuery = useQuery({
     queryKey: ["me-accent-gate"],
     queryFn: () => api.getMe() as Promise<{ isPrimaryAdmin: boolean }>,
     staleTime: Infinity,
   });
-  const [hex, setHex] = useState<string | null>(null);
+  // Runs for every user regardless of role — this is what makes the color
+  // actually org-wide rather than a personal preference.
+  const colorQuery = useQuery({
+    queryKey: ["org-accent-color"],
+    queryFn: () => api.getOrgAccentColor() as Promise<{ hex: string | null }>,
+    staleTime: 60_000,
+  });
   const [open, setOpen] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const stored = window.localStorage.getItem(STORAGE_KEY);
-    setHex(stored);
-    applyAccent(stored);
-  }, []);
+    applyAccent(colorQuery.data?.hex ?? null);
+  }, [colorQuery.data?.hex]);
 
   useEffect(() => {
     if (!open) return;
@@ -113,35 +109,39 @@ export function AccentPicker() {
     return () => document.removeEventListener("mousedown", onClick);
   }, [open]);
 
+  const setMutation = useMutation({
+    mutationFn: (hex: string) => api.updateOrgAccentColor(hex) as Promise<{ hex: string | null }>,
+    onSuccess: (result) => queryClient.setQueryData(["org-accent-color"], result),
+  });
+  const resetMutation = useMutation({
+    mutationFn: () => api.resetOrgAccentColor() as Promise<{ hex: string | null }>,
+    onSuccess: (result) => queryClient.setQueryData(["org-accent-color"], result),
+  });
+
   if (!meQuery.data?.isPrimaryAdmin) return null;
 
-  function choose(next: string | null) {
-    setHex(next);
-    applyAccent(next);
-    if (next) window.localStorage.setItem(STORAGE_KEY, next);
-    else window.localStorage.removeItem(STORAGE_KEY);
-  }
+  const hex = colorQuery.data?.hex ?? null;
 
   return (
     <div ref={panelRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        aria-label="Change accent color (only visible to you)"
-        title="Accent color — only visible to you"
+        aria-label="Change accent color for everyone (only you can do this)"
+        title="Accent color — applies org-wide, only you can change it"
         className="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-[var(--line)] transition-colors hover:bg-ink/5"
       >
         <span aria-hidden className="h-3.5 w-3.5 rounded-full" style={{ background: hex ?? "var(--accent)" }} />
       </button>
       {open && (
         <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-56 rounded-lg border border-[var(--line)] bg-surface p-3 shadow-lg">
-          <p className="mb-2 text-[11px] text-ink/50">Only visible to you — stored on this browser only.</p>
+          <p className="mb-2 text-[11px] text-ink/50">Changes the accent for everyone in the org. Only you can see this control.</p>
           <div className="grid grid-cols-8 gap-1.5">
             {SWATCHES.map((s) => (
               <button
                 key={s}
                 type="button"
-                onClick={() => choose(s)}
+                onClick={() => setMutation.mutate(s)}
                 aria-label={s}
                 className={`h-5 w-5 rounded-full border transition-transform hover:scale-110 ${hex === s ? "ring-2 ring-offset-1 ring-offset-surface ring-[var(--accent)]" : "border-[var(--line)]"}`}
                 style={{ background: s }}
@@ -152,12 +152,12 @@ export function AccentPicker() {
             <input
               type="color"
               value={hex ?? "#f2754a"}
-              onChange={(e) => choose(e.target.value)}
+              onChange={(e) => setMutation.mutate(e.target.value)}
               className="h-7 w-7 cursor-pointer rounded border border-[var(--line)] bg-transparent p-0"
             />
             <span className="text-xs text-ink/60">Custom</span>
             {hex && (
-              <button type="button" onClick={() => choose(null)} className="ml-auto text-xs text-accent hover:underline">
+              <button type="button" onClick={() => resetMutation.mutate()} className="ml-auto text-xs text-accent hover:underline">
                 Reset
               </button>
             )}

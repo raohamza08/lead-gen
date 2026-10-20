@@ -182,6 +182,42 @@ export class OrganizationService {
     return this.getAgentPrompts(orgId);
   }
 
+  /** The org-wide accent color override (Part: Dashboard Center, 2026-10-20)
+   *  — read by every logged-in user on load (AccentPicker applies it
+   *  unconditionally for everyone; only the control to CHANGE it is gated
+   *  to the primary admin, enforced by PrimaryAdminGuard on the PATCH/DELETE
+   *  routes below, not by anything here). `hex: null` means "no override,
+   *  use the app's built-in default" — the frontend's own fallback, not a
+   *  stored sentinel value. */
+  async getAccentColor(orgId: string): Promise<{ hex: string | null }> {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    const settings = (org.settings as Record<string, unknown>) ?? {};
+    return { hex: (settings.accentColorHex as string) || null };
+  }
+
+  async updateAccentColor(orgId: string, hex: string): Promise<{ hex: string | null }> {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    const settings = { ...(org.settings as Record<string, unknown>), accentColorHex: hex };
+    await this.prisma.organization.update({
+      where: { id: orgId },
+      data: { settings: settings as Prisma.InputJsonValue },
+    });
+    return this.getAccentColor(orgId);
+  }
+
+  /** The "Reset" button — removes the override so every user's browser goes
+   *  back to the app's built-in accent. */
+  async resetAccentColor(orgId: string): Promise<{ hex: string | null }> {
+    const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
+    const settings = { ...(org.settings as Record<string, unknown>) };
+    delete settings.accentColorHex;
+    await this.prisma.organization.update({
+      where: { id: orgId },
+      data: { settings: settings as Prisma.InputJsonValue },
+    });
+    return this.getAccentColor(orgId);
+  }
+
   /** The "Default" button — removes this org's override so the agent goes
    *  back to running the text the agent's own author shipped. */
   async restoreAgentPrompt(orgId: string, name: string): Promise<AgentPrompt[]> {

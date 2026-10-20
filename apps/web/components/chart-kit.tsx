@@ -283,7 +283,7 @@ export function RadialProgress({
   displayValue,
   label,
   color = SINGLE_SERIES,
-  size = 112,
+  size = 164,
 }: {
   value: number;
   displayValue: string;
@@ -293,34 +293,36 @@ export function RadialProgress({
 }) {
   const clamped = Math.max(0, Math.min(100, value));
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-2.5">
       <div className="relative" style={{ width: size, height: size }}>
         <ResponsiveContainer width="100%" height="100%">
           <RadialBarChart
             data={[{ value: clamped }]}
-            innerRadius="74%"
+            innerRadius="76%"
             outerRadius="100%"
             startAngle={90}
             endAngle={-270}
-            barSize={8}
+            barSize={10}
           >
-            <RadialBar dataKey="value" cornerRadius={6} fill={color} background={{ fill: "var(--chart-grid)" }} isAnimationActive={false} />
+            <RadialBar dataKey="value" cornerRadius={7} fill={color} background={{ fill: "var(--chart-grid)" }} isAnimationActive={false} />
           </RadialBarChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="text-lg font-semibold tracking-tight text-ink">{displayValue}</span>
+          <span className="text-2xl font-semibold tracking-tight text-ink">{displayValue}</span>
         </div>
       </div>
-      <span className="max-w-[9rem] text-center text-xs text-ink/60">{label}</span>
+      <span className="max-w-[10rem] text-center text-xs text-ink/60">{label}</span>
     </div>
   );
 }
 
-/** Groups a run of RadialProgress rings in one evenly-spaced row — the
- *  "Sales Statistics" / "Balance Statistics" pairing from the reference
- *  images, generalized to any count. */
+/** Groups a run of RadialProgress rings in one row, centered as a block
+ *  (Part: Dashboard Center sizing pass, 2026-10-20, explicit user request —
+ *  "I want the graphs to be a little bigger, center aligned and of same
+ *  size" — the first version used `justify-around`, which spreads 1-2 rings
+ *  across the full card width instead of clustering them in the middle). */
 export function RadialStrip({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap justify-around gap-6 py-2">{children}</div>;
+  return <div className="flex flex-wrap justify-center gap-10 py-2">{children}</div>;
 }
 
 /** A categorical breakdown as a donut + a value/percentage legend (Part:
@@ -345,35 +347,46 @@ export function DonutBreakdown({
     return <p className="py-8 text-center text-xs text-ink/45">No data for this period.</p>;
   }
   return (
-    <div className="flex flex-wrap items-center gap-6">
-      <div className="relative shrink-0" style={{ width: 150, height: 150 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={data} dataKey="value" nameKey="label" innerRadius={48} outerRadius={72} paddingAngle={2} strokeWidth={0} isAnimationActive={false}>
-              {data.map((d, i) => (
-                <Cell key={d.label} fill={d.color ?? SERIES[i % SERIES.length]} />
-              ))}
-            </Pie>
-            <Tooltip {...TOOLTIP_STYLE} formatter={(v: number, n: string) => [formatCompact(v), n]} />
-          </PieChart>
-        </ResponsiveContainer>
-        {centerValue && (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-            <span className="text-base font-semibold tracking-tight text-ink">{centerValue}</span>
-            {centerLabel && <span className="text-[11px] text-ink/55">{centerLabel}</span>}
-          </div>
-        )}
+    // Centered as a block, not stretched (Part: Dashboard Center sizing
+    // pass, 2026-10-20, explicit user request — "I want the graphs to be a
+    // little bigger, center aligned and of same size"). The legend's old
+    // `flex-1` made it stretch to fill whatever was left of the card after
+    // a fixed-width donut, which is exactly what produced the huge dead
+    // gutter on a short 2-4-item legend; dropping flex-1 and centering the
+    // donut+legend pair as one unit fixes both the gutter and the
+    // off-center placement at once. Donut itself bumped 150px -> 208px,
+    // same ratio of ring thickness to diameter as before, scaled up.
+    <div className="flex justify-center">
+      <div className="flex flex-wrap items-center gap-8">
+        <div className="relative shrink-0" style={{ width: 208, height: 208 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={data} dataKey="value" nameKey="label" innerRadius={66} outerRadius={100} paddingAngle={2} strokeWidth={0} isAnimationActive={false}>
+                {data.map((d, i) => (
+                  <Cell key={d.label} fill={d.color ?? SERIES[i % SERIES.length]} />
+                ))}
+              </Pie>
+              <Tooltip {...TOOLTIP_STYLE} formatter={(v: number, n: string) => [formatCompact(v), n]} />
+            </PieChart>
+          </ResponsiveContainer>
+          {centerValue && (
+            <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+              <span className="text-xl font-semibold tracking-tight text-ink">{centerValue}</span>
+              {centerLabel && <span className="text-xs text-ink/55">{centerLabel}</span>}
+            </div>
+          )}
+        </div>
+        <ul className="flex w-[14rem] flex-col gap-2">
+          {data.map((d, i) => (
+            <li key={d.label} className="flex items-center gap-2 text-xs">
+              <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: d.color ?? SERIES[i % SERIES.length] }} />
+              <span className="text-ink/70">{d.label}</span>
+              <span className="tabular ml-auto font-medium text-ink">{formatCompact(d.value)}</span>
+              <span className="tabular w-10 text-right text-ink/45">{Math.round((d.value / total) * 100)}%</span>
+            </li>
+          ))}
+        </ul>
       </div>
-      <ul className="flex min-w-[10rem] flex-1 flex-col gap-2">
-        {data.map((d, i) => (
-          <li key={d.label} className="flex items-center gap-2 text-xs">
-            <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: d.color ?? SERIES[i % SERIES.length] }} />
-            <span className="text-ink/70">{d.label}</span>
-            <span className="tabular ml-auto font-medium text-ink">{formatCompact(d.value)}</span>
-            <span className="tabular w-10 text-right text-ink/45">{Math.round((d.value / total) * 100)}%</span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

@@ -6,7 +6,7 @@ import { api } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct } from "../../../../components/dashboard-center/format";
-import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, Legend, SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SINGLE_SERIES, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -44,32 +44,37 @@ export function TeamTab() {
       {!teamQuery.isLoading && team.length === 0 && <EmptyState title="No active team members with activity in this period" />}
 
       {team.length > 0 && (
+        // Changed from "Leads added per team member" to a general activity
+        // ranking (Part: Dashboard Center, 2026-10-20, explicit user
+        // request — "change the table from leads per user, to activity per
+        // user, means the more a person uses the platform, it will be shown
+        // there"). activityScore sums every real per-user action this page
+        // already fetches across modules (leads added, social conversations
+        // handled, emails sent) rather than leads alone, so someone who's
+        // heavily active in the inbox/outreach but adds few leads directly
+        // still ranks near the top. A single ranking bar, sorted descending
+        // — same "who ranks" convention as Social's "By platform" and
+        // Upwork's "By submitter" charts, not a multi-series breakdown.
         <ChartWithTable
-          title="Leads added per team member"
+          title="Activity per team member"
+          subtitle="Leads added + social conversations handled + emails sent, this period — a usage ranking, not a performance judgment"
           expandable
           chart={
-            <>
-              {/* Converted/Lost added alongside the original leadsAdded bar
-                  (Part: Dashboard Center, 2026-10-20, explicit user request
-                  — "these are less charts and graphs, I need more"). Real,
-                  already-fetched per-member counts that were table-only. */}
-              <Legend items={[
-                { label: "Leads Added", color: SERIES[0] },
-                { label: "Converted", color: "rgb(var(--good-rgb))" },
-                { label: "Lost", color: "rgb(var(--bad-rgb))" },
-              ]} />
-              <ResponsiveContainer width="100%" height={Math.max(220, team.length * 44)}>
-                <BarChart data={team} layout="vertical" margin={{ left: 24 }}>
-                  <CartesianGrid {...GRID_PROPS} />
-                  <XAxis type="number" {...AXIS_PROPS} tickFormatter={formatCompact} />
-                  <YAxis type="category" dataKey="name" {...AXIS_PROPS} width={120} />
-                  <Tooltip {...TOOLTIP_STYLE} />
-                  <Bar dataKey="leadsAdded" name="Leads Added" fill={SERIES[0]} radius={[0, 3, 3, 0]} />
-                  <Bar dataKey="leadsConverted" name="Converted" fill="rgb(var(--good-rgb))" radius={[0, 3, 3, 0]} />
-                  <Bar dataKey="leadsLost" name="Lost" fill="rgb(var(--bad-rgb))" radius={[0, 3, 3, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </>
+            <ResponsiveContainer width="100%" height={Math.max(220, team.length * 40)}>
+              <BarChart
+                data={[...team]
+                  .map((r) => ({ ...r, activityScore: r.leadsAdded + r.conversationsHandled + r.emailsSent }))
+                  .sort((a, b) => b.activityScore - a.activityScore)}
+                layout="vertical"
+                margin={{ top: 4, right: 24, left: 8, bottom: 4 }}
+              >
+                <CartesianGrid {...GRID_PROPS} vertical horizontal={false} />
+                <XAxis type="number" allowDecimals={false} {...AXIS_PROPS} tickFormatter={formatCompact} />
+                <YAxis type="category" dataKey="name" width={130} {...AXIS_PROPS} />
+                <Tooltip {...TOOLTIP_STYLE} />
+                <Bar dataKey="activityScore" name="Activity" fill={SINGLE_SERIES} radius={[0, 4, 4, 0]} maxBarSize={22} />
+              </BarChart>
+            </ResponsiveContainer>
           }
           table={
             <DataTable
