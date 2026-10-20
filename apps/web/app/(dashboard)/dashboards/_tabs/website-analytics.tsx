@@ -7,20 +7,18 @@ import { api, getCurrentUser } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct } from "../../../../components/dashboard-center/format";
-import { ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
 import {
   AXIS_PROPS,
   ChartWithTable,
   DataTable,
   DonutBreakdown,
   GRID_PROPS,
-  KpiStrip,
   Legend,
+  MiniTrendCard,
   RadialProgress,
-  RadialStrip,
   SectionCard,
   SERIES,
-  StatTile,
+  StatCardWithSparkline,
   TOOLTIP_STYLE,
   formatCompact,
 } from "../../../../components/chart-kit";
@@ -42,10 +40,13 @@ interface GaOverview {
 }
 
 interface GaTimeseriesPoint {
+  [key: string]: string | number;
   date: string;
   totalUsers: number;
   sessions: number;
   pageViews: number;
+  avgSessionSeconds: number;
+  engagementRate: number;
 }
 
 interface GaBreakdownRow {
@@ -63,6 +64,45 @@ function avgSessionLabel(seconds: number | undefined): string {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return `${m}m ${s}s`;
+}
+
+/** Small inline line icons, matching this app's existing hand-rolled-SVG
+ *  convention (sidebar-nav.tsx, theme-toggle.tsx) rather than pulling in an
+ *  icon library for four glyphs. */
+const ICON_PROPS = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+
+function UsersIcon() {
+  return (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  );
+}
+function PulseIcon() {
+  return (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </svg>
+  );
+}
+function EyeIcon() {
+  return (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+function ClockIcon() {
+  return (
+    <svg aria-hidden {...ICON_PROPS}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  );
 }
 
 /** Website Analytics — real GA4 data via a read-only service account (Part:
@@ -185,81 +225,166 @@ export function WebsiteAnalyticsTab() {
       {overviewQuery.error && <ErrorState message={(overviewQuery.error as Error).message} onRetry={() => overviewQuery.refetch()} />}
 
       {overview && (
-        <>
-          <KpiStrip>
-            <StatTile
-              label="Total Users"
-              value={num(overview.totalUsers)}
-              hint={<ComparisonHint deltaPct={overview.totalUsersDeltaPct} />}
-            />
-            <StatTile
-              label="Sessions"
-              value={num(overview.sessions)}
-              hint={<ComparisonHint deltaPct={overview.sessionsDeltaPct} />}
-            />
-            <StatTile
-              label="Page Views"
-              value={num(overview.pageViews)}
-              hint={<ComparisonHint deltaPct={overview.pageViewsDeltaPct} />}
-            />
-            <StatTile label="Avg. Session" value={avgSessionLabel(overview.avgSessionSeconds)} />
-          </KpiStrip>
-
-          {overview.engagementRate !== undefined && (
-            <SectionCard title="Engagement Rate">
-              <RadialStrip>
-                <RadialProgress value={overview.engagementRate} displayValue={pct(overview.engagementRate)} label="Engagement Rate" />
-              </RadialStrip>
-            </SectionCard>
-          )}
-        </>
+        // Icon'd cards with embedded sparklines, not the app's usual flat
+        // KpiStrip (Part: Dashboard Center, 2026-10-20, explicit user
+        // request — a reference screenshot: "i want the dashboards like
+        // this one"). Each sparkline reuses `series`, the SAME per-day rows
+        // the big "Traffic over time" chart below is built from, rather
+        // than issuing its own request — a tile can never show a trend
+        // that disagrees with the detailed chart underneath it. Colors
+        // reuse this app's own SERIES tokens, not the reference's palette
+        // (standing instruction from earlier in this session).
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCardWithSparkline
+            icon={<UsersIcon />}
+            label="Total Users"
+            value={num(overview.totalUsers)}
+            deltaPct={overview.totalUsersDeltaPct}
+            color={SERIES[0]}
+            sparklineData={series}
+            dataKey="totalUsers"
+          />
+          <StatCardWithSparkline
+            icon={<PulseIcon />}
+            label="Sessions"
+            value={num(overview.sessions)}
+            deltaPct={overview.sessionsDeltaPct}
+            color={SERIES[1]}
+            sparklineData={series}
+            dataKey="sessions"
+          />
+          <StatCardWithSparkline
+            icon={<EyeIcon />}
+            label="Page Views"
+            value={num(overview.pageViews)}
+            deltaPct={overview.pageViewsDeltaPct}
+            color={SERIES[2]}
+            sparklineData={series}
+            dataKey="pageViews"
+          />
+          <StatCardWithSparkline
+            icon={<ClockIcon />}
+            label="Avg. Session"
+            value={avgSessionLabel(overview.avgSessionSeconds)}
+            color={SERIES[3]}
+            sparklineData={series}
+            dataKey="avgSessionSeconds"
+          />
+        </div>
       )}
 
-      {series.length > 0 && (
-        <ChartWithTable
-          title="Traffic over time"
-          expandable
-          chart={
-            <>
-              <Legend items={[
-                { label: "Users", color: SERIES[0] },
-                { label: "Sessions", color: SERIES[1] },
-                { label: "Page Views", color: SERIES[2] },
-              ]} />
-              <ResponsiveContainer width="100%" height={240}>
-                <AreaChart data={series}>
-                  <defs>
-                    {SERIES.slice(0, 3).map((color, i) => (
-                      <linearGradient key={color} id={`ga-area-${i}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                        <stop offset="100%" stopColor={color} stopOpacity={0} />
-                      </linearGradient>
-                    ))}
-                  </defs>
-                  <CartesianGrid {...GRID_PROPS} />
-                  <XAxis dataKey="date" {...AXIS_PROPS} />
-                  <YAxis {...AXIS_PROPS} tickFormatter={formatCompact} />
-                  <Tooltip {...TOOLTIP_STYLE} />
-                  <Area type="monotone" dataKey="totalUsers" name="Users" stroke={SERIES[0]} fill="url(#ga-area-0)" strokeWidth={2} dot={false} />
-                  <Area type="monotone" dataKey="sessions" name="Sessions" stroke={SERIES[1]} fill="url(#ga-area-1)" strokeWidth={2} dot={false} />
-                  <Area type="monotone" dataKey="pageViews" name="Page Views" stroke={SERIES[2]} fill="url(#ga-area-2)" strokeWidth={2} dot={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </>
-          }
-          table={
-            <DataTable
-              rowKey={(r) => r.date}
-              rows={series}
-              columns={[
-                { key: "date", header: "Date", render: (r) => r.date },
-                { key: "totalUsers", header: "Users", render: (r) => num(r.totalUsers), numeric: true },
-                { key: "sessions", header: "Sessions", render: (r) => num(r.sessions), numeric: true },
-                { key: "pageViews", header: "Page Views", render: (r) => num(r.pageViews), numeric: true },
-              ]}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {overview && overview.engagementRate !== undefined && (
+          <SectionCard title="Engagement Rate" subtitle="This period">
+            <div className="flex flex-col items-center gap-2 py-2">
+              <RadialProgress value={overview.engagementRate} displayValue={pct(overview.engagementRate)} label="Engagement Rate" size={188} />
+            </div>
+          </SectionCard>
+        )}
+
+        <div className="lg:col-span-2">
+          {series.length > 0 && (
+            <ChartWithTable
+              title="Traffic over time"
+              expandable
+              chart={
+                <>
+                  <Legend items={[
+                    { label: "Users", color: SERIES[0] },
+                    { label: "Sessions", color: SERIES[1] },
+                    { label: "Page Views", color: SERIES[2] },
+                  ]} />
+                  <ResponsiveContainer width="100%" height={260}>
+                    <AreaChart data={series}>
+                      <defs>
+                        {SERIES.slice(0, 3).map((color, i) => (
+                          <linearGradient key={color} id={`ga-area-${i}`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                            <stop offset="100%" stopColor={color} stopOpacity={0} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      <CartesianGrid {...GRID_PROPS} />
+                      <XAxis dataKey="date" {...AXIS_PROPS} />
+                      <YAxis {...AXIS_PROPS} tickFormatter={formatCompact} />
+                      <Tooltip {...TOOLTIP_STYLE} />
+                      <Area type="monotone" dataKey="totalUsers" name="Users" stroke={SERIES[0]} fill="url(#ga-area-0)" strokeWidth={2} dot={{ r: 2, fill: SERIES[0], strokeWidth: 0 }} />
+                      <Area type="monotone" dataKey="sessions" name="Sessions" stroke={SERIES[1]} fill="url(#ga-area-1)" strokeWidth={2} dot={{ r: 2, fill: SERIES[1], strokeWidth: 0 }} />
+                      <Area type="monotone" dataKey="pageViews" name="Page Views" stroke={SERIES[2]} fill="url(#ga-area-2)" strokeWidth={2} dot={{ r: 2, fill: SERIES[2], strokeWidth: 0 }} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </>
+              }
+              table={
+                <DataTable
+                  rowKey={(r) => r.date}
+                  rows={series}
+                  columns={[
+                    { key: "date", header: "Date", render: (r) => r.date },
+                    { key: "totalUsers", header: "Users", render: (r) => num(r.totalUsers), numeric: true },
+                    { key: "sessions", header: "Sessions", render: (r) => num(r.sessions), numeric: true },
+                    { key: "pageViews", header: "Page Views", render: (r) => num(r.pageViews), numeric: true },
+                  ]}
+                />
+              }
             />
-          }
-        />
+          )}
+        </div>
+      </div>
+
+      {series.length > 0 && overview && (
+        // One card per metric, each a full-size trend (Part: Dashboard
+        // Center, 2026-10-20) -- same real `series` rows as the sparklines
+        // and the combined chart above, just rendered larger with axes.
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MiniTrendCard
+            label="Users over time"
+            value={num(overview.totalUsers)}
+            deltaPct={overview.totalUsersDeltaPct}
+            color={SERIES[0]}
+            data={series}
+            dataKey="totalUsers"
+            xKey="date"
+            axisProps={AXIS_PROPS}
+            gridProps={GRID_PROPS}
+            tooltipProps={TOOLTIP_STYLE}
+          />
+          <MiniTrendCard
+            label="Sessions over time"
+            value={num(overview.sessions)}
+            deltaPct={overview.sessionsDeltaPct}
+            color={SERIES[1]}
+            data={series}
+            dataKey="sessions"
+            xKey="date"
+            axisProps={AXIS_PROPS}
+            gridProps={GRID_PROPS}
+            tooltipProps={TOOLTIP_STYLE}
+          />
+          <MiniTrendCard
+            label="Page Views over time"
+            value={num(overview.pageViews)}
+            deltaPct={overview.pageViewsDeltaPct}
+            color={SERIES[2]}
+            data={series}
+            dataKey="pageViews"
+            xKey="date"
+            axisProps={AXIS_PROPS}
+            gridProps={GRID_PROPS}
+            tooltipProps={TOOLTIP_STYLE}
+          />
+          <MiniTrendCard
+            label="Avg. Session Duration"
+            value={avgSessionLabel(overview.avgSessionSeconds)}
+            color={SERIES[3]}
+            data={series}
+            dataKey="avgSessionSeconds"
+            xKey="date"
+            axisProps={AXIS_PROPS}
+            gridProps={GRID_PROPS}
+            tooltipProps={TOOLTIP_STYLE}
+          />
+        </div>
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">

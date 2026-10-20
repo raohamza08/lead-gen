@@ -45,6 +45,8 @@ export interface GaTimeseriesPoint {
   totalUsers: number;
   sessions: number;
   pageViews: number;
+  avgSessionSeconds: number;
+  engagementRate: number;
 }
 
 export interface GaBreakdownRow {
@@ -182,12 +184,33 @@ export class WebsiteAnalyticsDashboardService {
     const propertyId = await this.getPropertyId(orgId);
     if (!propertyId) throw new ServiceUnavailableException("No GA4 property connected yet.");
     const { current } = resolveDashboardRange(query);
-    const res = await this.runReport(propertyId, current.from, current.to, ["date"], ["totalUsers", "sessions", "screenPageViews"], "date");
+    // avgSessionSeconds/engagementRate added alongside the original three
+    // (Part: Dashboard Center, 2026-10-20, explicit user request — "i want
+    // the dashboards like this one", a reference screenshot with a
+    // per-metric trend card for every KPI, including avg session). One
+    // report call covers all five metrics in lockstep per day, so the four
+    // per-metric trend cards on the frontend share this single fetch
+    // rather than issuing their own requests.
+    const res = await this.runReport(
+      propertyId,
+      current.from,
+      current.to,
+      ["date"],
+      ["totalUsers", "sessions", "screenPageViews", "averageSessionDuration", "engagementRate"],
+      "date",
+    );
     return (res.rows ?? []).map((r) => {
       const raw = r.dimensionValues?.[0]?.value ?? "";
       // GA4 returns dates as YYYYMMDD with no separators.
       const date = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw;
-      return { date, totalUsers: this.num(r, 0), sessions: this.num(r, 1), pageViews: this.num(r, 2) };
+      return {
+        date,
+        totalUsers: this.num(r, 0),
+        sessions: this.num(r, 1),
+        pageViews: this.num(r, 2),
+        avgSessionSeconds: this.num(r, 3),
+        engagementRate: this.num(r, 4) * 100,
+      };
     });
   }
 

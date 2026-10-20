@@ -8,7 +8,7 @@
  */
 
 import { ReactNode, useId, useState } from "react";
-import { Cell, Pie, PieChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip } from "recharts";
+import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { Modal } from "./ui/modal";
 
 /**
@@ -323,6 +323,140 @@ export function RadialProgress({
  *  across the full card width instead of clustering them in the middle). */
 export function RadialStrip({ children }: { children: ReactNode }) {
   return <div className="flex flex-wrap justify-center gap-10 py-2">{children}</div>;
+}
+
+/** An icon'd KPI tile with its own accent color and an embedded trend
+ *  sparkline (Part: Dashboard Center, 2026-10-20, explicit user request — a
+ *  reference screenshot: "i want the dashboards like this one"). Each
+ *  instance gets a left accent bar, a tinted icon badge, a delta pill, and
+ *  a small gradient-filled area chart along the bottom built from the SAME
+ *  real per-day series the page's main trend chart already fetched — no
+ *  separate request, so a tile's sparkline can never disagree with the big
+ *  chart below it. `sparklineData`/`dataKey` follow the same shape
+ *  ChartWithTable's own charts use (an array of point objects + the field
+ *  name to plot), so a caller just passes its existing timeseries rows. */
+export function StatCardWithSparkline({
+  icon,
+  label,
+  value,
+  deltaPct,
+  color,
+  sparklineData,
+  dataKey,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  deltaPct?: number | null;
+  color: string;
+  sparklineData: Record<string, number | string>[];
+  dataKey: string;
+}) {
+  const gradientId = useId();
+  return (
+    <div className="card overflow-hidden p-0" style={{ borderLeft: `3px solid ${color}` }}>
+      <div className="flex items-start justify-between gap-2 p-4 pb-2">
+        <div className="flex items-center gap-2.5">
+          <span
+            aria-hidden
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg"
+            style={{ background: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
+          >
+            {icon}
+          </span>
+          <div>
+            <div className="text-xs text-ink/55">{label}</div>
+            <div className="text-xl font-semibold tracking-tight text-ink">{value}</div>
+          </div>
+        </div>
+        {deltaPct !== undefined && deltaPct !== null && (
+          <span
+            className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${
+              deltaPct >= 0 ? "bg-good/15 text-good" : "bg-bad/15 text-bad"
+            }`}
+          >
+            {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(deltaPct).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      {sparklineData.length > 1 && (
+        <ResponsiveContainer width="100%" height={48}>
+          <AreaChart data={sparklineData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={1.5} fill={`url(#${gradientId})`} isAnimationActive={false} dot={false} />
+          </AreaChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  );
+}
+
+/** A single-metric trend card: big value, delta pill, and a full-size
+ *  labeled area chart underneath (Part: Dashboard Center, 2026-10-20) —
+ *  the reference screenshot's "Users over time" / "Sessions over time"
+ *  row, one card per metric rather than cramming several series onto one
+ *  chart. Same real data as StatCardWithSparkline's embedded sparklines,
+ *  just rendered larger with axes. */
+export function MiniTrendCard({
+  label,
+  value,
+  deltaPct,
+  color,
+  data,
+  dataKey,
+  xKey,
+  axisProps,
+  gridProps,
+  tooltipProps,
+  xAxisProps,
+}: {
+  label: string;
+  value: string;
+  deltaPct?: number | null;
+  color: string;
+  data: Record<string, number | string>[];
+  dataKey: string;
+  xKey: string;
+  axisProps: typeof AXIS_PROPS;
+  gridProps: typeof GRID_PROPS;
+  tooltipProps: typeof TOOLTIP_STYLE;
+  xAxisProps?: Record<string, unknown>;
+}) {
+  const gradientId = useId();
+  return (
+    <div className="card">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <span className="text-sm font-medium text-ink">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="tabular text-base font-semibold text-ink">{value}</span>
+          {deltaPct !== undefined && deltaPct !== null && (
+            <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${deltaPct >= 0 ? "bg-good/15 text-good" : "bg-bad/15 text-bad"}`}>
+              {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(deltaPct).toFixed(0)}%
+            </span>
+          )}
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={140}>
+        <AreaChart data={data}>
+          <defs>
+            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+              <stop offset="100%" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid {...gridProps} />
+          <XAxis dataKey={xKey} {...axisProps} {...xAxisProps} />
+          <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={false} />
+          <Tooltip {...tooltipProps} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  );
 }
 
 /** A categorical breakdown as a donut + a value/percentage legend (Part:
