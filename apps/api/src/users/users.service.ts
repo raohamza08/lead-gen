@@ -12,6 +12,21 @@ import { LocalDiskMediaStorageService } from "../social-media/media/local-disk-m
 import { apiPublicUrl } from "../common/api-url";
 import { UserAccessCacheService } from "../common/access/user-access-cache.service";
 
+/** The GET /users/:id/avatar URL never changes across uploads (same id),
+ *  and its response is cached by the browser (see AvatarFileController's
+ *  Cache-Control) — so replacing a picture at the same URL would keep
+ *  showing the old cached bytes with no error, since nothing tells the
+ *  browser the content changed (real-world bug, confirmed in production:
+ *  a fresh upload wasn't reflected without a hard reload). `storageKey`
+ *  is a new random UUID on every upload (LocalDiskMediaStorageService's
+ *  save()), so using it as a cache-busting query param forces a real
+ *  re-fetch whenever the avatar actually changes, while staying stable
+ *  (and thus still cacheable) in between. */
+function avatarUrlFor(userId: string, storageKey: string | null): string | null {
+  if (!storageKey) return null;
+  return `${apiPublicUrl()}/users/${userId}/avatar?v=${encodeURIComponent(storageKey)}`;
+}
+
 function credentialsEmailHtml(params: { recipientName: string; orgName: string; email: string; password: string }): string {
   const { recipientName, orgName, email, password } = params;
   const loginUrl = `${dashboardUrl()}/login`;
@@ -69,7 +84,7 @@ export class UsersService {
     });
     return users.map(({ avatarStorageKey, ...u }) => ({
       ...u,
-      avatarUrl: avatarStorageKey ? `${apiPublicUrl()}/users/${u.id}/avatar` : null,
+      avatarUrl: avatarUrlFor(u.id, avatarStorageKey),
     }));
   }
 
@@ -347,7 +362,7 @@ export class UsersService {
     });
     if (!user) return null;
     const { avatarStorageKey, ...rest } = user;
-    return { ...rest, avatarUrl: avatarStorageKey ? `${apiPublicUrl()}/users/${userId}/avatar` : null };
+    return { ...rest, avatarUrl: avatarUrlFor(userId, avatarStorageKey) };
   }
 
   /**

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { Avatar } from "../../../components/avatar";
 import { playNotificationTone, unlockNotificationAudio, SoundTone } from "../../../lib/notification-sounds";
@@ -46,7 +47,14 @@ const SOUND_TONE_OPTIONS = SOUND_TONES.map((t) => ({ value: t, label: t.charAt(0
  * from — see notifications-bell.tsx).
  */
 export default function ProfilePage() {
-  const [me, setMe] = useState<Me | null>(null);
+  const queryClient = useQueryClient();
+  // Shared ["me"] query key with HeaderUserMenu (Part: real-world bug —
+  // uploading a new avatar here used to update only this page's own local
+  // state, leaving the header icon stale until a full reload since it had
+  // its own independent fetch-on-mount). Invalidating this key below
+  // after any change refetches it everywhere it's used, not just here.
+  const meQuery = useQuery({ queryKey: ["me"], queryFn: () => api.getMe() as Promise<Me> });
+  const me = meQuery.data ?? null;
   const [preferences, setPreferences] = useState<Preferences | null>(null);
   const [displayName, setDisplayName] = useState("");
   const [jobTitle, setJobTitle] = useState("");
@@ -69,17 +77,17 @@ export default function ProfilePage() {
   const [prefsSaving, setPrefsSaving] = useState(false);
   const [permissionState, setPermissionState] = useState<NotificationPermission | "unsupported">("default");
 
-  function loadMe() {
-    api.getMe().then((res) => {
-      const m = res as Me;
-      setMe(m);
-      setDisplayName(m.displayName ?? "");
-      setJobTitle(m.jobTitle ?? "");
-      setPhone(m.phone ?? "");
-    });
+  useEffect(() => {
+    if (!me) return;
+    setDisplayName(me.displayName ?? "");
+    setJobTitle(me.jobTitle ?? "");
+    setPhone(me.phone ?? "");
+  }, [me]);
+
+  function refreshMe() {
+    queryClient.invalidateQueries({ queryKey: ["me"] });
   }
 
-  useEffect(loadMe, []);
   useEffect(() => {
     api.getNotificationPreferences().then((res) => setPreferences(res as Preferences));
     setPermissionState(typeof window !== "undefined" && "Notification" in window ? window.Notification.permission : "unsupported");
@@ -93,7 +101,7 @@ export default function ProfilePage() {
     try {
       await api.updateProfile({ displayName, jobTitle, phone });
       setProfileNotice("Profile updated.");
-      loadMe();
+      refreshMe();
     } catch (err) {
       setProfileError((err as Error).message);
     } finally {
@@ -126,7 +134,7 @@ export default function ProfilePage() {
     setAvatarError(null);
     try {
       await api.uploadAvatar(file);
-      loadMe();
+      refreshMe();
     } catch (err) {
       setAvatarError((err as Error).message);
     } finally {
@@ -140,7 +148,7 @@ export default function ProfilePage() {
     setAvatarError(null);
     try {
       await api.removeAvatar();
-      loadMe();
+      refreshMe();
     } catch (err) {
       setAvatarError((err as Error).message);
     } finally {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { api } from "../lib/api-client";
 import { Avatar } from "./avatar";
@@ -19,15 +19,14 @@ interface Me {
  *  too, see sidebar-nav.tsx). Same avatar/initials shown everywhere else the
  *  user's identity appears (Part: User Profile, 2026-08-31). */
 export function HeaderUserMenu() {
-  const [me, setMe] = useState<Me | null>(null);
+  // Shared ["me"] query key with the Profile page (Part: real-world bug —
+  // this used to be its own one-shot fetch-on-mount, so uploading a new
+  // avatar on /profile updated that page but left this header icon
+  // showing the stale picture until a full reload). The Profile page
+  // invalidates this same key after any avatar/profile change, which
+  // refetches here too without needing a reload.
+  const { data: me } = useQuery({ queryKey: ["me"], queryFn: () => api.getMe() as Promise<Me> });
   const router = useRouter();
-
-  useEffect(() => {
-    api
-      .getMe()
-      .then((res) => setMe(res as Me))
-      .catch(() => undefined);
-  }, []);
 
   async function handleSignOut() {
     // api.logout revokes the refresh token server-side and clears local
