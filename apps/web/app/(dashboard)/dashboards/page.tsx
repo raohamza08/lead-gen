@@ -16,6 +16,7 @@ import { PipelineTab } from "./_tabs/pipeline";
 import { TeamTab } from "./_tabs/team";
 import { ActivityTab } from "./_tabs/activity";
 import { BenchmarksTab } from "./_tabs/benchmarks";
+import { WebsiteAnalyticsTab } from "./_tabs/website-analytics";
 
 const ALL_TAB_DEFS: { value: string; label: string }[] = [
   { value: "overview", label: "Overview" },
@@ -30,6 +31,7 @@ const ALL_TAB_DEFS: { value: string; label: string }[] = [
   // drill-down pages and Settings stay separate real pages under the
   // sidebar's own Meta Ads group; only the Overview-level charts moved here.
   { value: "meta-ads", label: "Meta Ads" },
+  { value: "website-analytics", label: "Website Analytics" },
   { value: "pipeline", label: "Pipeline" },
   { value: "team", label: "Team Performance" },
   { value: "activity", label: "Activity / Audit" },
@@ -111,6 +113,7 @@ function DashboardCenterTabs() {
       {tab === "social" && <SocialTab />}
       {tab === "upwork" && <UpworkTab />}
       {tab === "meta-ads" && <MetaAdsTab />}
+      {tab === "website-analytics" && <WebsiteAnalyticsTab />}
       {tab === "pipeline" && <PipelineTab />}
       {tab === "team" && <TeamTab />}
       {tab === "activity" && <ActivityTab />}

@@ -15,7 +15,8 @@ import { PipelineDashboardService } from "./pipeline-dashboard.service";
 import { TeamDashboardService } from "./team-dashboard.service";
 import { BenchmarkService } from "./benchmark.service";
 import { OverviewDashboardService } from "./overview-dashboard.service";
-import { CreateConnectPurchaseDto, DashboardRangeQueryDto, ImportConnectPurchasesDto, LeadsAuditQueryDto, SetBenchmarkDto } from "./dto/dashboard-center.dto";
+import { WebsiteAnalyticsDashboardService } from "./website-analytics-dashboard.service";
+import { CreateConnectPurchaseDto, DashboardRangeQueryDto, ImportConnectPurchasesDto, LeadsAuditQueryDto, SetBenchmarkDto, SetGaPropertyIdDto } from "./dto/dashboard-center.dto";
 
 /** Cross-module BI layer (Part: Dashboard Center, 2026-09-30) — every route
  *  here composes existing services/Prisma queries per-domain rather than
@@ -40,6 +41,7 @@ export class DashboardCenterController {
     private readonly benchmarks: BenchmarkService,
     private readonly auditLogs: AuditLogService,
     private readonly overview: OverviewDashboardService,
+    private readonly websiteAnalytics: WebsiteAnalyticsDashboardService,
   ) {}
 
   // ---- Executive Overview ----
@@ -195,6 +197,37 @@ export class DashboardCenterController {
       page: Number(query.page) || undefined,
       pageSize: Number(query.pageSize) || undefined,
     });
+  }
+
+  // ---- Website Analytics (GA4) ----
+  @Get("website-analytics/status")
+  websiteAnalyticsStatus(@CurrentUser() user: JwtClaims) {
+    return this.websiteAnalytics.getConnectionStatus(user.orgId);
+  }
+  @Post("website-analytics/property")
+  @Roles(Role.ADMIN)
+  setGaProperty(@CurrentUser() user: JwtClaims, @Body() dto: SetGaPropertyIdDto) {
+    return this.websiteAnalytics.setPropertyId(user.orgId, dto.propertyId);
+  }
+  @Get("website-analytics/overview")
+  websiteAnalyticsOverview(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.websiteAnalytics.getOverview(user.orgId, query);
+  }
+  @Get("website-analytics/timeseries")
+  websiteAnalyticsTimeseries(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.websiteAnalytics.getTimeseries(user.orgId, query);
+  }
+  @Get("website-analytics/traffic-sources")
+  websiteAnalyticsTrafficSources(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.websiteAnalytics.getTrafficSources(user.orgId, query);
+  }
+  @Get("website-analytics/top-pages")
+  websiteAnalyticsTopPages(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.websiteAnalytics.getTopPages(user.orgId, query);
+  }
+  @Get("website-analytics/audience")
+  websiteAnalyticsAudience(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.websiteAnalytics.getAudience(user.orgId, query);
   }
 
   // ---- Benchmarks ----

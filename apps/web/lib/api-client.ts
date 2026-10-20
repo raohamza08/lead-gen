@@ -344,6 +344,19 @@ export const api = {
     }),
   restoreAgentPrompt: (name: string) =>
     request(`/settings/organization/agent-prompts/${name}`, { method: "DELETE" }),
+  getWebsiteAnalyticsStatus: () => request("/dashboard-center/website-analytics/status"),
+  setWebsiteAnalyticsProperty: (propertyId: string) =>
+    request("/dashboard-center/website-analytics/property", { method: "POST", body: JSON.stringify({ propertyId }) }),
+  getWebsiteAnalyticsOverview: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/website-analytics/overview?${new URLSearchParams(params)}`),
+  getWebsiteAnalyticsTimeseries: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/website-analytics/timeseries?${new URLSearchParams(params)}`),
+  getWebsiteAnalyticsTrafficSources: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/website-analytics/traffic-sources?${new URLSearchParams(params)}`),
+  getWebsiteAnalyticsTopPages: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/website-analytics/top-pages?${new URLSearchParams(params)}`),
+  getWebsiteAnalyticsAudience: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/website-analytics/audience?${new URLSearchParams(params)}`),
   getOrgAccentColor: () => request("/settings/organization/accent-color"),
   updateOrgAccentColor: (hex: string) =>
     request("/settings/organization/accent-color", { method: "PATCH", body: JSON.stringify({ hex }) }),

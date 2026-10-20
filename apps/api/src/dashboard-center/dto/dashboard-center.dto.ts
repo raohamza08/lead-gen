@@ -41,3 +41,10 @@ export class SetBenchmarkDto {
 export class ImportConnectPurchasesDto {
   @IsString() csv!: string;
 }
+
+export class SetGaPropertyIdDto {
+  /** GA4's numeric Property ID (Admin -> Property Settings), not the
+   *  "G-XXXXXXX" measurement ID -- a common mix-up since both are visible
+   *  on the same screen. */
+  @IsString() propertyId!: string;
+}
