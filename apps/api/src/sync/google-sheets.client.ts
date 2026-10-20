@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { google, sheets_v4 } from "googleapis";
 import { SHEETS_COLUMNS } from "./sheets-columns";
+import { decodeServiceAccountKey } from "../common/google-service-account";
 
 /**
  * Thin wrapper around the Sheets API v4 (Part C4): service-account auth,
@@ -20,16 +21,19 @@ export class GoogleSheetsClient {
   isConfigured(): boolean {
     return Boolean(
       this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_EMAIL") &&
-        this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY"),
+        this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64"),
     );
   }
 
   private getClient(): sheets_v4.Sheets {
     if (!this.sheetsApi) {
       const email = this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_EMAIL");
-      const privateKey = this.config
-        .get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY", "")
-        .replace(/\\n/g, "\n");
+      // Base64, not a backslash-n-escaped PEM (Part: Website Analytics,
+      // 2026-10-20, real bug found live) -- see
+      // common/google-service-account.ts's own docblock for why: this
+      // app's systemd units load .env via EnvironmentFile=, which silently
+      // strips backslashes before Node/dotenv ever see the value.
+      const privateKey = decodeServiceAccountKey(this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64", ""));
 
       const auth = new google.auth.JWT({
         email,

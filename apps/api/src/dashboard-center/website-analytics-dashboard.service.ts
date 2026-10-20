@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { google, analyticsdata_v1beta } from "googleapis";
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
+import { decodeServiceAccountKey } from "../common/google-service-account";
 import { DashboardRangeQuery, resolveDashboardRange, percentDelta } from "./dashboard-center.util";
 
 /**
@@ -10,7 +11,7 @@ import { DashboardRangeQuery, resolveDashboardRange, percentDelta } from "./dash
  * (Part: Dashboard Center, 2026-10-20, explicit user request — "i have a
  * website and i want to see its stats here on outly... connected to
  * analytics.google.com"). Auth is a read-only service account, the same
- * GOOGLE_SERVICE_ACCOUNT_EMAIL/GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY pair
+ * GOOGLE_SERVICE_ACCOUNT_EMAIL/GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64 pair
  * google-sheets.client.ts already uses — one shared service-account
  * identity, scoped per request (this file requests analytics.readonly,
  * that file requests spreadsheets; a single service account can hold both
@@ -69,7 +70,7 @@ export class WebsiteAnalyticsDashboardService {
   isCredentialConfigured(): boolean {
     return Boolean(
       this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_EMAIL") &&
-        this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY"),
+        this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64"),
     );
   }
 
@@ -89,7 +90,7 @@ export class WebsiteAnalyticsDashboardService {
   private getClient(): analyticsdata_v1beta.Analyticsdata {
     if (!this.client) {
       const email = this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_EMAIL");
-      const privateKey = this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY", "").replace(/\\n/g, "\n");
+      const privateKey = decodeServiceAccountKey(this.config.get<string>("GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64", ""));
       const auth = new google.auth.JWT({ email, key: privateKey, scopes: SCOPES });
       this.client = google.analyticsdata({ version: "v1beta", auth });
     }
