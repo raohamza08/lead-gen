@@ -21,6 +21,7 @@ import {
   SERIES,
   StatCardWithSparkline,
   TOOLTIP_STYLE,
+  TREND_DURATION_OPTIONS,
   formatCompact,
 } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
@@ -106,6 +107,43 @@ export function WebsiteAnalyticsTab() {
     queryFn: () => api.getWebsiteAnalyticsTimeseries(query) as Promise<GaTimeseriesPoint[]>,
     enabled: connected,
   });
+
+  // Independent per-card duration (Part: Dashboard Center, 2026-10-20,
+  // explicit user request — "there should be option in each chart to
+  // change the duration time for the single chart"). Each trend card
+  // starts on the page's own range (reusing the already-fetched `series`,
+  // no extra request) and only fires its OWN fetch once its duration
+  // diverges from the page -- same getWebsiteAnalyticsTimeseries endpoint,
+  // just a different range, so a card can never show data that didn't
+  // really happen, only a different real window of it.
+  const [usersDuration, setUsersDuration] = useState<string>(dateRange.range);
+  const [sessionsDuration, setSessionsDuration] = useState<string>(dateRange.range);
+  const [pageViewsDuration, setPageViewsDuration] = useState<string>(dateRange.range);
+  const [avgSessionDurationRange, setAvgSessionDurationRange] = useState<string>(dateRange.range);
+  const usersTrendQuery = useQuery({
+    queryKey: ["dc-ga-timeseries-card", "users", usersDuration],
+    queryFn: () => api.getWebsiteAnalyticsTimeseries({ range: usersDuration }) as Promise<GaTimeseriesPoint[]>,
+    enabled: connected && usersDuration !== dateRange.range,
+  });
+  const sessionsTrendQuery = useQuery({
+    queryKey: ["dc-ga-timeseries-card", "sessions", sessionsDuration],
+    queryFn: () => api.getWebsiteAnalyticsTimeseries({ range: sessionsDuration }) as Promise<GaTimeseriesPoint[]>,
+    enabled: connected && sessionsDuration !== dateRange.range,
+  });
+  const pageViewsTrendQuery = useQuery({
+    queryKey: ["dc-ga-timeseries-card", "pageViews", pageViewsDuration],
+    queryFn: () => api.getWebsiteAnalyticsTimeseries({ range: pageViewsDuration }) as Promise<GaTimeseriesPoint[]>,
+    enabled: connected && pageViewsDuration !== dateRange.range,
+  });
+  const avgSessionTrendQuery = useQuery({
+    queryKey: ["dc-ga-timeseries-card", "avgSession", avgSessionDurationRange],
+    queryFn: () => api.getWebsiteAnalyticsTimeseries({ range: avgSessionDurationRange }) as Promise<GaTimeseriesPoint[]>,
+    enabled: connected && avgSessionDurationRange !== dateRange.range,
+  });
+  const usersTrendData = usersDuration === dateRange.range ? undefined : usersTrendQuery.data;
+  const sessionsTrendData = sessionsDuration === dateRange.range ? undefined : sessionsTrendQuery.data;
+  const pageViewsTrendData = pageViewsDuration === dateRange.range ? undefined : pageViewsTrendQuery.data;
+  const avgSessionTrendData = avgSessionDurationRange === dateRange.range ? undefined : avgSessionTrendQuery.data;
   const sourcesQuery = useQuery({
     queryKey: ["dc-ga-sources", query],
     queryFn: () => api.getWebsiteAnalyticsTrafficSources(query) as Promise<GaBreakdownRow[]>,
@@ -306,47 +344,63 @@ export function WebsiteAnalyticsTab() {
             value={num(overview.totalUsers)}
             deltaPct={overview.totalUsersDeltaPct}
             color={SERIES[0]}
-            data={series}
+            data={usersTrendData ?? series}
             dataKey="totalUsers"
             xKey="date"
             axisProps={AXIS_PROPS}
             gridProps={GRID_PROPS}
             tooltipProps={TOOLTIP_STYLE}
+            duration={usersDuration}
+            durationOptions={TREND_DURATION_OPTIONS}
+            onDurationChange={setUsersDuration}
+            loading={usersTrendQuery.isFetching}
           />
           <MiniTrendCard
             label="Sessions over time"
             value={num(overview.sessions)}
             deltaPct={overview.sessionsDeltaPct}
             color={SERIES[1]}
-            data={series}
+            data={sessionsTrendData ?? series}
             dataKey="sessions"
             xKey="date"
             axisProps={AXIS_PROPS}
             gridProps={GRID_PROPS}
             tooltipProps={TOOLTIP_STYLE}
+            duration={sessionsDuration}
+            durationOptions={TREND_DURATION_OPTIONS}
+            onDurationChange={setSessionsDuration}
+            loading={sessionsTrendQuery.isFetching}
           />
           <MiniTrendCard
             label="Page Views over time"
             value={num(overview.pageViews)}
             deltaPct={overview.pageViewsDeltaPct}
             color={SERIES[2]}
-            data={series}
+            data={pageViewsTrendData ?? series}
             dataKey="pageViews"
             xKey="date"
             axisProps={AXIS_PROPS}
             gridProps={GRID_PROPS}
             tooltipProps={TOOLTIP_STYLE}
+            duration={pageViewsDuration}
+            durationOptions={TREND_DURATION_OPTIONS}
+            onDurationChange={setPageViewsDuration}
+            loading={pageViewsTrendQuery.isFetching}
           />
           <MiniTrendCard
             label="Avg. Session Duration"
             value={avgSessionLabel(overview.avgSessionSeconds)}
             color={SERIES[3]}
-            data={series}
+            data={avgSessionTrendData ?? series}
             dataKey="avgSessionSeconds"
             xKey="date"
             axisProps={AXIS_PROPS}
             gridProps={GRID_PROPS}
             tooltipProps={TOOLTIP_STYLE}
+            duration={avgSessionDurationRange}
+            durationOptions={TREND_DURATION_OPTIONS}
+            onDurationChange={setAvgSessionDurationRange}
+            loading={avgSessionTrendQuery.isFetching}
           />
         </div>
       )}

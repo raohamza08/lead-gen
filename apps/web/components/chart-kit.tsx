@@ -8,7 +8,7 @@
  */
 
 import { ReactNode, useId, useState } from "react";
-import { Area, AreaChart, CartesianGrid, Cell, Pie, PieChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { Modal } from "./ui/modal";
 
 /**
@@ -503,6 +503,55 @@ export function StatCardWithSparkline({
  *  row, one card per metric rather than cramming several series onto one
  *  chart. Same real data as StatCardWithSparkline's embedded sparklines,
  *  just rendered larger with axes. */
+/** Every duration a MiniTrendCard's own selector can offer — a subset of
+ *  DateRangeName (apps/api/src/analytics/date-range.ts) deliberately kept
+ *  short to what's useful for a SINGLE chart's own window, not the full
+ *  page-level range picker's list. */
+export const TREND_DURATION_OPTIONS = [
+  { value: "LAST_7_DAYS", label: "7D" },
+  { value: "LAST_30_DAYS", label: "30D" },
+  { value: "LAST_90_DAYS", label: "90D" },
+  { value: "THIS_MONTH", label: "This month" },
+  { value: "THIS_QUARTER", label: "This quarter" },
+] as const;
+
+const CHART_TYPE_ICON: Record<"area" | "line" | "bar", ReactNode> = {
+  area: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 17 9 9l4 4 8-10" />
+      <path d="M3 21h18" />
+    </svg>
+  ),
+  line: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 17 9 9l4 4 8-10" />
+    </svg>
+  ),
+  bar: (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="4" y="12" width="4" height="8" />
+      <rect x="10" y="7" width="4" height="13" />
+      <rect x="16" y="3" width="4" height="17" />
+    </svg>
+  ),
+};
+
+/** A single-metric trend card: big value, delta pill, a labeled chart
+ *  underneath, and — unlike a plain static chart — a type switcher
+ *  (area/line/bar, swapping how the SAME already-loaded data renders) and
+ *  an optional duration switcher (Part: Dashboard Center, 2026-10-20,
+ *  explicit user request — "there should be an option in each chart to
+ *  change the chart to any other chart and then there should be option in
+ *  each chart to change the duration time for the single chart"). The type
+ *  switch is pure client-side re-render, always on, zero extra cost. The
+ *  duration switch is deliberately NOT self-fetching: chart-kit has no
+ *  opinion on which API a given chart's data comes from (GA4, Email,
+ *  MetaAds timeseries endpoints all have different shapes), so it just
+ *  renders the control and calls `onDurationChange` — the CALLER owns the
+ *  actual refetch (its own react-query call with a duration-keyed
+ *  queryKey), same as every other query in this app. Omit
+ *  `durationOptions`/`onDurationChange` for a chart with no independent
+ *  duration concept (e.g. a chart already scoped to an all-time window). */
 export function MiniTrendCard({
   label,
   value,
@@ -515,6 +564,10 @@ export function MiniTrendCard({
   gridProps,
   tooltipProps,
   xAxisProps,
+  duration,
+  durationOptions,
+  onDurationChange,
+  loading,
 }: {
   label: string;
   value: string;
@@ -527,11 +580,17 @@ export function MiniTrendCard({
   gridProps: typeof GRID_PROPS;
   tooltipProps: typeof TOOLTIP_STYLE;
   xAxisProps?: Record<string, unknown>;
+  duration?: string;
+  durationOptions?: readonly { value: string; label: string }[];
+  onDurationChange?: (value: string) => void;
+  loading?: boolean;
 }) {
   const gradientId = useId();
+  const [chartType, setChartType] = useState<"area" | "line" | "bar">("area");
+
   return (
     <div className="card">
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium text-ink">{label}</span>
         <div className="flex items-center gap-2">
           <span className="tabular text-base font-semibold text-ink">{value}</span>
@@ -542,19 +601,63 @@ export function MiniTrendCard({
           )}
         </div>
       </div>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-0.5 rounded-md border border-[var(--line)] p-0.5">
+          {(["area", "line", "bar"] as const).map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setChartType(t)}
+              aria-label={`Show as ${t} chart`}
+              aria-pressed={chartType === t}
+              className={`flex h-5 w-6 items-center justify-center rounded transition-colors ${chartType === t ? "bg-ink/10 text-ink" : "text-ink/40 hover:text-ink/70"}`}
+            >
+              {CHART_TYPE_ICON[t]}
+            </button>
+          ))}
+        </div>
+        {durationOptions && onDurationChange && (
+          <select
+            value={duration}
+            onChange={(e) => onDurationChange(e.target.value)}
+            disabled={loading}
+            className="h-6 rounded-md border border-[var(--line)] bg-transparent px-1.5 text-[11px] text-ink/70 disabled:opacity-50"
+          >
+            {durationOptions.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        )}
+      </div>
       <ResponsiveContainer width="100%" height={140}>
-        <AreaChart data={data}>
-          <defs>
-            <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-              <stop offset="100%" stopColor={color} stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid {...gridProps} />
-          <XAxis dataKey={xKey} {...axisProps} {...xAxisProps} />
-          <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={false} />
-          <Tooltip {...tooltipProps} />
-        </AreaChart>
+        {chartType === "bar" ? (
+          <BarChart data={data}>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey={xKey} {...axisProps} {...xAxisProps} />
+            <Bar dataKey={dataKey} fill={color} radius={[3, 3, 0, 0]} />
+            <Tooltip {...tooltipProps} />
+          </BarChart>
+        ) : chartType === "line" ? (
+          <LineChart data={data}>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey={xKey} {...axisProps} {...xAxisProps} />
+            <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} dot={false} />
+            <Tooltip {...tooltipProps} />
+          </LineChart>
+        ) : (
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+                <stop offset="100%" stopColor={color} stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid {...gridProps} />
+            <XAxis dataKey={xKey} {...axisProps} {...xAxisProps} />
+            <Area type="monotone" dataKey={dataKey} stroke={color} strokeWidth={2} fill={`url(#${gradientId})`} dot={false} />
+            <Tooltip {...tooltipProps} />
+          </AreaChart>
+        )}
       </ResponsiveContainer>
     </div>
   );
