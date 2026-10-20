@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../../../../lib/api-client";
@@ -10,6 +11,7 @@ import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, SectionCard, SINGLE_
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
+import { Modal } from "../../../../components/ui/modal";
 
 interface TeamRow {
   userId: string;
@@ -60,6 +62,43 @@ export function TeamTab() {
   const upwork = upworkQuery.data ?? [];
   const bidders = upwork.filter((r) => r.bids > 0);
   const inviteRecipients = upwork.filter((r) => r.invites > 0);
+
+  // One row per person, not per (person, profile) (Part: Dashboard Center,
+  // 2026-10-20, explicit user request after seeing the first version — "I
+  // just need a summary... when i want to see the details i just click on
+  // it and it pops up with the details"). Summed from the same per-profile
+  // rows the modal shows, so the summary can never drift from its own
+  // detail view.
+  const bidderSummaries = Object.values(
+    bidders.reduce<Record<string, { name: string; bids: number; bidsWon: number; bidsInDiscussion: number; bidsLost: number }>>((acc, r) => {
+      const row = acc[r.name] ?? { name: r.name, bids: 0, bidsWon: 0, bidsInDiscussion: 0, bidsLost: 0 };
+      row.bids += r.bids;
+      row.bidsWon += r.bidsWon;
+      row.bidsInDiscussion += r.bidsInDiscussion;
+      row.bidsLost += r.bidsLost;
+      acc[r.name] = row;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.bidsWon - a.bidsWon);
+
+  const inviteSummaries = Object.values(
+    inviteRecipients.reduce<Record<string, { name: string; invites: number; invitesAccepted: number; invitesWon: number; invitesInDiscussion: number; invitesLost: number }>>(
+      (acc, r) => {
+        const row = acc[r.name] ?? { name: r.name, invites: 0, invitesAccepted: 0, invitesWon: 0, invitesInDiscussion: 0, invitesLost: 0 };
+        row.invites += r.invites;
+        row.invitesAccepted += r.invitesAccepted;
+        row.invitesWon += r.invitesWon;
+        row.invitesInDiscussion += r.invitesInDiscussion;
+        row.invitesLost += r.invitesLost;
+        acc[r.name] = row;
+        return acc;
+      },
+      {},
+    ),
+  ).sort((a, b) => b.invitesWon - a.invitesWon);
+
+  const [bidderDetail, setBidderDetail] = useState<string | null>(null);
+  const [inviteDetail, setInviteDetail] = useState<string | null>(null);
 
   return (
     <DashboardCenterShell
@@ -137,14 +176,21 @@ export function TeamTab() {
         </SectionCard>
       )}
 
-      {bidders.length > 0 && (
-        <SectionCard title="Bidding Performance by Person" subtitle="Each submitter's bids this period, broken down by outcome" expandable>
+      {bidderSummaries.length > 0 && (
+        <SectionCard title="Bidding Performance by Person" subtitle="Click a person for their per-profile breakdown" expandable>
           <DataTable
-            rowKey={(r) => `${r.name}-${r.profileName}`}
-            rows={[...bidders].sort((a, b) => b.bidsWon - a.bidsWon)}
+            rowKey={(r) => r.name}
+            rows={bidderSummaries}
             columns={[
-              { key: "name", header: "Person", render: (r) => r.name },
-              { key: "profileName", header: "Profile", render: (r) => r.profileName },
+              {
+                key: "name",
+                header: "Person",
+                render: (r) => (
+                  <button type="button" onClick={() => setBidderDetail(r.name)} className="text-accent hover:underline">
+                    {r.name}
+                  </button>
+                ),
+              },
               { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
               { key: "bidsWon", header: "Won", render: (r) => num(r.bidsWon), numeric: true },
               { key: "bidsInDiscussion", header: "In Discussion", render: (r) => num(r.bidsInDiscussion), numeric: true },
@@ -154,14 +200,37 @@ export function TeamTab() {
         </SectionCard>
       )}
 
-      {inviteRecipients.length > 0 && (
-        <SectionCard title="Invite Performance by Person" subtitle="Each submitter's invites this period, broken down by outcome" expandable>
+      <Modal open={bidderDetail !== null} onOpenChange={(open) => !open && setBidderDetail(null)} title={bidderDetail ? `${bidderDetail} — bids by profile` : undefined} contentClassName="w-full max-w-lg">
+        {bidderDetail && (
           <DataTable
-            rowKey={(r) => `${r.name}-${r.profileName}`}
-            rows={[...inviteRecipients].sort((a, b) => b.invitesWon - a.invitesWon)}
+            rowKey={(r) => r.profileName}
+            rows={bidders.filter((r) => r.name === bidderDetail)}
             columns={[
-              { key: "name", header: "Person", render: (r) => r.name },
               { key: "profileName", header: "Profile", render: (r) => r.profileName },
+              { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
+              { key: "bidsWon", header: "Won", render: (r) => num(r.bidsWon), numeric: true },
+              { key: "bidsInDiscussion", header: "In Discussion", render: (r) => num(r.bidsInDiscussion), numeric: true },
+              { key: "bidsLost", header: "Lost", render: (r) => num(r.bidsLost), numeric: true },
+            ]}
+          />
+        )}
+      </Modal>
+
+      {inviteSummaries.length > 0 && (
+        <SectionCard title="Invite Performance by Person" subtitle="Click a person for their per-profile breakdown" expandable>
+          <DataTable
+            rowKey={(r) => r.name}
+            rows={inviteSummaries}
+            columns={[
+              {
+                key: "name",
+                header: "Person",
+                render: (r) => (
+                  <button type="button" onClick={() => setInviteDetail(r.name)} className="text-accent hover:underline">
+                    {r.name}
+                  </button>
+                ),
+              },
               { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
               { key: "invitesAccepted", header: "Accepted", render: (r) => num(r.invitesAccepted), numeric: true },
               { key: "invitesWon", header: "Won", render: (r) => num(r.invitesWon), numeric: true },
@@ -171,6 +240,23 @@ export function TeamTab() {
           />
         </SectionCard>
       )}
+
+      <Modal open={inviteDetail !== null} onOpenChange={(open) => !open && setInviteDetail(null)} title={inviteDetail ? `${inviteDetail} — invites by profile` : undefined} contentClassName="w-full max-w-lg">
+        {inviteDetail && (
+          <DataTable
+            rowKey={(r) => r.profileName}
+            rows={inviteRecipients.filter((r) => r.name === inviteDetail)}
+            columns={[
+              { key: "profileName", header: "Profile", render: (r) => r.profileName },
+              { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
+              { key: "invitesAccepted", header: "Accepted", render: (r) => num(r.invitesAccepted), numeric: true },
+              { key: "invitesWon", header: "Won", render: (r) => num(r.invitesWon), numeric: true },
+              { key: "invitesInDiscussion", header: "In Discussion", render: (r) => num(r.invitesInDiscussion), numeric: true },
+              { key: "invitesLost", header: "Lost", render: (r) => num(r.invitesLost), numeric: true },
+            ]}
+          />
+        )}
+      </Modal>
     </DashboardCenterShell>
   );
 }
