@@ -23,6 +23,12 @@ const DEFAULT_COOLDOWN_MS = 60_000;
 export interface CoverLetterResult {
   clientNeeds: string;
   niche: string;
+  /// Body text ONLY — no greeting, no sign-off. Those are templated on in
+  /// code around this (Part: Upwork Proposal Writing, explicit user
+  /// request for a fixed "Hi {client}," / "Thank you," shape rather than
+  /// trusting the model to format it reliably every time). First sentence
+  /// is the curiosity hook shown in Upwork's inbox preview before the
+  /// client opens the proposal — see buildStructuralRules.
   coverLetter: string;
   /// Bidding SOP Part 1 — which word-limit band the model decided this job
   /// falls into and wrote to; purely the model's own judgment call, unlike

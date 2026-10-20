@@ -726,6 +726,7 @@ export const api = {
       manualClientCountry?: string;
       manualClientTotalSpent?: string;
       manualPostedMinutesAgo?: number;
+      knownClientName?: string;
     },
     extractedJob?: {
       title?: string;

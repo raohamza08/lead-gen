@@ -2925,6 +2925,19 @@ model UpworkProposalDraft {
   /// into columns, same "don't hard-code a shape someone else owns"
   /// reasoning as MetaAdInsightDaily.actions above.
   clientInfo     Json?   @map("client_info")
+  /// The client's real name — never scraped (Upwork's public job-posting
+  /// page exposes no personal/company name at all, confirmed against both
+  /// this app's server-side scraper and the browser extension's content
+  /// script, which run the identical extraction logic). Either typed in
+  /// directly when the agency already knows it from a past engagement, or
+  /// carried forward automatically from an earlier draft matched to the
+  /// same client (Part: Upwork Proposal Writing, explicit user request —
+  /// "the bot should find the client name from the previous jobs that were
+  /// done"); see ProposalWritingService.resolveClientName for the
+  /// matching heuristic. Null means genuinely unknown, not "not yet
+  /// looked up" — the cover letter falls back to a neutral greeting rather
+  /// than inventing one.
+  clientName     String? @map("client_name")
 
   /// The three things the user explicitly asked this module to always show
   /// (Part: Upwork Proposal Writing, explicit user request) — kept as

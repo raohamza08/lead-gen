@@ -33,4 +33,15 @@ export class GenerateCoverLetterDto {
   @IsOptional() @IsString() manualClientCountry?: string;
   @IsOptional() @IsString() manualClientTotalSpent?: string;
   @IsOptional() @IsInt() @Min(0) manualPostedMinutesAgo?: number;
+
+  /// Typed in directly when the agency already knows this client's real
+  /// name from a past engagement (Part: Upwork Proposal Writing, explicit
+  /// user request — "the bot should find the client name from the
+  /// previous jobs that were done"). Upwork's job page never exposes a
+  /// name to scrape, so this is either supplied here or auto-matched
+  /// server-side against an earlier draft for the same client (see
+  /// ProposalWritingService.resolveClientName) — this field wins over
+  /// that match when both are present, since an explicit human-confirmed
+  /// name is more trustworthy than a heuristic.
+  @IsOptional() @IsString() knownClientName?: string;
 }

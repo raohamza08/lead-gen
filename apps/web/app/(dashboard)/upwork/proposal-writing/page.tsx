@@ -31,6 +31,7 @@ interface GenerateResult {
   warnings?: string[];
   overallAssessment?: string;
   createdByName?: string | null;
+  clientName?: string | null;
   duplicateOf?: { createdByName: string; createdAt: string } | null;
 }
 
@@ -55,6 +56,7 @@ interface DraftRow {
   warnings: string[];
   overallAssessment: string | null;
   createdByName: string | null;
+  clientName: string | null;
   createdAt: string;
 }
 
@@ -80,6 +82,7 @@ function draftToResult(d: DraftRow): GenerateResult {
     warnings: d.warnings,
     overallAssessment: d.overallAssessment ?? undefined,
     createdByName: d.createdByName,
+    clientName: d.clientName,
   };
 }
 
@@ -428,6 +431,7 @@ function fetchJobViaExtension(jobUrl: string): Promise<{ ok: boolean; job?: Extr
 export default function UpworkProposalWritingPage() {
   const queryClient = useQueryClient();
   const [jobUrl, setJobUrl] = useState("");
+  const [knownClientName, setKnownClientName] = useState("");
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [viaExtension, setViaExtension] = useState(false);
   const [extensionInstalled, setExtensionInstalled] = useState(true); // optimistic until checked, avoids a flash of the install hint
@@ -447,17 +451,29 @@ export default function UpworkProposalWritingPage() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: ({ url, manual, extractedJob }: { url: string; manual?: ManualFields; extractedJob?: ExtractedJobPayload }) => {
-      const manualPayload = manual
-        ? {
-            manualTitle: manual.manualTitle || undefined,
-            manualDescription: manual.manualDescription,
-            manualBudget: manual.manualBudget || undefined,
-            manualClientCountry: manual.manualClientCountry || undefined,
-            manualClientTotalSpent: manual.manualClientTotalSpent || undefined,
-            manualPostedMinutesAgo: manual.manualPostedMinutesAgo ? Number(manual.manualPostedMinutesAgo) : undefined,
-          }
-        : undefined;
+    mutationFn: ({
+      url,
+      manual,
+      extractedJob,
+      knownClientName,
+    }: {
+      url: string;
+      manual?: ManualFields;
+      extractedJob?: ExtractedJobPayload;
+      knownClientName?: string;
+    }) => {
+      const manualPayload =
+        manual || knownClientName
+          ? {
+              manualTitle: manual?.manualTitle || undefined,
+              manualDescription: manual?.manualDescription,
+              manualBudget: manual?.manualBudget || undefined,
+              manualClientCountry: manual?.manualClientCountry || undefined,
+              manualClientTotalSpent: manual?.manualClientTotalSpent || undefined,
+              manualPostedMinutesAgo: manual?.manualPostedMinutesAgo ? Number(manual.manualPostedMinutesAgo) : undefined,
+              knownClientName: knownClientName || undefined,
+            }
+          : undefined;
       return api.generateUpworkCoverLetter(url, manualPayload, extractedJob) as Promise<GenerateResult>;
     },
     onSuccess: (data) => {
@@ -476,7 +492,7 @@ export default function UpworkProposalWritingPage() {
       try {
         const scraped = await fetchJobViaExtension(url);
         if (scraped.ok && scraped.job) {
-          generateMutation.mutate({ url, extractedJob: scraped.job });
+          generateMutation.mutate({ url, extractedJob: scraped.job, knownClientName: knownClientName.trim() || undefined });
         } else {
           setResult({ draftId: "", fetchStatus: "FAILED", error: scraped.error ?? "Couldn't read that job's details." });
         }
@@ -486,13 +502,13 @@ export default function UpworkProposalWritingPage() {
       return;
     }
 
-    generateMutation.mutate({ url });
+    generateMutation.mutate({ url, knownClientName: knownClientName.trim() || undefined });
   }
 
   function submitManual(manual: ManualFields) {
     if (!jobUrl.trim() || manual.manualDescription.trim().length < 20) return;
     setResult(null);
-    generateMutation.mutate({ url: jobUrl.trim(), manual });
+    generateMutation.mutate({ url: jobUrl.trim(), manual, knownClientName: knownClientName.trim() || undefined });
   }
 
   return (
@@ -515,6 +531,15 @@ export default function UpworkProposalWritingPage() {
               onKeyDown={(e) => e.key === "Enter" && submit()}
               placeholder="https://www.upwork.com/jobs/~..."
               className="flex-1 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+            />
+            <input
+              type="text"
+              value={knownClientName}
+              onChange={(e) => setKnownClientName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              placeholder="Client name, if known"
+              title="If you already know this client's real name from a past job, type it here — otherwise the system tries to match it from your own prior drafts, and falls back to a neutral greeting."
+              className="w-44 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
             />
             <button
               type="button"
@@ -563,7 +588,10 @@ export default function UpworkProposalWritingPage() {
           {(result?.fetchStatus === "SUCCESS" || result?.fetchStatus === "PARTIAL") && (
             <div className="flex flex-col gap-4 rounded-lg border border-[var(--line)] p-4">
               <div className="flex items-start justify-between gap-2">
-                {result.jobTitle && <div className="text-sm font-medium">{result.jobTitle}</div>}
+                <div>
+                  {result.jobTitle && <div className="text-sm font-medium">{result.jobTitle}</div>}
+                  {result.clientName && <div className="text-xs text-ink/50">Client: {result.clientName}</div>}
+                </div>
                 {result.createdByName && (
                   <span className="shrink-0 text-xs text-ink/50">
                     Generated by <span className="font-medium text-ink/70">{result.createdByName}</span>

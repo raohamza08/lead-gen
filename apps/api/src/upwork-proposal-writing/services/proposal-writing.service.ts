@@ -25,6 +25,12 @@ import {
 function buildStructuralRules(technicalWordLimit: number, nonTechnicalWordLimit: number): string {
   return `Write every cover letter in the voice of a single individual freelancer — use "I"/"my", never "we"/"our"/"our team". This is never written as an agency.
 
+Do not write a greeting ("Hi ...") or a sign-off ("Thank you," / "Best," / your name, etc.) at all — those are added separately in code, around whatever you write. Write only the body text in between.
+
+The body's very first sentence is the ONLY part of this that Upwork shows the client in their inbox preview before they open the full proposal. It must create genuine curiosity specific to THIS job — reference their actual stated problem or need — so the client is compelled to open it. Never spend it on a generic self-introduction ("I'm a developer with 5 years...") or a greeting.
+
+Break the body into short paragraphs of 3-4 lines each, not one dense block of text.
+
 First decide whether this job is TECHNICAL (development, data, technical writing, etc.) or NON_TECHNICAL (graphic design, simple content, data entry, and similar) and write within that type's word limit:
 - TECHNICAL: up to ${technicalWordLimit} words. Focus on the client's problem, your proposed solution, relevant experience, and the expected outcome.
 - NON_TECHNICAL: up to ${nonTechnicalWordLimit} words. Short, direct, personalized — and mention that relevant portfolio/reference links are attached (the actual links aren't available to you, so don't invent fake ones).
@@ -46,7 +52,7 @@ Respond with ONLY a JSON object with exactly these keys, no other text:
 - "suggestedProfile": the name of whichever configured freelancer profile best matches this job's niche, or null if none are configured or none fit reasonably.
 - "profileReason": one sentence on why that profile fits (or null if suggestedProfile is null).
 - "overallAssessment": 2-3 sentences answering "how good is this job to bid on" — weigh the deterministic signals given to you below (client spend tier, country, job age, long-term vs one-off) honestly; don't contradict them.
-- "coverLetter": the actual Upwork cover letter text, ready to paste as-is — no markdown formatting, no placeholder brackets like [Your Name].`;
+- "coverLetter": the cover letter BODY ONLY — no greeting, no sign-off (see the rules above, those are added separately), ready to paste as-is otherwise — no markdown formatting, no placeholder brackets like [Your Name]. Its first sentence must be the curiosity hook described above, and it must be broken into short 3-4 line paragraphs.`;
 }
 
 function buildSystemPrompt(
@@ -115,6 +121,11 @@ export interface ManualJobInput {
   manualClientCountry?: string;
   manualClientTotalSpent?: string;
   manualPostedMinutesAgo?: number;
+  /// Not actually a "manual job" field — the controller spreads every
+  /// non-jobUrl/extractedJob DTO field into this same `manual` object (see
+  /// the controller), so it lands here even though it's valid alongside an
+  /// automatic or extension fetch too, not just manual entry.
+  knownClientName?: string;
 }
 
 /** Builds a FetchedJob-shaped object from manually-entered fields (Part:
@@ -178,6 +189,36 @@ export class ProposalWritingService {
     private readonly settingsService: ProposalWritingSettingsService,
     private readonly freelancerProfiles: FreelancerProfilesService,
   ) {}
+
+  /** Best-effort match against this org's own draft history to carry a
+   *  known client name forward across different job postings from the
+   *  same client (Part: Upwork Proposal Writing, explicit user request —
+   *  "the bot should find the client name from the previous jobs that
+   *  were done"). Upwork's public job page exposes no stable client ID,
+   *  so this matches on the two distinguishing signals it does expose —
+   *  Country + "Member since" (a specific month) — against prior drafts
+   *  that already have a name recorded (which only ever got there via
+   *  `knownClientName`, typed in once). Deliberately loose: a false match
+   *  just resurfaces an old client's name on an unrelated client sharing
+   *  the same country/join-month, not something load-bearing. */
+  private async resolveClientName(orgId: string, client: Record<string, string> | undefined): Promise<string | null> {
+    const country = client?.["Country"];
+    const memberSince = client?.["Member since"];
+    if (!country || !memberSince) return null;
+
+    const priorNamedDrafts = await this.prisma.upworkProposalDraft.findMany({
+      where: { orgId, clientName: { not: null } },
+      orderBy: { createdAt: "desc" },
+      select: { clientName: true, clientInfo: true },
+      take: 200,
+    });
+
+    const match = priorNamedDrafts.find((d) => {
+      const info = d.clientInfo as Record<string, string> | null;
+      return info?.["Country"] === country && info?.["Member since"] === memberSince;
+    });
+    return match?.clientName ?? null;
+  }
 
   async generate(
     orgId: string,
@@ -282,6 +323,16 @@ export class ProposalWritingService {
     });
     const result = await this.gemini.generateCoverLetter(systemPrompt, jobBrief);
 
+    // Name resolution (Part: Upwork Proposal Writing, explicit user request
+    // — "the bot should find the client name from the previous jobs that
+    // were done"). An explicitly typed-in name always wins over the
+    // heuristic match — a human-confirmed name is more trustworthy than a
+    // country+join-month guess. Greeting/sign-off are templated here, not
+    // trusted to the model (see buildStructuralRules).
+    const knownClientName = options?.manual?.knownClientName?.trim();
+    const clientName = knownClientName || (await this.resolveClientName(orgId, job.client));
+    const coverLetter = `Hi ${clientName || "there"},\n\n${result.coverLetter.trim()}\n\nThank you,`;
+
     const draft = await this.prisma.upworkProposalDraft.create({
       data: {
         orgId,
@@ -291,9 +342,10 @@ export class ProposalWritingService {
         jobTitle: job.title,
         jobDescription: job.description,
         clientInfo: job.client ?? {},
+        clientName,
         clientNeeds: result.clientNeeds,
         niche: result.niche,
-        coverLetter: result.coverLetter,
+        coverLetter,
         jobType: result.jobType,
         suggestedProfile: result.suggestedProfile,
         profileReason: result.profileReason,
@@ -319,9 +371,10 @@ export class ProposalWritingService {
       jobTitle: job.title,
       jobUrl: draft.jobUrl,
       createdByName: draft.createdByName,
+      clientName,
       clientNeeds: result.clientNeeds,
       niche: result.niche,
-      coverLetter: result.coverLetter,
+      coverLetter,
       jobType: result.jobType,
       suggestedProfile: result.suggestedProfile,
       profileReason: result.profileReason,
