@@ -72,15 +72,16 @@ function isoDate(d: Date): string {
  *  server-side, but doesn't matter here: dashboardRangeToQuery always sends
  *  an explicit `compare=false` whenever the UI state is off (see below),
  *  which wins regardless of what the API would otherwise assume. */
+/** Defaults to the current calendar month (Part: Dashboard Center,
+ *  2026-10-20, explicit user request — "change the time filter status to
+ *  this month by default"). Was THIS_WEEK before this -- a week of data is
+ *  too thin a sample for most of the real-chart work added this session
+ *  (sparse single-point sparklines, "no data for this period" donuts), and
+ *  this was flagged live while reviewing it. */
 export function defaultDashboardDateRange(): DashboardDateRange {
   const to = new Date();
-  // Monday-start, mirrors resolveDateRange's startOfWeek on the API side —
-  // only meaningful if the user later switches to CUSTOM, but should still
-  // start from something sensible rather than the old rolling-30-day value.
-  const from = new Date(to);
-  const diff = (from.getDay() + 6) % 7; // days since Monday
-  from.setDate(from.getDate() - diff);
-  return { range: "THIS_WEEK", from: isoDate(from), to: isoDate(to), compare: false, compareMode: "last_month" };
+  const from = new Date(to.getFullYear(), to.getMonth(), 1);
+  return { range: "THIS_MONTH", from: isoDate(from), to: isoDate(to), compare: false, compareMode: "last_month" };
 }
 
 /** Turns the shared date-range control into the {range, from, to, compare,

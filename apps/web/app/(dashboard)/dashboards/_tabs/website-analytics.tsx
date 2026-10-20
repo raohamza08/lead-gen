@@ -10,6 +10,7 @@ import { num, pct } from "../../../../components/dashboard-center/format";
 import {
   AXIS_PROPS,
   ChartWithTable,
+  DashboardIcons,
   DataTable,
   DonutBreakdown,
   GRID_PROPS,
@@ -66,44 +67,7 @@ function avgSessionLabel(seconds: number | undefined): string {
   return `${m}m ${s}s`;
 }
 
-/** Small inline line icons, matching this app's existing hand-rolled-SVG
- *  convention (sidebar-nav.tsx, theme-toggle.tsx) rather than pulling in an
- *  icon library for four glyphs. */
-const ICON_PROPS = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-
-function UsersIcon() {
-  return (
-    <svg aria-hidden {...ICON_PROPS}>
-      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  );
-}
-function PulseIcon() {
-  return (
-    <svg aria-hidden {...ICON_PROPS}>
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-    </svg>
-  );
-}
-function EyeIcon() {
-  return (
-    <svg aria-hidden {...ICON_PROPS}>
-      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-function ClockIcon() {
-  return (
-    <svg aria-hidden {...ICON_PROPS}>
-      <circle cx="12" cy="12" r="10" />
-      <path d="M12 6v6l4 2" />
-    </svg>
-  );
-}
+const { Users: UsersIcon, Pulse: PulseIcon, Eye: EyeIcon, Clock: ClockIcon } = DashboardIcons;
 
 /** Website Analytics — real GA4 data via a read-only service account (Part:
  *  Dashboard Center, 2026-10-20, explicit user request — "i have a website

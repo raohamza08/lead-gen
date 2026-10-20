@@ -29,6 +29,107 @@ export const SERIES = [
 /** Single-series marks use the brand accent — one series, one colour. */
 export const SINGLE_SERIES = "var(--accent)";
 
+/** Small inline line icons for StatCardWithSparkline tiles (Part: Dashboard
+ *  Center, 2026-10-20, explicit user request — "i want the dashboards like
+ *  this one" extended to every tab, not just Website Analytics, after the
+ *  first pass only touched that one page). Hand-rolled SVGs, matching this
+ *  app's existing convention (sidebar-nav.tsx, theme-toggle.tsx) rather
+ *  than an icon library dependency for a dozen glyphs. One object so every
+ *  tab imports from the same place instead of redefining its own set. */
+const ICON_PROPS = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+export const DashboardIcons = {
+  Users: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+      <circle cx="9" cy="7" r="4" />
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  ),
+  Pulse: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
+    </svg>
+  ),
+  Eye: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  ),
+  Clock: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  ),
+  Mail: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <rect x="2" y="4" width="20" height="16" rx="2" />
+      <path d="m22 6-10 7L2 6" />
+    </svg>
+  ),
+  Dollar: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+    </svg>
+  ),
+  Chat: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+    </svg>
+  ),
+  Briefcase: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <rect x="2" y="7" width="20" height="14" rx="2" />
+      <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    </svg>
+  ),
+  Funnel: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3Z" />
+    </svg>
+  ),
+  Check: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m9 12 2 2 4-4" />
+    </svg>
+  ),
+  X: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <circle cx="12" cy="12" r="10" />
+      <path d="m15 9-6 6M9 9l6 6" />
+    </svg>
+  ),
+  TrendingUp: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="m23 6-9.5 9.5-5-5L1 18" />
+      <path d="M17 6h6v6" />
+    </svg>
+  ),
+  Target: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <circle cx="12" cy="12" r="10" />
+      <circle cx="12" cy="12" r="6" />
+      <circle cx="12" cy="12" r="2" />
+    </svg>
+  ),
+  Inbox: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <polyline points="22 12 16 12 14 15 10 15 8 12 2 12" />
+      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
+    </svg>
+  ),
+  Layers: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="m12 2 10 6-10 6L2 8z" />
+      <path d="m2 16 10 6 10-6" />
+      <path d="m2 12 10 6 10-6" />
+    </svg>
+  ),
+} as const;
+
 /** Recessive chrome: solid hairlines one step off the surface, never dashed. */
 export const AXIS_PROPS = {
   stroke: "var(--chart-axis)",

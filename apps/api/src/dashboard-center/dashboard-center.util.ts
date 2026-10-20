@@ -39,12 +39,12 @@ function lastCalendarMonthRange(now: Date): ResolvedDateRange {
  *  window instead (e.g. the 30 days before a selected 30-day range). */
 export function resolveDashboardRange(query: DashboardRangeQuery): ResolvedDashboardRange {
   const now = new Date();
-  // Defaults to the current calendar week, not a rolling window (Part:
-  // Dashboard Center, 2026-10-19, explicit user request — see
-  // defaultDashboardDateRange's matching docblock on the frontend for why).
-  // Only matters if a caller omits `range` entirely; every real page always
-  // sends one via dashboardRangeToQuery.
-  const current = resolveDateRange(query.range ?? "THIS_WEEK", now, query.from, query.to);
+  // Defaults to the current calendar month (Part: Dashboard Center,
+  // 2026-10-20, explicit user request — see defaultDashboardDateRange's
+  // matching docblock on the frontend for why). Only matters if a caller
+  // omits `range` entirely; every real page always sends one via
+  // dashboardRangeToQuery.
+  const current = resolveDateRange(query.range ?? "THIS_MONTH", now, query.from, query.to);
   if (query.compare === "false") return { current, previous: null, compareMode: null };
 
   const compareMode: CompareMode = query.compareMode === "previous_period" ? "previous_period" : "last_month";

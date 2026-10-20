@@ -318,19 +318,29 @@ export class UpworkDashboardService {
    *  org-wide invitesAccepted (IN_DISCUSSION plus every later-stage status
    *  through WON) so the two numbers mean the same thing at different
    *  granularities, not two different definitions of "accepted". */
+  /** Every UpworkProposalStatus value, in schema order -- the full lifecycle
+   *  a proposal can be in, not just a collapsed won/lost/in-discussion
+   *  subset (Part: Team Performance, 2026-10-20, explicit user correction
+   *  -- "remove the accepted status and... add all the current status in
+   *  the column heading and then show their numbers so that we have a more
+   *  clear report"). The old "Accepted" bucket (IN_DISCUSSION through WON,
+   *  invites only) is gone entirely; every status gets its own real count
+   *  instead of being folded into one umbrella term. */
+  static readonly PROPOSAL_STATUSES = ["SUBMITTED", "VIEWED", "IN_DISCUSSION", "TEST_TASK", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON", "LOST"] as const;
+
   async getSubmitterBreakdown(orgId: string, query: DashboardRangeQuery) {
     const { current } = resolveDashboardRange(query);
     const rows = await this.prisma.upworkProposal.findMany({
       where: { orgId, createdAt: { gte: current.from, lte: current.to } },
       select: { submittedBy: true, profileName: true, type: true, connects: true, status: true, projectHours: true },
     });
-    const ACCEPTED_INVITE_STATUSES = new Set(["IN_DISCUSSION", "TEST_TASK", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON"]);
+    const emptyStatusCounts = () => Object.fromEntries(UpworkDashboardService.PROPOSAL_STATUSES.map((s) => [s, 0])) as Record<string, number>;
     const byUserProfile = new Map<
       string,
       {
         name: string; profileName: string; connects: number; onboardedHours: number;
-        bids: number; bidsWon: number; bidsLost: number; bidsInDiscussion: number;
-        invites: number; invitesAccepted: number; invitesWon: number; invitesLost: number; invitesInDiscussion: number;
+        bids: number; bidStatusCounts: Record<string, number>;
+        invites: number; inviteStatusCounts: Record<string, number>;
       }
     >();
     for (const r of rows) {
@@ -339,33 +349,36 @@ export class UpworkDashboardService {
         byUserProfile.get(key) ??
         {
           name: r.submittedBy, profileName: r.profileName, connects: 0, onboardedHours: 0,
-          bids: 0, bidsWon: 0, bidsLost: 0, bidsInDiscussion: 0,
-          invites: 0, invitesAccepted: 0, invitesWon: 0, invitesLost: 0, invitesInDiscussion: 0,
+          bids: 0, bidStatusCounts: emptyStatusCounts(),
+          invites: 0, inviteStatusCounts: emptyStatusCounts(),
         };
       bucket.connects += r.connects ?? 0;
       if (r.type === "BIDDING") {
         bucket.bids += 1;
-        if (r.status === "WON") bucket.bidsWon += 1;
-        if (r.status === "LOST") bucket.bidsLost += 1;
-        if (r.status === "IN_DISCUSSION") bucket.bidsInDiscussion += 1;
+        bucket.bidStatusCounts[r.status] = (bucket.bidStatusCounts[r.status] ?? 0) + 1;
       } else {
         bucket.invites += 1;
-        if (ACCEPTED_INVITE_STATUSES.has(r.status)) bucket.invitesAccepted += 1;
-        if (r.status === "WON") bucket.invitesWon += 1;
-        if (r.status === "LOST") bucket.invitesLost += 1;
-        if (r.status === "IN_DISCUSSION") bucket.invitesInDiscussion += 1;
+        bucket.inviteStatusCounts[r.status] = (bucket.inviteStatusCounts[r.status] ?? 0) + 1;
       }
       if (r.status === "WON") bucket.onboardedHours += r.projectHours ?? 0;
       byUserProfile.set(key, bucket);
     }
     return [...byUserProfile.values()]
       .map((b) => {
-        const won = b.bidsWon + b.invitesWon;
-        const lost = b.bidsLost + b.invitesLost;
+        const won = b.bidStatusCounts.WON + b.inviteStatusCounts.WON;
+        const lost = b.bidStatusCounts.LOST + b.inviteStatusCounts.LOST;
         return {
           ...b,
+          // Kept for the existing Upwork tab table/chart that already
+          // reads these combined fields -- unaffected by this change.
           won,
           lost,
+          bidsWon: b.bidStatusCounts.WON,
+          bidsLost: b.bidStatusCounts.LOST,
+          bidsInDiscussion: b.bidStatusCounts.IN_DISCUSSION,
+          invitesWon: b.inviteStatusCounts.WON,
+          invitesLost: b.inviteStatusCounts.LOST,
+          invitesInDiscussion: b.inviteStatusCounts.IN_DISCUSSION,
           conversionRate: safeRate(won, b.bids + b.invites),
           connectsPerClient: safeDivide(b.connects, won),
           estimatedCost: b.connects * DEFAULT_CONNECT_UNIT_COST_USD,

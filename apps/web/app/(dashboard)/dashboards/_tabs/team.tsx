@@ -34,20 +34,40 @@ interface TeamRow {
  *  so the two pages can never disagree. `submittedBy` on UpworkProposal is
  *  free text, not a User relation (see the backend service's own
  *  docblock), so "person" here really means "whatever name was typed in" —
- *  it can fragment a real person across rows on a typo/casing difference. */
+ *  it can fragment a real person across rows on a typo/casing difference.
+ *
+ *  bidStatusCounts/inviteStatusCounts replace the earlier collapsed
+ *  won/lost/in-discussion/accepted fields (explicit user correction —
+ *  "remove the accepted status and... add all the current status in the
+ *  column heading and then show their numbers so that we have a more clear
+ *  report"): one real count per actual UpworkProposalStatus value. */
 interface UpworkSubmitterRow {
   name: string;
   profileName: string;
   bids: number;
-  bidsWon: number;
-  bidsLost: number;
-  bidsInDiscussion: number;
+  bidStatusCounts: Record<string, number>;
   invites: number;
-  invitesAccepted: number;
-  invitesWon: number;
-  invitesLost: number;
-  invitesInDiscussion: number;
+  inviteStatusCounts: Record<string, number>;
 }
+
+/** Every UpworkProposalStatus, in schema order, with a human label --
+ *  mirrors UpworkDashboardService.PROPOSAL_STATUSES on the backend. VIEWED
+ *  is bid-only (Upwork doesn't surface that signal for invites, see the
+ *  schema's own comment on the enum), so the invite column set omits it
+ *  rather than showing a column that can never have data. WON is labeled
+ *  "Client Won" per the same correction above, not just "Won". */
+const BID_STATUS_COLUMNS = [
+  { key: "SUBMITTED", label: "Submitted" },
+  { key: "VIEWED", label: "Viewed" },
+  { key: "IN_DISCUSSION", label: "In Discussion" },
+  { key: "TEST_TASK", label: "Test Task" },
+  { key: "FOLLOW_UP_1", label: "Follow Up 1" },
+  { key: "FOLLOW_UP_2", label: "Follow Up 2" },
+  { key: "FOLLOW_UP_3", label: "Follow Up 3" },
+  { key: "WON", label: "Client Won" },
+  { key: "LOST", label: "Lost" },
+] as const;
+const INVITE_STATUS_COLUMNS = BID_STATUS_COLUMNS.filter((c) => c.key !== "VIEWED");
 
 export function TeamTab() {
   const [dateRange, setDateRange] = useDashboardDateRange();
@@ -70,32 +90,28 @@ export function TeamTab() {
   // rows the modal shows, so the summary can never drift from its own
   // detail view.
   const bidderSummaries = Object.values(
-    bidders.reduce<Record<string, { name: string; bids: number; bidsWon: number; bidsInDiscussion: number; bidsLost: number }>>((acc, r) => {
-      const row = acc[r.name] ?? { name: r.name, bids: 0, bidsWon: 0, bidsInDiscussion: 0, bidsLost: 0 };
+    bidders.reduce<Record<string, { name: string; bids: number; won: number; inDiscussion: number; lost: number }>>((acc, r) => {
+      const row = acc[r.name] ?? { name: r.name, bids: 0, won: 0, inDiscussion: 0, lost: 0 };
       row.bids += r.bids;
-      row.bidsWon += r.bidsWon;
-      row.bidsInDiscussion += r.bidsInDiscussion;
-      row.bidsLost += r.bidsLost;
+      row.won += r.bidStatusCounts.WON ?? 0;
+      row.inDiscussion += r.bidStatusCounts.IN_DISCUSSION ?? 0;
+      row.lost += r.bidStatusCounts.LOST ?? 0;
       acc[r.name] = row;
       return acc;
     }, {}),
-  ).sort((a, b) => b.bidsWon - a.bidsWon);
+  ).sort((a, b) => b.won - a.won);
 
   const inviteSummaries = Object.values(
-    inviteRecipients.reduce<Record<string, { name: string; invites: number; invitesAccepted: number; invitesWon: number; invitesInDiscussion: number; invitesLost: number }>>(
-      (acc, r) => {
-        const row = acc[r.name] ?? { name: r.name, invites: 0, invitesAccepted: 0, invitesWon: 0, invitesInDiscussion: 0, invitesLost: 0 };
-        row.invites += r.invites;
-        row.invitesAccepted += r.invitesAccepted;
-        row.invitesWon += r.invitesWon;
-        row.invitesInDiscussion += r.invitesInDiscussion;
-        row.invitesLost += r.invitesLost;
-        acc[r.name] = row;
-        return acc;
-      },
-      {},
-    ),
-  ).sort((a, b) => b.invitesWon - a.invitesWon);
+    inviteRecipients.reduce<Record<string, { name: string; invites: number; won: number; inDiscussion: number; lost: number }>>((acc, r) => {
+      const row = acc[r.name] ?? { name: r.name, invites: 0, won: 0, inDiscussion: 0, lost: 0 };
+      row.invites += r.invites;
+      row.won += r.inviteStatusCounts.WON ?? 0;
+      row.inDiscussion += r.inviteStatusCounts.IN_DISCUSSION ?? 0;
+      row.lost += r.inviteStatusCounts.LOST ?? 0;
+      acc[r.name] = row;
+      return acc;
+    }, {}),
+  ).sort((a, b) => b.won - a.won);
 
   const [bidderDetail, setBidderDetail] = useState<string | null>(null);
   const [inviteDetail, setInviteDetail] = useState<string | null>(null);
@@ -192,15 +208,15 @@ export function TeamTab() {
                 ),
               },
               { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
-              { key: "bidsWon", header: "Won", render: (r) => num(r.bidsWon), numeric: true },
-              { key: "bidsInDiscussion", header: "In Discussion", render: (r) => num(r.bidsInDiscussion), numeric: true },
-              { key: "bidsLost", header: "Lost", render: (r) => num(r.bidsLost), numeric: true },
+              { key: "won", header: "Client Won", render: (r) => num(r.won), numeric: true },
+              { key: "inDiscussion", header: "In Discussion", render: (r) => num(r.inDiscussion), numeric: true },
+              { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
             ]}
           />
         </SectionCard>
       )}
 
-      <Modal open={bidderDetail !== null} onOpenChange={(open) => !open && setBidderDetail(null)} title={bidderDetail ? `${bidderDetail} — bids by profile` : undefined} contentClassName="w-full max-w-lg">
+      <Modal open={bidderDetail !== null} onOpenChange={(open) => !open && setBidderDetail(null)} title={bidderDetail ? `${bidderDetail} — bids by profile and status` : undefined} contentClassName="w-full max-w-3xl">
         {bidderDetail && (
           <DataTable
             rowKey={(r) => r.profileName}
@@ -208,9 +224,12 @@ export function TeamTab() {
             columns={[
               { key: "profileName", header: "Profile", render: (r) => r.profileName },
               { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
-              { key: "bidsWon", header: "Won", render: (r) => num(r.bidsWon), numeric: true },
-              { key: "bidsInDiscussion", header: "In Discussion", render: (r) => num(r.bidsInDiscussion), numeric: true },
-              { key: "bidsLost", header: "Lost", render: (r) => num(r.bidsLost), numeric: true },
+              ...BID_STATUS_COLUMNS.map((c) => ({
+                key: c.key,
+                header: c.label,
+                render: (r: UpworkSubmitterRow) => num(r.bidStatusCounts[c.key] ?? 0),
+                numeric: true,
+              })),
             ]}
           />
         )}
@@ -232,16 +251,15 @@ export function TeamTab() {
                 ),
               },
               { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
-              { key: "invitesAccepted", header: "Accepted", render: (r) => num(r.invitesAccepted), numeric: true },
-              { key: "invitesWon", header: "Won", render: (r) => num(r.invitesWon), numeric: true },
-              { key: "invitesInDiscussion", header: "In Discussion", render: (r) => num(r.invitesInDiscussion), numeric: true },
-              { key: "invitesLost", header: "Lost", render: (r) => num(r.invitesLost), numeric: true },
+              { key: "won", header: "Client Won", render: (r) => num(r.won), numeric: true },
+              { key: "inDiscussion", header: "In Discussion", render: (r) => num(r.inDiscussion), numeric: true },
+              { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
             ]}
           />
         </SectionCard>
       )}
 
-      <Modal open={inviteDetail !== null} onOpenChange={(open) => !open && setInviteDetail(null)} title={inviteDetail ? `${inviteDetail} — invites by profile` : undefined} contentClassName="w-full max-w-lg">
+      <Modal open={inviteDetail !== null} onOpenChange={(open) => !open && setInviteDetail(null)} title={inviteDetail ? `${inviteDetail} — invites by profile and status` : undefined} contentClassName="w-full max-w-3xl">
         {inviteDetail && (
           <DataTable
             rowKey={(r) => r.profileName}
@@ -249,10 +267,12 @@ export function TeamTab() {
             columns={[
               { key: "profileName", header: "Profile", render: (r) => r.profileName },
               { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
-              { key: "invitesAccepted", header: "Accepted", render: (r) => num(r.invitesAccepted), numeric: true },
-              { key: "invitesWon", header: "Won", render: (r) => num(r.invitesWon), numeric: true },
-              { key: "invitesInDiscussion", header: "In Discussion", render: (r) => num(r.invitesInDiscussion), numeric: true },
-              { key: "invitesLost", header: "Lost", render: (r) => num(r.invitesLost), numeric: true },
+              ...INVITE_STATUS_COLUMNS.map((c) => ({
+                key: c.key,
+                header: c.label,
+                render: (r: UpworkSubmitterRow) => num(r.inviteStatusCounts[c.key] ?? 0),
+                numeric: true,
+              })),
             ]}
           />
         )}
