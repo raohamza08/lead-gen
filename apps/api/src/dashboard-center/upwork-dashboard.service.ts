@@ -294,49 +294,83 @@ export class UpworkDashboardService {
    *  is deliberately not a User relation (Part: Dashboard Center
    *  gap-analysis confirmed this via the schema's own comment), so this can
    *  fragment a real person into several rows on a typo/casing difference.
-   *  Reported as-is rather than silently guessing a canonical mapping. */
-  /** Grouped by (submitter, profile) — not just submitter (Part: Upwork
-   *  Requests, explicit user request — "add the profile name on which the
+   *  Reported as-is rather than silently guessing a canonical mapping.
+   *
+   *  Grouped by (submitter, profile) -- not just submitter (Part: Upwork
+   *  Requests, explicit user request -- "add the profile name on which the
    *  bd has onboarded the project... how many hours were requested on a
    *  profile and how many we have got by bd team on this profile"). Each
-   *  row now also carries `onboardedHours` (sum of WON proposals'
-   *  projectHours for that submitter+profile) so it can be read directly
-   *  against the Requests page's per-profile "requested" hours — the two
-   *  tables share the same `profileName` string convention (case-
-   *  sensitive match here, same as everywhere else this convention is
-   *  used — see UpworkRequestItem's own docblock). */
+   *  row carries `onboardedHours` (sum of WON proposals' projectHours for
+   *  that submitter+profile) so it can be read directly against the
+   *  Requests page's per-profile "requested" hours -- the two tables share
+   *  the same `profileName` string convention (case-sensitive match here,
+   *  same as everywhere else this convention is used -- see
+   *  UpworkRequestItem's own docblock).
+   *
+   *  Bids and invites split per-type as of 2026-10-20 (explicit user
+   *  request -- Team Performance needed "which person did how many bids,
+   *  then how many he won, how many in the in-discussion phase... then
+   *  which person accepts how many invites, how many won, how many in
+   *  discussion"). bidsWon/invitesWon etc. are new; won/lost are kept too
+   *  (now derived as bids+invites combined) so the existing Upwork tab
+   *  table/chart that already reads them doesn't need to change.
+   *  invitesAccepted uses the exact same status set as getKpis' own
+   *  org-wide invitesAccepted (IN_DISCUSSION plus every later-stage status
+   *  through WON) so the two numbers mean the same thing at different
+   *  granularities, not two different definitions of "accepted". */
   async getSubmitterBreakdown(orgId: string, query: DashboardRangeQuery) {
     const { current } = resolveDashboardRange(query);
     const rows = await this.prisma.upworkProposal.findMany({
       where: { orgId, createdAt: { gte: current.from, lte: current.to } },
       select: { submittedBy: true, profileName: true, type: true, connects: true, status: true, projectHours: true },
     });
+    const ACCEPTED_INVITE_STATUSES = new Set(["IN_DISCUSSION", "TEST_TASK", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON"]);
     const byUserProfile = new Map<
       string,
-      { name: string; profileName: string; bids: number; invites: number; connects: number; won: number; lost: number; onboardedHours: number }
+      {
+        name: string; profileName: string; connects: number; onboardedHours: number;
+        bids: number; bidsWon: number; bidsLost: number; bidsInDiscussion: number;
+        invites: number; invitesAccepted: number; invitesWon: number; invitesLost: number; invitesInDiscussion: number;
+      }
     >();
     for (const r of rows) {
-      const key = `${r.submittedBy} ${r.profileName}`;
+      const key = `${r.submittedBy} ${r.profileName}`;
       const bucket =
         byUserProfile.get(key) ??
-        { name: r.submittedBy, profileName: r.profileName, bids: 0, invites: 0, connects: 0, won: 0, lost: 0, onboardedHours: 0 };
-      if (r.type === "BIDDING") bucket.bids += 1;
-      else bucket.invites += 1;
+        {
+          name: r.submittedBy, profileName: r.profileName, connects: 0, onboardedHours: 0,
+          bids: 0, bidsWon: 0, bidsLost: 0, bidsInDiscussion: 0,
+          invites: 0, invitesAccepted: 0, invitesWon: 0, invitesLost: 0, invitesInDiscussion: 0,
+        };
       bucket.connects += r.connects ?? 0;
-      if (r.status === "WON") {
-        bucket.won += 1;
-        bucket.onboardedHours += r.projectHours ?? 0;
+      if (r.type === "BIDDING") {
+        bucket.bids += 1;
+        if (r.status === "WON") bucket.bidsWon += 1;
+        if (r.status === "LOST") bucket.bidsLost += 1;
+        if (r.status === "IN_DISCUSSION") bucket.bidsInDiscussion += 1;
+      } else {
+        bucket.invites += 1;
+        if (ACCEPTED_INVITE_STATUSES.has(r.status)) bucket.invitesAccepted += 1;
+        if (r.status === "WON") bucket.invitesWon += 1;
+        if (r.status === "LOST") bucket.invitesLost += 1;
+        if (r.status === "IN_DISCUSSION") bucket.invitesInDiscussion += 1;
       }
-      if (r.status === "LOST") bucket.lost += 1;
+      if (r.status === "WON") bucket.onboardedHours += r.projectHours ?? 0;
       byUserProfile.set(key, bucket);
     }
     return [...byUserProfile.values()]
-      .map((b) => ({
-        ...b,
-        conversionRate: safeRate(b.won, b.bids + b.invites),
-        connectsPerClient: safeDivide(b.connects, b.won),
-        estimatedCost: b.connects * DEFAULT_CONNECT_UNIT_COST_USD,
-      }))
+      .map((b) => {
+        const won = b.bidsWon + b.invitesWon;
+        const lost = b.bidsLost + b.invitesLost;
+        return {
+          ...b,
+          won,
+          lost,
+          conversionRate: safeRate(won, b.bids + b.invites),
+          connectsPerClient: safeDivide(b.connects, won),
+          estimatedCost: b.connects * DEFAULT_CONNECT_UNIT_COST_USD,
+        };
+      })
       .sort((a, b) => a.name.localeCompare(b.name) || a.profileName.localeCompare(b.profileName));
   }
 }
