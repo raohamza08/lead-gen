@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import compression from "compression";
+import { RequestMethod } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 import { NestExpressApplication } from "@nestjs/platform-express";
 import { IoAdapter } from "@nestjs/platform-socket.io";
@@ -53,6 +54,14 @@ async function bootstrap() {
     // matching how media's own public URL is built. Without this exclusion
     // that URL 404'd against the real (prefixed) route while every avatar
     // in the app silently failed to load.
+    //
+    // Restricted to GET (real-world bug, confirmed in production logs):
+    // a plain path string here excludes that path for EVERY method, and
+    // `:id` is a wildcard that also matches the literal segment "me" — so
+    // an unrestricted "users/:id/avatar" silently excluded
+    // POST/DELETE /api/v1/users/me/avatar (UsersController's own upload
+    // and remove routes) from the prefix too, registering them at
+    // /users/me/avatar instead and 404ing every real upload attempt.
     exclude: [
       "webhooks/(.*)",
       "track/(.*)",
@@ -61,7 +70,7 @@ async function bootstrap() {
       "social-oauth/(.*)",
       "meta-ads-oauth/(.*)",
       "upwork-oauth/(.*)",
-      "users/:id/avatar",
+      { path: "users/:id/avatar", method: RequestMethod.GET },
     ],
   });
 
