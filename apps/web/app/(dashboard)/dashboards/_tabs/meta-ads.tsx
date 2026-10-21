@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../../../../lib/api-client";
@@ -9,7 +8,8 @@ import { AXIS_PROPS, ChartWithTable, DataTable, GRID_PROPS, KpiStrip, SERIES, SI
 import { ComparisonTile } from "../../../../components/meta-ads/comparison-tile";
 import { money, num, pct } from "../../../../components/meta-ads/format";
 import { MetaAdsAccountStatusBar, MetaAdAccountRow } from "../../../../components/meta-ads/account-status-bar";
-import { MetaAdsDateRangeBar, defaultMetaAdsDateRange, metaAdsRangeToQuery } from "../../../../components/meta-ads/date-range-bar";
+import { DashboardDateRangeBar, dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
+import { useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { EmptyState } from "../../../../components/ui/empty-state";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
@@ -55,19 +55,26 @@ type TimeseriesPoint = Metrics & { date: string };
  * Meta Ads group — only the Overview-level charts moved in here.
  */
 export function MetaAdsTab() {
-  const [range, setRange] = useState(defaultMetaAdsDateRange(30));
+  // Shared Dashboard Center date-range dropdown (Part: Meta Ads dashboard
+  // fix, 2026-10-21, explicit user request — "I want the time filter the
+  // dropdown you added for other dashboards") — replaces this tab's own
+  // 7d/14d/30d/90d bar (still used by the standalone /meta-ads/campaigns,
+  // /adsets, /ads pages, untouched) with the same named-preset dropdown
+  // (Today/This week/This month/.../Custom + Compare to) every other
+  // Dashboard Center tab already uses.
+  const [range, setRange] = useDashboardDateRange();
   const accountsQuery = useQuery({ queryKey: ["meta-ads-accounts"], queryFn: () => api.getMetaAdsAccounts() as Promise<MetaAdAccountRow[]> });
   const accounts = accountsQuery.data ?? [];
   const [selectedId, selectAccount] = useSelectedMetaAdAccount(accounts);
 
   const overviewQuery = useQuery({
     queryKey: ["meta-ads-overview", selectedId, range],
-    queryFn: () => api.getMetaAdsOverview(selectedId as string, metaAdsRangeToQuery(range)) as Promise<OverviewResponse>,
+    queryFn: () => api.getMetaAdsOverview(selectedId as string, dashboardRangeToQuery(range)) as Promise<OverviewResponse>,
     enabled: Boolean(selectedId),
   });
   const timeseriesQuery = useQuery({
     queryKey: ["meta-ads-timeseries", selectedId, range],
-    queryFn: () => api.getMetaAdsTimeseries(selectedId as string, metaAdsRangeToQuery(range)) as Promise<TimeseriesPoint[]>,
+    queryFn: () => api.getMetaAdsTimeseries(selectedId as string, dashboardRangeToQuery(range)) as Promise<TimeseriesPoint[]>,
     enabled: Boolean(selectedId),
   });
 
@@ -103,7 +110,7 @@ export function MetaAdsTab() {
           accountsQuery.refetch();
         }}
       />
-      <MetaAdsDateRangeBar value={range} onChange={setRange} />
+      <DashboardDateRangeBar value={range} onChange={setRange} />
 
       {overviewQuery.isLoading && <SkeletonCard className="h-40" />}
       {overviewQuery.error && <ErrorState message={(overviewQuery.error as Error).message} onRetry={() => overviewQuery.refetch()} />}
@@ -259,12 +266,18 @@ export function MetaAdsTab() {
                       (a ~0-10x ratio) and Conversions (a raw count, often in the
                       hundreds) share no sensible single scale; the chart was
                       missing the ROAS line entirely before this, title/table
-                      promising a series the chart never rendered. */}
+                      promising a series the chart never rendered. connectNulls
+                      on both: aggregateInsights returns undefined (not 0) for
+                      conversions/roas on any day with zero value — see its own
+                      "0 vs unavailable" docblock — so without this the line
+                      fragments into isolated dots on a chart with many
+                      zero-conversion days, which reads as broken rather than a
+                      sparse-but-real trend. */}
                   <YAxis yAxisId="conversions" {...AXIS_PROPS} tickFormatter={formatCompact} />
                   <YAxis yAxisId="roas" orientation="right" {...AXIS_PROPS} tickFormatter={(v: number) => `${v}x`} />
                   <Tooltip {...TOOLTIP_STYLE} />
-                  <Line yAxisId="conversions" type="monotone" dataKey="conversions" name="Conversions" stroke={SERIES[3]} dot={false} strokeWidth={2} />
-                  <Line yAxisId="roas" type="monotone" dataKey="roas" name="ROAS" stroke={SERIES[0]} dot={false} strokeWidth={2} />
+                  <Line yAxisId="conversions" type="monotone" dataKey="conversions" name="Conversions" stroke={SERIES[3]} dot={false} strokeWidth={2} connectNulls />
+                  <Line yAxisId="roas" type="monotone" dataKey="roas" name="ROAS" stroke={SERIES[0]} dot={false} strokeWidth={2} connectNulls />
                 </LineChart>
               </ResponsiveContainer>
             }

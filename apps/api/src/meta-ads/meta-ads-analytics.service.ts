@@ -2,6 +2,8 @@ import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { aggregateInsights, percentDelta } from "./meta-ads-metrics.util";
 import { DateRangeQueryDto, ListAdSetsQueryDto, ListAdsQueryDto, ListCampaignsQueryDto, TimeseriesQueryDto } from "./dto/meta-ads.dto";
+import { resolveDashboardRange } from "../dashboard-center/dashboard-center.util";
+import { DateRangeName } from "../analytics/date-range";
 
 const DEFAULT_WINDOW_DAYS = 30;
 
@@ -44,6 +46,30 @@ interface Resolved {
  *  `from` itself, so the day the current period starts on is never also
  *  counted in the "previous period" comparison. */
 function resolveRange(query: DateRangeQueryDto): Resolved {
+  // Named-preset path (Part: Meta Ads dashboard fix, 2026-10-21, explicit
+  // user request — "I want the time filter the dropdown you added for
+  // other dashboards") — delegates to the exact same resolver every other
+  // Dashboard Center tab uses, so "This month" means the same thing here as
+  // it does on Leads/Email/Team/etc. Only the Dashboard Center's Meta Ads
+  // tab sends `range`; the standalone /meta-ads/campaigns, /adsets, /ads
+  // pages never do, so they fall through to the legacy from/to path below
+  // completely unaffected.
+  if (query.range) {
+    const resolved = resolveDashboardRange({
+      range: query.range as DateRangeName,
+      from: query.from,
+      to: query.to,
+      compare: query.compare,
+      compareMode: query.compareMode,
+    });
+    return {
+      from: resolved.current.from,
+      to: resolved.current.to,
+      compareFrom: resolved.previous?.from,
+      compareTo: resolved.previous?.to,
+    };
+  }
+
   const now = new Date();
   const to = query.to ? endOfDayUtc(new Date(query.to)) : now;
   const from = query.from ? startOfDayUtc(new Date(query.from)) : addDaysUtc(startOfDayUtc(now), -DEFAULT_WINDOW_DAYS);
