@@ -711,10 +711,7 @@ export function SidebarNav({
             <Link
               key={ws.id}
               href={ws.defaultHref}
-              onClick={() => {
-                setActiveWorkspaceId(ws.id);
-                onNavigate?.();
-              }}
+              onClick={onNavigate}
               title={ws.label}
               className={`relative flex w-14 flex-col items-center gap-1 rounded-xl py-2.5 text-[10px] font-medium transition-colors duration-fast ${
                 active ? "bg-black/10 text-[rgb(var(--accent-contrast-rgb))]" : "text-[rgb(var(--accent-contrast-rgb))]/70 hover:bg-black/5"
