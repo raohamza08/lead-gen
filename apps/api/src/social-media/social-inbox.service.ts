@@ -127,8 +127,20 @@ export class SocialInboxService {
     return { conversations, total, page, pageSize };
   }
 
+  /** Opening a conversation marks it read (Part: Social Inbox removal /
+   *  per-module messaging follow-up, 2026-10-21, explicit user request —
+   *  "the badge icon didnt disaapear when i open the chat") — unreadCount
+   *  was only ever set, never cleared, anywhere in this service; the nav
+   *  badge and this page's own list both read the same column, so neither
+   *  could ever clear on its own. Emits the same conversationUpdated event
+   *  updateConversation already does, so the sidebar badge and any other
+   *  open tab refresh immediately, not just the viewer's own query cache. */
   async getConversation(user: JwtClaims, id: string) {
-    await this.assertConversationAccess(user, id);
+    const conversation = await this.assertConversationAccess(user, id);
+    if (conversation.unreadCount > 0) {
+      await this.prisma.socialConversation.update({ where: { id }, data: { unreadCount: 0 } });
+      this.realtime.emitToOrg(conversation.socialAccount.orgId, "socialInbox.conversationUpdated", { conversationId: id });
+    }
     return this.prisma.socialConversation.findUniqueOrThrow({
       where: { id },
       include: {

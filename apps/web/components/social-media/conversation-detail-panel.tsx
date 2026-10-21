@@ -111,7 +111,20 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
       setReplyText("");
       invalidate();
     },
-    onError: (err) => setError((err as Error).message),
+    // Facebook/Instagram's own 24-hour messaging-window policy (Part:
+    // Social Inbox removal / per-module messaging follow-up, 2026-10-21,
+    // explicit user request — "the msgs are not getting sent") surfaces as
+    // a raw Graph API error (code 10 / error_subcode 2018278) that reads as
+    // broken rather than a real, unavoidable platform rule — same
+    // limitation WhatsApp already explains plainly in its own reply box.
+    onError: (err) => {
+      const message = (err as Error).message;
+      setError(
+        /error_subcode["\s:]*2018278|outside the allowed window/i.test(message)
+          ? "Can't send — it's been more than 24 hours since this person's last message. Meta only allows free-form replies within that window; after it, a business needs a pre-approved message template, which isn't built here yet."
+          : message,
+      );
+    },
   });
 
   const createNoteMutation = useMutation({

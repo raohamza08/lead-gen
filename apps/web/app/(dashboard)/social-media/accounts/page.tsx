@@ -31,8 +31,6 @@ interface Account {
   lastPublishError: string | null;
 }
 
-const EMPTY_DRAFT = { platform: "INSTAGRAM" as Platform, username: "", displayName: "" };
-
 interface PendingCandidate {
   externalAccountId: string;
   username: string;
@@ -80,8 +78,9 @@ export default function SocialAccountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
-  const [draft, setDraft] = useState(EMPTY_DRAFT);
-  const [saving, setSaving] = useState(false);
+  const [newPlatform, setNewPlatform] = useState<Platform>("INSTAGRAM");
+  const [newOAuthAppId, setNewOAuthAppId] = useState("");
+  const [connectingNew, setConnectingNew] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedAppByAccountId, setSelectedAppByAccountId] = useState<Record<string, string>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -132,24 +131,27 @@ export default function SocialAccountsPage() {
     }
   }
 
-  async function addAccount(e: React.FormEvent) {
+  // Goes straight to the real OAuth connect — no placeholder SocialAccount
+  // row created first (Part: Social Inbox removal / per-module messaging
+  // follow-up, 2026-10-21, explicit user request — "there a blank account
+  // remain there, i dont want it"). The old flow created a row here with
+  // whatever username was typed, then the real OAuth callback created a
+  // SEPARATE row keyed on the real username Meta/LinkedIn returned (see
+  // SocialMediaService.connectProfile's upsert key) -- the typed-in
+  // placeholder was never touched again and just sat there forever. Every
+  // platform here authenticates via OAuth (all 7 providers implement
+  // getOAuthUrl), so there's no real account this manual step ever needed
+  // to represent.
+  async function connectNewAccount(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
+    setConnectingNew(true);
     setError(null);
     try {
-      await api.createSocialAccount({
-        platform: draft.platform,
-        username: draft.username,
-        displayName: draft.displayName || undefined,
-      });
-      setDraft(EMPTY_DRAFT);
-      setShowForm(false);
-      setNotice("Account added. Click Connect to authorize it.");
-      refresh();
+      const { url } = await api.connectSocialAccount(newPlatform, newOAuthAppId || undefined);
+      window.location.href = url;
     } catch (err) {
       setError((err as Error).message);
-    } finally {
-      setSaving(false);
+      setConnectingNew(false);
     }
   }
 
@@ -249,13 +251,16 @@ export default function SocialAccountsPage() {
       )}
 
       {showForm && (
-        <SectionCard title="Add account">
-          <form onSubmit={addAccount} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <SectionCard title="Connect an account">
+          <form onSubmit={connectNewAccount} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="block">
               <span className="mb-1 block text-xs text-ink/60">Platform</span>
               <select
-                value={draft.platform}
-                onChange={(e) => setDraft((d) => ({ ...d, platform: e.target.value as Platform }))}
+                value={newPlatform}
+                onChange={(e) => {
+                  setNewPlatform(e.target.value as Platform);
+                  setNewOAuthAppId("");
+                }}
                 className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
               >
                 {PLATFORMS.map((p) => (
@@ -265,31 +270,31 @@ export default function SocialAccountsPage() {
                 ))}
               </select>
             </label>
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink/60">Handle / username *</span>
-              <input
-                required
-                value={draft.username}
-                onChange={(e) => setDraft((d) => ({ ...d, username: e.target.value }))}
-                placeholder="@brand"
-                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-              />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-xs text-ink/60">Internal label</span>
-              <input
-                value={draft.displayName}
-                onChange={(e) => setDraft((d) => ({ ...d, displayName: e.target.value }))}
-                placeholder="optional"
-                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
-              />
-            </label>
+            {oauthApps.some((app) => app.platform === newPlatform) && (
+              <label className="block">
+                <span className="mb-1 block text-xs text-ink/60">OAuth app</span>
+                <select
+                  value={newOAuthAppId}
+                  onChange={(e) => setNewOAuthAppId(e.target.value)}
+                  className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+                >
+                  <option value="">Platform default app</option>
+                  {oauthApps
+                    .filter((app) => app.platform === newPlatform)
+                    .map((app) => (
+                      <option key={app.id} value={app.id}>
+                        {app.name}
+                      </option>
+                    ))}
+                </select>
+              </label>
+            )}
             <button
               type="submit"
-              disabled={saving || !draft.username.trim()}
+              disabled={connectingNew}
               className="rounded-md bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
             >
-              {saving ? "Adding…" : "Add"}
+              {connectingNew ? "Redirecting…" : "Connect"}
             </button>
           </form>
         </SectionCard>
