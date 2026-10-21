@@ -76,28 +76,24 @@ export function TeamTab() {
   // rows the modal shows, so the summary can never drift from its own
   // detail view.
   const bidderSummaries = Object.values(
-    bidders.reduce<Record<string, { name: string; bids: number; won: number; inDiscussion: number; lost: number }>>((acc, r) => {
-      const row = acc[r.name] ?? { name: r.name, bids: 0, won: 0, inDiscussion: 0, lost: 0 };
+    bidders.reduce<Record<string, { name: string; bids: number; statusCounts: Record<string, number> }>>((acc, r) => {
+      const row = acc[r.name] ?? { name: r.name, bids: 0, statusCounts: {} };
       row.bids += r.bids;
-      row.won += r.bidStatusCounts.WON ?? 0;
-      row.inDiscussion += r.bidStatusCounts.IN_DISCUSSION ?? 0;
-      row.lost += r.bidStatusCounts.LOST ?? 0;
+      for (const c of BID_STATUS_COLUMNS) row.statusCounts[c.key] = (row.statusCounts[c.key] ?? 0) + (r.bidStatusCounts[c.key] ?? 0);
       acc[r.name] = row;
       return acc;
     }, {}),
-  ).sort((a, b) => b.won - a.won);
+  ).sort((a, b) => (b.statusCounts.WON ?? 0) - (a.statusCounts.WON ?? 0));
 
   const inviteSummaries = Object.values(
-    inviteRecipients.reduce<Record<string, { name: string; invites: number; won: number; inDiscussion: number; lost: number }>>((acc, r) => {
-      const row = acc[r.name] ?? { name: r.name, invites: 0, won: 0, inDiscussion: 0, lost: 0 };
+    inviteRecipients.reduce<Record<string, { name: string; invites: number; statusCounts: Record<string, number> }>>((acc, r) => {
+      const row = acc[r.name] ?? { name: r.name, invites: 0, statusCounts: {} };
       row.invites += r.invites;
-      row.won += r.inviteStatusCounts.WON ?? 0;
-      row.inDiscussion += r.inviteStatusCounts.IN_DISCUSSION ?? 0;
-      row.lost += r.inviteStatusCounts.LOST ?? 0;
+      for (const c of INVITE_STATUS_COLUMNS) row.statusCounts[c.key] = (row.statusCounts[c.key] ?? 0) + (r.inviteStatusCounts[c.key] ?? 0);
       acc[r.name] = row;
       return acc;
     }, {}),
-  ).sort((a, b) => b.won - a.won);
+  ).sort((a, b) => (b.statusCounts.WON ?? 0) - (a.statusCounts.WON ?? 0));
 
   const [bidderDetail, setBidderDetail] = useState<string | null>(null);
   const [inviteDetail, setInviteDetail] = useState<string | null>(null);
@@ -136,9 +132,12 @@ export function TeamTab() {
                 ),
               },
               { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
-              { key: "won", header: "Client Won", render: (r) => num(r.won), numeric: true },
-              { key: "inDiscussion", header: "In Discussion", render: (r) => num(r.inDiscussion), numeric: true },
-              { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
+              ...BID_STATUS_COLUMNS.map((c) => ({
+                key: c.key,
+                header: c.label,
+                render: (r: (typeof bidderSummaries)[number]) => num(r.statusCounts[c.key] ?? 0),
+                numeric: true,
+              })),
             ]}
           />
         </SectionCard>
@@ -179,9 +178,12 @@ export function TeamTab() {
                 ),
               },
               { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
-              { key: "won", header: "Client Won", render: (r) => num(r.won), numeric: true },
-              { key: "inDiscussion", header: "In Discussion", render: (r) => num(r.inDiscussion), numeric: true },
-              { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
+              ...INVITE_STATUS_COLUMNS.map((c) => ({
+                key: c.key,
+                header: c.label,
+                render: (r: (typeof inviteSummaries)[number]) => num(r.statusCounts[c.key] ?? 0),
+                numeric: true,
+              })),
             ]}
           />
         </SectionCard>
