@@ -5,15 +5,22 @@ import { DateRangeQueryDto, ListAdSetsQueryDto, ListAdsQueryDto, ListCampaignsQu
 
 const DEFAULT_WINDOW_DAYS = 30;
 
-function startOfDay(d: Date): Date {
-  const copy = new Date(d);
-  copy.setHours(0, 0, 0, 0);
-  return copy;
+// UTC-based, not local-timezone-based (Part: Meta Ads dashboard fix,
+// 2026-10-21) — the old versions used setHours()/setDate(), which read/write
+// the server PROCESS's local timezone, not UTC. metaAdInsightDaily.date is
+// always stored as an exact UTC midnight per calendar day (see
+// MetaAdsSyncService's `new Date(row.date_start)` — a date-only string
+// always parses as UTC midnight), so comparing against a boundary computed
+// in local time silently drifts by the server's UTC offset whenever that
+// isn't exactly 0.
+function startOfDayUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0));
 }
-function addDays(d: Date, days: number): Date {
-  const copy = new Date(d);
-  copy.setDate(copy.getDate() + days);
-  return copy;
+function endOfDayUtc(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59, 999));
+}
+function addDaysUtc(d: Date, days: number): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + days, 0, 0, 0, 0));
 }
 
 interface Resolved {
@@ -28,19 +35,26 @@ interface Resolved {
  *  never "all time" — an empty reporting period must be a real, visible
  *  empty state (Part: Error Handling), not silently widened. When a
  *  comparison is requested without explicit compareFrom/compareTo, the
- *  previous equal-length period immediately preceding `from` is used. */
+ *  previous equal-length period immediately preceding `from` is used.
+ *
+ *  `to` is end-of-day (Part: Meta Ads dashboard fix, 2026-10-21) — it used
+ *  to be the raw, un-adjusted start of the "to" date, which happened to
+ *  still match daily-granularity rows exactly but left no margin if finer-
+ *  grained data is ever added later. compareTo is `from` minus 1ms, not
+ *  `from` itself, so the day the current period starts on is never also
+ *  counted in the "previous period" comparison. */
 function resolveRange(query: DateRangeQueryDto): Resolved {
   const now = new Date();
-  const to = query.to ? new Date(query.to) : now;
-  const from = query.from ? startOfDay(new Date(query.from)) : addDays(startOfDay(now), -DEFAULT_WINDOW_DAYS);
+  const to = query.to ? endOfDayUtc(new Date(query.to)) : now;
+  const from = query.from ? startOfDayUtc(new Date(query.from)) : addDaysUtc(startOfDayUtc(now), -DEFAULT_WINDOW_DAYS);
 
   if (query.compare !== "true") return { from, to };
 
   if (query.compareFrom && query.compareTo) {
-    return { from, to, compareFrom: startOfDay(new Date(query.compareFrom)), compareTo: new Date(query.compareTo) };
+    return { from, to, compareFrom: startOfDayUtc(new Date(query.compareFrom)), compareTo: endOfDayUtc(new Date(query.compareTo)) };
   }
   const spanMs = to.getTime() - from.getTime();
-  return { from, to, compareFrom: new Date(from.getTime() - spanMs), compareTo: from };
+  return { from, to, compareFrom: new Date(from.getTime() - spanMs), compareTo: new Date(from.getTime() - 1) };
 }
 
 @Injectable()

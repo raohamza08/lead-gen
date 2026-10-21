@@ -255,9 +255,16 @@ export function MetaAdsTab() {
                 <LineChart data={series}>
                   <CartesianGrid {...GRID_PROPS} />
                   <XAxis dataKey="date" {...AXIS_PROPS} />
-                  <YAxis {...AXIS_PROPS} tickFormatter={formatCompact} />
+                  {/* Two Y-axes (Part: Meta Ads dashboard fix, 2026-10-21) — ROAS
+                      (a ~0-10x ratio) and Conversions (a raw count, often in the
+                      hundreds) share no sensible single scale; the chart was
+                      missing the ROAS line entirely before this, title/table
+                      promising a series the chart never rendered. */}
+                  <YAxis yAxisId="conversions" {...AXIS_PROPS} tickFormatter={formatCompact} />
+                  <YAxis yAxisId="roas" orientation="right" {...AXIS_PROPS} tickFormatter={(v: number) => `${v}x`} />
                   <Tooltip {...TOOLTIP_STYLE} />
-                  <Line type="monotone" dataKey="conversions" stroke={SERIES[3]} dot={false} strokeWidth={2} />
+                  <Line yAxisId="conversions" type="monotone" dataKey="conversions" name="Conversions" stroke={SERIES[3]} dot={false} strokeWidth={2} />
+                  <Line yAxisId="roas" type="monotone" dataKey="roas" name="ROAS" stroke={SERIES[0]} dot={false} strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             }

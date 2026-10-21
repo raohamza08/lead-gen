@@ -13,8 +13,17 @@ const PRESETS = [
   { label: "90d", days: 90 },
 ];
 
+/** Local calendar date, not UTC (Part: Meta Ads dashboard fix, 2026-10-21) —
+ *  `d.toISOString().slice(0, 10)` reads the UTC date, which silently shifts
+ *  by a day from the user's actual "today" for roughly a third of the day
+ *  in any timezone away from UTC (e.g. early morning in a timezone ahead of
+ *  UTC sees yesterday's UTC date, so "today" data drops off the end of
+ *  every preset). getFullYear/getMonth/getDate read the LOCAL date instead. */
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 export function defaultMetaAdsDateRange(days = 30): MetaAdsDateRange {
