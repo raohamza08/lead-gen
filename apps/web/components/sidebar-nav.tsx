@@ -23,8 +23,12 @@ interface NavLink {
    *  Social Media nav reorg, 2026-09-30) — e.g. "Accounts" expands to the
    *  individual platform pages. Clicking the row itself still navigates to
    *  `href`; a separate chevron toggles the sub-list open/closed. Not
-   *  rendered in icons-only (compact) mode, same as group headers aren't. */
-  children?: { href: string; label: string }[];
+   *  rendered in icons-only (compact) mode, same as group headers aren't.
+   *  `socialPlatform` (Part: Social Inbox removal / per-module messaging,
+   *  2026-10-21) drives that child's own unread badge from the per-platform
+   *  breakdown GET /social-inbox/stats now returns — independent of
+   *  `countKey` above, which only ever read the Email Hub stats shape. */
+  children?: { href: string; label: string; socialPlatform?: "FACEBOOK" | "INSTAGRAM" | "LINKEDIN" | "WHATSAPP" }[];
   /** Per-link access, independent of the group's own moduleFlag (Part:
    *  Upwork Requests, 2026-10-01, explicit user request — "not everyone
    *  needs everything... hide bidding and invites for them"). Only the
@@ -168,11 +172,11 @@ const NAV: NavItem[] = [
     type: "group",
     label: "Social Media",
     links: [
-      // Social Inbox moved in from a standalone top-level entry (Part:
-      // Social Media nav reorg, 2026-09-30) -- now gated by this group's own
-      // socialMediaAccess flag like everything else here, rather than its
-      // own separate moduleFlag check.
-      { href: "/social-inbox", label: "Social Inbox" },
+      // The centralized Social Inbox page was removed (Part: Social Inbox
+      // removal / per-module messaging, 2026-10-21, explicit user request —
+      // "remove the centralized Social Inbox... all messages must be
+      // accessible directly within their respective modules"). Each
+      // platform page below now has its own Inbox/Feed tabs instead.
       // LinkedIn/Instagram/Facebook/WhatsApp collapsed into a sub-list under
       // Accounts (Part: Social Media nav reorg, 2026-09-30); X removed from
       // nav entirely -- its page/provider are untouched, just not linked.
@@ -180,10 +184,10 @@ const NAV: NavItem[] = [
         href: "/social-media/accounts",
         label: "Accounts",
         children: [
-          { href: "/social-media/linkedin", label: "LinkedIn" },
-          { href: "/social-media/instagram", label: "Instagram" },
-          { href: "/social-media/facebook", label: "Facebook" },
-          { href: "/social-media/whatsapp", label: "WhatsApp" },
+          { href: "/social-media/linkedin", label: "LinkedIn", socialPlatform: "LINKEDIN" },
+          { href: "/social-media/instagram", label: "Instagram", socialPlatform: "INSTAGRAM" },
+          { href: "/social-media/facebook", label: "Facebook", socialPlatform: "FACEBOOK" },
+          { href: "/social-media/whatsapp", label: "WhatsApp", socialPlatform: "WHATSAPP" },
         ],
       },
       { href: "/social-media/calendar", label: "Calendar" },
@@ -362,6 +366,23 @@ export function SidebarNav({
   );
   const stats = statsQuery.data;
 
+  // Same query key the platform pages' own Inbox tab uses (PlatformInbox /
+  // ConversationDetailPanel invalidate "social-inbox-stats") — one cache
+  // entry, so this badge and that tab's own numbers never disagree (Part:
+  // Social Inbox removal / per-module messaging, 2026-10-21, same
+  // "Social Media group + per-platform" badge convention confirmed with the
+  // user, mirroring Email Hub's badge pattern above).
+  const socialStatsQuery = useQuery({
+    queryKey: ["social-inbox-stats"],
+    queryFn: () => api.getSocialInboxStats() as Promise<{ unread: number; byPlatform: Record<string, number> }>,
+    enabled: Boolean(moduleAccess?.socialMediaAccess),
+  });
+  useRealtimeRefetch(
+    ["socialInbox.messageReceived", "socialInbox.conversationUpdated"],
+    () => queryClient.invalidateQueries({ queryKey: ["social-inbox-stats"] }),
+  );
+  const socialStats = socialStatsQuery.data;
+
   function flagGranted(flag: ModuleFlag | ModuleFlag[] | undefined): boolean {
     if (!flag || !moduleAccess) return true;
     // ADMIN bypass (Part: same-day correction — the backend's
@@ -489,7 +510,18 @@ export function SidebarNav({
                   onClick={() => setGroupCollapsed((c) => ({ ...c, [item.label]: !c[item.label] }))}
                   className="flex items-center justify-between rounded-lg px-3 py-2 text-label uppercase text-ink/50 transition-colors duration-fast hover:text-ink/80"
                 >
-                  {item.label}
+                  <span className="flex items-center gap-1.5">
+                    {item.label}
+                    {/* Group-level aggregate badge (Part: Social Inbox removal
+                        / per-module messaging, 2026-10-21) — only the Social
+                        Media group has a social-platform unread total today;
+                        a no-op span for every other group. */}
+                    {item.label === "Social Media" && (socialStats?.unread ?? 0) > 0 && (
+                      <span className="tabular rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-primary">
+                        {(socialStats?.unread ?? 0) > 99 ? "99+" : socialStats?.unread}
+                      </span>
+                    )}
+                  </span>
                   <span aria-hidden className={`transition-transform duration-fast ${isOpen ? "rotate-90" : ""}`}>
                     ›
                   </span>
@@ -564,17 +596,32 @@ export function SidebarNav({
                           <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
                             {link.children.map((child) => {
                               const childActive = isActive(pathname, search, child);
+                              // Per-platform unread badge (Part: Social Inbox
+                              // removal / per-module messaging, 2026-10-21) —
+                              // child links had no badge mechanism at all
+                              // before this; a no-op for any child without a
+                              // socialPlatform tag.
+                              const childCount = child.socialPlatform ? socialStats?.byPlatform?.[child.socialPlatform] ?? 0 : 0;
                               return (
                                 <Link
                                   key={child.href}
                                   href={child.href}
                                   onClick={onNavigate}
                                   aria-current={childActive ? "page" : undefined}
-                                  className={`nav-tick rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
+                                  className={`nav-tick flex items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
                                     childActive ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                                   }`}
                                 >
-                                  {child.label}
+                                  <span>{child.label}</span>
+                                  {childCount > 0 && (
+                                    <span
+                                      className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                        childActive ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
+                                      }`}
+                                    >
+                                      {childCount > 99 ? "99+" : childCount}
+                                    </span>
+                                  )}
                                 </Link>
                               );
                             })}

@@ -30,7 +30,6 @@ import { Button } from "../../../components/ui/button";
 import { ErrorState } from "../../../components/ui/error-state";
 import { SkeletonCard } from "../../../components/ui/skeleton";
 import { EmailCampaignReportSection } from "../../../components/email-campaign-report-section";
-import { SocialInboxOverviewSection } from "../../../components/social-inbox-overview-section";
 import { UpworkOverviewSection } from "../../../components/upwork-overview-section";
 
 /** One stat card, reused across this page's several tile grids (main KPIs,
@@ -154,12 +153,7 @@ export default function OverviewPage() {
         <ReportTabBar tab={tab} onChange={setTab} />
         {tab === "EMAIL_CAMPAIGN" && <EmailCampaignReportSection />}
         {tab === "UNIFIED_INBOX" && <EmailOverviewSection />}
-        {tab === "SOCIAL_INBOX" && (
-          <>
-            <SocialInboxOverviewSection />
-            <SocialMediaOverviewSection />
-          </>
-        )}
+        {tab === "SOCIAL_INBOX" && <SocialMediaOverviewSection />}
         {tab === "UPWORK" && <UpworkOverviewSection />}
       </div>
     );

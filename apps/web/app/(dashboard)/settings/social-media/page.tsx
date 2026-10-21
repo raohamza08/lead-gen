@@ -187,7 +187,7 @@ export default function SocialMediaSettingsPage() {
     setNotice(null);
     try {
       await api.subscribeSocialAccountWebhook(accountId);
-      setNotice("Webhook subscribed — real-time messages should start arriving in the Social Inbox.");
+      setNotice("Webhook subscribed — real-time messages should start arriving in this platform's own Inbox tab.");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -201,7 +201,7 @@ export default function SocialMediaSettingsPage() {
     setNotice(null);
     try {
       await api.syncSocialInboxAccountNow(accountId);
-      setNotice("Synced — existing conversation history should now be visible in the Social Inbox.");
+      setNotice("Synced — existing conversation history should now be visible in this platform's own Inbox tab.");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -212,7 +212,7 @@ export default function SocialMediaSettingsPage() {
   async function deleteAccount(account: Account) {
     if (
       !confirm(
-        `Permanently delete ${account.platform} — ${account.displayName || account.username}? This removes the account, its Social Inbox conversations, and access grants. Past posts are kept but lose their link to this account. This cannot be undone.`,
+        `Permanently delete ${account.platform} — ${account.displayName || account.username}? This removes the account, its Inbox conversations, and access grants. Past posts are kept but lose their link to this account. This cannot be undone.`,
       )
     )
       return;

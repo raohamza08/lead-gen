@@ -133,7 +133,12 @@ export class SocialInboxIngestService {
         message: `New ${socialAccount.platform} message on @${socialAccount.username}${input.senderName ? ` from ${input.senderName}` : ""}.`,
         entityType: "socialConversation",
         entityId: result.conversationId,
-        actionUrl: `/social-inbox?conversationId=${result.conversationId}`,
+        // Points at the platform page's own Inbox tab (Part: Social Inbox
+        // removal / per-module messaging, 2026-10-21) — the centralized
+        // /social-inbox route no longer exists; messaging now lives inside
+        // each platform's own page, which reads ?tab=inbox&conversationId=
+        // to preselect the right conversation on load.
+        actionUrl: `/social-media/${socialAccount.platform.toLowerCase()}?tab=inbox&conversationId=${result.conversationId}`,
       });
     }
 

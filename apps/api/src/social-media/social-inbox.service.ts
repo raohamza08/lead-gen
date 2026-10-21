@@ -221,13 +221,34 @@ export class SocialInboxService {
       socialAccount: { orgId: user.orgId },
       ...(accountIds ? { socialAccountId: { in: accountIds } } : {}),
     };
-    const [total, unread, open, pending, closed] = await Promise.all([
+    // Per-platform unread breakdown (Part: Social Inbox removal / per-module
+    // messaging, 2026-10-21, explicit user request — give each platform's
+    // own nav entry its own badge, not just the group-level `unread` total
+    // below). SocialConversation has no own `platform` column (it's on the
+    // related socialAccount), hence the relation filter per platform rather
+    // than a groupBy.
+    const PLATFORMS = ["FACEBOOK", "INSTAGRAM", "LINKEDIN", "WHATSAPP"] as const;
+    const [total, unread, open, pending, closed, byPlatformCounts] = await Promise.all([
       this.prisma.socialConversation.count({ where }),
       this.prisma.socialConversation.count({ where: { ...where, unreadCount: { gt: 0 } } }),
       this.prisma.socialConversation.count({ where: { ...where, status: "OPEN" } }),
       this.prisma.socialConversation.count({ where: { ...where, status: "PENDING" } }),
       this.prisma.socialConversation.count({ where: { ...where, status: "CLOSED" } }),
+      Promise.all(
+        PLATFORMS.map((p) =>
+          this.prisma.socialConversation.count({
+            where: { ...where, unreadCount: { gt: 0 }, socialAccount: { orgId: user.orgId, platform: p } },
+          }),
+        ),
+      ),
     ]);
-    return { total, unread, open, pending, closed };
+    return {
+      total,
+      unread,
+      open,
+      pending,
+      closed,
+      byPlatform: Object.fromEntries(PLATFORMS.map((p, i) => [p, byPlatformCounts[i]])),
+    };
   }
 }

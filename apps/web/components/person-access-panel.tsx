@@ -66,8 +66,8 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
   { key: "socialMediaAccess", label: "Social Media" },
   {
     key: "socialEngagementAccess",
-    label: "Social Inbox + Engagement",
-    hint: "Narrower than Social Media — only DMs and comments, not Create Post/Calendar/Analytics/Automations/Accounts. Redundant if Social Media is already checked.",
+    label: "Social Messaging + Engagement",
+    hint: "Narrower than Social Media — only each platform's Inbox/Feed tabs and the Engagement Center's comments, not Create Post/Calendar/Analytics/Automations/Accounts. Redundant if Social Media is already checked.",
   },
   // Upwork Proposals is three independent toggles, not one (Part: Upwork
   // Requests, 2026-10-01, explicit user request — "not everyone needs
