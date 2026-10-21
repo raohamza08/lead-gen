@@ -663,6 +663,8 @@ export const api = {
     request(`/social-inbox/conversations/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   replySocialInboxConversation: (id: string, text: string) =>
     request(`/social-inbox/conversations/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  startSocialConversation: (accountId: string, to: string, text: string) =>
+    request(`/social-inbox/accounts/${accountId}/start`, { method: "POST", body: JSON.stringify({ to, text }) }),
   createSocialInboxNote: (id: string, note: string) =>
     request(`/social-inbox/conversations/${id}/notes`, { method: "POST", body: JSON.stringify({ note }) }),
   updateSocialInboxNote: (id: string, noteId: string, note: string) =>

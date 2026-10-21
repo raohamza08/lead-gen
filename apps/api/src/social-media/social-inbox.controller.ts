@@ -6,7 +6,7 @@ import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
 import { SocialInboxService } from "./social-inbox.service";
-import { UpdateConversationDto, ReplyDto, CreateNoteDto, UpdateNoteDto } from "./dto/social-inbox.dto";
+import { UpdateConversationDto, ReplyDto, CreateNoteDto, UpdateNoteDto, StartConversationDto } from "./dto/social-inbox.dto";
 
 /**
  * Unified Social Media DM Monitoring (Part: Unified Social Media DM
@@ -32,6 +32,11 @@ export class SocialInboxController {
   @Post("accounts/:accountId/sync")
   syncNow(@CurrentUser() user: JwtClaims, @Param("accountId") accountId: string) {
     return this.service.syncAccountNow(user, accountId);
+  }
+
+  @Post("accounts/:accountId/start")
+  startConversation(@CurrentUser() user: JwtClaims, @Param("accountId") accountId: string, @Body() dto: StartConversationDto) {
+    return this.service.startConversation(user, accountId, dto);
   }
 
   @Get("conversations")

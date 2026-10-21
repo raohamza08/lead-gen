@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
 import { useRealtimeRefetch } from "../../lib/realtime";
 import { ConversationDetailPanel } from "./conversation-detail-panel";
 import { Avatar } from "../ui/avatar";
 import { Tabs } from "../ui/tabs";
-import { LoadingRow } from "../spinner";
+import { Modal } from "../ui/modal";
+import { LoadingRow, Spinner } from "../spinner";
 
 interface SocialAccountItem {
   id: string;
@@ -84,6 +85,11 @@ export function PlatformInbox({
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [selectedId, setSelectedId] = useState<string | null>(initialConversationId ?? null);
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [newChatAccountId, setNewChatAccountId] = useState("");
+  const [newChatTo, setNewChatTo] = useState("");
+  const [newChatText, setNewChatText] = useState("");
+  const [newChatError, setNewChatError] = useState<string | null>(null);
 
   const statusFilter = chip === "unread" || chip === "" ? "" : chip;
   const unreadOnly = chip === "unread";
@@ -127,6 +133,39 @@ export function PlatformInbox({
     };
   }
 
+  // Starting a brand-new chat, not replying to an existing one (Part:
+  // Social Inbox removal / per-module messaging follow-up, 2026-10-21,
+  // explicit user request — "add an option for whatsapp to send a message
+  // from here as well") — WhatsApp-only (Facebook/Instagram can't cold-
+  // message an arbitrary person, see SocialInboxService.startConversation's
+  // own docblock), so the button only renders for platform === "WHATSAPP".
+  const newChatMutation = useMutation({
+    mutationFn: () => api.startSocialConversation(newChatAccountId, newChatTo, newChatText) as Promise<{ conversationId: string }>,
+    onSuccess: (res) => {
+      setNewChatOpen(false);
+      setNewChatTo("");
+      setNewChatText("");
+      setNewChatError(null);
+      setSelectedId(res.conversationId);
+      invalidateAll();
+    },
+    onError: (err) => setNewChatError((err as Error).message),
+  });
+
+  function openNewChat() {
+    setNewChatAccountId(accountId || accounts[0]?.id || "");
+    setNewChatTo("");
+    setNewChatText("");
+    setNewChatError(null);
+    setNewChatOpen(true);
+  }
+
+  function submitNewChat(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newChatAccountId || !newChatTo.trim() || !newChatText.trim()) return;
+    newChatMutation.mutate();
+  }
+
   return (
     <div className="grid gap-4 lg:grid-cols-[360px_1fr]" style={{ height: "calc(100vh - 220px)", minHeight: 520 }}>
       {/* Chat list — WhatsApp Web's own left pane shape: account switcher (if
@@ -141,17 +180,34 @@ export function PlatformInbox({
               tabs={[{ value: "", label: "All accounts" }, ...accounts.map((a) => ({ value: a.id, label: a.displayName || a.username }))]}
             />
           )}
-          <div className="relative">
-            <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" fill="none" stroke="currentColor" strokeWidth={2}>
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3.5-3.5" strokeLinecap="round" />
-            </svg>
-            <input
-              value={search}
-              onChange={(e) => resetPage(setSearch)(e.target.value)}
-              placeholder="Search or start a new chat"
-              className="w-full rounded-full border-0 bg-ink/[0.04] py-2 pl-9 pr-3 text-sm outline-none focus:ring-1 focus:ring-accent"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <svg viewBox="0 0 24 24" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" fill="none" stroke="currentColor" strokeWidth={2}>
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+              </svg>
+              <input
+                value={search}
+                onChange={(e) => resetPage(setSearch)(e.target.value)}
+                placeholder="Search"
+                className="w-full rounded-full border-0 bg-ink/[0.04] py-2 pl-9 pr-3 text-sm outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+            {/* New chat (Part: Social Inbox removal / per-module messaging
+                follow-up, 2026-10-21) -- WhatsApp-only, same reasoning as
+                startConversation's own docblock on the backend. */}
+            {platform === "WHATSAPP" && (
+              <button
+                type="button"
+                onClick={openNewChat}
+                title="New chat"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink/[0.05] text-ink/60 transition-colors hover:bg-ink/10"
+              >
+                <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path d="M12 5v14M5 12h14" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
           </div>
           <div className="flex flex-wrap gap-1.5">
             {CHIPS.map((c) => (
@@ -232,6 +288,64 @@ export function PlatformInbox({
           </div>
         )}
       </div>
+
+      <Modal open={newChatOpen} onOpenChange={setNewChatOpen} title="New chat">
+        <form onSubmit={submitNewChat} className="flex flex-col gap-3">
+          {accounts.length > 1 && (
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Send from</span>
+              <select
+                value={newChatAccountId}
+                onChange={(e) => setNewChatAccountId(e.target.value)}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              >
+                {accounts.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.displayName || a.username}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink/60">Phone number</span>
+            <input
+              autoFocus
+              value={newChatTo}
+              onChange={(e) => setNewChatTo(e.target.value)}
+              placeholder="+92 300 1234567"
+              className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs text-ink/60">Message</span>
+            <textarea
+              value={newChatText}
+              onChange={(e) => setNewChatText(e.target.value)}
+              rows={3}
+              placeholder="Type a message"
+              className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+            />
+          </label>
+          {newChatError && (
+            <p className="rounded border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-1.5 text-xs text-bad">
+              {newChatError}
+            </p>
+          )}
+          <p className="text-[11px] text-ink/40">
+            Only works if this number has messaged you before, or within WhatsApp&apos;s 24-hour window — a brand-new
+            contact who has never messaged you needs a pre-approved message template, which isn&apos;t built here yet.
+          </p>
+          <button
+            type="submit"
+            disabled={newChatMutation.isPending || !newChatAccountId || !newChatTo.trim() || !newChatText.trim()}
+            className="flex items-center justify-center gap-1.5 self-start rounded-full bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
+          >
+            {newChatMutation.isPending && <Spinner className="h-3.5 w-3.5" />}
+            Send
+          </button>
+        </form>
+      </Modal>
     </div>
   );
 }

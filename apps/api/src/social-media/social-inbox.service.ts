@@ -189,6 +189,54 @@ export class SocialInboxService {
     return { sent: true, conversationId };
   }
 
+  /** Starting a brand-new conversation, not replying to an existing one
+   *  (Part: Social Inbox removal / per-module messaging follow-up,
+   *  2026-10-21, explicit user request — "add an option for whatsapp to
+   *  send a message from here as well"). WhatsApp-only: Facebook/Instagram
+   *  Send API messages require a page-scoped participant id only
+   *  obtainable once the person has already messaged the page/account
+   *  first -- there is no way to cold-message an arbitrary person there,
+   *  unlike WhatsApp where the identifier is just their real phone number.
+   *  Meta's own 24-hour-window + template-required rule (same one
+   *  reply()'s errors already explain on the frontend) applies in full
+   *  here too -- a number that has never messaged this business before
+   *  will be rejected unless a pre-approved template is used, which isn't
+   *  built here yet; that rejection surfaces as a real BadRequestException,
+   *  not a silent failure. */
+  async startConversation(user: JwtClaims, accountId: string, dto: { to: string; text: string }) {
+    const account = await this.prisma.socialAccount.findFirst({ where: { id: accountId, orgId: user.orgId } });
+    if (!account) throw new NotFoundException("Social account not found");
+    if (account.platform !== "WHATSAPP") {
+      throw new BadRequestException("Starting a new conversation from here is only supported for WhatsApp.");
+    }
+    if (user.role !== Role.ADMIN) {
+      const grant = await this.prisma.socialAccountAccess.findUnique({
+        where: { userId_accountId: { userId: user.sub, accountId: account.id } },
+      });
+      if (!grant?.canView) throw new ForbiddenException("You do not have access to this account's conversations");
+    }
+
+    const to = dto.to.replace(/\D/g, "");
+    if (!to) throw new BadRequestException("Enter a valid phone number.");
+
+    const provider = this.registry.for(account.platform);
+    try {
+      await provider.sendMessage(account, to, dto.text);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+    const { conversationId } = await this.ingest.persistMessage(account, {
+      externalConversationId: to,
+      contactExternalId: to,
+      contactUsername: to,
+      externalMessageId: `outbound-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      fromUs: true,
+      messageText: dto.text,
+      sentAt: new Date(),
+    });
+    return { sent: true, conversationId };
+  }
+
   // ---------------------------------------------------------------------
   // Internal notes — never sent to the platform, never rendered inside the
   // message thread (enforced by living in a separate table entirely).
