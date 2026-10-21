@@ -20,5 +20,9 @@ import { SyncModule } from "../sync/sync.module";
     UpworkFollowUpReminderWorker,
     UpworkClickupSyncService,
   ],
+  // UpworkService exported (Part: global search, 2026-10-21) so
+  // SearchModule/AiAssistantModule can reuse its existing findAll search
+  // query instead of duplicating it.
+  exports: [UpworkService],
 })
 export class UpworkModule {}

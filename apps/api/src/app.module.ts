@@ -38,6 +38,8 @@ import { MetaAdsModule } from "./meta-ads/meta-ads.module";
 import { UpworkIntegrationModule } from "./upwork-integration/upwork-integration.module";
 import { DashboardCenterModule } from "./dashboard-center/dashboard-center.module";
 import { UpworkProposalWritingModule } from "./upwork-proposal-writing/upwork-proposal-writing.module";
+import { SearchModule } from "./search/search.module";
+import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
 
 @Module({
   imports: [
@@ -79,6 +81,8 @@ import { UpworkProposalWritingModule } from "./upwork-proposal-writing/upwork-pr
     UpworkIntegrationModule,
     DashboardCenterModule,
     UpworkProposalWritingModule,
+    SearchModule,
+    AiAssistantModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

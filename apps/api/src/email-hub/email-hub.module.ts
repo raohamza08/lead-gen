@@ -23,5 +23,9 @@ import { EmailAccountResumeWorker } from "./email-account-resume.worker";
     EmailAccountResumeQueue,
     EmailAccountResumeWorker,
   ],
+  // EmailHubService exported (Part: global search, 2026-10-21) so
+  // SearchModule/AiAssistantModule can reuse its existing listMessages
+  // search query instead of duplicating it.
+  exports: [EmailHubService],
 })
 export class EmailHubModule {}

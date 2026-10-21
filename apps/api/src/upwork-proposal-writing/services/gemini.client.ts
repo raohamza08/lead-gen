@@ -141,15 +141,23 @@ export class GeminiClient {
     return Math.max(nextMidnightPacific.getTime() - pacificNow.getTime(), DEFAULT_COOLDOWN_MS);
   }
 
-  private async callGemini(key: string, systemPrompt: string, jobBrief: string): Promise<CoverLetterResult> {
+  /** Low-level call, shared by every public method below — differs only in
+   *  `generationConfig`/parsing of the response text, never in auth/rotation
+   *  (that's `runWithKeyRotation`'s job). */
+  private async rawGenerateContent(
+    key: string,
+    systemPrompt: string,
+    userText: string,
+    generationConfig: Record<string, unknown>,
+  ): Promise<string> {
     const url = `${API_BASE}/${this.model()}:generateContent?key=${key}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: jobBrief }] }],
+        contents: [{ role: "user", parts: [{ text: userText }] }],
         systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { responseMimeType: "application/json", temperature: 0.7 },
+        generationConfig,
       }),
     });
 
@@ -168,36 +176,16 @@ export class GeminiClient {
         blockReason ? `Gemini returned no content (${blockReason}).` : "Gemini returned an empty response.",
       );
     }
-
-    let parsed: Partial<CoverLetterResult>;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw new ServiceUnavailableException("Gemini returned a response that wasn't valid JSON.");
-    }
-
-    if (!parsed.coverLetter) {
-      throw new ServiceUnavailableException("Gemini's response was missing a cover letter.");
-    }
-
-    return {
-      clientNeeds: parsed.clientNeeds ?? "",
-      niche: parsed.niche ?? "",
-      coverLetter: parsed.coverLetter,
-      jobType: parsed.jobType === "NON_TECHNICAL" ? "NON_TECHNICAL" : "TECHNICAL",
-      suggestedProfile: parsed.suggestedProfile ?? null,
-      profileReason: parsed.profileReason ?? null,
-      overallAssessment: parsed.overallAssessment ?? "",
-    };
+    return raw;
   }
 
-  /** Same contract as the OpenAI version this replaced: `systemPrompt`
-   *  carries the org's editable settings, `jobBrief` is the fetched job as
-   *  plain text. Tries each configured key in turn (starting from the one
-   *  that last worked), skipping any still on cooldown, and rotates to the
-   *  next on a 429 — so a single caller never has to know how many keys
-   *  exist or manage rotation itself. */
-  async generateCoverLetter(systemPrompt: string, jobBrief: string): Promise<CoverLetterResult> {
+  /** Key selection + 429 rotation/cooldown, extracted (Part: AI chat
+   *  assistant + global search, 2026-10-21) so `generateText` can share it
+   *  with `generateCoverLetter` instead of duplicating the rotation loop.
+   *  `attempt(key)` does the actual request and must throw
+   *  `GeminiRateLimitError` on a 429 for rotation to kick in — anything else
+   *  propagates straight to the caller. */
+  private async runWithKeyRotation<T>(attempt: (key: string) => Promise<T>): Promise<T> {
     const keys = this.keys();
     const now = Date.now();
 
@@ -212,7 +200,7 @@ export class GeminiClient {
     let lastError: Error | undefined;
     for (const key of order) {
       try {
-        const result = await this.callGemini(key, systemPrompt, jobBrief);
+        const result = await attempt(key);
         this.lastGoodKeyIndex = keys.indexOf(key);
         this.cooldownUntil.delete(key);
         return result;
@@ -232,6 +220,52 @@ export class GeminiClient {
 
     throw new ServiceUnavailableException(
       `All ${keys.length} Gemini API key(s) are currently rate-limited.${lastError ? ` (${lastError.message})` : ""}`,
+    );
+  }
+
+  /** Same contract as the OpenAI version this replaced: `systemPrompt`
+   *  carries the org's editable settings, `jobBrief` is the fetched job as
+   *  plain text. Tries each configured key in turn (starting from the one
+   *  that last worked), skipping any still on cooldown, and rotates to the
+   *  next on a 429 — so a single caller never has to know how many keys
+   *  exist or manage rotation itself. */
+  async generateCoverLetter(systemPrompt: string, jobBrief: string): Promise<CoverLetterResult> {
+    return this.runWithKeyRotation(async (key) => {
+      const raw = await this.rawGenerateContent(key, systemPrompt, jobBrief, {
+        responseMimeType: "application/json",
+        temperature: 0.7,
+      });
+
+      let parsed: Partial<CoverLetterResult>;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        throw new ServiceUnavailableException("Gemini returned a response that wasn't valid JSON.");
+      }
+
+      if (!parsed.coverLetter) {
+        throw new ServiceUnavailableException("Gemini's response was missing a cover letter.");
+      }
+
+      return {
+        clientNeeds: parsed.clientNeeds ?? "",
+        niche: parsed.niche ?? "",
+        coverLetter: parsed.coverLetter,
+        jobType: parsed.jobType === "NON_TECHNICAL" ? "NON_TECHNICAL" : "TECHNICAL",
+        suggestedProfile: parsed.suggestedProfile ?? null,
+        profileReason: parsed.profileReason ?? null,
+        overallAssessment: parsed.overallAssessment ?? "",
+      };
+    });
+  }
+
+  /** Plain free-text generation (Part: global search + AI chat assistant,
+   *  2026-10-21) — unlike `generateCoverLetter`, no `responseMimeType:
+   *  "application/json"` is forced, since the assistant's replies are meant
+   *  to be read as prose, not parsed. Same key-rotation/cooldown guarantees. */
+  async generateText(systemInstruction: string, prompt: string, opts?: { temperature?: number }): Promise<string> {
+    return this.runWithKeyRotation((key) =>
+      this.rawGenerateContent(key, systemInstruction, prompt, { temperature: opts?.temperature ?? 0.3 }),
     );
   }
 }

@@ -74,6 +74,9 @@ import { SocialOAuthAppService } from "./social-oauth-app.service";
     SocialEngagementService,
     SocialOAuthAppService,
   ],
-  exports: [SocialMediaService, SocialInboxIngestService, SocialProviderRegistryService],
+  // SocialInboxService added (Part: global search, 2026-10-21) so
+  // SearchModule/AiAssistantModule can reuse its existing listConversations
+  // search query instead of duplicating it.
+  exports: [SocialMediaService, SocialInboxIngestService, SocialProviderRegistryService, SocialInboxService],
 })
 export class SocialMediaModule {}

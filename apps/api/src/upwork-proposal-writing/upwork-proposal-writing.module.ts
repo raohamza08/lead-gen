@@ -17,5 +17,9 @@ import { DiscoveredJobsService } from "./services/discovered-jobs.service";
     FreelancerProfilesService,
     DiscoveredJobsService,
   ],
+  // GeminiClient exported (Part: AI chat assistant, 2026-10-21) so
+  // AiAssistantModule can inject the same key-rotation-aware client instead
+  // of duplicating it.
+  exports: [GeminiClient],
 })
 export class UpworkProposalWritingModule {}

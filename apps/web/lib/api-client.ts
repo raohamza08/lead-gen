@@ -489,6 +489,25 @@ export const api = {
     return res.json();
   },
 
+  // ---- Global search (Part: EBOS-inspired shell redesign round 2,
+  // 2026-10-21) ----
+  globalSearch: (q: string) =>
+    request<{
+      leads: { id: string; title: string; subtitle?: string; href: string }[];
+      emails: { id: string; title: string; subtitle?: string; href: string }[];
+      social: { id: string; title: string; subtitle?: string; href: string }[];
+      upwork: { id: string; title: string; subtitle?: string; href: string }[];
+    }>(`/search?${new URLSearchParams({ q }).toString()}`),
+
+  // ---- AI chat assistant (Part: EBOS-inspired shell redesign round 2,
+  // 2026-10-21) — stateless server-side, see AssistantService's own
+  // docblock; `history` is the frontend's own in-memory conversation so far. ----
+  sendAssistantMessage: (message: string, history?: { role: "user" | "assistant"; content: string }[]) =>
+    request<{ reply: string }>("/assistant/message", {
+      method: "POST",
+      body: JSON.stringify({ message, history }),
+    }),
+
   // ---- Email Hub ----
   getEmailHubAccounts: () => request("/email-hub/accounts"),
   getEmailHubStats: () => request("/email-hub/stats"),

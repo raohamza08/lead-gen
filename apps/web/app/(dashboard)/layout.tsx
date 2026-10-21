@@ -1,6 +1,8 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { SidebarNav } from "../../components/sidebar-nav";
 import { AuthGuard } from "../../components/auth-guard";
 import { ThemeToggle } from "../../components/theme-toggle";
@@ -8,6 +10,16 @@ import { AccentPicker } from "../../components/accent-picker";
 import { NotificationsBell } from "../../components/notifications-bell";
 import { HeaderUserMenu } from "../../components/header-user-menu";
 import { QueryProvider } from "../../components/query-provider";
+import { AiAssistantPanel } from "../../components/ai-assistant-panel";
+import { Popover, PopoverAnchor, PopoverContent } from "../../components/ui/popover";
+import { api } from "../../lib/api-client";
+
+interface SearchHit {
+  id: string;
+  title: string;
+  subtitle?: string;
+  href: string;
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   // Mobile-only drawer state (Part: UI/UX Redesign, 2026-09-01) — below `md`
@@ -16,6 +28,60 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   // which persists across sessions; this one resets to closed on every page
   // load, matching how a drawer is expected to behave.
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  // Real AI chat assistant (Part: EBOS-inspired shell redesign round 2,
+  // 2026-10-21) — the header "AI" button was previously decorative only.
+  const [assistantOpen, setAssistantOpen] = useState(false);
+
+  // Real global search (Part: EBOS-inspired shell redesign round 2,
+  // 2026-10-21) — same 300ms-debounce convention as leads/page.tsx's own
+  // search box, the only other debounced input in this codebase.
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
+    return () => clearTimeout(id);
+  }, [searchInput]);
+  // Explicit dismiss (Esc/outside-click/clicking a result) so the popover
+  // doesn't immediately reopen on its own next render while the same query
+  // is still sitting in the box.
+  const [searchDismissed, setSearchDismissed] = useState(false);
+  useEffect(() => setSearchDismissed(false), [debouncedSearch]);
+
+  const searchQuery = useQuery({
+    queryKey: ["global-search", debouncedSearch],
+    queryFn: () => api.globalSearch(debouncedSearch) as Promise<Record<"leads" | "emails" | "social" | "upwork", SearchHit[]>>,
+    enabled: debouncedSearch.length >= 2,
+  });
+  const searchOpen = !searchDismissed && debouncedSearch.length >= 2;
+  const results = searchQuery.data;
+  const hasAnyResults = Boolean(
+    results && (results.leads.length || results.emails.length || results.social.length || results.upwork.length),
+  );
+
+  function closeSearch() {
+    setSearchDismissed(true);
+  }
+
+  function renderResultGroup(label: string, items: SearchHit[]) {
+    if (!items.length) return null;
+    return (
+      <div key={label}>
+        <div className="px-2 py-1 text-label uppercase text-ink/45">{label}</div>
+        {items.map((item) => (
+          <Link
+            key={item.id}
+            href={item.href}
+            onClick={closeSearch}
+            className="flex flex-col rounded-lg px-2.5 py-1.5 text-sm text-ink/80 transition-colors duration-fast hover:bg-ink/5"
+          >
+            <span className="truncate">{item.title}</span>
+            {item.subtitle && <span className="truncate text-xs text-ink/45">{item.subtitle}</span>}
+          </Link>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <QueryProvider>
@@ -52,32 +118,55 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   </svg>
                 </div>
               </div>
-              {/* Visual-only global search (Part: EBOS-inspired shell
-                  redesign, 2026-10-21) -- focusable/typable so it doesn't
-                  look dead, but wired to nothing; a real cross-entity search
-                  API is a separate, larger feature the user explicitly
-                  deferred. */}
+              {/* Real global search (Part: EBOS-inspired shell redesign
+                  round 2, 2026-10-21) -- fans out to leads/email/social/
+                  upwork via GET /search, each gated by the user's own
+                  existing module-access flags server-side. */}
               <div className="hidden flex-1 justify-center px-6 lg:flex">
-                <label className="glass-surface flex w-full max-w-md items-center gap-2 rounded-full border border-[var(--line)] px-3.5 py-2 text-ink/45">
-                  <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0">
-                    <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
-                    <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                  <input
-                    type="text"
-                    placeholder="Search..."
-                    className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink/40 focus:outline-none"
-                  />
-                  <kbd className="shrink-0 rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-ink/40">Ctrl K</kbd>
-                </label>
+                <Popover open={searchOpen} onOpenChange={(o) => !o && closeSearch()}>
+                  <PopoverAnchor asChild>
+                    <label className="glass-surface flex w-full max-w-md items-center gap-2 rounded-full border border-[var(--line)] px-3.5 py-2 text-ink/45">
+                      <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0">
+                        <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                        <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                      <input
+                        type="text"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        placeholder="Search..."
+                        className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink/40 focus:outline-none"
+                      />
+                      <kbd className="shrink-0 rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-ink/40">Ctrl K</kbd>
+                    </label>
+                  </PopoverAnchor>
+                  <PopoverContent
+                    align="center"
+                    className="max-h-[70vh] w-[420px] overflow-y-auto p-2"
+                    onOpenAutoFocus={(e) => e.preventDefault()}
+                  >
+                    {searchQuery.isFetching && <div className="px-2.5 py-2 text-xs text-ink/45">Searching…</div>}
+                    {!searchQuery.isFetching && !hasAnyResults && <div className="px-2.5 py-2 text-xs text-ink/45">No results.</div>}
+                    {results && (
+                      <div className="flex flex-col gap-2">
+                        {renderResultGroup("Leads", results.leads)}
+                        {renderResultGroup("Email", results.emails)}
+                        {renderResultGroup("Social", results.social)}
+                        {renderResultGroup("Upwork", results.upwork)}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex items-center gap-2">
-                {/* Visual-only AI button (Part: EBOS-inspired shell redesign,
-                    2026-10-21) -- same reasoning as the search bar above; no
-                    AI command surface is wired up behind this yet. */}
+                {/* Real AI chat assistant (Part: EBOS-inspired shell
+                    redesign round 2, 2026-10-21) -- opens a drawer-right
+                    panel backed by Gemini, grounded in this user's own
+                    permission-filtered Outly data. */}
                 <button
                   type="button"
                   title="AI"
+                  onClick={() => setAssistantOpen(true)}
                   className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs font-medium text-ink/70 transition-colors duration-fast hover:bg-ink/5"
                 >
                   <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none">
@@ -107,6 +196,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </main>
           </div>
         </div>
+        <AiAssistantPanel open={assistantOpen} onOpenChange={setAssistantOpen} />
       </AuthGuard>
     </QueryProvider>
   );
