@@ -13,6 +13,18 @@ export class UpdateUserModulesDto {
   @IsOptional() @IsBoolean() metaAdsAccess?: boolean;
   @IsOptional() @IsBoolean() upworkApiAccess?: boolean;
   @IsOptional() @IsBoolean() upworkProposalWritingAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardOverviewAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardLeadsAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardEmailAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardInboxAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardSocialAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardUpworkAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardMetaAdsAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardWebsiteAnalyticsAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardPipelineAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardTeamAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardActivityAccess?: boolean;
+  @IsOptional() @IsBoolean() dashboardBenchmarksAccess?: boolean;
 }
 
 export class UpdateUserEmailAccountAccessDto {

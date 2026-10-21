@@ -15,6 +15,18 @@ interface ModuleFlags {
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
   upworkProposalWritingAccess: boolean;
+  dashboardOverviewAccess: boolean;
+  dashboardLeadsAccess: boolean;
+  dashboardEmailAccess: boolean;
+  dashboardInboxAccess: boolean;
+  dashboardSocialAccess: boolean;
+  dashboardUpworkAccess: boolean;
+  dashboardMetaAdsAccess: boolean;
+  dashboardWebsiteAnalyticsAccess: boolean;
+  dashboardPipelineAccess: boolean;
+  dashboardTeamAccess: boolean;
+  dashboardActivityAccess: boolean;
+  dashboardBenchmarksAccess: boolean;
 }
 
 interface EmailAccountRow {
@@ -75,6 +87,31 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
     label: "Upwork — Proposal Writing",
     hint: "Paste a job link and get an AI-generated cover letter. Separate from Bidding/Invite/Requests above.",
   },
+];
+
+/** Which tabs of the cross-team Dashboard Center (/dashboards) this person
+ *  can see (Part: Dashboard Center per-user access, 2026-10-21, explicit
+ *  user request — "I want that i got option to show different dashboard to
+ *  different persons"). Independent of the module flags above — e.g.
+ *  dashboardUpworkAccess controls visibility of the Dashboard Center's
+ *  Upwork tab specifically, separate from upworkBiddingAccess/
+ *  upworkInviteAccess/upworkRequestsAccess which gate the actual Upwork
+ *  tool pages elsewhere in the sidebar. Admins/Managers get every tab by
+ *  default when created (see UsersService's role-default seeding) but that
+ *  default is just a starting point, editable here same as any other flag. */
+const DASHBOARD_LABELS: { key: keyof ModuleFlags; label: string }[] = [
+  { key: "dashboardOverviewAccess", label: "Overview" },
+  { key: "dashboardLeadsAccess", label: "Leads" },
+  { key: "dashboardEmailAccess", label: "Email Campaigns" },
+  { key: "dashboardInboxAccess", label: "Unified Inbox" },
+  { key: "dashboardSocialAccess", label: "Social Inbox" },
+  { key: "dashboardUpworkAccess", label: "Upwork" },
+  { key: "dashboardMetaAdsAccess", label: "Meta Ads" },
+  { key: "dashboardWebsiteAnalyticsAccess", label: "Website Analytics" },
+  { key: "dashboardPipelineAccess", label: "Pipeline" },
+  { key: "dashboardTeamAccess", label: "Team Performance" },
+  { key: "dashboardActivityAccess", label: "Activity / Audit" },
+  { key: "dashboardBenchmarksAccess", label: "Benchmarks" },
 ];
 
 /**
@@ -185,6 +222,22 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
           <div className="flex flex-wrap gap-3">
             {MODULE_LABELS.map(({ key, label, hint }) => (
               <label key={key} className="flex items-center gap-1.5 text-sm" title={hint}>
+                <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Dashboard Center tabs</h4>
+        {data.isAdmin ? (
+          <p className="text-xs text-ink/50">Admins always see every Dashboard Center tab — this can&apos;t be restricted here.</p>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {DASHBOARD_LABELS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-1.5 text-sm">
                 <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
                 {label}
               </label>

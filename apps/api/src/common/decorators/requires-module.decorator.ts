@@ -11,7 +11,23 @@ export type AccessModule =
   | "UPWORK_REQUESTS"
   | "META_ADS"
   | "UPWORK_API"
-  | "UPWORK_PROPOSAL_WRITING";
+  | "UPWORK_PROPOSAL_WRITING"
+  // Per-tab Dashboard Center visibility (Part: Dashboard Center per-user
+  // access, 2026-10-21) — independent of the module flags above; these gate
+  // the cross-team BI tabs under /dashboards, not the underlying feature
+  // pages those tabs summarize.
+  | "DASHBOARD_OVERVIEW"
+  | "DASHBOARD_LEADS"
+  | "DASHBOARD_EMAIL"
+  | "DASHBOARD_INBOX"
+  | "DASHBOARD_SOCIAL"
+  | "DASHBOARD_UPWORK"
+  | "DASHBOARD_META_ADS"
+  | "DASHBOARD_WEBSITE_ANALYTICS"
+  | "DASHBOARD_PIPELINE"
+  | "DASHBOARD_TEAM"
+  | "DASHBOARD_ACTIVITY"
+  | "DASHBOARD_BENCHMARKS";
 
 /** Attach to a controller/route: @RequiresModule("EMAIL_HUB"). Enforced by
  *  ModuleAccessGuard. Pass an array for OR semantics — access.

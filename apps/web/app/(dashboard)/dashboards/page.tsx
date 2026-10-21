@@ -2,9 +2,11 @@
 
 import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getCurrentUser } from "../../../lib/api-client";
+import { useQuery } from "@tanstack/react-query";
+import { api, getCurrentUser } from "../../../lib/api-client";
 import { Tabs } from "../../../components/ui/tabs";
 import { EmptyState } from "../../../components/ui/empty-state";
+import { SkeletonCard } from "../../../components/ui/skeleton";
 import { OverviewTab } from "./_tabs/overview";
 import { LeadsTab } from "./_tabs/leads";
 import { EmailTab } from "./_tabs/email";
@@ -18,6 +20,8 @@ import { ActivityTab } from "./_tabs/activity";
 import { BenchmarksTab } from "./_tabs/benchmarks";
 import { WebsiteAnalyticsTab } from "./_tabs/website-analytics";
 
+/** Each tab's `value` maps to a DashboardAccessFlags key via FLAG_BY_TAB
+ *  below — keep both in sync when adding a tab. */
 const ALL_TAB_DEFS: { value: string; label: string }[] = [
   { value: "overview", label: "Overview" },
   { value: "leads", label: "Leads" },
@@ -40,19 +44,35 @@ const ALL_TAB_DEFS: { value: string; label: string }[] = [
 
 const DEFAULT_TAB = "overview";
 
-// Mirrors DashboardCenterController's own @Roles matrix exactly (Part:
-// Dashboard Center access fix, 2026-10-01, explicit user request — "the
-// team is able to see the dashboards, but are not able to see the content
-// in it... make sure that they don't see it"). Before this, every role saw
-// the full tabbed shell and every API call underneath it 403'd, which read
-// as a broken page rather than a hidden one. ADMIN/MANAGER see everything;
-// BUSINESS_DEVELOPER only has backend access to the Upwork tab's routes
-// (see dashboard-center.controller.ts's method-level @Roles overrides and
-// UpworkRequestController's dashboardSummary route), so that's the only tab
-// shown to them; every other role has zero Dashboard Center routes granted
-// and gets a clean "no access" message instead of a page full of errors.
-const FULL_ACCESS_ROLES = ["ADMIN", "MANAGER"];
-const UPWORK_ONLY_ROLES = ["BUSINESS_DEVELOPER"];
+interface DashboardAccessFlags {
+  dashboardOverviewAccess: boolean;
+  dashboardLeadsAccess: boolean;
+  dashboardEmailAccess: boolean;
+  dashboardInboxAccess: boolean;
+  dashboardSocialAccess: boolean;
+  dashboardUpworkAccess: boolean;
+  dashboardMetaAdsAccess: boolean;
+  dashboardWebsiteAnalyticsAccess: boolean;
+  dashboardPipelineAccess: boolean;
+  dashboardTeamAccess: boolean;
+  dashboardActivityAccess: boolean;
+  dashboardBenchmarksAccess: boolean;
+}
+
+const FLAG_BY_TAB: Record<string, keyof DashboardAccessFlags> = {
+  overview: "dashboardOverviewAccess",
+  leads: "dashboardLeadsAccess",
+  email: "dashboardEmailAccess",
+  inbox: "dashboardInboxAccess",
+  social: "dashboardSocialAccess",
+  upwork: "dashboardUpworkAccess",
+  "meta-ads": "dashboardMetaAdsAccess",
+  "website-analytics": "dashboardWebsiteAnalyticsAccess",
+  pipeline: "dashboardPipelineAccess",
+  team: "dashboardTeamAccess",
+  activity: "dashboardActivityAccess",
+  benchmarks: "dashboardBenchmarksAccess",
+};
 
 /**
  * Dashboard Center, unified (Part: Dashboard Center tab consolidation,
@@ -68,20 +88,48 @@ const UPWORK_ONLY_ROLES = ["BUSINESS_DEVELOPER"];
 function DashboardCenterTabs() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const role = getCurrentUser()?.role;
-  const hasFullAccess = role ? FULL_ACCESS_ROLES.includes(role) : false;
-  const isUpworkOnly = role ? UPWORK_ONLY_ROLES.includes(role) : false;
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
 
-  if (!hasFullAccess && !isUpworkOnly) {
+  // Per-tab, per-user flags (Part: Dashboard Center per-user access,
+  // 2026-10-21, explicit user request — "I want that i got option to show
+  // different dashboard to different persons") replace the old hardcoded
+  // FULL_ACCESS_ROLES/UPWORK_ONLY_ROLES role arrays. ADMIN still bypasses
+  // (matches ModuleAccessGuard's own unconditional ADMIN bypass on the
+  // backend) without waiting on this fetch. Fails CLOSED while loading —
+  // unlike sidebar-nav's "default open" module flags, this page renders
+  // real cross-team data, so a flash of tabs/content the person can't
+  // actually load (then a yank once flags arrive) is worse than a brief
+  // loading state.
+  const flagsQuery = useQuery({
+    queryKey: ["dc-my-dashboard-access"],
+    queryFn: () => api.getMe() as Promise<DashboardAccessFlags>,
+    enabled: !isAdmin,
+  });
+
+  if (!isAdmin && flagsQuery.isLoading) {
+    return <SkeletonCard className="h-64" />;
+  }
+  if (!isAdmin && flagsQuery.error) {
     return (
       <EmptyState
-        title="No access to the Dashboard Center"
-        description="This cross-team view is restricted to Admins, Managers, and (for the Upwork tab) Business Developers — ask an admin if you need access."
+        title="Couldn't load your Dashboard Center access"
+        description={(flagsQuery.error as Error).message}
       />
     );
   }
 
-  const tabDefs = hasFullAccess ? ALL_TAB_DEFS : ALL_TAB_DEFS.filter((t) => t.value === "upwork");
+  const flags = flagsQuery.data;
+  const tabDefs = isAdmin ? ALL_TAB_DEFS : ALL_TAB_DEFS.filter((t) => flags?.[FLAG_BY_TAB[t.value]]);
+
+  if (tabDefs.length === 0) {
+    return (
+      <EmptyState
+        title="No access to the Dashboard Center"
+        description="You don't have any Dashboard Center tabs granted yet — ask an admin to grant them in Settings > Team > Access."
+      />
+    );
+  }
+
   const requestedTab = searchParams.get("tab") ?? DEFAULT_TAB;
   const tab = tabDefs.some((t) => t.value === requestedTab) ? requestedTab : tabDefs[0].value;
 

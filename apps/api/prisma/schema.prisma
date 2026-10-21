@@ -299,6 +299,31 @@ model User {
   /// upworkApiAccess above (genuinely new, not a retrofit onto something
   /// everyone already used) — granted per-person from Settings > Team.
   upworkProposalWritingAccess Boolean      @default(false) @map("upwork_proposal_writing_access")
+  /// Per-tab visibility into the Dashboard Center (Part: Dashboard Center
+  /// per-user access, 2026-10-21, explicit user request — "I want that i
+  /// got option to show different dashboard to different persons"). Before
+  /// this, every tab was gated purely by role (ADMIN/MANAGER saw all 12,
+  /// BUSINESS_DEVELOPER saw only Upwork, everyone else saw none) with no
+  /// way to grant one specific tab to one specific person. All 12 default
+  /// false here — the real defaults live in the migration's backfill
+  /// (existing ADMIN/MANAGER users set true on every flag, existing
+  /// BUSINESS_DEVELOPER set true only on dashboardUpworkAccess) and in
+  /// UsersService.create's role-based seeding for brand-new users, so
+  /// nobody's current access changes the moment this ships — an admin can
+  /// only ADD a tab for someone beyond what their role already implies.
+  /// ADMIN still always bypasses via ModuleAccessGuard regardless of these.
+  dashboardOverviewAccess         Boolean @default(false) @map("dashboard_overview_access")
+  dashboardLeadsAccess            Boolean @default(false) @map("dashboard_leads_access")
+  dashboardEmailAccess            Boolean @default(false) @map("dashboard_email_access")
+  dashboardInboxAccess            Boolean @default(false) @map("dashboard_inbox_access")
+  dashboardSocialAccess           Boolean @default(false) @map("dashboard_social_access")
+  dashboardUpworkAccess           Boolean @default(false) @map("dashboard_upwork_access")
+  dashboardMetaAdsAccess          Boolean @default(false) @map("dashboard_meta_ads_access")
+  dashboardWebsiteAnalyticsAccess Boolean @default(false) @map("dashboard_website_analytics_access")
+  dashboardPipelineAccess         Boolean @default(false) @map("dashboard_pipeline_access")
+  dashboardTeamAccess             Boolean @default(false) @map("dashboard_team_access")
+  dashboardActivityAccess         Boolean @default(false) @map("dashboard_activity_access")
+  dashboardBenchmarksAccess       Boolean @default(false) @map("dashboard_benchmarks_access")
   /// The org's single authorized administrator (Part: Notification Center &
   /// Admin/Audit, 2026-08-31) — distinct from Role.ADMIN, which any admin can
   /// already grant to any other user. This flag gates System Logs and

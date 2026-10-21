@@ -47,7 +47,19 @@ type ModuleFlag =
   | "upworkRequestsAccess"
   | "metaAdsAccess"
   | "upworkApiAccess"
-  | "upworkProposalWritingAccess";
+  | "upworkProposalWritingAccess"
+  | "dashboardOverviewAccess"
+  | "dashboardLeadsAccess"
+  | "dashboardEmailAccess"
+  | "dashboardInboxAccess"
+  | "dashboardSocialAccess"
+  | "dashboardUpworkAccess"
+  | "dashboardMetaAdsAccess"
+  | "dashboardWebsiteAnalyticsAccess"
+  | "dashboardPipelineAccess"
+  | "dashboardTeamAccess"
+  | "dashboardActivityAccess"
+  | "dashboardBenchmarksAccess";
 
 type NavItem =
   // moduleFlag accepts an array for OR semantics (Part: narrow Social Inbox
@@ -91,13 +103,32 @@ const NAV: NavItem[] = [
   // its own group entry is now an in-page tab on /dashboards itself (see
   // that page for the tab list, including why Meta Ads still links out
   // rather than duplicating its own dashboard inline).
-  // Mirrors DashboardCenterController's own @Roles matrix -- ADMIN/MANAGER
-  // see every tab there; BUSINESS_DEVELOPER only has backend access to the
-  // Upwork tab's routes and sees a narrowed-down Dashboard Center page (see
-  // dashboards/page.tsx); every other role has zero Dashboard Center routes
-  // granted, so the link itself is hidden rather than leading to a page
-  // whose every API call 403s.
-  { type: "link", href: "/dashboards", label: "Dashboard Center", allowedRoles: ["ADMIN", "MANAGER", "BUSINESS_DEVELOPER"] },
+  // allowedRoles kept as a fast-path for the common case (ADMIN/MANAGER/
+  // Business Developer); moduleFlag is OR'd in below (Part: Dashboard
+  // Center per-user access, 2026-10-21) so a person outside those roles but
+  // individually granted at least one Dashboard Center tab via
+  // PersonAccessPanel still sees this link — see dashboards/page.tsx for
+  // the actual per-tab filtering once they're on the page.
+  {
+    type: "link",
+    href: "/dashboards",
+    label: "Dashboard Center",
+    allowedRoles: ["ADMIN", "MANAGER", "BUSINESS_DEVELOPER"],
+    moduleFlag: [
+      "dashboardOverviewAccess",
+      "dashboardLeadsAccess",
+      "dashboardEmailAccess",
+      "dashboardInboxAccess",
+      "dashboardSocialAccess",
+      "dashboardUpworkAccess",
+      "dashboardMetaAdsAccess",
+      "dashboardWebsiteAnalyticsAccess",
+      "dashboardPipelineAccess",
+      "dashboardTeamAccess",
+      "dashboardActivityAccess",
+      "dashboardBenchmarksAccess",
+    ],
+  },
   {
     type: "group",
     label: "Lead Room",
@@ -271,6 +302,18 @@ export function SidebarNav({
           metaAdsAccess: boolean;
           upworkApiAccess: boolean;
           upworkProposalWritingAccess: boolean;
+          dashboardOverviewAccess: boolean;
+          dashboardLeadsAccess: boolean;
+          dashboardEmailAccess: boolean;
+          dashboardInboxAccess: boolean;
+          dashboardSocialAccess: boolean;
+          dashboardUpworkAccess: boolean;
+          dashboardMetaAdsAccess: boolean;
+          dashboardWebsiteAnalyticsAccess: boolean;
+          dashboardPipelineAccess: boolean;
+          dashboardTeamAccess: boolean;
+          dashboardActivityAccess: boolean;
+          dashboardBenchmarksAccess: boolean;
           isPrimaryAdmin: boolean;
         };
         setModuleAccess({
@@ -285,6 +328,18 @@ export function SidebarNav({
           metaAdsAccess: m.metaAdsAccess,
           upworkApiAccess: m.upworkApiAccess,
           upworkProposalWritingAccess: m.upworkProposalWritingAccess,
+          dashboardOverviewAccess: m.dashboardOverviewAccess,
+          dashboardLeadsAccess: m.dashboardLeadsAccess,
+          dashboardEmailAccess: m.dashboardEmailAccess,
+          dashboardInboxAccess: m.dashboardInboxAccess,
+          dashboardSocialAccess: m.dashboardSocialAccess,
+          dashboardUpworkAccess: m.dashboardUpworkAccess,
+          dashboardMetaAdsAccess: m.dashboardMetaAdsAccess,
+          dashboardWebsiteAnalyticsAccess: m.dashboardWebsiteAnalyticsAccess,
+          dashboardPipelineAccess: m.dashboardPipelineAccess,
+          dashboardTeamAccess: m.dashboardTeamAccess,
+          dashboardActivityAccess: m.dashboardActivityAccess,
+          dashboardBenchmarksAccess: m.dashboardBenchmarksAccess,
         });
         setIsPrimaryAdmin(m.isPrimaryAdmin);
       })
@@ -332,7 +387,12 @@ export function SidebarNav({
     if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
     if (item.type === "link" && item.allowedRoles) {
       const role = getCurrentUser()?.role;
-      return role ? item.allowedRoles.includes(role) : false;
+      const roleOk = role ? item.allowedRoles.includes(role) : false;
+      // OR'd with moduleFlag (Part: Dashboard Center per-user access,
+      // 2026-10-21) -- a person outside allowedRoles but individually
+      // granted at least one Dashboard Center tab (PersonAccessPanel) still
+      // needs the nav link itself to reach /dashboards.
+      return roleOk || flagGranted(item.moduleFlag);
     }
     if (item.type === "group") {
       const flag = MODULE_FLAG_BY_GROUP[item.label];

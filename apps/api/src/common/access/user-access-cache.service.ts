@@ -17,6 +17,18 @@ export interface UserAccessSnapshot {
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
   upworkProposalWritingAccess: boolean;
+  dashboardOverviewAccess: boolean;
+  dashboardLeadsAccess: boolean;
+  dashboardEmailAccess: boolean;
+  dashboardInboxAccess: boolean;
+  dashboardSocialAccess: boolean;
+  dashboardUpworkAccess: boolean;
+  dashboardMetaAdsAccess: boolean;
+  dashboardWebsiteAnalyticsAccess: boolean;
+  dashboardPipelineAccess: boolean;
+  dashboardTeamAccess: boolean;
+  dashboardActivityAccess: boolean;
+  dashboardBenchmarksAccess: boolean;
   isPrimaryAdmin: boolean;
 }
 
@@ -71,6 +83,18 @@ export class UserAccessCacheService {
           metaAdsAccess: true,
           upworkApiAccess: true,
           upworkProposalWritingAccess: true,
+          dashboardOverviewAccess: true,
+          dashboardLeadsAccess: true,
+          dashboardEmailAccess: true,
+          dashboardInboxAccess: true,
+          dashboardSocialAccess: true,
+          dashboardUpworkAccess: true,
+          dashboardMetaAdsAccess: true,
+          dashboardWebsiteAnalyticsAccess: true,
+          dashboardPipelineAccess: true,
+          dashboardTeamAccess: true,
+          dashboardActivityAccess: true,
+          dashboardBenchmarksAccess: true,
           isPrimaryAdmin: true,
         },
       });

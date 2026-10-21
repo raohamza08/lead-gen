@@ -22,6 +22,39 @@ import { UserAccessCacheService } from "../common/access/user-access-cache.servi
  *  save()), so using it as a cache-busting query param forces a real
  *  re-fetch whenever the avatar actually changes, while staying stable
  *  (and thus still cacheable) in between. */
+const ALL_DASHBOARD_FLAGS = [
+  "dashboardOverviewAccess",
+  "dashboardLeadsAccess",
+  "dashboardEmailAccess",
+  "dashboardInboxAccess",
+  "dashboardSocialAccess",
+  "dashboardUpworkAccess",
+  "dashboardMetaAdsAccess",
+  "dashboardWebsiteAnalyticsAccess",
+  "dashboardPipelineAccess",
+  "dashboardTeamAccess",
+  "dashboardActivityAccess",
+  "dashboardBenchmarksAccess",
+] as const;
+
+/** Seeds a brand-new user's Dashboard Center flags from their role (Part:
+ *  Dashboard Center per-user access, 2026-10-21) — the same matrix
+ *  DashboardCenterTabs used to hardcode (ADMIN/MANAGER see every tab,
+ *  BUSINESS_DEVELOPER only Upwork, everyone else none) is now just this
+ *  role's *starting point*; an admin can still grant/revoke individual
+ *  tabs afterward via PersonAccessPanel. Only read at creation time — a
+ *  later role change (setRole) does NOT re-run this, same as none of the
+ *  other module flags get re-seeded on a role change either. */
+function dashboardAccessDefaultsForRole(role: Role): Record<string, boolean> {
+  if (role === Role.ADMIN || role === Role.MANAGER) {
+    return Object.fromEntries(ALL_DASHBOARD_FLAGS.map((f) => [f, true]));
+  }
+  if (role === Role.BUSINESS_DEVELOPER) {
+    return { dashboardUpworkAccess: true };
+  }
+  return {};
+}
+
 function avatarUrlFor(userId: string, storageKey: string | null): string | null {
   if (!storageKey) return null;
   return `${apiPublicUrl()}/users/${userId}/avatar?v=${encodeURIComponent(storageKey)}`;
@@ -92,7 +125,7 @@ export class UsersService {
     const passwordHash = await bcrypt.hash(input.password, 12);
     try {
       const user = await this.prisma.user.create({
-        data: { orgId, email: input.email, name: input.name, passwordHash, role: input.role },
+        data: { orgId, email: input.email, name: input.name, passwordHash, role: input.role, ...dashboardAccessDefaultsForRole(input.role) },
         select: { id: true, email: true, name: true, role: true, active: true, createdAt: true },
       });
       this.auditLog.write({
@@ -206,6 +239,18 @@ export class UsersService {
         metaAdsAccess: true,
         upworkApiAccess: true,
         upworkProposalWritingAccess: true,
+        dashboardOverviewAccess: true,
+        dashboardLeadsAccess: true,
+        dashboardEmailAccess: true,
+        dashboardInboxAccess: true,
+        dashboardSocialAccess: true,
+        dashboardUpworkAccess: true,
+        dashboardMetaAdsAccess: true,
+        dashboardWebsiteAnalyticsAccess: true,
+        dashboardPipelineAccess: true,
+        dashboardTeamAccess: true,
+        dashboardActivityAccess: true,
+        dashboardBenchmarksAccess: true,
       },
     });
     if (!targetUser) throw new NotFoundException("User not found");
@@ -252,6 +297,18 @@ export class UsersService {
         metaAdsAccess: targetUser.metaAdsAccess,
         upworkApiAccess: targetUser.upworkApiAccess,
         upworkProposalWritingAccess: targetUser.upworkProposalWritingAccess,
+        dashboardOverviewAccess: targetUser.dashboardOverviewAccess,
+        dashboardLeadsAccess: targetUser.dashboardLeadsAccess,
+        dashboardEmailAccess: targetUser.dashboardEmailAccess,
+        dashboardInboxAccess: targetUser.dashboardInboxAccess,
+        dashboardSocialAccess: targetUser.dashboardSocialAccess,
+        dashboardUpworkAccess: targetUser.dashboardUpworkAccess,
+        dashboardMetaAdsAccess: targetUser.dashboardMetaAdsAccess,
+        dashboardWebsiteAnalyticsAccess: targetUser.dashboardWebsiteAnalyticsAccess,
+        dashboardPipelineAccess: targetUser.dashboardPipelineAccess,
+        dashboardTeamAccess: targetUser.dashboardTeamAccess,
+        dashboardActivityAccess: targetUser.dashboardActivityAccess,
+        dashboardBenchmarksAccess: targetUser.dashboardBenchmarksAccess,
       },
       emailAccounts: emailAccounts.map((a) => {
         const grant = emailGrantByAccount.get(a.id);
@@ -353,6 +410,18 @@ export class UsersService {
         metaAdsAccess: true,
         upworkApiAccess: true,
         upworkProposalWritingAccess: true,
+        dashboardOverviewAccess: true,
+        dashboardLeadsAccess: true,
+        dashboardEmailAccess: true,
+        dashboardInboxAccess: true,
+        dashboardSocialAccess: true,
+        dashboardUpworkAccess: true,
+        dashboardMetaAdsAccess: true,
+        dashboardWebsiteAnalyticsAccess: true,
+        dashboardPipelineAccess: true,
+        dashboardTeamAccess: true,
+        dashboardActivityAccess: true,
+        dashboardBenchmarksAccess: true,
         isPrimaryAdmin: true,
         displayName: true,
         jobTitle: true,

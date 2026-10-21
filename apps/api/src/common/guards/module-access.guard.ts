@@ -16,6 +16,18 @@ const FIELD_BY_MODULE: Record<
   | "metaAdsAccess"
   | "upworkApiAccess"
   | "upworkProposalWritingAccess"
+  | "dashboardOverviewAccess"
+  | "dashboardLeadsAccess"
+  | "dashboardEmailAccess"
+  | "dashboardInboxAccess"
+  | "dashboardSocialAccess"
+  | "dashboardUpworkAccess"
+  | "dashboardMetaAdsAccess"
+  | "dashboardWebsiteAnalyticsAccess"
+  | "dashboardPipelineAccess"
+  | "dashboardTeamAccess"
+  | "dashboardActivityAccess"
+  | "dashboardBenchmarksAccess"
 > = {
   LEAD_GENERATION: "leadGenAccess",
   EMAIL_HUB: "emailHubAccess",
@@ -39,6 +51,22 @@ const FIELD_BY_MODULE: Record<
   // Proposal Writing) — a separate module from UPWORK/UPWORK_REQUESTS
   // above, same "not everyone needs everything" per-flag reasoning.
   UPWORK_PROPOSAL_WRITING: "upworkProposalWritingAccess",
+  // Per-tab Dashboard Center visibility (Part: Dashboard Center per-user
+  // access, 2026-10-21) — replaces DashboardCenterTabs' hardcoded
+  // FULL_ACCESS_ROLES/UPWORK_ONLY_ROLES role arrays with the same per-user
+  // flag mechanism every other module here already uses.
+  DASHBOARD_OVERVIEW: "dashboardOverviewAccess",
+  DASHBOARD_LEADS: "dashboardLeadsAccess",
+  DASHBOARD_EMAIL: "dashboardEmailAccess",
+  DASHBOARD_INBOX: "dashboardInboxAccess",
+  DASHBOARD_SOCIAL: "dashboardSocialAccess",
+  DASHBOARD_UPWORK: "dashboardUpworkAccess",
+  DASHBOARD_META_ADS: "dashboardMetaAdsAccess",
+  DASHBOARD_WEBSITE_ANALYTICS: "dashboardWebsiteAnalyticsAccess",
+  DASHBOARD_PIPELINE: "dashboardPipelineAccess",
+  DASHBOARD_TEAM: "dashboardTeamAccess",
+  DASHBOARD_ACTIVITY: "dashboardActivityAccess",
+  DASHBOARD_BENCHMARKS: "dashboardBenchmarksAccess",
 };
 
 /**

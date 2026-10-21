@@ -58,9 +58,14 @@ export class UpworkRequestController {
   }
 
   /** Org-wide summary for the Upwork Dashboard's Requests section — cross-PM
-   *  visibility, so restricted the same way the Dashboard Center itself is. */
+   *  visibility, so restricted the same way the Dashboard Center's Upwork
+   *  tab itself is (Part: Dashboard Center per-user access, 2026-10-21 —
+   *  replaces the hardcoded ADMIN/MANAGER/BUSINESS_DEVELOPER @Roles with the
+   *  same dashboardUpworkAccess flag that tab's other routes now check;
+   *  method-level @RequiresModule overrides the class-level UPWORK_REQUESTS
+   *  for just this one route). */
   @Get("dashboard-summary")
-  @Roles(Role.ADMIN, Role.MANAGER, Role.BUSINESS_DEVELOPER)
+  @RequiresModule("DASHBOARD_UPWORK")
   dashboardSummary(@CurrentUser() user: JwtClaims, @Query() query: QueryUpworkWeekDto) {
     return this.requests.getDashboardSummary(user.orgId, query);
   }
