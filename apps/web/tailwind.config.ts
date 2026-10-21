@@ -46,13 +46,19 @@ const config: Config = {
       // text-[11px] uppercase tracking-wide stat-tile label pattern, and
       // `numeric-lg` is the text-2xl font-semibold tracking-tight stat value
       // pattern — all four already appear verbatim on the Overview page.
+      // Heading tokens bumped (Part: EBOS-inspired shell redesign round 2,
+      // 2026-10-21, explicit user request — "especially the fonts... also
+      // check... the nav bar"/"I want a clean readable font and font size in
+      // the dashboard") to sit closer to EBOS's bold greeting-card headline
+      // scale; `label`/`metadata`/body text untouched here because the root
+      // html font-size bump in globals.css already scales those up via rem.
       fontSize: {
-        display: ["2.5rem", { lineHeight: "1.15", fontWeight: "600", letterSpacing: "-0.02em" }],
-        "page-title": ["1.375rem", { lineHeight: "1.3", fontWeight: "600", letterSpacing: "-0.01em" }],
-        "section-title": ["0.875rem", { lineHeight: "1.4", fontWeight: "600" }],
+        display: ["2.75rem", { lineHeight: "1.15", fontWeight: "700", letterSpacing: "-0.02em" }],
+        "page-title": ["1.75rem", { lineHeight: "1.25", fontWeight: "700", letterSpacing: "-0.01em" }],
+        "section-title": ["0.9375rem", { lineHeight: "1.4", fontWeight: "600" }],
         label: ["0.6875rem", { lineHeight: "1.3", fontWeight: "500", letterSpacing: "0.02em" }],
         metadata: ["0.75rem", { lineHeight: "1.4" }],
-        "numeric-lg": ["1.5rem", { lineHeight: "1.2", fontWeight: "600", letterSpacing: "-0.01em" }],
+        "numeric-lg": ["1.625rem", { lineHeight: "1.2", fontWeight: "600", letterSpacing: "-0.01em" }],
       },
       // Mirrors the --duration-*/--ease-* CSS vars in globals.css so the same
       // three durations and three easings are reachable as Tailwind

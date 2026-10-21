@@ -345,6 +345,14 @@ body {
    obviously-unstyled control against a custom-themed dark app. Driven by
    --ink-rgb so it's correct in both themes without a separate dark rule. */
 html {
+  /* Root type scale bump (Part: EBOS-inspired shell redesign round 2,
+     2026-10-21, explicit user request — "I want a clean readable font and
+     font size in the dashboard"). Tailwind's fontSize AND spacing utilities
+     are both rem-based, so this one change scales nearly every text-* size
+     and padding/gap/margin utility in the app proportionally (~106%) without
+     touching individual components -- EBOS reads larger/airier throughout,
+     not just in its headings. */
+  font-size: 106.25%;
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--ink-rgb) / 0.2) transparent;
 }

@@ -19,15 +19,29 @@ interface NavLink {
    *  Inbox. Omitted for links with no meaningful unread count (Leads,
    *  Follow-ups, Sent, Settings). */
   countKey?: "unread" | "important" | "ignored";
-  /** Nested links shown in a collapsible sub-list under this one (Part:
-   *  Social Media nav reorg, 2026-09-30) — e.g. "Accounts" expands to the
-   *  individual platform pages. Clicking the row itself still navigates to
-   *  `href`; a separate chevron toggles the sub-list open/closed.
+  /** Nested links shown flat under this one (Part: Social Media nav reorg,
+   *  2026-09-30) — e.g. "Accounts" expands to the individual platform pages.
+   *  Clicking the row itself still navigates to `href`; the children render
+   *  permanently visible beneath it (Part: EBOS-inspired shell redesign
+   *  round 2, 2026-10-21 — the reference app has no collapse/expand toggle
+   *  anywhere in its nav, so this no longer has one either).
    *  `socialPlatform` (Part: Social Inbox removal / per-module messaging,
    *  2026-10-21) drives that child's own unread badge from the per-platform
    *  breakdown GET /social-inbox/stats now returns — independent of
    *  `countKey` above, which only ever read the Email Hub stats shape. */
-  children?: { href: string; label: string; socialPlatform?: "FACEBOOK" | "INSTAGRAM" | "LINKEDIN" | "WHATSAPP" }[];
+  children?: {
+    href: string;
+    label: string;
+    socialPlatform?: "FACEBOOK" | "INSTAGRAM" | "LINKEDIN" | "WHATSAPP";
+    icon?: (props: { className?: string }) => JSX.Element;
+  }[];
+  /** Small leading icon (Part: EBOS-inspired shell redesign round 2,
+   *  2026-10-21, explicit user request — "check the dropdowns in the nav
+   *  bar bec there are no dropdowns [in EBOS]... the nav bar is still not
+   *  exactly like this") — EBOS gives every single leaf nav row its own
+   *  icon; falls back to a plain dot in renderPanel if omitted rather than
+   *  leaving a row with nothing (every row in the reference has one). */
+  icon?: (props: { className?: string }) => JSX.Element;
   /** Per-link access, independent of the group's own moduleFlag (Part:
    *  Upwork Requests, 2026-10-01, explicit user request — "not everyone
    *  needs everything... hide bidding and invites for them"). Only the
@@ -74,6 +88,7 @@ type NavItem =
       type: "link";
       href: string;
       label: string;
+      icon?: (props: { className?: string }) => JSX.Element;
       moduleFlag?: ModuleFlag | ModuleFlag[];
       requiresPrimaryAdmin?: boolean;
       /** Restricts this link to specific roles, independent of moduleFlag
@@ -144,6 +159,205 @@ function AdsIcon({ className }: { className?: string }) {
   );
 }
 
+/* Small leaf-row icons (Part: EBOS-inspired shell redesign round 2,
+ * 2026-10-21, explicit user request — every individual nav row in EBOS has
+ * its own line icon, not just the workspace rail). Deliberately thinner
+ * stroke than the rail icons above so they read as secondary at the smaller
+ * leaf-row size. */
+function GridIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <rect x="3.5" y="3.5" width="7" height="7" rx="1.2" />
+      <rect x="13.5" y="3.5" width="7" height="7" rx="1.2" />
+      <rect x="3.5" y="13.5" width="7" height="7" rx="1.2" />
+      <rect x="13.5" y="13.5" width="7" height="7" rx="1.2" />
+    </svg>
+  );
+}
+function UserIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" strokeLinecap="round" />
+    </svg>
+  );
+}
+function FunnelIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M4 5h16l-6 7.5V19l-4 2v-8.5z" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+function LayersIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M12 3.5 3.5 8 12 12.5 20.5 8z" strokeLinejoin="round" />
+      <path d="M3.5 12 12 16.5 20.5 12M3.5 16l8.5 4.5L20.5 16" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function MegaphoneIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M3 10v4a1 1 0 0 0 1 1h2l8 4V5L6 9H4a1 1 0 0 0-1 1z" strokeLinejoin="round" strokeLinecap="round" />
+      <path d="M18 9a4 4 0 0 1 0 6" strokeLinecap="round" />
+    </svg>
+  );
+}
+function ChartIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M4 20V10M11 20V4M18 20v-7" strokeLinecap="round" />
+    </svg>
+  );
+}
+function BoltIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M13 3 5 13h5l-1 8 8-10h-5z" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+function GearIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <circle cx="12" cy="12" r="3" />
+      <path
+        d="M12 3.5v2M12 18.5v2M20.5 12h-2M5.5 12h-2M17.8 6.2l-1.4 1.4M7.6 16.4l-1.4 1.4M17.8 17.8l-1.4-1.4M7.6 7.6 6.2 6.2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+function MailIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <rect x="3.5" y="5.5" width="17" height="13" rx="1.5" />
+      <path d="m4.5 6.5 7.5 6 7.5-6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function StarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="m12 3.5 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function ClockIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function EyeOffIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path
+        d="M3.5 12S7 5.5 12 5.5 20.5 12 20.5 12 17 18.5 12 18.5 3.5 12 3.5 12Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="2.5" />
+      <path d="M4 20 20 4" strokeLinecap="round" />
+    </svg>
+  );
+}
+function SendIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M20.5 3.5 10.5 13.5M20.5 3.5 14 20.5l-3.5-7-7-3.5z" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function EyeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path
+        d="M3.5 12S7 5.5 12 5.5 20.5 12 20.5 12 17 18.5 12 18.5 3.5 12 3.5 12Z"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="12" r="2.5" />
+    </svg>
+  );
+}
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="1.5" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4" strokeLinecap="round" />
+    </svg>
+  );
+}
+function TagIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M11.5 3.5H5a1.5 1.5 0 0 0-1.5 1.5v6.5l10 10 8-8-10-10Z" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx="8" cy="8" r="1.5" />
+    </svg>
+  );
+}
+function ImageIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1.5" />
+      <circle cx="9" cy="10" r="1.6" />
+      <path d="m5 18 5-5 4 3 3-3.5 3.5 4.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function DollarIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M12 3v18M16.5 7.5c0-1.7-2-3-4.5-3s-4.5 1.3-4.5 3 2 2.6 4.5 3 4.5 1.3 4.5 3-2 3-4.5 3-4.5-1.3-4.5-3" strokeLinecap="round" />
+    </svg>
+  );
+}
+function ClipboardIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <rect x="5" y="4.5" width="14" height="16" rx="1.5" />
+      <rect x="8.5" y="3" width="7" height="3" rx="1" />
+      <path d="M8.5 11.5h7M8.5 15.5h7" strokeLinecap="round" />
+    </svg>
+  );
+}
+function FileIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M7 3.5h7l4 4V20a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4.5a1 1 0 0 1 1-1Z" strokeLinejoin="round" />
+      <path d="M14 3.5V8h4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function RssIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M4.5 4.5a15 15 0 0 1 15 15M4.5 10.5a9 9 0 0 1 9 9" strokeLinecap="round" />
+      <circle cx="5.5" cy="18.5" r="1.6" />
+    </svg>
+  );
+}
+function PlugIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M9 3v5M15 3v5M6 8h12v4a6 6 0 0 1-12 0z" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M12 18v3" strokeLinecap="round" />
+    </svg>
+  );
+}
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={1.75}>
+      <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.3-.67L3 21l1.67-6.2A8.5 8.5 0 1 1 21 11.5z" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /**
  * The dashboard's information architecture (Part: EBOS-inspired shell
  * redesign, 2026-10-21 — grouping these into icon-rail "workspaces" on top
@@ -163,6 +377,7 @@ const WORKSPACES: Workspace[] = [
         type: "link",
         href: "/dashboards",
         label: "Dashboard Center",
+        icon: GridIcon,
         allowedRoles: ["ADMIN", "MANAGER", "BUSINESS_DEVELOPER"],
         moduleFlag: [
           "dashboardOverviewAccess",
@@ -187,17 +402,17 @@ const WORKSPACES: Workspace[] = [
     icon: LeadsIcon,
     defaultHref: "/leads",
     items: [
-      { type: "group", label: "Lead Room", links: [{ href: "/leads", label: "Leads" }] },
+      { type: "group", label: "Lead Room", links: [{ href: "/leads", label: "Leads", icon: UserIcon }] },
       {
         type: "group",
         label: "Lead Generation",
         links: [
-          { href: "/pipeline", label: "Pipeline" },
-          { href: "/sequences", label: "Sequences" },
-          { href: "/campaigns", label: "Campaigns" },
-          { href: "/analytics", label: "Analytics" },
-          { href: "/automation", label: "Automation" },
-          { href: "/settings/lead-generation", label: "Settings" },
+          { href: "/pipeline", label: "Pipeline", icon: FunnelIcon },
+          { href: "/sequences", label: "Sequences", icon: LayersIcon },
+          { href: "/campaigns", label: "Campaigns", icon: MegaphoneIcon },
+          { href: "/analytics", label: "Analytics", icon: ChartIcon },
+          { href: "/automation", label: "Automation", icon: BoltIcon },
+          { href: "/settings/lead-generation", label: "Settings", icon: GearIcon },
         ],
       },
     ],
@@ -212,14 +427,14 @@ const WORKSPACES: Workspace[] = [
         type: "group",
         label: "Email Hub",
         links: [
-          { href: "/email-hub", label: "Unified Inbox", matchSearch: "", countKey: "unread" },
-          { href: "/email-hub?view=important", label: "Important", matchSearch: "view=important", countKey: "important" },
-          { href: "/email-hub?view=leads", label: "Leads", matchSearch: "view=leads" },
-          { href: "/email-hub?view=followups", label: "Follow-ups", matchSearch: "view=followups" },
-          { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored", countKey: "ignored" },
-          { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent" },
-          { href: "/email-hub?view=tracked", label: "Tracked", matchSearch: "view=tracked" },
-          { href: "/settings/email-hub", label: "Settings" },
+          { href: "/email-hub", label: "Unified Inbox", matchSearch: "", countKey: "unread", icon: MailIcon },
+          { href: "/email-hub?view=important", label: "Important", matchSearch: "view=important", countKey: "important", icon: StarIcon },
+          { href: "/email-hub?view=leads", label: "Leads", matchSearch: "view=leads", icon: UserIcon },
+          { href: "/email-hub?view=followups", label: "Follow-ups", matchSearch: "view=followups", icon: ClockIcon },
+          { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored", countKey: "ignored", icon: EyeOffIcon },
+          { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent", icon: SendIcon },
+          { href: "/email-hub?view=tracked", label: "Tracked", matchSearch: "view=tracked", icon: EyeIcon },
+          { href: "/settings/email-hub", label: "Settings", icon: GearIcon },
         ],
       },
       // Engagement (Social Engagement Center) nav entry intentionally
@@ -235,17 +450,18 @@ const WORKSPACES: Workspace[] = [
           {
             href: "/social-media/accounts",
             label: "Accounts",
+            icon: UserIcon,
             children: [
-              { href: "/social-media/linkedin", label: "LinkedIn", socialPlatform: "LINKEDIN" },
-              { href: "/social-media/instagram", label: "Instagram", socialPlatform: "INSTAGRAM" },
-              { href: "/social-media/facebook", label: "Facebook", socialPlatform: "FACEBOOK" },
-              { href: "/social-media/whatsapp", label: "WhatsApp", socialPlatform: "WHATSAPP" },
+              { href: "/social-media/linkedin", label: "LinkedIn", socialPlatform: "LINKEDIN", icon: ChatIcon },
+              { href: "/social-media/instagram", label: "Instagram", socialPlatform: "INSTAGRAM", icon: ChatIcon },
+              { href: "/social-media/facebook", label: "Facebook", socialPlatform: "FACEBOOK", icon: ChatIcon },
+              { href: "/social-media/whatsapp", label: "WhatsApp", socialPlatform: "WHATSAPP", icon: ChatIcon },
             ],
           },
-          { href: "/social-media/calendar", label: "Calendar" },
-          { href: "/social-media/analytics", label: "Analytics" },
-          { href: "/social-media/automations", label: "Automations" },
-          { href: "/settings/social-media", label: "Settings" },
+          { href: "/social-media/calendar", label: "Calendar", icon: CalendarIcon },
+          { href: "/social-media/analytics", label: "Analytics", icon: ChartIcon },
+          { href: "/social-media/automations", label: "Automations", icon: BoltIcon },
+          { href: "/settings/social-media", label: "Settings", icon: GearIcon },
         ],
       },
     ],
@@ -263,17 +479,17 @@ const WORKSPACES: Workspace[] = [
         // Upwork Requests, 2026-10-01) -- see NavLink's own moduleFlag
         // docblock.
         links: [
-          { href: "/upwork/bidding", label: "Bidding", moduleFlag: "upworkBiddingAccess" },
-          { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess" },
-          { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess" },
-          { href: "/upwork/proposal-writing", label: "Proposal Writing", moduleFlag: "upworkProposalWritingAccess" },
-          { href: "/upwork/job-feed", label: "Job Feed", moduleFlag: "upworkProposalWritingAccess" },
+          { href: "/upwork/bidding", label: "Bidding", moduleFlag: "upworkBiddingAccess", icon: DollarIcon },
+          { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess", icon: SendIcon },
+          { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess", icon: ClipboardIcon },
+          { href: "/upwork/proposal-writing", label: "Proposal Writing", moduleFlag: "upworkProposalWritingAccess", icon: FileIcon },
+          { href: "/upwork/job-feed", label: "Job Feed", moduleFlag: "upworkProposalWritingAccess", icon: RssIcon },
         ],
       },
       // Standard module-flag gate (Part: Upwork API integration,
       // 2026-10-12) -- folded into this workspace instead of a standalone
       // top-level link (Part: EBOS-inspired shell redesign, 2026-10-21).
-      { type: "link", href: "/settings/upwork-api", label: "Upwork API", moduleFlag: "upworkApiAccess" },
+      { type: "link", href: "/settings/upwork-api", label: "Upwork API", icon: PlugIcon, moduleFlag: "upworkApiAccess" },
     ],
   },
   {
@@ -288,10 +504,10 @@ const WORKSPACES: Workspace[] = [
         links: [
           // Overview moved into the Dashboard Center's own Meta Ads tab
           // (Part: Dashboard Center tab consolidation, 2026-09-30).
-          { href: "/meta-ads/campaigns", label: "Campaigns" },
-          { href: "/meta-ads/adsets", label: "Ad Sets" },
-          { href: "/meta-ads/ads", label: "Ads" },
-          { href: "/settings/meta-ads", label: "Settings" },
+          { href: "/meta-ads/campaigns", label: "Campaigns", icon: MegaphoneIcon },
+          { href: "/meta-ads/adsets", label: "Ad Sets", icon: TagIcon },
+          { href: "/meta-ads/ads", label: "Ads", icon: ImageIcon },
+          { href: "/settings/meta-ads", label: "Settings", icon: GearIcon },
         ],
       },
     ],
@@ -521,39 +737,22 @@ export function SidebarNav({
   const activeWorkspace = visibleWorkspaces.find((ws) => ws.id === activeWorkspaceId) ?? visibleWorkspaces[0];
   const activeItems = activeWorkspace?.items ?? [];
 
-  // Auto-expand whichever group contains the current page, so a direct link
-  // or refresh never lands on a page whose group looks collapsed/unselected.
-  // A link with children counts as "containing" the current page if either
-  // the link itself or one of its children matches. Re-seeded whenever the
-  // active workspace changes, same reasoning as the one-time init before.
-  const [groupCollapsed, setGroupCollapsed] = useState<Record<string, boolean>>({});
-  const [expandedLinks, setExpandedLinks] = useState<Record<string, boolean>>({});
-  useEffect(() => {
-    const collapsed: Record<string, boolean> = {};
-    const expanded: Record<string, boolean> = {};
-    for (const item of activeItems) {
-      if (item.type !== "group") continue;
-      collapsed[item.label] = !item.links.some(
-        (l) => isActive(pathname, search, l) || l.children?.some((c) => isActive(pathname, search, c)),
-      );
-      for (const link of item.links) {
-        if (link.children) expanded[link.href] = link.children.some((c) => isActive(pathname, search, c));
-      }
-    }
-    setGroupCollapsed((prev) => ({ ...collapsed, ...prev }));
-    setExpandedLinks((prev) => ({ ...expanded, ...prev }));
-    // Only re-seed when the workspace itself changes -- once open/closed by
-    // the user, a group/sub-list shouldn't snap back on every pathname
-    // change within the same workspace (e.g. switching Email Hub views).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeWorkspaceId]);
-
+  /** Flat, always-expanded panel (Part: EBOS-inspired shell redesign round 2,
+   *  2026-10-21, explicit user request — "check the dropdowns in the nav
+   *  bar bec there are no dropdowns [in EBOS]... the nav bar is still not
+   *  exactly like this"). Verified against the live EBOS reference: its
+   *  secondary panel has zero collapse/expand interactions anywhere -- every
+   *  section is a plain static label and every item list is always visible.
+   *  Group headers below are now non-interactive (no button, no chevron) and
+   *  "Accounts"' nested children render flat under it permanently instead of
+   *  behind their own toggle. */
   function renderPanel(onNavigate?: () => void) {
     return (
       <>
         {activeItems.map((item) => {
           if (item.type === "link") {
             const active = pathname === item.href;
+            const Icon = item.icon;
             return (
               <Link
                 key={item.href}
@@ -564,127 +763,107 @@ export function SidebarNav({
                   active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                 }`}
               >
+                {Icon && <Icon className="h-4 w-4 shrink-0" />}
                 {item.label}
               </Link>
             );
           }
 
-          const isOpen = !groupCollapsed[item.label];
           return (
             <div key={item.label} className="flex flex-col">
-              <button
-                type="button"
-                onClick={() => setGroupCollapsed((c) => ({ ...c, [item.label]: !c[item.label] }))}
-                className="flex items-center justify-between rounded-lg px-3 py-2 text-label uppercase text-ink/50 transition-colors duration-fast hover:text-ink/80"
-              >
-                <span className="flex items-center gap-1.5">
-                  {item.label}
-                  {/* Group-level aggregate badge (Part: Social Inbox removal
-                      / per-module messaging, 2026-10-21) — only the Social
-                      Media group has a social-platform unread total today;
-                      a no-op span for every other group. */}
-                  {item.label === "Social Media" && (socialStats?.unread ?? 0) > 0 && (
-                    <span className="tabular rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-primary">
-                      {(socialStats?.unread ?? 0) > 99 ? "99+" : socialStats?.unread}
-                    </span>
-                  )}
-                </span>
-                <span aria-hidden className={`transition-transform duration-fast ${isOpen ? "rotate-90" : ""}`}>
-                  ›
-                </span>
-              </button>
-              {isOpen && (
-                <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
-                  {item.links.map((link) => {
-                    const active = isActive(pathname, search, link);
-                    const count = link.countKey ? stats?.[link.countKey] ?? 0 : 0;
-                    const linkEl = (
-                      <Link
-                        href={link.href}
-                        onClick={onNavigate}
-                        aria-current={active ? "page" : undefined}
-                        className={`flex flex-1 items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
-                          active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
-                        }`}
-                      >
-                        <span>{link.label}</span>
-                        {count > 0 && (
-                          <span
-                            className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                              active ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
-                            }`}
-                          >
-                            {count > 99 ? "99+" : count}
-                          </span>
-                        )}
-                      </Link>
-                    );
+              <div className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-label uppercase text-ink/50">
+                {item.label}
+                {/* Group-level aggregate badge (Part: Social Inbox removal
+                    / per-module messaging, 2026-10-21) — only the Social
+                    Media group has a social-platform unread total today;
+                    a no-op span for every other group. */}
+                {item.label === "Social Media" && (socialStats?.unread ?? 0) > 0 && (
+                  <span className="tabular rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-primary">
+                    {(socialStats?.unread ?? 0) > 99 ? "99+" : socialStats?.unread}
+                  </span>
+                )}
+              </div>
+              <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
+                {item.links.map((link) => {
+                  const active = isActive(pathname, search, link);
+                  const count = link.countKey ? stats?.[link.countKey] ?? 0 : 0;
+                  const LinkIcon = link.icon;
+                  const linkEl = (
+                    <Link
+                      href={link.href}
+                      onClick={onNavigate}
+                      aria-current={active ? "page" : undefined}
+                      className={`flex flex-1 items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
+                        active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {LinkIcon && <LinkIcon className="h-4 w-4 shrink-0" />}
+                        {link.label}
+                      </span>
+                      {count > 0 && (
+                        <span
+                          className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                            active ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
+                          }`}
+                        >
+                          {count > 99 ? "99+" : count}
+                        </span>
+                      )}
+                    </Link>
+                  );
 
-                    // Sub-list (e.g. Accounts -> LinkedIn/Instagram/
-                    // Facebook/WhatsApp).
-                    if (!link.children) {
-                      return (
-                        <div key={link.href} className="nav-tick">
-                          {linkEl}
-                        </div>
-                      );
-                    }
-
-                    const childOpen = Boolean(expandedLinks[link.href]);
+                  // Sub-list (e.g. Accounts -> LinkedIn/Instagram/Facebook/
+                  // WhatsApp) -- always flat/visible now, no toggle.
+                  if (!link.children) {
                     return (
-                      <div key={link.href} className="flex flex-col">
-                        <div className="nav-tick flex items-center">
-                          {linkEl}
-                          <button
-                            type="button"
-                            onClick={() => setExpandedLinks((e) => ({ ...e, [link.href]: !e[link.href] }))}
-                            aria-expanded={childOpen}
-                            aria-label={`${childOpen ? "Collapse" : "Expand"} ${link.label}`}
-                            className="flex items-center justify-center rounded-lg px-2 py-1.5 text-ink/50 transition-colors duration-fast hover:bg-ink/5 hover:text-ink/80"
-                          >
-                            <span aria-hidden className={`transition-transform duration-fast ${childOpen ? "rotate-90" : ""}`}>
-                              ›
-                            </span>
-                          </button>
-                        </div>
-                        {childOpen && (
-                          <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
-                            {link.children.map((child) => {
-                              const childActive = isActive(pathname, search, child);
-                              // Per-platform unread badge (Part: Social
-                              // Inbox removal / per-module messaging,
-                              // 2026-10-21).
-                              const childCount = child.socialPlatform ? socialStats?.byPlatform?.[child.socialPlatform] ?? 0 : 0;
-                              return (
-                                <Link
-                                  key={child.href}
-                                  href={child.href}
-                                  onClick={onNavigate}
-                                  aria-current={childActive ? "page" : undefined}
-                                  className={`nav-tick flex items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
-                                    childActive ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
-                                  }`}
-                                >
-                                  <span>{child.label}</span>
-                                  {childCount > 0 && (
-                                    <span
-                                      className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                                        childActive ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
-                                      }`}
-                                    >
-                                      {childCount > 99 ? "99+" : childCount}
-                                    </span>
-                                  )}
-                                </Link>
-                              );
-                            })}
-                          </div>
-                        )}
+                      <div key={link.href} className="nav-tick">
+                        {linkEl}
                       </div>
                     );
-                  })}
-                </div>
-              )}
+                  }
+
+                  return (
+                    <div key={link.href} className="flex flex-col">
+                      <div className="nav-tick flex items-center">{linkEl}</div>
+                      <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
+                        {link.children.map((child) => {
+                          const childActive = isActive(pathname, search, child);
+                          // Per-platform unread badge (Part: Social Inbox
+                          // removal / per-module messaging, 2026-10-21).
+                          const childCount = child.socialPlatform ? socialStats?.byPlatform?.[child.socialPlatform] ?? 0 : 0;
+                          const ChildIcon = child.icon;
+                          return (
+                            <Link
+                              key={child.href}
+                              href={child.href}
+                              onClick={onNavigate}
+                              aria-current={childActive ? "page" : undefined}
+                              className={`nav-tick flex items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
+                                childActive ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                              }`}
+                            >
+                              <span className="flex items-center gap-2">
+                                {ChildIcon && <ChildIcon className="h-4 w-4 shrink-0" />}
+                                {child.label}
+                              </span>
+                              {childCount > 0 && (
+                                <span
+                                  className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                    childActive ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
+                                  }`}
+                                >
+                                  {childCount > 99 ? "99+" : childCount}
+                                </span>
+                              )}
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
