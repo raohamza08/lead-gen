@@ -153,16 +153,32 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     this.logger.log(`Resolved WABA id(s) before phone lookup: ${JSON.stringify([...wabaIds])}`);
     const results: { wabaId: string; phoneNumberId: string; displayPhoneNumber: string; verifiedName: string }[] = [];
     for (const wabaId of wabaIds) {
+      // Explicit `fields` (Part: WhatsApp multi-number connect debugging,
+      // 2026-10-21) -- the default phone_numbers response only returns
+      // id/display_phone_number/verified_name, which was hiding WHY a given
+      // number wasn't connectable (its code_verification_status/quality_
+      // rating/status weren't visible anywhere, only the generic connect-
+      // time error). Logged in full, not just a count, so a second number
+      // added to the same WABA but not yet appearing here is distinguishable
+      // from one that appears but is still PENDING/unverified.
       const phonesRes = await fetch(
-        `https://graph.facebook.com/${this.graphVersion()}/${wabaId}/phone_numbers?access_token=${userToken}`,
+        `https://graph.facebook.com/${this.graphVersion()}/${wabaId}/phone_numbers?fields=id,display_phone_number,verified_name,code_verification_status,quality_rating,status&access_token=${userToken}`,
       );
       if (!phonesRes.ok) {
         this.logger.warn(`phone_numbers lookup failed for WABA ${wabaId}: ${phonesRes.status} ${await phonesRes.text()}`);
         continue;
       }
       const phones = (await phonesRes.json()) as {
-        data: { id: string; display_phone_number: string; verified_name: string }[];
+        data: {
+          id: string;
+          display_phone_number: string;
+          verified_name: string;
+          code_verification_status?: string;
+          quality_rating?: string;
+          status?: string;
+        }[];
       };
+      this.logger.log(`phone_numbers for WABA ${wabaId}: ${JSON.stringify(phones.data)}`);
       for (const phone of phones.data ?? []) {
         results.push({ wabaId, phoneNumberId: phone.id, displayPhoneNumber: phone.display_phone_number, verifiedName: phone.verified_name });
       }
