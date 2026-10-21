@@ -139,18 +139,18 @@ export function DashboardDateRangeBar({
             type="date"
             value={value.from}
             onChange={(e) => onChange({ ...value, from: e.target.value })}
-            className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-xs"
+            className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-sm"
           />
-          <span className="text-xs text-ink/40">to</span>
+          <span className="text-sm text-ink/45">to</span>
           <input
             type="date"
             value={value.to}
             onChange={(e) => onChange({ ...value, to: e.target.value })}
-            className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-xs"
+            className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-sm"
           />
         </>
       )}
-      <label className="flex items-center gap-1.5 text-xs text-ink/60">
+      <label className="flex items-center gap-1.5 text-sm text-ink/65">
         <input type="checkbox" checked={value.compare} onChange={(e) => onChange({ ...value, compare: e.target.checked })} />
         Compare to
       </label>
@@ -158,7 +158,7 @@ export function DashboardDateRangeBar({
         <select
           value={value.compareMode}
           onChange={(e) => onChange({ ...value, compareMode: e.target.value as CompareMode })}
-          className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-xs"
+          className="h-10 rounded-full border border-[var(--line)] bg-surface-elevated px-4 text-sm"
         >
           <option value="last_month">Last month</option>
           <option value="previous_period">Previous period (equal length)</option>

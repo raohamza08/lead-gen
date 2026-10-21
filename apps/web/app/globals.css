@@ -462,7 +462,12 @@ select, option {
 }
 .kpi-cell {
   background: var(--surface);
-  padding: 14px 18px;
+  /* Roomier than the original 14px 18px (Part: Dashboard Center readability
+     pass, 2026-10-21, explicit user request — "make the dashboards like
+     this [the new nav/header] as well... fonts and everything") — matches
+     the more generous breathing room already used in the redesigned shell
+     rather than this page's original denser BI-template spacing. */
+  padding: 18px 20px;
   font: inherit;
   /* Centered, not inherited (Part: premium dark theme pass v4, 2026-10-19,
      explicit user request — "center align these tabs", clarified to mean
@@ -496,21 +501,27 @@ select, option {
   background: rgb(var(--accent-rgb) / 0.1);
 }
 .kpi-label {
-  font-size: 12px;
-  color: var(--ink-muted);
+  /* 12px -> 13px, plain --ink at reduced opacity instead of --ink-muted
+     (Part: Dashboard Center readability pass, 2026-10-21) — --ink-muted is a
+     fixed hex, so it can't adapt to a user's accent/theme choice the way the
+     rest of this redesign's text does; --ink/65 matches the muted-label
+     convention already used everywhere else in the app (e.g. kpi-label's
+     equivalent on every other card is `text-ink/55`-ish). */
+  font-size: 13px;
+  color: rgb(var(--ink-rgb) / 0.65);
 }
 .kpi-value {
-  margin-top: 4px;
-  font-size: 28px;
-  font-weight: 600;
+  margin-top: 5px;
+  font-size: 29px;
+  font-weight: 700;
   line-height: 1.1;
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .kpi-hint {
-  margin-top: 5px;
-  font-size: 12px;
-  color: var(--ink-muted);
+  margin-top: 6px;
+  font-size: 13px;
+  color: rgb(var(--ink-rgb) / 0.65);
 }
 
 .card-interactive {

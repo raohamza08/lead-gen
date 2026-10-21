@@ -205,8 +205,12 @@ export function SectionCard({
     <section className="card p-6">
       <div className="mb-[18px] flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-          {subtitle ? <p className="mt-0.5 text-xs text-ink/55">{subtitle}</p> : null}
+          {/* text-lg, not text-base (Part: Dashboard Center readability
+              pass, 2026-10-21, explicit user request — "make the dashboards
+              like this [the new nav/header] as well") — matches the bolder
+              heading weight the shell redesign already uses elsewhere. */}
+          <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+          {subtitle ? <p className="mt-1 text-sm text-ink/60">{subtitle}</p> : null}
         </div>
         <div className="flex items-center gap-2">
           {actions}
@@ -226,7 +230,7 @@ export function SectionCard({
       {children}
       {expandable && (
         <Modal open={open} onOpenChange={setOpen} title={title} contentClassName="w-full max-w-4xl">
-          {subtitle ? <p className="mb-4 text-xs text-ink/55">{subtitle}</p> : null}
+          {subtitle ? <p className="mb-4 text-sm text-ink/60">{subtitle}</p> : null}
           {children}
         </Modal>
       )}
@@ -257,14 +261,14 @@ export function DataTable<T>({
 }) {
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[480px] border-collapse text-xs">
+      <table className="w-full min-w-[480px] border-collapse text-sm">
         <thead>
           <tr className="border-b border-[var(--line)]">
             {columns.map((col) => (
               <th
                 key={col.key}
                 scope="col"
-                className={`whitespace-nowrap px-3 py-2 font-medium text-ink/55 ${
+                className={`whitespace-nowrap px-3 py-2.5 font-medium text-ink/60 ${
                   col.numeric ? "text-right" : "text-left"
                 }`}
               >
@@ -279,7 +283,7 @@ export function DataTable<T>({
               {columns.map((col) => (
                 <td
                   key={col.key}
-                  className={`whitespace-nowrap px-3 py-2 ${
+                  className={`whitespace-nowrap px-3 py-2.5 ${
                     col.numeric ? "tabular text-right" : "text-left"
                   }`}
                 >
@@ -353,7 +357,7 @@ export function Legend({ items }: { items: { label: string; color: string }[] })
   return (
     <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1.5">
       {items.map((item) => (
-        <li key={item.label} className="flex items-center gap-1.5 text-xs text-ink/70">
+        <li key={item.label} className="flex items-center gap-1.5 text-sm text-ink/70">
           <span
             aria-hidden
             className="h-0.5 w-4 rounded-full"
@@ -412,7 +416,7 @@ export function RadialProgress({
           <span className="text-2xl font-semibold tracking-tight text-ink">{displayValue}</span>
         </div>
       </div>
-      <span className="max-w-[10rem] text-center text-xs text-ink/60">{label}</span>
+      <span className="max-w-[10rem] text-center text-sm text-ink/60">{label}</span>
     </div>
   );
 }
@@ -466,8 +470,8 @@ export function StatCardWithSparkline({
             {icon}
           </span>
           <div>
-            <div className="text-xs text-ink/55">{label}</div>
-            <div className="text-xl font-semibold tracking-tight text-ink">{value}</div>
+            <div className="text-sm text-ink/60">{label}</div>
+            <div className="text-xl font-bold tracking-tight text-ink">{value}</div>
           </div>
         </div>
         {deltaPct !== undefined && deltaPct !== null && (
@@ -591,9 +595,9 @@ export function MiniTrendCard({
   return (
     <div className="card">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-medium text-ink">{label}</span>
+        <span className="text-sm font-medium text-ink/80">{label}</span>
         <div className="flex items-center gap-2">
-          <span className="tabular text-base font-semibold text-ink">{value}</span>
+          <span className="tabular text-base font-bold text-ink">{value}</span>
           {deltaPct !== undefined && deltaPct !== null && (
             <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-medium ${deltaPct >= 0 ? "bg-good/15 text-good" : "bg-bad/15 text-bad"}`}>
               {deltaPct >= 0 ? "↑" : "↓"} {Math.abs(deltaPct).toFixed(0)}%
@@ -682,7 +686,7 @@ export function DonutBreakdown({
 }) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
   if (total <= 0) {
-    return <p className="py-8 text-center text-xs text-ink/45">No data for this period.</p>;
+    return <p className="py-8 text-center text-sm text-ink/50">No data for this period.</p>;
   }
   return (
     // Centered as a block, not stretched (Part: Dashboard Center sizing
@@ -709,18 +713,18 @@ export function DonutBreakdown({
           </ResponsiveContainer>
           {centerValue && (
             <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-xl font-semibold tracking-tight text-ink">{centerValue}</span>
-              {centerLabel && <span className="text-xs text-ink/55">{centerLabel}</span>}
+              <span className="text-2xl font-bold tracking-tight text-ink">{centerValue}</span>
+              {centerLabel && <span className="text-sm text-ink/60">{centerLabel}</span>}
             </div>
           )}
         </div>
         <ul className="flex w-[14rem] flex-col gap-2">
           {data.map((d, i) => (
-            <li key={d.label} className="flex items-center gap-2 text-xs">
+            <li key={d.label} className="flex items-center gap-2 text-sm">
               <span aria-hidden className="h-2 w-2 shrink-0 rounded-full" style={{ background: d.color ?? SERIES[i % SERIES.length] }} />
               <span className="text-ink/70">{d.label}</span>
               <span className="tabular ml-auto font-medium text-ink">{formatCompact(d.value)}</span>
-              <span className="tabular w-10 text-right text-ink/45">{Math.round((d.value / total) * 100)}%</span>
+              <span className="tabular w-10 text-right text-ink/50">{Math.round((d.value / total) * 100)}%</span>
             </li>
           ))}
         </ul>
