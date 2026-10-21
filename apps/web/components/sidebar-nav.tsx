@@ -22,8 +22,7 @@ interface NavLink {
   /** Nested links shown in a collapsible sub-list under this one (Part:
    *  Social Media nav reorg, 2026-09-30) — e.g. "Accounts" expands to the
    *  individual platform pages. Clicking the row itself still navigates to
-   *  `href`; a separate chevron toggles the sub-list open/closed. Not
-   *  rendered in icons-only (compact) mode, same as group headers aren't.
+   *  `href`; a separate chevron toggles the sub-list open/closed.
    *  `socialPlatform` (Part: Social Inbox removal / per-module messaging,
    *  2026-10-21) drives that child's own unread badge from the per-platform
    *  breakdown GET /social-inbox/stats now returns — independent of
@@ -36,7 +35,7 @@ interface NavLink {
    *  all its links uniformly via MODULE_FLAG_BY_GROUP instead. When set, a
    *  link is hidden unless this flag (or any flag, for an array) is true —
    *  the group header itself then only shows if at least one child link
-   *  survives this filtering (see visibleNav below). */
+   *  survives this filtering (see filterItems below). */
   moduleFlag?: ModuleFlag | ModuleFlag[];
 }
 
@@ -89,162 +88,217 @@ type NavItem =
     }
   | { type: "group"; label: string; links: NavLink[] };
 
+/** One icon-rail entry (Part: EBOS-inspired shell redesign, 2026-10-21,
+ *  explicit user request — "go check [EBOS's] navigation panel and UI...
+ *  make my outly ui exactly like this one"). Each workspace buckets several
+ *  of the app's existing nav groups under one rail icon; clicking the icon
+ *  swaps the whole second panel to that workspace's own items and navigates
+ *  to its defaultHref, same behavior observed in EBOS (e.g. its "Projects"
+ *  icon jumps straight to Time Tracker). Deliberately keeps Outly's existing
+ *  orange accent (explicit user decision, not EBOS's teal) and copies only
+ *  the structural pattern, not the color. */
+interface Workspace {
+  id: string;
+  label: string;
+  icon: (props: { className?: string }) => JSX.Element;
+  defaultHref: string;
+  items: NavItem[];
+}
+
+function HomeIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M3 11.5 12 4l9 7.5M5.5 10v9a1 1 0 0 0 1 1H10v-5.5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1V20h3.5a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function LeadsIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2}>
+      <circle cx="12" cy="8" r="3.2" />
+      <path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6" strokeLinecap="round" />
+    </svg>
+  );
+}
+function InboxIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5 8.4 8.4 0 0 1-3.3-.67L3 21l1.67-6.2A8.5 8.5 0 1 1 21 11.5z" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+function UpworkIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2}>
+      <rect x="3.5" y="7.5" width="17" height="12" rx="1.5" />
+      <path d="M8.5 7.5V6a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+function AdsIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M3 10v4a1 1 0 0 0 1 1h2l8 4V5L6 9H4a1 1 0 0 0-1 1z" strokeLinejoin="round" strokeLinecap="round" />
+      <path d="M18 9a4 4 0 0 1 0 6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /**
- * The dashboard's information architecture (Part: Overall Dashboard
- * Structure) — a persistent left sidebar replacing the old horizontal
- * `<Nav>` bar. "Lead Generation" groups every route the existing system
- * already had, unchanged; "Email Hub" is the new module. Nothing under
- * Lead Generation moved or was rebuilt — this is purely a navigation
- * re-home, same pattern `nav.tsx`'s GROUPS constant already used, just
- * rendered vertically and one level deeper.
+ * The dashboard's information architecture (Part: EBOS-inspired shell
+ * redesign, 2026-10-21 — grouping these into icon-rail "workspaces" on top
+ * of Part: Overall Dashboard Structure's original flat-list design). Every
+ * group/link below is copied verbatim from the pre-redesign NAV array —
+ * this buckets existing nav data into workspaces, it does not change what
+ * any group contains or how it's gated.
  */
-const NAV: NavItem[] = [
-  // Dashboard Center is now the app's home/landing nav entry, replacing the
-  // old standalone "Dashboard" (`/overview`) link (Part: Dashboard Center
-  // tab consolidation, 2026-09-30 — explicit user request: "replacing the
-  // dashboard with dashboard center"). It's a single link, not a dropdown
-  // group, like "Dashboard" used to be — every dashboard that used to be
-  // its own group entry is now an in-page tab on /dashboards itself (see
-  // that page for the tab list, including why Meta Ads still links out
-  // rather than duplicating its own dashboard inline).
-  // allowedRoles kept as a fast-path for the common case (ADMIN/MANAGER/
-  // Business Developer); moduleFlag is OR'd in below (Part: Dashboard
-  // Center per-user access, 2026-10-21) so a person outside those roles but
-  // individually granted at least one Dashboard Center tab via
-  // PersonAccessPanel still sees this link — see dashboards/page.tsx for
-  // the actual per-tab filtering once they're on the page.
+const WORKSPACES: Workspace[] = [
   {
-    type: "link",
-    href: "/dashboards",
-    label: "Dashboard Center",
-    allowedRoles: ["ADMIN", "MANAGER", "BUSINESS_DEVELOPER"],
-    moduleFlag: [
-      "dashboardOverviewAccess",
-      "dashboardLeadsAccess",
-      "dashboardEmailAccess",
-      "dashboardInboxAccess",
-      "dashboardSocialAccess",
-      "dashboardUpworkAccess",
-      "dashboardMetaAdsAccess",
-      "dashboardWebsiteAnalyticsAccess",
-      "dashboardPipelineAccess",
-      "dashboardTeamAccess",
-      "dashboardActivityAccess",
-      "dashboardBenchmarksAccess",
-    ],
-  },
-  {
-    type: "group",
-    label: "Lead Room",
-    links: [{ href: "/leads", label: "Leads" }],
-  },
-  {
-    type: "group",
-    label: "Lead Generation",
-    links: [
-      { href: "/pipeline", label: "Pipeline" },
-      { href: "/sequences", label: "Sequences" },
-      { href: "/campaigns", label: "Campaigns" },
-      { href: "/analytics", label: "Analytics" },
-      { href: "/automation", label: "Automation" },
-      { href: "/settings/lead-generation", label: "Settings" },
-    ],
-  },
-  {
-    type: "group",
-    label: "Email Hub",
-    links: [
-      { href: "/email-hub", label: "Unified Inbox", matchSearch: "", countKey: "unread" },
-      { href: "/email-hub?view=important", label: "Important", matchSearch: "view=important", countKey: "important" },
-      { href: "/email-hub?view=leads", label: "Leads", matchSearch: "view=leads" },
-      { href: "/email-hub?view=followups", label: "Follow-ups", matchSearch: "view=followups" },
-      { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored", countKey: "ignored" },
-      { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent" },
-      { href: "/email-hub?view=tracked", label: "Tracked", matchSearch: "view=tracked" },
-      { href: "/settings/email-hub", label: "Settings" },
-    ],
-  },
-  // Engagement (Social Engagement Center) nav entry intentionally removed
-  // (2026-09-30) -- no current requirement; the page/backend/sync worker
-  // are untouched, just not linked, so re-adding this one line reconnects
-  // it later.
-  {
-    type: "group",
-    label: "Social Media",
-    links: [
-      // The centralized Social Inbox page was removed (Part: Social Inbox
-      // removal / per-module messaging, 2026-10-21, explicit user request —
-      // "remove the centralized Social Inbox... all messages must be
-      // accessible directly within their respective modules"). Each
-      // platform page below now has its own Inbox/Feed tabs instead.
-      // LinkedIn/Instagram/Facebook/WhatsApp collapsed into a sub-list under
-      // Accounts (Part: Social Media nav reorg, 2026-09-30); X removed from
-      // nav entirely -- its page/provider are untouched, just not linked.
+    id: "home",
+    label: "Home",
+    icon: HomeIcon,
+    defaultHref: "/dashboards",
+    items: [
       {
-        href: "/social-media/accounts",
-        label: "Accounts",
-        children: [
-          { href: "/social-media/linkedin", label: "LinkedIn", socialPlatform: "LINKEDIN" },
-          { href: "/social-media/instagram", label: "Instagram", socialPlatform: "INSTAGRAM" },
-          { href: "/social-media/facebook", label: "Facebook", socialPlatform: "FACEBOOK" },
-          { href: "/social-media/whatsapp", label: "WhatsApp", socialPlatform: "WHATSAPP" },
+        type: "link",
+        href: "/dashboards",
+        label: "Dashboard Center",
+        allowedRoles: ["ADMIN", "MANAGER", "BUSINESS_DEVELOPER"],
+        moduleFlag: [
+          "dashboardOverviewAccess",
+          "dashboardLeadsAccess",
+          "dashboardEmailAccess",
+          "dashboardInboxAccess",
+          "dashboardSocialAccess",
+          "dashboardUpworkAccess",
+          "dashboardMetaAdsAccess",
+          "dashboardWebsiteAnalyticsAccess",
+          "dashboardPipelineAccess",
+          "dashboardTeamAccess",
+          "dashboardActivityAccess",
+          "dashboardBenchmarksAccess",
         ],
       },
-      { href: "/social-media/calendar", label: "Calendar" },
-      { href: "/social-media/analytics", label: "Analytics" },
-      { href: "/social-media/automations", label: "Automations" },
-      { href: "/settings/social-media", label: "Settings" },
     ],
   },
   {
-    type: "group",
-    label: "Upwork Proposals",
-    // Each link gated by its own flag, not the group as a whole (Part:
-    // Upwork Requests, 2026-10-01, explicit user request) -- see NavLink's
-    // own moduleFlag docblock. The group header itself has no entry in
-    // MODULE_FLAG_BY_GROUP below; it shows automatically once at least one
-    // of these three survives per-link filtering.
-    links: [
-      { href: "/upwork/bidding", label: "Bidding", moduleFlag: "upworkBiddingAccess" },
-      { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess" },
-      { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess" },
-      { href: "/upwork/proposal-writing", label: "Proposal Writing", moduleFlag: "upworkProposalWritingAccess" },
-      { href: "/upwork/job-feed", label: "Job Feed", moduleFlag: "upworkProposalWritingAccess" },
+    id: "leads",
+    label: "Leads",
+    icon: LeadsIcon,
+    defaultHref: "/leads",
+    items: [
+      { type: "group", label: "Lead Room", links: [{ href: "/leads", label: "Leads" }] },
+      {
+        type: "group",
+        label: "Lead Generation",
+        links: [
+          { href: "/pipeline", label: "Pipeline" },
+          { href: "/sequences", label: "Sequences" },
+          { href: "/campaigns", label: "Campaigns" },
+          { href: "/analytics", label: "Analytics" },
+          { href: "/automation", label: "Automation" },
+          { href: "/settings/lead-generation", label: "Settings" },
+        ],
+      },
     ],
   },
   {
-    type: "group",
-    label: "Meta Ads",
-    links: [
-      // Overview moved into the Dashboard Center's own Meta Ads tab (Part:
-      // Dashboard Center tab consolidation, 2026-09-30) — reach it from
-      // there now, not a separate entry here. Campaigns/Ad Sets/Ads
-      // drill-down and Settings are unaffected.
-      { href: "/meta-ads/campaigns", label: "Campaigns" },
-      { href: "/meta-ads/adsets", label: "Ad Sets" },
-      { href: "/meta-ads/ads", label: "Ads" },
-      { href: "/settings/meta-ads", label: "Settings" },
+    id: "inbox",
+    label: "Inbox",
+    icon: InboxIcon,
+    defaultHref: "/email-hub",
+    items: [
+      {
+        type: "group",
+        label: "Email Hub",
+        links: [
+          { href: "/email-hub", label: "Unified Inbox", matchSearch: "", countKey: "unread" },
+          { href: "/email-hub?view=important", label: "Important", matchSearch: "view=important", countKey: "important" },
+          { href: "/email-hub?view=leads", label: "Leads", matchSearch: "view=leads" },
+          { href: "/email-hub?view=followups", label: "Follow-ups", matchSearch: "view=followups" },
+          { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored", countKey: "ignored" },
+          { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent" },
+          { href: "/email-hub?view=tracked", label: "Tracked", matchSearch: "view=tracked" },
+          { href: "/settings/email-hub", label: "Settings" },
+        ],
+      },
+      // Engagement (Social Engagement Center) nav entry intentionally
+      // removed (2026-09-30) -- no current requirement; the page/backend/
+      // sync worker are untouched, just not linked.
+      {
+        type: "group",
+        label: "Social Media",
+        links: [
+          // The centralized Social Inbox page was removed (Part: Social
+          // Inbox removal / per-module messaging, 2026-10-21) — each
+          // platform page below now has its own Inbox/Feed tabs instead.
+          {
+            href: "/social-media/accounts",
+            label: "Accounts",
+            children: [
+              { href: "/social-media/linkedin", label: "LinkedIn", socialPlatform: "LINKEDIN" },
+              { href: "/social-media/instagram", label: "Instagram", socialPlatform: "INSTAGRAM" },
+              { href: "/social-media/facebook", label: "Facebook", socialPlatform: "FACEBOOK" },
+              { href: "/social-media/whatsapp", label: "WhatsApp", socialPlatform: "WHATSAPP" },
+            ],
+          },
+          { href: "/social-media/calendar", label: "Calendar" },
+          { href: "/social-media/analytics", label: "Analytics" },
+          { href: "/social-media/automations", label: "Automations" },
+          { href: "/settings/social-media", label: "Settings" },
+        ],
+      },
     ],
   },
-  // My Profile deliberately isn't a nav entry (Part: UI/UX Redesign,
-  // 2026-09-01) — it moved into HeaderUserMenu's dropdown, which is now the
-  // only place it's reachable from; it used to be duplicated here too.
-  { type: "link", href: "/settings", label: "Settings" },
-  // Standard module-flag gate (Part: Upwork API integration, 2026-10-12) —
-  // replaces an earlier hardcoded-single-email lock, explicit user request:
-  // "make the module an access option so i can give anyone the access".
-  // Defaults false on every user (see upworkApiAccess's own schema
-  // docblock), so it stays hidden until granted from Settings > Team — any
-  // ADMIN sees it immediately regardless, same as every other module here.
-  { type: "link", href: "/settings/upwork-api", label: "Upwork API", moduleFlag: "upworkApiAccess" },
-  // Not a moduleFlag gate — System Logs is restricted to the org's single
-  // primary admin (Part: Admin/System Logs, 2026-08-31), distinct from the
-  // shared Role.ADMIN. This entry is UX-only; the real enforcement is
-  // PrimaryAdminGuard on the backend route.
-  { type: "link", href: "/admin/system-logs", label: "System Logs", requiresPrimaryAdmin: true },
+  {
+    id: "upwork",
+    label: "Upwork",
+    icon: UpworkIcon,
+    defaultHref: "/upwork/bidding",
+    items: [
+      {
+        type: "group",
+        label: "Upwork Proposals",
+        // Each link gated by its own flag, not the group as a whole (Part:
+        // Upwork Requests, 2026-10-01) -- see NavLink's own moduleFlag
+        // docblock.
+        links: [
+          { href: "/upwork/bidding", label: "Bidding", moduleFlag: "upworkBiddingAccess" },
+          { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess" },
+          { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess" },
+          { href: "/upwork/proposal-writing", label: "Proposal Writing", moduleFlag: "upworkProposalWritingAccess" },
+          { href: "/upwork/job-feed", label: "Job Feed", moduleFlag: "upworkProposalWritingAccess" },
+        ],
+      },
+      // Standard module-flag gate (Part: Upwork API integration,
+      // 2026-10-12) -- folded into this workspace instead of a standalone
+      // top-level link (Part: EBOS-inspired shell redesign, 2026-10-21).
+      { type: "link", href: "/settings/upwork-api", label: "Upwork API", moduleFlag: "upworkApiAccess" },
+    ],
+  },
+  {
+    id: "ads",
+    label: "Ads",
+    icon: AdsIcon,
+    defaultHref: "/meta-ads/campaigns",
+    items: [
+      {
+        type: "group",
+        label: "Meta Ads",
+        links: [
+          // Overview moved into the Dashboard Center's own Meta Ads tab
+          // (Part: Dashboard Center tab consolidation, 2026-09-30).
+          { href: "/meta-ads/campaigns", label: "Campaigns" },
+          { href: "/meta-ads/adsets", label: "Ad Sets" },
+          { href: "/meta-ads/ads", label: "Ads" },
+          { href: "/settings/meta-ads", label: "Settings" },
+        ],
+      },
+    ],
+  },
 ];
 
-/** Maps a NAV group's label to the module flag from GET /users/me that gates it. */
+/** Maps a group's label to the module flag from GET /users/me that gates it. */
 const MODULE_FLAG_BY_GROUP: Record<string, ModuleFlag> = {
   "Lead Room": "leadGenAccess",
   "Lead Generation": "leadGenAccess",
@@ -252,9 +306,8 @@ const MODULE_FLAG_BY_GROUP: Record<string, ModuleFlag> = {
   "Social Media": "socialMediaAccess",
   // Upwork Proposals deliberately has no entry here (Part: Upwork Requests,
   // 2026-10-01) -- each of its three links carries its own moduleFlag
-  // instead (see the NAV array above); the group's own visibility is
-  // derived in visibleNav from whether any child link survives that
-  // per-link filtering, not from a single flag here.
+  // instead; the group's own visibility is derived from whether any child
+  // link survives per-link filtering, not from a single flag here.
   "Meta Ads": "metaAdsAccess",
 };
 
@@ -265,7 +318,25 @@ function isActive(pathname: string | null, search: string, link: NavLink): boole
   return search === link.matchSearch;
 }
 
-const SIDEBAR_COLLAPSED_KEY = "sidebar-collapsed";
+/** Whether `pathname` belongs to this workspace at all (Part: EBOS-inspired
+ *  shell redesign, 2026-10-21) — checked against every link/child href
+ *  across the workspace's items, ignoring query strings (a path match is
+ *  enough to pick the workspace; matchSearch only matters for highlighting
+ *  the exact active link inside it). */
+function workspaceContainsPath(ws: Workspace, pathname: string | null): boolean {
+  if (!pathname) return false;
+  for (const item of ws.items) {
+    if (item.type === "link") {
+      if (item.href === pathname) return true;
+    } else {
+      for (const link of item.links) {
+        if (link.href.split(/[?#]/)[0] === pathname) return true;
+        if (link.children?.some((c) => c.href === pathname)) return true;
+      }
+    }
+  }
+  return false;
+}
 
 export function SidebarNav({
   mobileOpen,
@@ -369,9 +440,7 @@ export function SidebarNav({
   // Same query key the platform pages' own Inbox tab uses (PlatformInbox /
   // ConversationDetailPanel invalidate "social-inbox-stats") — one cache
   // entry, so this badge and that tab's own numbers never disagree (Part:
-  // Social Inbox removal / per-module messaging, 2026-10-21, same
-  // "Social Media group + per-platform" badge convention confirmed with the
-  // user, mirroring Email Hub's badge pattern above).
+  // Social Inbox removal / per-module messaging, 2026-10-21).
   const socialStatsQuery = useQuery({
     queryKey: ["social-inbox-stats"],
     queryFn: () => api.getSocialInboxStats() as Promise<{ unread: number; byPlatform: Record<string, number> }>,
@@ -399,84 +468,90 @@ export function SidebarNav({
     return Array.isArray(flag) ? flag.some((f) => moduleAccess[f]) : moduleAccess[flag];
   }
 
-  const visibleNav = NAV.map((item) => {
-    if (item.type !== "group") return item;
-    // Per-link filtering (Part: Upwork Requests, 2026-10-01) -- a no-op for
-    // every group whose links don't set their own moduleFlag.
-    return { ...item, links: item.links.filter((l) => flagGranted(l.moduleFlag)) };
-  }).filter((item) => {
-    if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
-    if (item.type === "link" && item.allowedRoles) {
-      const role = getCurrentUser()?.role;
-      const roleOk = role ? item.allowedRoles.includes(role) : false;
-      // OR'd with moduleFlag (Part: Dashboard Center per-user access,
-      // 2026-10-21) -- a person outside allowedRoles but individually
-      // granted at least one Dashboard Center tab (PersonAccessPanel) still
-      // needs the nav link itself to reach /dashboards.
-      return roleOk || flagGranted(item.moduleFlag);
-    }
-    if (item.type === "group") {
-      const flag = MODULE_FLAG_BY_GROUP[item.label];
-      // No single group-level flag (Upwork Proposals) -- show the group iff
-      // at least one child link survived the per-link filtering above.
-      if (!flag) return item.links.length > 0;
-      return flagGranted(flag);
-    }
-    return flagGranted(item.moduleFlag);
-  });
+  function filterItems(items: NavItem[]): NavItem[] {
+    return items
+      .map((item) => {
+        if (item.type !== "group") return item;
+        // Per-link filtering (Part: Upwork Requests, 2026-10-01) -- a no-op
+        // for every group whose links don't set their own moduleFlag.
+        return { ...item, links: item.links.filter((l) => flagGranted(l.moduleFlag)) };
+      })
+      .filter((item) => {
+        if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
+        if (item.type === "link" && item.allowedRoles) {
+          const role = getCurrentUser()?.role;
+          const roleOk = role ? item.allowedRoles.includes(role) : false;
+          // OR'd with moduleFlag (Part: Dashboard Center per-user access,
+          // 2026-10-21) -- a person outside allowedRoles but individually
+          // granted at least one Dashboard Center tab still needs the link.
+          return roleOk || flagGranted(item.moduleFlag);
+        }
+        if (item.type === "group") {
+          const flag = MODULE_FLAG_BY_GROUP[item.label];
+          // No single group-level flag (Upwork Proposals) -- show the
+          // group iff at least one child link survived per-link filtering.
+          if (!flag) return item.links.length > 0;
+          return flagGranted(flag);
+        }
+        return flagGranted(item.moduleFlag);
+      });
+  }
+
+  const visibleWorkspaces = WORKSPACES.map((ws) => ({ ...ws, items: filterItems(ws.items) })).filter(
+    (ws) => ws.items.length > 0,
+  );
+
+  // Which workspace's panel is showing (Part: EBOS-inspired shell redesign,
+  // 2026-10-21) — derived from pathname so a direct link/refresh/back-
+  // button always lands on the right panel, but kept as real state (not a
+  // pure derivation) so clicking a rail icon can switch the panel the
+  // instant it's clicked, not only after navigation finishes.
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState(
+    () => visibleWorkspaces.find((ws) => workspaceContainsPath(ws, pathname))?.id ?? visibleWorkspaces[0]?.id,
+  );
+  useEffect(() => {
+    const match = visibleWorkspaces.find((ws) => workspaceContainsPath(ws, pathname));
+    if (match) setActiveWorkspaceId(match.id);
+    // Only pathname should retrigger this -- visibleWorkspaces is recomputed
+    // every render from the same (rarely-changing) access flags, and
+    // including it would fight the optimistic click-set below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
+  const activeWorkspace = visibleWorkspaces.find((ws) => ws.id === activeWorkspaceId) ?? visibleWorkspaces[0];
+  const activeItems = activeWorkspace?.items ?? [];
 
   // Auto-expand whichever group contains the current page, so a direct link
   // or refresh never lands on a page whose group looks collapsed/unselected.
   // A link with children counts as "containing" the current page if either
-  // the link itself or one of its children matches.
-  const [groupCollapsed, setGroupCollapsed] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    for (const item of NAV) {
-      if (item.type === "group") {
-        initial[item.label] = !item.links.some(
-          (l) => isActive(pathname, search, l) || l.children?.some((c) => isActive(pathname, search, c)),
-        );
-      }
-    }
-    return initial;
-  });
-
-  // Which links-with-children sub-lists are expanded (Part: Social Media nav
-  // reorg, 2026-09-30) -- e.g. "Accounts" expanding to show LinkedIn/
-  // Instagram/Facebook/WhatsApp. Keyed by the parent link's href, same
-  // auto-expand-if-active reasoning as groupCollapsed above.
-  const [expandedLinks, setExpandedLinks] = useState<Record<string, boolean>>(() => {
-    const initial: Record<string, boolean> = {};
-    for (const item of NAV) {
-      if (item.type !== "group") continue;
-      for (const link of item.links) {
-        if (link.children) initial[link.href] = link.children.some((c) => isActive(pathname, search, c));
-      }
-    }
-    return initial;
-  });
-
-  // Sidebar-wide collapse-to-icons (Part: UI/UX Redesign, 2026-09-01) — a
-  // deliberately different concept from groupCollapsed above (which section
-  // headers are expanded). Persisted the same way theme-toggle.tsx persists
-  // its own preference: read once on mount (SSR has no localStorage, so this
-  // starts false and settles after hydration — a one-frame width flash is an
-  // acceptable trade for not needing a cookie round-trip just for this).
-  const [iconsOnly, setIconsOnly] = useState(false);
+  // the link itself or one of its children matches. Re-seeded whenever the
+  // active workspace changes, same reasoning as the one-time init before.
+  const [groupCollapsed, setGroupCollapsed] = useState<Record<string, boolean>>({});
+  const [expandedLinks, setExpandedLinks] = useState<Record<string, boolean>>({});
   useEffect(() => {
-    setIconsOnly(window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1");
-  }, []);
-  function toggleIconsOnly() {
-    setIconsOnly((v) => {
-      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, v ? "0" : "1");
-      return !v;
-    });
-  }
+    const collapsed: Record<string, boolean> = {};
+    const expanded: Record<string, boolean> = {};
+    for (const item of activeItems) {
+      if (item.type !== "group") continue;
+      collapsed[item.label] = !item.links.some(
+        (l) => isActive(pathname, search, l) || l.children?.some((c) => isActive(pathname, search, c)),
+      );
+      for (const link of item.links) {
+        if (link.children) expanded[link.href] = link.children.some((c) => isActive(pathname, search, c));
+      }
+    }
+    setGroupCollapsed((prev) => ({ ...collapsed, ...prev }));
+    setExpandedLinks((prev) => ({ ...expanded, ...prev }));
+    // Only re-seed when the workspace itself changes -- once open/closed by
+    // the user, a group/sub-list shouldn't snap back on every pathname
+    // change within the same workspace (e.g. switching Email Hub views).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceId]);
 
-  function renderNav(compact: boolean, onNavigate?: () => void) {
+  function renderPanel(onNavigate?: () => void) {
     return (
       <>
-        {visibleNav.map((item) => {
+        {activeItems.map((item) => {
           if (item.type === "link") {
             const active = pathname === item.href;
             return (
@@ -485,50 +560,41 @@ export function SidebarNav({
                 href={item.href}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
-                title={compact ? item.label : undefined}
-                className={`flex items-center rounded-lg text-sm transition-colors duration-fast ${
-                  compact ? "justify-center px-2 py-2" : "gap-2.5 px-3 py-2"
-                } ${active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
+                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors duration-fast ${
+                  active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                }`}
               >
-                {compact ? (
-                  <span aria-hidden className="flex h-5 w-5 items-center justify-center text-xs font-semibold">
-                    {item.label[0]}
-                  </span>
-                ) : (
-                  item.label
-                )}
+                {item.label}
               </Link>
             );
           }
 
-          const isOpen = compact || !groupCollapsed[item.label];
+          const isOpen = !groupCollapsed[item.label];
           return (
             <div key={item.label} className="flex flex-col">
-              {!compact && (
-                <button
-                  type="button"
-                  onClick={() => setGroupCollapsed((c) => ({ ...c, [item.label]: !c[item.label] }))}
-                  className="flex items-center justify-between rounded-lg px-3 py-2 text-label uppercase text-ink/50 transition-colors duration-fast hover:text-ink/80"
-                >
-                  <span className="flex items-center gap-1.5">
-                    {item.label}
-                    {/* Group-level aggregate badge (Part: Social Inbox removal
-                        / per-module messaging, 2026-10-21) — only the Social
-                        Media group has a social-platform unread total today;
-                        a no-op span for every other group. */}
-                    {item.label === "Social Media" && (socialStats?.unread ?? 0) > 0 && (
-                      <span className="tabular rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-primary">
-                        {(socialStats?.unread ?? 0) > 99 ? "99+" : socialStats?.unread}
-                      </span>
-                    )}
-                  </span>
-                  <span aria-hidden className={`transition-transform duration-fast ${isOpen ? "rotate-90" : ""}`}>
-                    ›
-                  </span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setGroupCollapsed((c) => ({ ...c, [item.label]: !c[item.label] }))}
+                className="flex items-center justify-between rounded-lg px-3 py-2 text-label uppercase text-ink/50 transition-colors duration-fast hover:text-ink/80"
+              >
+                <span className="flex items-center gap-1.5">
+                  {item.label}
+                  {/* Group-level aggregate badge (Part: Social Inbox removal
+                      / per-module messaging, 2026-10-21) — only the Social
+                      Media group has a social-platform unread total today;
+                      a no-op span for every other group. */}
+                  {item.label === "Social Media" && (socialStats?.unread ?? 0) > 0 && (
+                    <span className="tabular rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-primary">
+                      {(socialStats?.unread ?? 0) > 99 ? "99+" : socialStats?.unread}
+                    </span>
+                  )}
+                </span>
+                <span aria-hidden className={`transition-transform duration-fast ${isOpen ? "rotate-90" : ""}`}>
+                  ›
+                </span>
+              </button>
               {isOpen && (
-                <div className={compact ? "flex flex-col gap-0.5" : "ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2"}>
+                <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
                   {item.links.map((link) => {
                     const active = isActive(pathname, search, link);
                     const count = link.countKey ? stats?.[link.countKey] ?? 0 : 0;
@@ -537,39 +603,28 @@ export function SidebarNav({
                         href={link.href}
                         onClick={onNavigate}
                         aria-current={active ? "page" : undefined}
-                        title={compact ? link.label : undefined}
-                        className={`flex items-center justify-between rounded-lg text-sm transition-colors duration-fast ${
-                          compact ? "justify-center px-2 py-2" : "flex-1 px-3 py-1.5"
-                        } ${active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"}`}
+                        className={`flex flex-1 items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
+                          active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                        }`}
                       >
-                        {compact ? (
-                          <span aria-hidden className="flex h-5 w-5 items-center justify-center text-xs font-semibold">
-                            {link.label[0]}
+                        <span>{link.label}</span>
+                        {count > 0 && (
+                          <span
+                            className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                              active ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
+                            }`}
+                          >
+                            {count > 99 ? "99+" : count}
                           </span>
-                        ) : (
-                          <>
-                            <span>{link.label}</span>
-                            {count > 0 && (
-                              <span
-                                className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                                  active ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
-                                }`}
-                              >
-                                {count > 99 ? "99+" : count}
-                              </span>
-                            )}
-                          </>
                         )}
                       </Link>
                     );
 
-                    // Sub-list (e.g. Accounts -> LinkedIn/Instagram/Facebook/
-                    // WhatsApp) — not shown in compact mode, same as group
-                    // headers aren't, to keep icons-only mode from getting
-                    // cluttered with a second level of nesting.
-                    if (!link.children || compact) {
+                    // Sub-list (e.g. Accounts -> LinkedIn/Instagram/
+                    // Facebook/WhatsApp).
+                    if (!link.children) {
                       return (
-                        <div key={link.href} className={compact ? undefined : "nav-tick"}>
+                        <div key={link.href} className="nav-tick">
                           {linkEl}
                         </div>
                       );
@@ -596,11 +651,9 @@ export function SidebarNav({
                           <div className="ml-1 flex flex-col gap-0.5 border-l border-[var(--line)] pl-2">
                             {link.children.map((child) => {
                               const childActive = isActive(pathname, search, child);
-                              // Per-platform unread badge (Part: Social Inbox
-                              // removal / per-module messaging, 2026-10-21) —
-                              // child links had no badge mechanism at all
-                              // before this; a no-op for any child without a
-                              // socialPlatform tag.
+                              // Per-platform unread badge (Part: Social
+                              // Inbox removal / per-module messaging,
+                              // 2026-10-21).
                               const childCount = child.socialPlatform ? socialStats?.byPlatform?.[child.socialPlatform] ?? 0 : 0;
                               return (
                                 <Link
@@ -639,42 +692,70 @@ export function SidebarNav({
     );
   }
 
+  /** The icon rail itself (Part: EBOS-inspired shell redesign, 2026-10-21) —
+   *  solid accent fill (EBOS uses teal; this keeps Outly's own orange, per
+   *  explicit user decision), accent-contrast text/icons for the same
+   *  readability reason Tabs' active-state text already uses that token
+   *  instead of plain white (see that component's own comment). "Inbox"
+   *  gets an aggregate badge (Email Hub unread + Social Media unread) since
+   *  it's the one workspace bundling two separately-badged groups. */
+  function renderRail(onNavigate?: () => void) {
+    const inboxBadge = (stats?.unread ?? 0) + (socialStats?.unread ?? 0);
+    return (
+      <div className="flex w-[68px] shrink-0 flex-col items-center gap-1 bg-accent py-3">
+        {visibleWorkspaces.map((ws) => {
+          const active = ws.id === activeWorkspaceId;
+          const Icon = ws.icon;
+          const badge = ws.id === "inbox" ? inboxBadge : 0;
+          return (
+            <Link
+              key={ws.id}
+              href={ws.defaultHref}
+              onClick={() => {
+                setActiveWorkspaceId(ws.id);
+                onNavigate?.();
+              }}
+              title={ws.label}
+              className={`relative flex w-14 flex-col items-center gap-1 rounded-xl py-2.5 text-[10px] font-medium transition-colors duration-fast ${
+                active ? "bg-black/10 text-[rgb(var(--accent-contrast-rgb))]" : "text-[rgb(var(--accent-contrast-rgb))]/70 hover:bg-black/5"
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+              <span>{ws.label}</span>
+              {badge > 0 && (
+                <span className="tabular absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-bad px-1 text-[9px] font-semibold text-white">
+                  {badge > 99 ? "99+" : badge}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    );
+  }
+
   return (
     <>
-      {/* Desktop: persistent, collapsible to icons-only. Hidden below md,
-          where the mobile drawer below takes over instead. */}
-      <nav
-        className={`relative hidden h-full shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3 transition-[width] duration-normal ease-standard md:flex ${
-          iconsOnly ? "w-16" : "w-56"
-        }`}
-      >
-        <div className="relative z-10 flex flex-1 flex-col gap-1 overflow-y-auto">{renderNav(iconsOnly)}</div>
-        <button
-          type="button"
-          onClick={toggleIconsOnly}
-          aria-label={iconsOnly ? "Expand sidebar" : "Collapse sidebar"}
-          title={iconsOnly ? "Expand sidebar" : "Collapse sidebar"}
-          className="relative z-10 mt-1 flex items-center justify-center rounded-lg py-2 text-ink/50 transition-colors duration-fast hover:bg-ink/5 hover:text-ink/80"
-        >
-          <svg aria-hidden width="16" height="16" viewBox="0 0 16 16" fill="none" className={`transition-transform duration-normal ${iconsOnly ? "rotate-180" : ""}`}>
-            <path d="M10 3 5 8l5 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
-        </button>
-      </nav>
+      {/* Desktop: permanent icon rail + a second panel for the active
+          workspace's own nav items. Hidden below md, where the mobile
+          drawer below takes over instead. */}
+      <div className="hidden h-full shrink-0 md:flex">
+        {renderRail()}
+        <nav className="relative flex h-full w-48 shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3">
+          <div className="relative z-10 flex flex-1 flex-col gap-1 overflow-y-auto">{renderPanel()}</div>
+        </nav>
+      </div>
 
-      {/* Mobile: overlay + slide-over drawer, always full-width (no
-          icons-only mode — the drawer is already temporary, so nothing is
-          gained by shrinking it further). */}
+      {/* Mobile: overlay + slide-over drawer, same rail+panel shape. */}
       {mobileOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
-          <div
-            className="absolute inset-0 bg-ink/40 backdrop-blur-[1px]"
-            onClick={onMobileClose}
-            aria-hidden
-          />
-          <nav className="animate-slide-in-left absolute inset-y-0 left-0 flex w-64 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] bg-surface p-3 shadow-lg">
-            <div className="relative z-10 flex flex-1 flex-col gap-1">{renderNav(false, onMobileClose)}</div>
-          </nav>
+          <div className="absolute inset-0 bg-ink/40 backdrop-blur-[1px]" onClick={onMobileClose} aria-hidden />
+          <div className="animate-slide-in-left absolute inset-y-0 left-0 flex shadow-lg">
+            {renderRail(onMobileClose)}
+            <nav className="flex w-56 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] bg-surface p-3">
+              <div className="relative z-10 flex flex-1 flex-col gap-1">{renderPanel(onMobileClose)}</div>
+            </nav>
+          </div>
         </div>
       )}
     </>

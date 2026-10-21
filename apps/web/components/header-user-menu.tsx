@@ -11,6 +11,7 @@ interface Me {
   email: string;
   displayName: string | null;
   avatarUrl: string | null;
+  isPrimaryAdmin: boolean;
 }
 
 /** Header identity + actions (Part: UI/UX Redesign, 2026-09-01) — folds in
@@ -50,6 +51,15 @@ export function HeaderUserMenu() {
         </div>
         <DropdownSeparator />
         <DropdownItem onSelect={() => router.push("/profile")}>My Profile</DropdownItem>
+        {/* Settings and System Logs moved here (Part: EBOS-inspired shell
+            redesign, 2026-10-21) -- both used to be standalone top-level
+            sidebar links; neither belongs to any one icon-rail workspace,
+            same as EBOS keeps account/admin-level things out of its own
+            workspace rail. System Logs keeps its exact same primary-admin-
+            only gating (UX-only -- PrimaryAdminGuard on the backend route
+            is the real enforcement, same as before). */}
+        <DropdownItem onSelect={() => router.push("/settings")}>Settings</DropdownItem>
+        {me.isPrimaryAdmin && <DropdownItem onSelect={() => router.push("/admin/system-logs")}>System Logs</DropdownItem>}
         <DropdownSeparator />
         <DropdownItem destructive onSelect={handleSignOut}>
           Sign out
