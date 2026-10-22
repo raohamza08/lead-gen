@@ -746,6 +746,48 @@ export class UpworkGraphQLClient {
     return data.marketplaceJobPostingsSearch;
   }
 
+  /** Real freelancer profile aggregates for ONE freelancer (spec Module
+   *  H) — confirmed live, real data (real earnings, job counts,
+   *  top-rated status, skills). `talentProfile` requires a specific
+   *  `personId` — no bulk directory listing exists in the schema.
+   *  `TalentProfileIdentity` only exposes `id`/`ciphertext` (confirmed
+   *  live — no name field there), so this intentionally does NOT fetch
+   *  identity; callers already have the freelancer's name from their own
+   *  proposal/invite records. */
+  async getTalentProfile(accessToken: string, organizationId: string | null, personId: string) {
+    const data = await this.request<{
+      talentProfile: {
+        profiles: {
+          personId: string;
+          profileAggregates: {
+            lastWorkedOn: string | null;
+            totalHourlyJobs: number | null;
+            totalFixedJobs: number | null;
+            topRatedStatus: string | null;
+            totalFeedback: number | null;
+            totalEarnings: number | null;
+            totalJobs: number | null;
+          } | null;
+          skills: { skill: string | null; prettyName: string | null }[] | null;
+        }[] | null;
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($id: ID!) {
+        talentProfile(personId: $id) {
+          profiles {
+            personId
+            profileAggregates { lastWorkedOn totalHourlyJobs totalFixedJobs topRatedStatus totalFeedback totalEarnings totalJobs }
+            skills { skill prettyName }
+          }
+        }
+      }`,
+      { id: personId },
+    );
+    return data.talentProfile.profiles?.[0] ?? null;
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(

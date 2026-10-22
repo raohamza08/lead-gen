@@ -128,4 +128,10 @@ export const QUEUE_NAMES = {
   // (Part: Upwork API integration — Rooms & Messages domain, 2026-10-23)
   // -- see upwork-rooms-sync.worker.ts. Read-only, no send capability.
   UPWORK_ROOMS_SYNC: "upwork-rooms-sync",
+  // Periodic freelancer-profile pull for every known freelancer (same
+  // sourcing as UPWORK_WORK_HISTORY_SYNC) per CONNECTED
+  // UpworkApiConnection (Part: Upwork API integration — Freelancer
+  // Profiles domain, 2026-10-23) -- see
+  // upwork-freelancer-profiles-sync.worker.ts.
+  UPWORK_FREELANCER_PROFILES_SYNC: "upwork-freelancer-profiles-sync",
 } as const;

@@ -231,6 +231,7 @@ model Organization {
   upworkApiTransactions         UpworkApiTransaction[]
   upworkApiWorkHistoryEntries   UpworkApiWorkHistoryEntry[]
   upworkApiRooms                UpworkApiRoom[]
+  upworkApiFreelancerProfiles   UpworkApiFreelancerProfile[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -2192,6 +2193,42 @@ model UpworkApiRoom {
 
   @@unique([orgId, upworkRoomId])
   @@map("upwork_api_rooms")
+}
+
+/// Real freelancer profile aggregates (spec Module H: Freelancer Profiles,
+/// Part: Upwork API integration — Freelancer Profiles domain, 2026-10-23)
+/// — from the real `talentProfile(personId!)` GraphQL query, confirmed
+/// live with real data (real earnings, job counts, top-rated status,
+/// skills). `talentProfile` requires a specific personId — no bulk
+/// directory listing exists in the schema — so this is synced per KNOWN
+/// freelancer, same sourcing as UpworkApiWorkHistoryEntry (freelancerUserId
+/// already present on this org's own UpworkApiProposal/UpworkApiInvite
+/// rows). This is deliberately the agency-SCOPED view the spec requires
+/// ("do NOT automatically treat the connected personal freelancer profile
+/// as the agency's profile") — these are freelancers with a verified
+/// proposal/invite relationship to this agency, never the connected
+/// user's own unrelated personal profile.
+///
+/// Retention: permanent, same reasoning as every other UpworkApi* table.
+model UpworkApiFreelancerProfile {
+  id                String       @id @default(uuid())
+  orgId             String       @map("org_id")
+  org               Organization @relation(fields: [orgId], references: [id])
+  freelancerUserId  String       @map("freelancer_user_id")
+  freelancerName    String?      @map("freelancer_name")
+  topRatedStatus    String?      @map("top_rated_status")
+  totalEarnings     Float?       @map("total_earnings")
+  totalJobs         Int?         @map("total_jobs")
+  totalHourlyJobs   Int?         @map("total_hourly_jobs")
+  totalFixedJobs    Int?         @map("total_fixed_jobs")
+  totalFeedback     Float?       @map("total_feedback")
+  lastWorkedOn      DateTime?    @map("last_worked_on")
+  skillsJson        Json?        @map("skills_json")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@unique([orgId, freelancerUserId])
+  @@map("upwork_api_freelancer_profiles")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every
