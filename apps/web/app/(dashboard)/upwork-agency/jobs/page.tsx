@@ -79,22 +79,32 @@ function timeAgoLabel(iso: string): string {
  *  real-data keyword match (niche words found in the job's own title/
  *  category/subcategory/skills) rather than an exact lookup — a job that
  *  matches no configured niche lands in "Other", never silently dropped. */
+function jobHaystack(job: MarketplaceJob): string {
+  return [job.title, job.category ?? "", job.subcategory ?? "", ...job.skills.map((s) => s.prettyName)].join(" ").toLowerCase();
+}
+
+function nicheWordList(niche: string): string[] {
+  return niche.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOPWORDS.has(w));
+}
+
+/** Upwork's real public job-posting URL scheme — `~<recordNumber>`
+ *  resolves on its own, no slug required (Part: Marketplace Jobs "copy
+ *  link", 2026-10-23, explicit user request). */
+function jobUrl(job: MarketplaceJob): string {
+  return `https://www.upwork.com/jobs/~${job.recordNumber}`;
+}
+
 function categorize(jobs: MarketplaceJob[], niches: string[]): { niche: string; jobs: MarketplaceJob[] }[] {
   if (niches.length === 0) return [{ niche: "All jobs", jobs }];
 
-  const nicheWords = niches.map((n) => ({
-    niche: n,
-    words: n.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOPWORDS.has(w)),
-  }));
+  const nicheWords = niches.map((n) => ({ niche: n, words: nicheWordList(n) }));
 
   const buckets = new Map<string, MarketplaceJob[]>();
   for (const n of niches) buckets.set(n, []);
   buckets.set("Other", []);
 
   for (const job of jobs) {
-    const haystack = [job.title, job.category ?? "", job.subcategory ?? "", ...job.skills.map((s) => s.prettyName)]
-      .join(" ")
-      .toLowerCase();
+    const haystack = jobHaystack(job);
     let best: { niche: string; score: number } | null = null;
     for (const { niche, words } of nicheWords) {
       const score = words.reduce((acc, w) => acc + (haystack.includes(w) ? 1 : 0), 0);
@@ -108,6 +118,27 @@ function categorize(jobs: MarketplaceJob[], niches: string[]): { niche: string; 
   );
 }
 
+/** Which of the user's own freelancer profiles (from Proposal Writing)
+ *  best fits bidding on this specific job (Part: Marketplace Jobs
+ *  "recommended profile", 2026-10-23, explicit user request — "there
+ *  should be the recommendation so the profile from which i should
+ *  apply"). Same real-data keyword-overlap heuristic as the niche
+ *  grouping above, just scored per-job instead of bucketing a whole
+ *  list — a job that matches no profile's niche gets no recommendation
+ *  rather than a guessed one. */
+function matchProfile(job: MarketplaceJob, profiles: FreelancerProfile[]): { profile: FreelancerProfile; matchedWords: string[] } | null {
+  const haystack = jobHaystack(job);
+  let best: { profile: FreelancerProfile; score: number; matchedWords: string[] } | null = null;
+  for (const profile of profiles) {
+    const words = nicheWordList(profile.niche);
+    const matchedWords = words.filter((w) => haystack.includes(w));
+    if (matchedWords.length > 0 && (!best || matchedWords.length > best.score)) {
+      best = { profile, score: matchedWords.length, matchedWords };
+    }
+  }
+  return best ? { profile: best.profile, matchedWords: best.matchedWords } : null;
+}
+
 function Badge({ children, tone }: { children: React.ReactNode; tone?: "accent" | "good" | "neutral" }) {
   const cls =
     tone === "accent"
@@ -118,8 +149,9 @@ function Badge({ children, tone }: { children: React.ReactNode; tone?: "accent" 
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>{children}</span>;
 }
 
-function JobRow({ job, onOpen }: { job: MarketplaceJob; onOpen: () => void }) {
+function JobRow({ job, profiles, onOpen }: { job: MarketplaceJob; profiles: FreelancerProfile[]; onOpen: () => void }) {
   const justPosted = minutesAgo(job.publishedDateTime) <= JUST_POSTED_WINDOW_MIN;
+  const match = matchProfile(job, profiles);
   return (
     <button
       type="button"
@@ -133,6 +165,7 @@ function JobRow({ job, onOpen }: { job: MarketplaceJob; onOpen: () => void }) {
       <p className="line-clamp-2 text-xs text-ink/50">{job.description}</p>
       <div className="flex flex-wrap items-center gap-1.5">
         {justPosted && <Badge tone="accent">New</Badge>}
+        {match && <Badge tone="good">Apply as {match.profile.name}</Badge>}
         {job.budgetDisplay && <Badge>{job.budgetDisplay}</Badge>}
         {job.experienceLevel && <Badge>{job.experienceLevel}</Badge>}
         {job.client.verificationStatus === "VERIFIED" && <Badge tone="good">Payment verified</Badge>}
@@ -143,9 +176,39 @@ function JobRow({ job, onOpen }: { job: MarketplaceJob; onOpen: () => void }) {
   );
 }
 
-function JobDetail({ job }: { job: MarketplaceJob }) {
+function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: FreelancerProfile[] }) {
+  const [copied, setCopied] = useState(false);
+  const match = matchProfile(job, profiles);
+
+  async function copyLink() {
+    await navigator.clipboard.writeText(jobUrl(job));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
     <div className="flex flex-col gap-5 text-sm">
+      <button
+        type="button"
+        onClick={copyLink}
+        className="flex items-center justify-center gap-2 self-start rounded-md border border-[var(--line)] px-3 py-1.5 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+      >
+        {copied ? "Link copied" : "Copy job link"}
+      </button>
+
+      {match && (
+        <div className="rounded-lg border border-accent/30 bg-accent/10 px-3.5 py-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-accent">Recommended profile to apply from</p>
+          <p className="mt-1 text-sm font-medium text-ink">{match.profile.name}</p>
+          <p className="text-xs text-ink/55">
+            Niche: {match.profile.niche} · matched on {match.matchedWords.join(", ")}
+          </p>
+        </div>
+      )}
+      {!match && profiles.length > 0 && (
+        <p className="text-xs text-ink/45">No freelancer profile's niche matches this job closely — review manually before applying.</p>
+      )}
+
       <div className="flex flex-wrap items-center gap-1.5">
         {minutesAgo(job.publishedDateTime) <= JUST_POSTED_WINDOW_MIN && <Badge tone="accent">New</Badge>}
         {job.premium && <Badge>Premium</Badge>}
@@ -278,6 +341,9 @@ export default function MarketplaceJobsPage() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [openJobId, setOpenJobId] = useState<string | null>(null);
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [experienceFilter, setExperienceFilter] = useState("all");
+  const [maxApplicants, setMaxApplicants] = useState("");
 
   const jobsQuery = useQuery({
     queryKey: ["upwork-api-marketplace-jobs", query],
@@ -297,16 +363,23 @@ export default function MarketplaceJobsPage() {
     retry: false,
     throwOnError: false,
   });
-  const niches = useMemo(
-    () => [...new Set((profilesQuery.data ?? []).filter((p) => p.active).map((p) => p.niche.trim()).filter(Boolean))],
-    [profilesQuery.data],
-  );
+  const activeProfiles = useMemo(() => (profilesQuery.data ?? []).filter((p) => p.active && p.niche.trim()), [profilesQuery.data]);
+  const niches = useMemo(() => [...new Set(activeProfiles.map((p) => p.niche.trim()))], [activeProfiles]);
 
-  const allJobs = jobs?.jobs ?? [];
-  const sorted = useMemo(
-    () => [...allJobs].sort((a, b) => new Date(b.publishedDateTime).getTime() - new Date(a.publishedDateTime).getTime()),
-    [allJobs],
-  );
+  const allJobs = useMemo(() => jobs?.jobs ?? [], [jobs]);
+  const categories = useMemo(() => [...new Set(allJobs.map((j) => j.category).filter((c): c is string => Boolean(c)))], [allJobs]);
+  const experienceLevels = useMemo(() => [...new Set(allJobs.map((j) => j.experienceLevel).filter((e): e is string => Boolean(e)))], [allJobs]);
+
+  const maxApplicantsNum = maxApplicants.trim() === "" ? null : Number(maxApplicants);
+  const hasFilters = categoryFilter !== "all" || experienceFilter !== "all" || maxApplicantsNum != null;
+
+  const sorted = useMemo(() => {
+    return [...allJobs]
+      .filter((j) => (categoryFilter === "all" ? true : j.category === categoryFilter))
+      .filter((j) => (experienceFilter === "all" ? true : j.experienceLevel === experienceFilter))
+      .filter((j) => (maxApplicantsNum == null ? true : j.totalApplicants <= maxApplicantsNum))
+      .sort((a, b) => new Date(b.publishedDateTime).getTime() - new Date(a.publishedDateTime).getTime());
+  }, [allJobs, categoryFilter, experienceFilter, maxApplicantsNum]);
   const justPosted = sorted.filter((j) => minutesAgo(j.publishedDateTime) <= JUST_POSTED_WINDOW_MIN);
   const rest = sorted.filter((j) => minutesAgo(j.publishedDateTime) > JUST_POSTED_WINDOW_MIN);
   const groups = useMemo(() => categorize(rest, niches), [rest, niches]);
@@ -344,6 +417,63 @@ export default function MarketplaceJobsPage() {
             Search
           </button>
         </form>
+
+        {allJobs.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {categories.length > 0 && (
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="h-9 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+              >
+                <option value="all">All categories</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            )}
+            {experienceLevels.length > 0 && (
+              <select
+                value={experienceFilter}
+                onChange={(e) => setExperienceFilter(e.target.value)}
+                className="h-9 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+              >
+                <option value="all">Any experience level</option>
+                {experienceLevels.map((e) => (
+                  <option key={e} value={e}>
+                    {e}
+                  </option>
+                ))}
+              </select>
+            )}
+            <input
+              type="number"
+              min={0}
+              value={maxApplicants}
+              onChange={(e) => setMaxApplicants(e.target.value)}
+              placeholder="Max applicants"
+              className="h-9 w-32 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+            />
+            {hasFilters && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCategoryFilter("all");
+                  setExperienceFilter("all");
+                  setMaxApplicants("");
+                }}
+                className="h-9 rounded-md px-3 text-xs text-accent hover:underline"
+              >
+                Clear filters
+              </button>
+            )}
+            <span className="text-xs text-ink/40">
+              {sorted.length} of {allJobs.length} shown
+            </span>
+          </div>
+        )}
       </SectionCard>
 
       {jobsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
@@ -361,7 +491,7 @@ export default function MarketplaceJobsPage() {
             <SectionCard title={`Posted in the last ${JUST_POSTED_WINDOW_MIN} minutes`}>
               <div className="flex flex-col gap-2">
                 {justPosted.map((job) => (
-                  <JobRow key={job.id} job={job} onOpen={() => setOpenJobId(job.id)} />
+                  <JobRow key={job.id} job={job} profiles={activeProfiles} onOpen={() => setOpenJobId(job.id)} />
                 ))}
               </div>
             </SectionCard>
@@ -371,7 +501,7 @@ export default function MarketplaceJobsPage() {
             <SectionCard key={niche} title={niche}>
               <div className="flex flex-col gap-2">
                 {groupJobs.map((job) => (
-                  <JobRow key={job.id} job={job} onOpen={() => setOpenJobId(job.id)} />
+                  <JobRow key={job.id} job={job} profiles={activeProfiles} onOpen={() => setOpenJobId(job.id)} />
                 ))}
               </div>
             </SectionCard>
@@ -386,7 +516,7 @@ export default function MarketplaceJobsPage() {
       )}
 
       <Modal open={Boolean(openJob)} onOpenChange={(open) => !open && setOpenJobId(null)} variant="drawer-right" title={openJob?.title ?? "Job"} contentClassName="w-full max-w-xl">
-        {openJob && <JobDetail job={openJob} />}
+        {openJob && <JobDetail job={openJob} profiles={activeProfiles} />}
       </Modal>
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile, DataTable } from "../../../../components/chart-kit";
@@ -35,6 +35,23 @@ export default function InvitesPage() {
   const invites = invitesQuery.data;
 
   const [selected, setSelected] = useState<Invite | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+  const all = invites?.recent ?? [];
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return all
+      .filter((i) => (statusFilter ? i.status === statusFilter : true))
+      .filter((i) =>
+        q
+          ? (i.jobTitle ?? "").toLowerCase().includes(q) ||
+            (i.clientName ?? "").toLowerCase().includes(q) ||
+            (i.freelancerName ?? "").toLowerCase().includes(q)
+          : true,
+      );
+  }, [all, search, statusFilter]);
+  const hasFilters = search !== "" || statusFilter !== null;
 
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Invites" />;
@@ -54,21 +71,56 @@ export default function InvitesPage() {
               {Object.entries(invites.countByStatus)
                 .filter(([, count]) => count > 0)
                 .map(([status_, count]) => (
-                  <StatTile key={status_} label={status_} value={count} />
+                  <StatTile
+                    key={status_}
+                    label={status_}
+                    value={count}
+                    active={statusFilter === status_}
+                    onClick={() => setStatusFilter((current) => (current === status_ ? null : status_))}
+                  />
                 ))}
             </KpiStrip>
-            <DataTable
-              rowKey={(i) => i.id}
-              onRowClick={(i) => setSelected(i)}
-              columns={[
-                { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—" },
-                { key: "client", header: "Client", render: (i) => i.clientName ?? "—" },
-                { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—" },
-                { key: "status", header: "Status", render: (i) => i.status ?? "—" },
-                { key: "updated", header: "Updated", render: (i) => (i.upworkModifiedAt ? new Date(i.upworkModifiedAt).toLocaleString() : "—") },
-              ]}
-              rows={invites.recent}
-            />
+
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search job, client, or freelancer…"
+                className="h-9 w-64 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+              />
+              {hasFilters && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setStatusFilter(null);
+                  }}
+                  className="h-9 rounded-md px-3 text-xs text-accent hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
+              <span className="text-xs text-ink/40">
+                {filtered.length} of {all.length} shown
+              </span>
+            </div>
+
+            {filtered.length === 0 ? (
+              <p className="py-6 text-center text-sm text-ink/50">No invites match these filters.</p>
+            ) : (
+              <DataTable
+                rowKey={(i) => i.id}
+                onRowClick={(i) => setSelected(i)}
+                columns={[
+                  { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—" },
+                  { key: "client", header: "Client", render: (i) => i.clientName ?? "—" },
+                  { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—" },
+                  { key: "status", header: "Status", render: (i) => i.status ?? "—" },
+                  { key: "updated", header: "Updated", render: (i) => (i.upworkModifiedAt ? new Date(i.upworkModifiedAt).toLocaleString() : "—") },
+                ]}
+                rows={filtered}
+              />
+            )}
           </div>
         )}
       </SectionCard>

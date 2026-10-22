@@ -46,6 +46,7 @@ export default function RoomsPage() {
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [unreadOnly, setUnreadOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [resyncing, setResyncing] = useState(false);
   const [resyncError, setResyncError] = useState<string | null>(null);
@@ -72,9 +73,10 @@ export default function RoomsPage() {
   const filtered = useMemo(() => {
     return allRooms
       .filter((r) => (typeFilter === "all" ? true : r.roomType === typeFilter))
+      .filter((r) => (unreadOnly ? (r.numUnread ?? 0) > 0 : true))
       .filter((r) => (search ? (r.roomName ?? "").toLowerCase().includes(search.toLowerCase()) : true))
       .sort((a, b) => new Date(b.latestMessageAt ?? 0).getTime() - new Date(a.latestMessageAt ?? 0).getTime());
-  }, [allRooms, typeFilter, search]);
+  }, [allRooms, typeFilter, unreadOnly, search]);
 
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
 
@@ -117,7 +119,7 @@ export default function RoomsPage() {
           <KpiStrip>
             <StatTile label="Total rooms" value={rooms.totalCount} />
             <StatTile label="Unread messages" value={rooms.totalUnread} />
-            <StatTile label="Rooms with unread" value={roomsWithUnread} />
+            <StatTile label="Rooms with unread" value={roomsWithUnread} active={unreadOnly} onClick={() => setUnreadOnly((v) => !v)} />
             <StatTile label="Total participants" value={totalParticipants} />
           </KpiStrip>
 
@@ -130,19 +132,38 @@ export default function RoomsPage() {
                   placeholder="Search rooms…"
                   className="h-9 w-full rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
                 />
-                {types.length > 0 && (
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    className="h-9 w-full rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+                <div className="flex items-center gap-2">
+                  {types.length > 0 && (
+                    <select
+                      value={typeFilter}
+                      onChange={(e) => setTypeFilter(e.target.value)}
+                      className="h-9 flex-1 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+                    >
+                      <option value="all">All types</option>
+                      {types.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink/60">
+                    <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
+                    Unread only
+                  </label>
+                </div>
+                {(search !== "" || typeFilter !== "all" || unreadOnly) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch("");
+                      setTypeFilter("all");
+                      setUnreadOnly(false);
+                    }}
+                    className="self-start text-xs text-accent hover:underline"
                   >
-                    <option value="all">All types</option>
-                    {types.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    Clear filters
+                  </button>
                 )}
 
                 <div className="flex max-h-[520px] flex-col gap-1 overflow-y-auto">

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile } from "../../../components/chart-kit";
@@ -13,6 +14,7 @@ import { SectionCard, KpiStrip, StatTile } from "../../../components/chart-kit";
  * domain service — this page adds no new data logic, just presentation.
  */
 export default function UpworkAgencyOverviewPage() {
+  const router = useRouter();
   const overviewQuery = useQuery({
     queryKey: ["upwork-api-agency-overview"],
     queryFn: () => api.getUpworkApiAgencyOverview(),
@@ -49,14 +51,34 @@ export default function UpworkAgencyOverviewPage() {
         </p>
       </div>
 
-      <SectionCard title="Key metrics">
+      <SectionCard title="Key metrics" subtitle="Click a tile to open that module.">
         <KpiStrip>
-          <StatTile label="Connects balance" value={overview.connects?.unavailable ? "—" : overview.connects?.balance ?? "—"} />
-          <StatTile label="Proposals" value={overview.proposals?.unavailable ? "—" : overview.proposals?.totalCount ?? "—"} />
-          <StatTile label="Invites" value={overview.invites?.unavailable ? "—" : overview.invites?.totalCount ?? "—"} />
-          <StatTile label="Transactions" value={overview.transactions?.unavailable ? "—" : overview.transactions?.totalCount ?? "—"} />
-          <StatTile label="Freelancers tracked" value={overview.freelancerProfiles?.unavailable ? "—" : overview.freelancerProfiles?.totalCount ?? "—"} />
-          <StatTile label="Rooms" value={overview.rooms?.unavailable ? "—" : overview.rooms?.totalCount ?? "—"} />
+          <StatTile
+            label="Connects balance"
+            value={overview.connects?.unavailable ? "—" : overview.connects?.balance ?? "—"}
+            onClick={() => router.push("/upwork-agency/transactions")}
+          />
+          <StatTile
+            label="Proposals"
+            value={overview.proposals?.unavailable ? "—" : overview.proposals?.totalCount ?? "—"}
+            onClick={() => router.push("/upwork-agency/bidding")}
+          />
+          <StatTile
+            label="Invites"
+            value={overview.invites?.unavailable ? "—" : overview.invites?.totalCount ?? "—"}
+            onClick={() => router.push("/upwork-agency/invites")}
+          />
+          <StatTile
+            label="Transactions"
+            value={overview.transactions?.unavailable ? "—" : overview.transactions?.totalCount ?? "—"}
+            onClick={() => router.push("/upwork-agency/transactions")}
+          />
+          <StatTile
+            label="Freelancers tracked"
+            value={overview.freelancerProfiles?.unavailable ? "—" : overview.freelancerProfiles?.totalCount ?? "—"}
+            onClick={() => router.push("/upwork-agency/freelancers")}
+          />
+          <StatTile label="Rooms" value={overview.rooms?.unavailable ? "—" : overview.rooms?.totalCount ?? "—"} onClick={() => router.push("/upwork-agency/rooms")} />
         </KpiStrip>
       </SectionCard>
 
