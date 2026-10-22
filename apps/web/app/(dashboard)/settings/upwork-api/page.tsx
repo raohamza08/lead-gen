@@ -199,7 +199,7 @@ export default function UpworkApiSettingsPage() {
             </div>
             {status.organizationName && <div className="text-xs text-ink/50">Organization: {status.organizationName}</div>}
             {status.scope && <div className="text-xs text-ink/50">Scope: {status.scope}</div>}
-            {status.lastSyncError && <div className="mt-1 text-xs text-bad">{status.lastSyncError}</div>}
+            {status.lastSyncError && <div className="mt-1 text-xs text-bad">Last sync warning: {status.lastSyncError}</div>}
 
             {/* Manual organization-ID override (Part: Upwork API
                 integration, 2026-10-22) — Upwork's automatic org-detection
@@ -234,6 +234,24 @@ export default function UpworkApiSettingsPage() {
                 public Upwork agency page — it&apos;s embedded in the logo image URL.
               </p>
             </div>
+          </div>
+        ) : status?.status === "EXPIRED" || status?.status === "ERROR" ? (
+          // Distinct from "never connected" (Part: Upwork API integration,
+          // 2026-10-22, found via a real incident: Upwork revoked the
+          // refresh token during rapid disconnect/reconnect testing —
+          // confirmed via Upwork's own "invalid_grant: Refresh token is
+          // expired or revoked or not registered" response). The row still
+          // exists with real history (organizationName/lastSyncError), so
+          // showing "Not connected yet" with no explanation would hide a
+          // real, actionable error -- surface it and point at the fix.
+          <div className="flex flex-col gap-1 text-sm">
+            <div className="flex items-center gap-2 font-medium">
+              Connection expired
+              <StatusBadge status={status.status} />
+            </div>
+            {status.organizationName && <div className="text-xs text-ink/50">Was connected to: {status.organizationName}</div>}
+            {status.lastSyncError && <div className="text-xs text-bad">{status.lastSyncError}</div>}
+            <p className="mt-1 text-xs text-ink/55">Click &ldquo;Connect Upwork account&rdquo; above to re-authorize.</p>
           </div>
         ) : (
           <p className="text-sm text-ink/55">Not connected yet. Click &ldquo;Connect Upwork account&rdquo; above once Upwork approves the API application.</p>
