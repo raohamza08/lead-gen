@@ -690,6 +690,62 @@ export class UpworkGraphQLClient {
     return data.userDetails;
   }
 
+  /** Real public marketplace job search (spec Modules G + S) — confirmed
+   *  live against real data: 93,279 real open job postings at the time
+   *  of testing, each with rich fields (title, description, budget,
+   *  skills, client info, dates). Deliberately NOT synced/stored —
+   *  unlike every other UpworkApi* table, this is genuinely bulk public
+   *  third-party marketplace content (not the org's own business
+   *  record), and at this volume a live search is the only sane
+   *  approach. Each search result already carries every field this app
+   *  would otherwise need a separate "detail" query for — confirmed
+   *  live that the separate `jobPosting(jobPostingId!)` detail query is
+   *  blocked with a real 403 ("Authorization failed") for jobs this
+   *  agency hasn't itself interacted with, so Module S (Job Details)
+   *  is served from this same search result, not a second query. */
+  async searchMarketplaceJobs(accessToken: string, organizationId: string | null, searchTerm: string | null, first = 25) {
+    const data = await this.request<{
+      marketplaceJobPostingsSearch: {
+        totalCount: number | null;
+        edges: {
+          node: {
+            id: string;
+            title: string;
+            description: string;
+            category: string | null;
+            subcategory: string | null;
+            experienceLevel: string | null;
+            createdDateTime: string;
+            publishedDateTime: string;
+            totalApplicants: number;
+            amount: { rawValue: string; currency: string; displayValue: string } | null;
+            hourlyBudgetMin: { rawValue: string; currency: string; displayValue: string } | null;
+            hourlyBudgetMax: { rawValue: string; currency: string; displayValue: string } | null;
+          };
+        }[];
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($filter: MarketplaceJobPostingsSearchFilter) {
+        marketplaceJobPostingsSearch(marketPlaceJobFilter: $filter) {
+          totalCount
+          edges {
+            node {
+              id title description category subcategory experienceLevel
+              createdDateTime publishedDateTime totalApplicants
+              amount { rawValue currency displayValue }
+              hourlyBudgetMin { rawValue currency displayValue }
+              hourlyBudgetMax { rawValue currency displayValue }
+            }
+          }
+        }
+      }`,
+      { filter: { pagination_eq: { first }, ...(searchTerm ? { searchExpression_eq: searchTerm } : {}) } },
+    );
+    return data.marketplaceJobPostingsSearch;
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(

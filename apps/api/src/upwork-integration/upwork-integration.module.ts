@@ -16,6 +16,7 @@ import { UpworkWorkHistoryModule } from "./work-history/work-history.module";
 import { UpworkRoomsModule } from "./rooms/rooms.module";
 import { UpworkOntologyModule } from "./ontology/ontology.module";
 import { UpworkPublicUserModule } from "./public-user/public-user.module";
+import { UpworkMarketplaceJobsModule } from "./marketplace-jobs/marketplace-jobs.module";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -96,6 +97,7 @@ import { UpworkPublicUserModule } from "./public-user/public-user.module";
     UpworkRoomsModule,
     UpworkOntologyModule,
     UpworkPublicUserModule,
+    UpworkMarketplaceJobsModule,
   ],
 })
 export class UpworkIntegrationModule {}
