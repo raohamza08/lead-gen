@@ -584,11 +584,11 @@ export default function UpworkApiSettingsPage() {
       )}
 
       {status?.connected && (
-        <SectionCard title="Rooms &amp; Messages" subtitle="Read-only conversation listing, synced every 30 minutes. No send-message capability exists in this app.">
+        <SectionCard title="Rooms &amp; Messages" subtitle="Read-only conversation listing. Recently active rooms refresh every 15 minutes; the full room list reconciles every 6 hours. No send-message capability exists in this app.">
           {roomsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
           {roomsQuery.error && <p className="text-sm text-bad">{(roomsQuery.error as Error).message}</p>}
           {rooms && rooms.totalCount === 0 && (
-            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting, then every 30 minutes.</p>
+            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting.</p>
           )}
           {rooms && rooms.totalCount > 0 && (
             <div className="flex flex-col gap-4">

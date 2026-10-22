@@ -372,6 +372,8 @@ export default function MarketplaceJobsPage() {
   const [budgetMin, setBudgetMin] = useState("");
   const [budgetMax, setBudgetMax] = useState("");
   const [maxApplicants, setMaxApplicants] = useState("");
+  const [profileFilter, setProfileFilter] = useState("all");
+  const [paymentVerifiedOnly, setPaymentVerifiedOnly] = useState(false);
 
   const currentCursor = cursorStack[pageIndex] ?? null;
   const jobsQuery = useQuery({
@@ -433,7 +435,9 @@ export default function MarketplaceJobsPage() {
     locationFilter !== "all" ||
     budgetMinNum != null ||
     budgetMaxNum != null ||
-    maxApplicantsNum != null;
+    maxApplicantsNum != null ||
+    profileFilter !== "all" ||
+    paymentVerifiedOnly;
 
   function clearFilters() {
     setCategoryFilter("all");
@@ -444,6 +448,8 @@ export default function MarketplaceJobsPage() {
     setBudgetMin("");
     setBudgetMax("");
     setMaxApplicants("");
+    setProfileFilter("all");
+    setPaymentVerifiedOnly(false);
   }
 
   const sorted = useMemo(() => {
@@ -455,6 +461,13 @@ export default function MarketplaceJobsPage() {
       .filter((j) => (jobTypeFilter === "all" ? true : jobTypeFilter === "fixed" ? j.fixedAmountRaw != null : j.fixedAmountRaw == null))
       .filter((j) => (postedWithinMin == null ? true : minutesAgo(j.publishedDateTime) <= postedWithinMin))
       .filter((j) => (maxApplicantsNum == null ? true : j.totalApplicants <= maxApplicantsNum))
+      .filter((j) => (paymentVerifiedOnly ? j.client.verificationStatus === "VERIFIED" : true))
+      .filter((j) => {
+        if (profileFilter === "all") return true;
+        const match = matchProfile(j, activeProfiles);
+        if (profileFilter === "recommended") return match != null;
+        return match?.profile.id === profileFilter;
+      })
       .filter((j) => {
         if (budgetMinNum == null && budgetMaxNum == null) return true;
         const lo = j.fixedAmountRaw ?? j.hourlyBudgetMinRaw ?? 0;
@@ -464,7 +477,20 @@ export default function MarketplaceJobsPage() {
         return true;
       })
       .sort((a, b) => new Date(b.publishedDateTime).getTime() - new Date(a.publishedDateTime).getTime());
-  }, [allJobs, categoryFilter, experienceFilter, locationFilter, jobTypeFilter, postedWithin, maxApplicantsNum, budgetMinNum, budgetMaxNum]);
+  }, [
+    allJobs,
+    categoryFilter,
+    experienceFilter,
+    locationFilter,
+    jobTypeFilter,
+    postedWithin,
+    maxApplicantsNum,
+    budgetMinNum,
+    budgetMaxNum,
+    paymentVerifiedOnly,
+    profileFilter,
+    activeProfiles,
+  ]);
 
   const justPosted = sorted.filter((j) => minutesAgo(j.publishedDateTime) <= JUST_POSTED_WINDOW_MIN);
   const rest = sorted.filter((j) => minutesAgo(j.publishedDateTime) > JUST_POSTED_WINDOW_MIN);
@@ -563,6 +589,21 @@ export default function MarketplaceJobsPage() {
             <input type="number" min={0} value={budgetMin} onChange={(e) => setBudgetMin(e.target.value)} placeholder="Budget min" className="h-9 w-28 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm" />
             <input type="number" min={0} value={budgetMax} onChange={(e) => setBudgetMax(e.target.value)} placeholder="Budget max" className="h-9 w-28 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm" />
             <input type="number" min={0} value={maxApplicants} onChange={(e) => setMaxApplicants(e.target.value)} placeholder="Max applicants" className="h-9 w-32 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm" />
+            {activeProfiles.length > 0 && (
+              <select value={profileFilter} onChange={(e) => setProfileFilter(e.target.value)} className="h-9 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm">
+                <option value="all">Any profile</option>
+                <option value="recommended">Preferred by any profile</option>
+                {activeProfiles.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    Preferred by {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <label className="flex h-9 items-center gap-1.5 rounded-md border border-[var(--line)] px-2.5 text-xs text-ink/70">
+              <input type="checkbox" checked={paymentVerifiedOnly} onChange={(e) => setPaymentVerifiedOnly(e.target.checked)} />
+              Payment verified only
+            </label>
             {hasFilters && (
               <button type="button" onClick={clearFilters} className="h-9 rounded-md px-3 text-xs text-accent hover:underline">
                 Clear filters

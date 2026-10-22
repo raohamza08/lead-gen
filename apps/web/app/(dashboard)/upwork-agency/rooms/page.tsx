@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile } from "../../../../components/chart-kit";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
@@ -37,7 +37,6 @@ function timeAgo(iso: string | null): string {
  *  fabricated, with a short disclosure instead. No send-message
  *  capability exists anywhere in this app, by explicit instruction. */
 export default function RoomsPage() {
-  const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ["upwork-api-status"], queryFn: () => api.getUpworkApiStatus() as Promise<UpworkConnectionStatus> });
   const connected = Boolean(statusQuery.data?.connected);
 
@@ -48,21 +47,6 @@ export default function RoomsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [resyncing, setResyncing] = useState(false);
-  const [resyncError, setResyncError] = useState<string | null>(null);
-
-  async function resyncNow() {
-    setResyncing(true);
-    setResyncError(null);
-    try {
-      await api.resyncUpworkApiRooms();
-      await queryClient.invalidateQueries({ queryKey: ["upwork-api-rooms"] });
-    } catch (err) {
-      setResyncError((err as Error).message);
-    } finally {
-      setResyncing(false);
-    }
-  }
 
   const allRooms = rooms?.rooms ?? [];
   const types = useMemo(
@@ -88,24 +72,14 @@ export default function RoomsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">Rooms & Messages</h1>
-          <p className="mt-0.5 text-xs text-ink/50">
-            Read-only conversation listing, synced every 30 minutes. No send-message capability exists in this app.
-          </p>
-        </div>
-        <button
-          type="button"
-          disabled={resyncing}
-          onClick={resyncNow}
-          className="h-9 shrink-0 rounded-md border border-[var(--line)] px-3.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/[0.05] disabled:opacity-50"
-        >
-          {resyncing ? "Syncing…" : "Sync now"}
-        </button>
+      <div>
+        <h1 className="text-lg font-semibold tracking-tight">Rooms & Messages</h1>
+        <p className="mt-0.5 text-xs text-ink/50">
+          Read-only conversation listing. Recently active rooms refresh every 15 minutes; the full room list reconciles every 6 hours. No
+          send-message capability exists in this app.
+        </p>
       </div>
 
-      {resyncError && <p className="text-sm text-bad">{resyncError}</p>}
       {roomsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
 
       {rooms && rooms.totalCount === 0 && (
