@@ -7,9 +7,9 @@ import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
 import { UpworkInvitesService } from "./invites.service";
 
-/** Invite tracking domain — not yet built, see UpworkInvitesService's own
- *  docblock for the real lead on where to start. Same guard stack and
- *  `upwork-api` route prefix as every other Upwork sub-controller. */
+/** Invites domain — LIVE (Part: Upwork API integration — Invites domain,
+ *  2026-10-22). Same guard stack and `upwork-api` route prefix as every
+ *  other Upwork sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
 @RequiresModule("UPWORK_API")

@@ -108,4 +108,11 @@ export const QUEUE_NAMES = {
   // statuses, paginated) never delays the much lighter Connects balance
   // sync.
   UPWORK_PROPOSALS_SYNC: "upwork-proposals-sync",
+  // Periodic invites pull for every CONNECTED UpworkApiConnection (Part:
+  // Upwork API integration — Invites domain, 2026-10-22) -- see
+  // upwork-invites-sync.worker.ts. Deliberately separate from
+  // UPWORK_PROPOSALS_SYNC and its own Prisma model/table — the user
+  // explicitly required bids and invites to be stored and shown as
+  // distinct, separate domains, not merged into one "proposals" bucket.
+  UPWORK_INVITES_SYNC: "upwork-invites-sync",
 } as const;

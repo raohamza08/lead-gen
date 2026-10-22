@@ -18,13 +18,13 @@ interface ConnectionStatus {
   lastSyncError?: string | null;
 }
 
-// Connects usage monitoring removed from this list (Part: Upwork API
-// integration, 2026-10-22) — it's live now, rendered as a real SectionCard
-// below instead of a "pending" placeholder row. The other 6 domains follow
-// the same path one at a time (see upwork-integration.module.ts's docblock).
+// Connects usage, Bidding/proposals, and Invites removed from this list
+// (Part: Upwork API integration, 2026-10-22) — all three are live now,
+// rendered as real SectionCards below instead of "pending" placeholder
+// rows. The remaining 4 domains follow the same path one at a time (see
+// upwork-integration.module.ts's docblock).
 const STUB_MODULES = [
   { label: "Agency & profile management", hint: "Blocked by a missing Upwork scope — the company/companySelector queries both require a permission this app's Upwork credentials don't have." },
-  { label: "Invite tracking", hint: "Track and respond to client invitations." },
   { label: "Job discovery", hint: "Surface relevant job postings as they're posted." },
   { label: "Reporting", hint: "Weekly / monthly / yearly financial & performance reports." },
   { label: "Client communication monitoring", hint: "Internal concern-alerting only — no auto-replies." },
@@ -44,14 +44,18 @@ function StatusBadge({ status }: { status: ConnectionStatus["status"] }) {
  * ModuleAccessGuard on the backend regardless of whether someone finds
  * this URL directly.
  *
- * "connect / status / disconnect", Connects usage, and Bidding/proposals
- * (Part: Upwork API integration, 2026-10-22 — the first 2 of 7 data domains
- * built against a real, introspection-confirmed schema) are live. The
- * remaining domain cards below mirror the application's own capability list
- * and show live once each one's backend stub (see apps/api/src/
- * upwork-integration/services/) is replaced with a real implementation, one
- * at a time. Agency & profile management was attempted and found genuinely
- * blocked by a missing Upwork scope — see that card's own hint text.
+ * "connect / status / disconnect", Connects usage, Bidding/proposals, and
+ * Invites (Part: Upwork API integration, 2026-10-22 — the first 3 of 7 data
+ * domains built against a real, introspection-confirmed schema) are live.
+ * Bidding/proposals and Invites are deliberately separate SectionCards
+ * backed by separate API routes/Prisma tables — explicit user requirement
+ * ("I want them separate, bids and invites separately"), not just a UI
+ * split over shared data. The remaining domain cards below mirror the
+ * application's own capability list and go live once each one's backend
+ * stub (see apps/api/src/upwork-integration/) is replaced with a real
+ * implementation, one at a time. Agency & profile management was attempted
+ * and found genuinely blocked by a missing Upwork scope — see that card's
+ * own hint text.
  */
 export default function UpworkApiSettingsPage() {
   const queryClient = useQueryClient();
@@ -78,6 +82,13 @@ export default function UpworkApiSettingsPage() {
     enabled: Boolean(status?.connected),
   });
   const proposals = proposalsQuery.data;
+
+  const invitesQuery = useQuery({
+    queryKey: ["upwork-api-invites"],
+    queryFn: () => api.getUpworkApiInvites(),
+    enabled: Boolean(status?.connected),
+  });
+  const invites = invitesQuery.data;
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -310,7 +321,10 @@ export default function UpworkApiSettingsPage() {
       )}
 
       {status?.connected && (
-        <SectionCard title="Bidding &amp; proposals" subtitle="Your real submitted proposals/bids, synced every 6 hours from Upwork's real API.">
+        <SectionCard
+          title="Bidding &amp; proposals"
+          subtitle={`Your real submitted proposals/bids${status.organizationName ? ` for ${status.organizationName}` : ""}, synced every 6 hours from Upwork's real API.`}
+        >
           {proposalsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
           {proposalsQuery.error && <p className="text-sm text-bad">{(proposalsQuery.error as Error).message}</p>}
           {proposals && proposals.totalCount === 0 && (
@@ -339,6 +353,47 @@ export default function UpworkApiSettingsPage() {
                       { key: "updated", header: "Updated", render: (p) => (p.upworkModifiedAt ? new Date(p.upworkModifiedAt).toLocaleString() : "—") },
                     ]}
                     rows={proposals.recent}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {status?.connected && (
+        <SectionCard
+          title="Invites"
+          subtitle={`Client invitations your freelancers received${status.organizationName ? ` under ${status.organizationName}` : ""}, synced every 6 hours — tracked separately from the Bidding/proposals data above.`}
+        >
+          {invitesQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
+          {invitesQuery.error && <p className="text-sm text-bad">{(invitesQuery.error as Error).message}</p>}
+          {invites && invites.totalCount === 0 && (
+            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting, then every 6 hours.</p>
+          )}
+          {invites && invites.totalCount > 0 && (
+            <div className="flex flex-col gap-4">
+              <KpiStrip>
+                {Object.entries(invites.countByStatus)
+                  .filter(([, count]) => count > 0)
+                  .map(([status_, count]) => (
+                    <StatTile key={status_} label={status_} value={count} />
+                  ))}
+              </KpiStrip>
+
+              {invites.recent.length > 0 && (
+                <div>
+                  <div className="mb-2 text-sm font-medium text-ink">Recently updated</div>
+                  <DataTable
+                    rowKey={(i) => i.id}
+                    columns={[
+                      { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—" },
+                      { key: "client", header: "Client", render: (i) => i.clientName ?? "—" },
+                      { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—" },
+                      { key: "status", header: "Status", render: (i) => i.status ?? "—" },
+                      { key: "updated", header: "Updated", render: (i) => (i.upworkModifiedAt ? new Date(i.upworkModifiedAt).toLocaleString() : "—") },
+                    ]}
+                    rows={invites.recent}
                   />
                 </div>
               )}

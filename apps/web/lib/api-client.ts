@@ -783,6 +783,28 @@ export const api = {
         upworkModifiedAt: string | null;
       }[];
     }>("/upwork-api/proposals"),
+  // Invites (Part: Upwork API integration — Invites domain, 2026-10-22) —
+  // deliberately a SEPARATE endpoint/dataset from proposals above, per
+  // explicit user requirement ("I want them separate, bids and invites
+  // separately").
+  getUpworkApiInvites: () =>
+    request<{
+      countByStatus: Record<string, number>;
+      totalCount: number;
+      recent: {
+        id: string;
+        context: "Freelancer" | "Agency" | null;
+        jobTitle: string | null;
+        clientName: string | null;
+        freelancerName: string | null;
+        status: string | null;
+        invitationLetter: string | null;
+        acceptanceDuration: string | null;
+        upfrontPaymentPct: number | null;
+        upworkCreatedAt: string | null;
+        upworkModifiedAt: string | null;
+      }[];
+    }>("/upwork-api/invites"),
 
   // ---- Upwork Proposal Writing (gated by upworkProposalWritingAccess module flag) ----
   generateUpworkCoverLetter: (

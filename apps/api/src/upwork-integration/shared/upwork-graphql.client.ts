@@ -60,6 +60,34 @@ export interface VendorProposalsPage {
   hasNextPage: boolean;
 }
 
+/** `VendorCurrentOrganizationInvitationFilter.status_eq` — confirmed live,
+ *  only two values exist (NOT the 5 real lifecycle statuses on
+ *  `statusDetails.status`, which this filter doesn't expose directly):
+ *  "pending" = still-active/awaiting-response invitations, "terminated" =
+ *  invitations whose lifecycle has ended (Accepted/Declined/Withdrawn/
+ *  Archived all fall under "terminated"). A sync walks both. */
+export const VENDOR_INVITATION_STATUS_FILTERS = ["pending", "terminated"] as const;
+export type VendorInvitationStatusFilter = (typeof VENDOR_INVITATION_STATUS_FILTERS)[number];
+
+export interface VendorInvitationNode {
+  id: string;
+  context: "Freelancer" | "Agency" | null;
+  client: { user: { id: string; name: string | null } } | null;
+  freelancer: { user: { id: string; name: string | null } } | null;
+  jobPosting: { id: string; content: { title: string } } | null;
+  invitationLetter: string | null;
+  inviteAttempt: number | null;
+  statusDetails: { status: string } | null;
+  acceptanceDetails: { duration: string | null; upfrontPaymentPercent: number | null; coverLetter: string | null } | null;
+  auditDetails: { createdBy: string | null; createdDateTime: string | null; modifiedBy: string | null; modifiedDateTime: string | null } | null;
+}
+
+export interface VendorInvitationsPage {
+  invitations: VendorInvitationNode[];
+  endCursor: string | null;
+  hasNextPage: boolean;
+}
+
 /** Exported (Part: real bug fix, 2026-10-22 — reactive token refresh) so
  *  UpworkApiConnectionService.withFreshTokenOnAuthFailure can detect a real
  *  401 from Upwork and force-refresh, instead of trusting our own
@@ -206,6 +234,68 @@ export class UpworkGraphQLClient {
       proposals: data.vendorProposals.edges.map((e) => e.node),
       endCursor: data.vendorProposals.pageInfo.endCursor,
       hasNextPage: data.vendorProposals.pageInfo.hasNextPage,
+    };
+  }
+
+  /** One page of invitations this org has sent to freelancers/agencies —
+   *  real, separate query from `vendorProposals` (Part: Upwork API
+   *  integration — Invites domain, 2026-10-22, built specifically because
+   *  the user explicitly asked for "bids and invites separately"). Lives on
+   *  `organization { vendorInvitations }`, NOT a standalone top-level
+   *  query — confirmed live via introspection. `status_eq` only accepts
+   *  "pending"/"terminated" (see VENDOR_INVITATION_STATUS_FILTERS), a
+   *  coarser split than the 5 real statuses on `statusDetails.status`.
+   *  Deliberately omits `annotations` — confirmed live to be broken on
+   *  Upwork's own end (`"Can't serialize value ... Invalid input for enum
+   *  'VendorInvitationAnnotations'. Unknown value '3'"` — Upwork returning
+   *  a raw internal code that doesn't map to any of its own enum's declared
+   *  values, not something fixable client-side). `first` caps at 40,
+   *  confirmed live ("query param limit can not be greater than 40") — a
+   *  different, higher cap than vendorProposals' 25. */
+  async getVendorInvitationsPage(
+    accessToken: string,
+    organizationId: string | null,
+    status: VendorInvitationStatusFilter,
+    after: string | null,
+    first = 40,
+  ): Promise<VendorInvitationsPage> {
+    const data = await this.request<{
+      organization: {
+        vendorInvitations: { edges: { node: VendorInvitationNode }[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } };
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($filter: VendorCurrentOrganizationInvitationFilter!, $pagination: Pagination!) {
+        organization {
+          vendorInvitations(filter: $filter, pagination: $pagination) {
+            edges {
+              node {
+                id
+                context
+                client { user { id name } }
+                freelancer { user { id name } }
+                jobPosting { id content { title } }
+                invitationLetter
+                inviteAttempt
+                statusDetails { status }
+                acceptanceDetails { duration upfrontPaymentPercent coverLetter }
+                auditDetails { createdBy createdDateTime modifiedBy modifiedDateTime }
+              }
+            }
+            pageInfo { endCursor hasNextPage }
+          }
+        }
+      }`,
+      {
+        filter: { status_eq: status },
+        pagination: { first, ...(after ? { after } : {}) },
+      },
+    );
+    return {
+      invitations: data.organization.vendorInvitations.edges.map((e) => e.node),
+      endCursor: data.organization.vendorInvitations.pageInfo.endCursor,
+      hasNextPage: data.organization.vendorInvitations.pageInfo.hasNextPage,
     };
   }
 

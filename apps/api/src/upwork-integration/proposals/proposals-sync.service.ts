@@ -35,14 +35,21 @@ function toDate(displayValue: string | undefined | null): Date | null {
  *
  * Upwork's `vendorProposals` query requires exactly one `status_eq` per
  * call (no "all statuses"/date-range filter exists in the schema, confirmed
- * live) — this walks all 8 known statuses every tick. Each status is sorted
- * DESC by modified time and paginated with an early-stop: once a page's
- * proposals are ALL already in our database (by upworkProposalId), that
- * status's walk stops — anything older than that has necessarily been seen
- * on a prior sync, since Upwork always returns newest-modified first. This
- * makes repeat syncs cheap without needing a date filter the API doesn't
- * offer. The very first sync for a status has nothing to stop early on, so
- * it walks up to MAX_PAGES_PER_STATUS pages (a real, one-time backfill).
+ * live) — this walks all 8 known statuses every tick, up to
+ * MAX_PAGES_PER_STATUS pages each, every time.
+ *
+ * Deliberately does NOT early-stop when a page's proposals are all already
+ * known locally (an earlier version of this method did, and shipped a real
+ * data-loss bug: 2026-10 incidents interrupted several partial syncs
+ * mid-walk for some statuses — a 401, a pagination-limit rejection, and a
+ * revoked refresh token — leaving small amounts of partial data behind.
+ * A later "successful" run's early-stop then matched against that leftover
+ * partial data and stopped after 1-2 pages, undercounting badly: e.g.
+ * "Hired" stored only 65 rows locally against Upwork's own live totalCount
+ * of 3091). A full bounded walk every tick is the only way to guarantee
+ * completeness regardless of prior partial-sync history, and Upwork's rate
+ * limits comfortably support it (worst case ~574 requests for a full
+ * 8-status walk at 25/page, against limits of 300/min and 40k/day).
  *
  * Uses UpworkApiConnectionService.withFreshTokenOnAuthFailure, not a plain
  * getValidAccessToken (Part: real bug fix, 2026-10-22 — same fix as
@@ -97,23 +104,9 @@ export class UpworkProposalsSyncService {
       const page = await this.graphql.getVendorProposalsPage(accessToken, organizationId, status, after, PAGE_SIZE);
       if (!page.proposals.length) break;
 
-      const existingIds = new Set(
-        (
-          await this.prisma.upworkApiProposal.findMany({
-            where: { orgId, upworkProposalId: { in: page.proposals.map((p) => p.id) } },
-            select: { upworkProposalId: true },
-          })
-        ).map((r) => r.upworkProposalId),
-      );
-      const allAlreadySeen = page.proposals.every((p) => existingIds.has(p.id));
-
       await this.prisma.$transaction(page.proposals.map((p) => this.upsertProposal(orgId, p)));
 
       pages += 1;
-      // Early-stop (see class docblock) -- but only once we've actually
-      // seen at least one already-known row this status, not on an empty
-      // existingIds set from a status that's simply never been synced yet.
-      if (allAlreadySeen && existingIds.size > 0) break;
       after = page.endCursor;
       if (!page.hasNextPage) break;
     } while (after && pages < MAX_PAGES_PER_STATUS);

@@ -227,6 +227,7 @@ model Organization {
   upworkConnectsSnapshots       UpworkConnectsSnapshot[]
   upworkConnectsTransactions    UpworkConnectsTransaction[]
   upworkApiProposals            UpworkApiProposal[]
+  upworkApiInvites              UpworkApiInvite[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -2038,6 +2039,53 @@ model UpworkApiProposal {
   @@index([orgId, status])
   @@index([orgId, upworkModifiedAt])
   @@map("upwork_api_proposals")
+}
+
+/// Real Upwork invitations ledger (Part: Upwork API integration — Invites
+/// domain, 2026-10-22) — from the real `organization { vendorInvitations }`
+/// GraphQL query, confirmed live against real data (EurosHub: 352
+/// terminated + 0 currently-pending invitations at build time, all
+/// `context: "Agency"`). Deliberately a SEPARATE model/table from
+/// UpworkApiProposal — explicit user requirement: "I want them separate,
+/// bids and invites separately." An invite that gets accepted does
+/// eventually produce a proposal on Upwork's side (see
+/// `acceptanceDetails.jobProposal` in the schema), but this app does not
+/// attempt to link the two rows — no stable shared ID was confirmed live
+/// between `VendorInvitation.id` and `VendorProposal.id`.
+///
+/// Retention: permanent, same reasoning as UpworkApiProposal — the org's
+/// own received-invitations ledger, not bulk-copied third-party content.
+/// Upwork returns a real, stable invitation ID, so `upworkInvitationId` is
+/// the real dedupe key, not a synthetic hash.
+model UpworkApiInvite {
+  id                   String       @id @default(uuid())
+  orgId                String       @map("org_id")
+  org                  Organization @relation(fields: [orgId], references: [id])
+  upworkInvitationId   String       @map("upwork_invitation_id")
+  context              String?
+  clientUserId         String?      @map("client_user_id")
+  clientName           String?      @map("client_name")
+  freelancerUserId     String?      @map("freelancer_user_id")
+  freelancerName       String?      @map("freelancer_name")
+  jobId                String?      @map("job_id")
+  jobTitle             String?      @map("job_title")
+  invitationLetter     String?      @map("invitation_letter")
+  inviteAttempt        Int?         @map("invite_attempt")
+  status               String?
+  acceptanceDuration   String?      @map("acceptance_duration")
+  upfrontPaymentPct    Float?       @map("upfront_payment_pct")
+  coverLetter          String?      @map("cover_letter")
+  upworkCreatedBy      String?      @map("upwork_created_by")
+  upworkCreatedAt      DateTime?    @map("upwork_created_at")
+  upworkModifiedBy     String?      @map("upwork_modified_by")
+  upworkModifiedAt     DateTime?    @map("upwork_modified_at")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+
+  @@unique([orgId, upworkInvitationId])
+  @@index([orgId, status])
+  @@index([orgId, upworkModifiedAt])
+  @@map("upwork_api_invites")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every
