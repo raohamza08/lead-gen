@@ -8,18 +8,20 @@ import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../
 
 interface MeWithReminderSettings {
   upworkChatReminderEnabled: boolean;
-  upworkChatReminderThresholdMinutes: number;
 }
 
 type NotificationPermissionState = NotificationPermission | "unsupported";
 
-/** "Enable Desktop Notifications" control + threshold (Part: Rooms &
- *  Messages desktop notifications, 2026-10-23, explicit user request).
- *  Mirrors the exact pattern already used on the Profile page's
- *  "Desktop notifications" toggle (same permission-request flow, same
- *  denied/unsupported messaging, never re-prompts once granted/denied)
- *  — this is a more specific, additional opt-in layered on top of that
- *  general one, not a replacement for it. */
+/** "Enable Desktop Notifications" control, fixed 15-minute threshold
+ *  (Part: Rooms & Messages desktop notifications, 2026-10-23; simplified
+ *  2026-10-23 per explicit user feedback — "hide this section by making
+ *  the timer fixed to 10 or 15 mins"). No longer exposes an editable
+ *  threshold (the backend default of 15 minutes just stands, unedited,
+ *  via upworkChatReminderThresholdMinutes' own column default). Once
+ *  enabled this renders nothing at all — "once the user has enabled the
+ *  notifications using the button, then you should immediately hide it,
+ *  it can be turned off from the settings" — the general "Desktop
+ *  notifications" toggle on the Profile page is that off-switch. */
 function PendingChatReminderSettings() {
   const [me, setMe] = useState<MeWithReminderSettings | null>(null);
   const [permissionState, setPermissionState] = useState<NotificationPermissionState>("default");
@@ -30,22 +32,6 @@ function PendingChatReminderSettings() {
     api.getMe().then((res) => setMe(res as MeWithReminderSettings));
     setPermissionState(typeof window !== "undefined" && "Notification" in window ? window.Notification.permission : "unsupported");
   }, []);
-
-  async function save(patch: Partial<MeWithReminderSettings>) {
-    if (!me) return;
-    const next = { ...me, ...patch };
-    setMe(next);
-    setSaving(true);
-    setError(null);
-    try {
-      await api.updateProfile(patch);
-    } catch (err) {
-      setError((err as Error).message);
-      setMe(me); // revert on failure
-    } finally {
-      setSaving(false);
-    }
-  }
 
   // One click does everything needed for a real popup to actually fire
   // (Part: desktop-notification fix, 2026-10-23, explicit user feedback —
@@ -61,57 +47,36 @@ function PendingChatReminderSettings() {
       setPermissionState(result);
       if (result !== "granted") return; // don't flip the preference on if the browser itself refused
     }
-    await Promise.all([save({ upworkChatReminderEnabled: true }), api.updateNotificationPreferences({ desktopEnabled: true })]);
+    setSaving(true);
+    setError(null);
+    try {
+      await Promise.all([api.updateProfile({ upworkChatReminderEnabled: true }), api.updateNotificationPreferences({ desktopEnabled: true })]);
+      setMe({ upworkChatReminderEnabled: true });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
   }
 
-  if (!me) return null;
+  if (!me || me.upworkChatReminderEnabled) return null;
 
   return (
-    <SectionCard title="Desktop reminders" subtitle="A real desktop notification when a client chat has gone unanswered — not the in-app bell.">
-      {me.upworkChatReminderEnabled ? (
-        // Hidden once enabled, per explicit user feedback — "once the user
-        // has enabled the notifications using the button, then you should
-        // immediately hide it, it can be turned off from the settings."
-        // Only a compact status line + the threshold remain here; turning
-        // it back off is a small text link, not a standing button.
-        <div className="flex flex-wrap items-center gap-3 text-xs text-ink/60">
-          <span className="flex items-center gap-1.5 text-good">
-            <span className="h-1.5 w-1.5 rounded-full bg-good" /> Desktop reminders enabled
-          </span>
-          <label className="flex items-center gap-1.5">
-            Remind me after
-            <input
-              type="number"
-              min={1}
-              max={240}
-              value={me.upworkChatReminderThresholdMinutes}
-              onChange={(e) => save({ upworkChatReminderThresholdMinutes: Math.min(240, Math.max(1, Number(e.target.value) || 15)) })}
-              className="h-8 w-16 rounded-md border border-[var(--line)] bg-transparent px-2 text-sm"
-            />
-            minutes unanswered
-          </label>
-          <button type="button" disabled={saving} onClick={() => save({ upworkChatReminderEnabled: false })} className="text-accent hover:underline disabled:opacity-50">
-            Turn off
-          </button>
-        </div>
-      ) : (
-        <button
-          type="button"
-          disabled={saving}
-          onClick={enable}
-          className="h-9 rounded-md bg-accent px-3.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
-          Enable Desktop Notifications
-        </button>
-      )}
+    <div className="flex flex-col gap-1.5">
+      <button
+        type="button"
+        disabled={saving}
+        onClick={enable}
+        className="h-9 w-fit rounded-md bg-accent px-3.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+      >
+        Enable Desktop Notifications
+      </button>
       {permissionState === "denied" && (
-        <p className="mt-2 text-[11px] text-bad">Blocked at the browser level — enable notifications for this site in your browser settings first.</p>
+        <p className="text-[11px] text-bad">Blocked at the browser level — enable notifications for this site in your browser settings first.</p>
       )}
-      {permissionState === "unsupported" && (
-        <p className="mt-2 text-[11px] text-ink/40">Desktop notifications aren&apos;t supported in this browser.</p>
-      )}
-      {error && <p className="mt-2 text-[11px] text-bad">{error}</p>}
-    </SectionCard>
+      {permissionState === "unsupported" && <p className="text-[11px] text-ink/40">Desktop notifications aren&apos;t supported in this browser.</p>}
+      {error && <p className="text-[11px] text-bad">{error}</p>}
+    </div>
   );
 }
 
