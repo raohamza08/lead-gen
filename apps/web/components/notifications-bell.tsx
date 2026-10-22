@@ -132,6 +132,30 @@ export function NotificationsBell() {
       old ? { ...old, total: old.total + 1 } : old,
     );
 
+    // Desktop notifications for "pending chat response" reminders (Part:
+    // Rooms & Messages desktop notifications, 2026-10-23) are a GUARANTEED
+    // separate channel from the in-app bell, by explicit user request ("do
+    // not use the bell as the primary mechanism" / "I asked you for the
+    // desktop notifications") — fires independent of inAppEnabled and
+    // independent of document.hidden (every other notification type still
+    // only pops while the tab is backgrounded, unchanged below; this one
+    // type always pops, since the whole point is catching someone who
+    // isn't necessarily staring at this tab AND someone who is).
+    if (
+      n.type === "UPWORK_ROOM_PENDING_RESPONSE" &&
+      preferences?.desktopEnabled &&
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      window.Notification.permission === "granted"
+    ) {
+      const desktop = new window.Notification(n.title || "EurosHub", { body: n.message, tag: n.id });
+      desktop.onclick = () => {
+        window.focus();
+        if (n.actionUrl) router.push(n.actionUrl);
+        desktop.close();
+      };
+    }
+
     const prefKey = PREFERENCE_KEY_BY_CATEGORY[n.category];
     const categoryAllowed = !prefKey || preferences?.[prefKey] !== false;
     if (!categoryAllowed || preferences?.inAppEnabled === false) return;
@@ -145,8 +169,11 @@ export function NotificationsBell() {
     // applied to email-open tracking. Requires explicit opt-in
     // (desktopEnabled, off by default) AND the browser's own permission AND
     // the tab being out of focus — no point interrupting someone already
-    // looking at the page.
+    // looking at the page. (UPWORK_ROOM_PENDING_RESPONSE already handled
+    // above, unconditionally — skip it here so it doesn't also double-fire
+    // a second Notification while backgrounded.)
     if (
+      n.type !== "UPWORK_ROOM_PENDING_RESPONSE" &&
       preferences?.desktopEnabled &&
       typeof window !== "undefined" &&
       "Notification" in window &&

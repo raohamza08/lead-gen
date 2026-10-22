@@ -47,63 +47,68 @@ function PendingChatReminderSettings() {
     }
   }
 
+  // One click does everything needed for a real popup to actually fire
+  // (Part: desktop-notification fix, 2026-10-23, explicit user feedback —
+  // "the notifications are still coming in the application, i asked you
+  // for the desktop notifications"): browser permission, this specific
+  // reminder's own opt-in, AND the general NotificationPreference.desktopEnabled
+  // switch the shared bell component gates every desktop popup on — without
+  // this third step the first two alone still only ever land in the in-app
+  // bell, which is exactly the bug that was reported.
   async function enable() {
     if (typeof window !== "undefined" && "Notification" in window) {
       const result = await window.Notification.requestPermission();
       setPermissionState(result);
       if (result !== "granted") return; // don't flip the preference on if the browser itself refused
     }
-    await save({ upworkChatReminderEnabled: true });
+    await Promise.all([save({ upworkChatReminderEnabled: true }), api.updateNotificationPreferences({ desktopEnabled: true })]);
   }
 
   if (!me) return null;
 
   return (
     <SectionCard title="Desktop reminders" subtitle="A real desktop notification when a client chat has gone unanswered — not the in-app bell.">
-      <div className="flex flex-wrap items-center gap-3">
-        {me.upworkChatReminderEnabled ? (
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => save({ upworkChatReminderEnabled: false })}
-            className="h-9 rounded-md border border-[var(--line)] px-3.5 text-xs font-medium text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-          >
-            Disable reminders
+      {me.upworkChatReminderEnabled ? (
+        // Hidden once enabled, per explicit user feedback — "once the user
+        // has enabled the notifications using the button, then you should
+        // immediately hide it, it can be turned off from the settings."
+        // Only a compact status line + the threshold remain here; turning
+        // it back off is a small text link, not a standing button.
+        <div className="flex flex-wrap items-center gap-3 text-xs text-ink/60">
+          <span className="flex items-center gap-1.5 text-good">
+            <span className="h-1.5 w-1.5 rounded-full bg-good" /> Desktop reminders enabled
+          </span>
+          <label className="flex items-center gap-1.5">
+            Remind me after
+            <input
+              type="number"
+              min={1}
+              max={240}
+              value={me.upworkChatReminderThresholdMinutes}
+              onChange={(e) => save({ upworkChatReminderThresholdMinutes: Math.min(240, Math.max(1, Number(e.target.value) || 15)) })}
+              className="h-8 w-16 rounded-md border border-[var(--line)] bg-transparent px-2 text-sm"
+            />
+            minutes unanswered
+          </label>
+          <button type="button" disabled={saving} onClick={() => save({ upworkChatReminderEnabled: false })} className="text-accent hover:underline disabled:opacity-50">
+            Turn off
           </button>
-        ) : (
-          <button
-            type="button"
-            disabled={saving}
-            onClick={enable}
-            className="h-9 rounded-md bg-accent px-3.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
-            Enable Desktop Notifications
-          </button>
-        )}
-        <label className="flex items-center gap-1.5 text-xs text-ink/60">
-          Remind me after
-          <input
-            type="number"
-            min={1}
-            max={240}
-            value={me.upworkChatReminderThresholdMinutes}
-            onChange={(e) => save({ upworkChatReminderThresholdMinutes: Math.min(240, Math.max(1, Number(e.target.value) || 15)) })}
-            className="h-8 w-16 rounded-md border border-[var(--line)] bg-transparent px-2 text-sm"
-          />
-          minutes unanswered
-        </label>
-      </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={saving}
+          onClick={enable}
+          className="h-9 rounded-md bg-accent px-3.5 text-xs font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          Enable Desktop Notifications
+        </button>
+      )}
       {permissionState === "denied" && (
         <p className="mt-2 text-[11px] text-bad">Blocked at the browser level — enable notifications for this site in your browser settings first.</p>
       )}
       {permissionState === "unsupported" && (
         <p className="mt-2 text-[11px] text-ink/40">Desktop notifications aren&apos;t supported in this browser.</p>
-      )}
-      {me.upworkChatReminderEnabled && (
-        <p className="mt-2 text-[11px] text-ink/40">
-          Also requires &quot;Desktop notifications&quot; enabled in your Profile settings — this is an additional, more specific reminder on
-          top of that general toggle.
-        </p>
       )}
       {error && <p className="mt-2 text-[11px] text-bad">{error}</p>}
     </SectionCard>
