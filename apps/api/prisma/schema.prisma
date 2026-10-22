@@ -232,6 +232,7 @@ model Organization {
   upworkApiWorkHistoryEntries   UpworkApiWorkHistoryEntry[]
   upworkApiRooms                UpworkApiRoom[]
   upworkApiFreelancerProfiles   UpworkApiFreelancerProfile[]
+  upworkApiSubmittedProposals   UpworkApiSubmittedProposal[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -2229,6 +2230,28 @@ model UpworkApiFreelancerProfile {
 
   @@unique([orgId, freelancerUserId])
   @@map("upwork_api_freelancer_profiles")
+}
+
+/// Local record of every real proposal submission attempted through
+/// Outly (spec Module Q: Submit Proposals to Jobs, Part: Upwork API
+/// integration — Submit Proposals domain, 2026-10-23) — this is the
+/// "dedicated history of submissions made through Outly" the spec asks
+/// for, AND the duplicate-submission guard (unique on orgId +
+/// jobReference + selectedContractorId) that stops an accidental retry
+/// from double-submitting a real bid.
+model UpworkApiSubmittedProposal {
+  id                   String       @id @default(uuid())
+  orgId                String       @map("org_id")
+  org                  Organization @relation(fields: [orgId], references: [id])
+  jobReference         String       @map("job_reference")
+  selectedContractorId String       @map("selected_contractor_id")
+  upworkProposalId     String?      @map("upwork_proposal_id")
+  status               String?
+  error                String?
+  createdAt            DateTime     @default(now()) @map("created_at")
+
+  @@unique([orgId, jobReference, selectedContractorId])
+  @@map("upwork_api_submitted_proposals")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every

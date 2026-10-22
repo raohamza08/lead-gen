@@ -788,6 +788,79 @@ export class UpworkGraphQLClient {
     return data.talentProfile.profiles?.[0] ?? null;
   }
 
+  /** Real contract proposals listing (spec Module L) — confirmed live
+   *  (EurosHub's own org ID works directly as `agencyTeamId`, confirmed
+   *  live — no separate "team ID" lookup needed). Deliberately read-only
+   *  per the spec's explicit requirement for this module. Live/on-demand
+   *  only, no DB sync — confirmed live at zero current results for this
+   *  org, and the schema has no date-range filter to make an
+   *  incremental sync meaningful yet. */
+  async getContractProposalsByAgency(accessToken: string, organizationId: string | null, agencyTeamId: string, page = 1) {
+    const data = await this.request<{
+      contractProposalsByAgency: {
+        paging: { total: number | null; page: number | null; itemsPerPage: number | null } | null;
+        contracts: {
+          id: string;
+          referenceContractRid: string | null;
+          createdDate: string | null;
+          offerDetails: { title: string | null } | null;
+          client: { personName: { firstName: string | null; lastName: string | null } | null } | null;
+        }[] | null;
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($id: ID!, $page: Int) {
+        contractProposalsByAgency(agencyTeamId: $id, page: $page) {
+          paging { total page itemsPerPage }
+          contracts { id referenceContractRid createdDate offerDetails { title } client { personName { firstName lastName } } }
+        }
+      }`,
+      { id: agencyTeamId, page },
+    );
+    return data.contractProposalsByAgency;
+  }
+
+  /** Real, consequential write: submits an actual proposal/bid to a real
+   *  Upwork job posting, spending real Connects (spec Module Q). Schema
+   *  confirmed via introspection: `selectedContractor` needs BOTH `id`
+   *  (the contractor-selection record ID from the job posting, not a
+   *  freelancer ID by itself) and `oDeskUserID` (the freelancer's
+   *  legacy-format user ID) — neither is guessable, both must come from
+   *  the job posting's own contractor-selection data, which this app
+   *  does not currently surface from marketplaceJobPostingsSearch (that
+   *  query was built read-only for listing, not proposal submission).
+   *  Confirmed via introspection only — NOT exercised against the real
+   *  live API, since this spends real Connects and represents the
+   *  agency externally; must only run after explicit user-reviewed
+   *  confirmation in the UI. */
+  async createJobProposal(
+    accessToken: string,
+    organizationId: string | null,
+    input: {
+      selectedContractor: { id: string; oDeskUserID: string };
+      jobReference: string;
+      chargedAmount: number;
+      coverLetter: string;
+      teamOrgId: string;
+      agencyOrgId?: string;
+      occupationId?: string;
+      estimatedDuration?: number;
+      questions?: { question: string; answer: string }[];
+      attachments?: string[];
+    },
+  ): Promise<{ newProposalId: string | null; status: string | null; error: string | null }> {
+    const data = await this.request<{ createJobProposal: { newProposalId: string | null; status: string | null; error: string | null } }>(
+      accessToken,
+      organizationId,
+      `mutation($input: CreateJobProposalInput!) {
+        createJobProposal(input: $input) { newProposalId status error }
+      }`,
+      { input },
+    );
+    return data.createJobProposal;
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(
