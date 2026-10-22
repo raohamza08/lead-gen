@@ -944,6 +944,7 @@ export const api = {
         latestMessageFrom: string | null;
       }[];
     }>("/upwork-api/rooms"),
+  resyncUpworkApiRooms: () => request<{ resynced: boolean }>("/upwork-api/rooms/resync", { method: "POST" }),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.

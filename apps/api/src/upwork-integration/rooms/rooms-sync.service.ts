@@ -51,6 +51,19 @@ export class UpworkRoomsSyncService {
     private readonly graphql: UpworkGraphQLClient,
   ) {}
 
+  /** Manual "sync now" entry point (Part: Upwork API integration — Rooms
+   *  & Messages domain, 2026-10-23, added after a real org-switch
+   *  incident where waiting out the 30-minute tick wasn't acceptable).
+   *  Looks up the connection itself rather than taking a row, since the
+   *  controller only has a user/orgId, not the full row. */
+  async syncOrgNow(orgId: string): Promise<void> {
+    const connectionRow = await this.prisma.upworkApiConnection.findUnique({ where: { orgId } });
+    if (!connectionRow || connectionRow.status !== "CONNECTED") {
+      throw new Error("Upwork API is not connected for this organization");
+    }
+    await this.syncConnection(connectionRow);
+  }
+
   async syncConnection(connectionRow: UpworkApiConnection): Promise<void> {
     try {
       const seenRoomIds: string[] = [];
