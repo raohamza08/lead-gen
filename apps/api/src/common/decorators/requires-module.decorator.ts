@@ -12,6 +12,23 @@ export type AccessModule =
   | "META_ADS"
   | "UPWORK_API"
   | "UPWORK_PROPOSAL_WRITING"
+  // Per-page granularity inside the "Upwork Agency" sidebar group (Part:
+  // Upwork API integration — per-module access, 2026-10-23) — independent
+  // of UPWORK_API above, which now only backs the handful of domain
+  // controllers with no sidebar page of their own.
+  | "UPWORK_AGENCY_OVERVIEW"
+  | "UPWORK_AGENCY_ORGANIZATION"
+  | "UPWORK_AGENCY_TRANSACTIONS"
+  | "UPWORK_AGENCY_BIDDING"
+  | "UPWORK_AGENCY_INVITES"
+  | "UPWORK_AGENCY_CONTRACT_PROPOSALS"
+  | "UPWORK_AGENCY_SUBMIT_PROPOSAL"
+  | "UPWORK_AGENCY_WORK_HISTORY"
+  | "UPWORK_AGENCY_FREELANCERS"
+  | "UPWORK_AGENCY_ROOMS"
+  | "UPWORK_AGENCY_JOBS"
+  | "UPWORK_AGENCY_ONTOLOGY"
+  | "UPWORK_AGENCY_CONNECTION"
   // Per-tab Dashboard Center visibility (Part: Dashboard Center per-user
   // access, 2026-10-21) — independent of the module flags above; these gate
   // the cross-team BI tabs under /dashboards, not the underlying feature

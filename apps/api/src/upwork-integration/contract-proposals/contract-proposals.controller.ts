@@ -12,7 +12,7 @@ import { UpworkContractProposalsService } from "./contract-proposals.service";
  *  sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_CONTRACT_PROPOSALS")
 export class UpworkContractProposalsController {
   constructor(private readonly contractProposals: UpworkContractProposalsService) {}
 

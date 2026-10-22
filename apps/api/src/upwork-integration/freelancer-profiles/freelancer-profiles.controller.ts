@@ -11,7 +11,7 @@ import { UpworkFreelancerProfilesService } from "./freelancer-profiles.service";
  *  and `upwork-api` route prefix as every other Upwork sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_FREELANCERS")
 export class UpworkFreelancerProfilesController {
   constructor(private readonly freelancerProfiles: UpworkFreelancerProfilesService) {}
 

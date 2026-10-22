@@ -12,7 +12,7 @@ import { UpworkAgencyOverviewService } from "./agency-overview.service";
  *  sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_OVERVIEW")
 export class UpworkAgencyOverviewController {
   constructor(private readonly agencyOverview: UpworkAgencyOverviewService) {}
 

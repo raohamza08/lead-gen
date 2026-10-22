@@ -303,6 +303,33 @@ model User {
   /// explicit user request, 2026-10-12: "make the module an access option
   /// so i can give anyone the access... rather than hardcoding it".
   upworkApiAccess             Boolean      @default(false) @map("upwork_api_access")
+  /// Per-page granularity inside the "Upwork Agency" sidebar group (Part:
+  /// Upwork API integration — per-module access, 2026-10-23, explicit user
+  /// request — "I need separate access for each module in the Upwork
+  /// Agency tab, not everyone need the complete module"). Before this, a
+  /// single upworkApiAccess above gated the whole 12-page group at once.
+  /// All 13 default false; the migration backfills every existing user who
+  /// had upworkApiAccess=true to true on every one of these too, so nobody
+  /// loses access the moment this ships — from here on an admin narrows per
+  /// page instead. upworkApiAccess itself is kept, now only backing the
+  /// handful of domain controllers with no sidebar page of their own
+  /// (connects-usage, job-discovery, reporting, timesheets, snapshots,
+  /// activity, client-proposals, common-entities, public-user,
+  /// chat-monitoring) plus offers (merged into upworkAgencyBiddingAccess
+  /// below since it renders inside the Bidding & Proposals page).
+  upworkAgencyOverviewAccess          Boolean @default(false) @map("upwork_agency_overview_access")
+  upworkAgencyOrganizationAccess      Boolean @default(false) @map("upwork_agency_organization_access")
+  upworkAgencyTransactionsAccess      Boolean @default(false) @map("upwork_agency_transactions_access")
+  upworkAgencyBiddingAccess           Boolean @default(false) @map("upwork_agency_bidding_access")
+  upworkAgencyInvitesAccess           Boolean @default(false) @map("upwork_agency_invites_access")
+  upworkAgencyContractProposalsAccess Boolean @default(false) @map("upwork_agency_contract_proposals_access")
+  upworkAgencySubmitProposalAccess    Boolean @default(false) @map("upwork_agency_submit_proposal_access")
+  upworkAgencyWorkHistoryAccess       Boolean @default(false) @map("upwork_agency_work_history_access")
+  upworkAgencyFreelancersAccess       Boolean @default(false) @map("upwork_agency_freelancers_access")
+  upworkAgencyRoomsAccess             Boolean @default(false) @map("upwork_agency_rooms_access")
+  upworkAgencyJobsAccess              Boolean @default(false) @map("upwork_agency_jobs_access")
+  upworkAgencyOntologyAccess          Boolean @default(false) @map("upwork_agency_ontology_access")
+  upworkAgencyConnectionAccess        Boolean @default(false) @map("upwork_agency_connection_access")
   /// New module (Part: Upwork Proposal Writing) — generates AI cover
   /// letters from a pasted Upwork job link. Defaults false like
   /// upworkApiAccess above (genuinely new, not a retrofit onto something

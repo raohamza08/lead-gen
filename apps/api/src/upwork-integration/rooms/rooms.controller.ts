@@ -16,7 +16,7 @@ import { UpworkRoomsSyncService } from "./rooms-sync.service";
  *  never sends anything to Upwork. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_ROOMS")
 export class UpworkRoomsController {
   constructor(
     private readonly rooms: UpworkRoomsService,

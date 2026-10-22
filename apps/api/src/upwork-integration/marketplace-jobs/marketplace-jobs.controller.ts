@@ -12,7 +12,7 @@ import { UpworkMarketplaceJobsService } from "./marketplace-jobs.service";
  *  Upwork sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_JOBS")
 export class UpworkMarketplaceJobsController {
   constructor(private readonly marketplaceJobs: UpworkMarketplaceJobsService) {}
 

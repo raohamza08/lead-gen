@@ -15,6 +15,19 @@ interface ModuleFlags {
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
   upworkProposalWritingAccess: boolean;
+  upworkAgencyOverviewAccess: boolean;
+  upworkAgencyOrganizationAccess: boolean;
+  upworkAgencyTransactionsAccess: boolean;
+  upworkAgencyBiddingAccess: boolean;
+  upworkAgencyInvitesAccess: boolean;
+  upworkAgencyContractProposalsAccess: boolean;
+  upworkAgencySubmitProposalAccess: boolean;
+  upworkAgencyWorkHistoryAccess: boolean;
+  upworkAgencyFreelancersAccess: boolean;
+  upworkAgencyRoomsAccess: boolean;
+  upworkAgencyJobsAccess: boolean;
+  upworkAgencyOntologyAccess: boolean;
+  upworkAgencyConnectionAccess: boolean;
   dashboardOverviewAccess: boolean;
   dashboardLeadsAccess: boolean;
   dashboardEmailAccess: boolean;
@@ -78,11 +91,6 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
   { key: "upworkRequestsAccess", label: "Upwork — Requests" },
   { key: "metaAdsAccess", label: "Meta Ads" },
   {
-    key: "upworkApiAccess",
-    label: "Upwork Agency",
-    hint: "The full live Upwork Agency platform — Rooms & Messages, Marketplace Jobs, Proposals, Invites, Work History, Transactions, Organization, and the rest of the \"Upwork Agency\" sidebar group. Backed by a real connected Upwork account.",
-  },
-  {
     key: "upworkProposalWritingAccess",
     label: "Upwork — Proposal Writing",
     hint: "Paste a job link and get an AI-generated cover letter. Separate from Bidding/Invite/Requests above.",
@@ -112,6 +120,29 @@ const DASHBOARD_LABELS: { key: keyof ModuleFlags; label: string }[] = [
   { key: "dashboardTeamAccess", label: "Team Performance" },
   { key: "dashboardActivityAccess", label: "Activity / Audit" },
   { key: "dashboardBenchmarksAccess", label: "Benchmarks" },
+];
+
+/** Per-page access into the "Upwork Agency" sidebar group (Part: Upwork
+ *  API integration — per-module access, 2026-10-23, explicit user request
+ *  — "I need separate access for each module in the Upwork Agency tab,
+ *  not everyone need the complete module"). Replaces the single
+ *  upworkApiAccess checkbox that used to gate the whole 12-page group at
+ *  once — each page now has its own flag, same granularity as the
+ *  Dashboard Center tabs below. */
+const UPWORK_AGENCY_LABELS: { key: keyof ModuleFlags; label: string }[] = [
+  { key: "upworkAgencyOverviewAccess", label: "Overview" },
+  { key: "upworkAgencyOrganizationAccess", label: "Organization" },
+  { key: "upworkAgencyTransactionsAccess", label: "Transactions" },
+  { key: "upworkAgencyBiddingAccess", label: "Bidding & Proposals" },
+  { key: "upworkAgencyInvitesAccess", label: "Invites" },
+  { key: "upworkAgencyContractProposalsAccess", label: "Contract Proposals" },
+  { key: "upworkAgencySubmitProposalAccess", label: "Submit Proposal" },
+  { key: "upworkAgencyWorkHistoryAccess", label: "Work History" },
+  { key: "upworkAgencyFreelancersAccess", label: "Freelancers" },
+  { key: "upworkAgencyRoomsAccess", label: "Rooms & Messages" },
+  { key: "upworkAgencyJobsAccess", label: "Marketplace Jobs" },
+  { key: "upworkAgencyOntologyAccess", label: "Ontology" },
+  { key: "upworkAgencyConnectionAccess", label: "Connection Settings" },
 ];
 
 /**
@@ -222,6 +253,22 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
           <div className="flex flex-wrap gap-3">
             {MODULE_LABELS.map(({ key, label, hint }) => (
               <label key={key} className="flex items-center gap-1.5 text-sm" title={hint}>
+                <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Upwork Agency pages</h4>
+        {data.isAdmin ? (
+          <p className="text-xs text-ink/50">Admins always see every Upwork Agency page — this can&apos;t be restricted here.</p>
+        ) : (
+          <div className="flex flex-wrap gap-3">
+            {UPWORK_AGENCY_LABELS.map(({ key, label }) => (
+              <label key={key} className="flex items-center gap-1.5 text-sm">
                 <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
                 {label}
               </label>

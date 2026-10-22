@@ -12,7 +12,7 @@ import { UpworkOntologyService } from "./ontology.service";
  *  sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_ONTOLOGY")
 export class UpworkOntologyController {
   constructor(private readonly ontology: UpworkOntologyService) {}
 

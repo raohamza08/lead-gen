@@ -16,6 +16,19 @@ const FIELD_BY_MODULE: Record<
   | "metaAdsAccess"
   | "upworkApiAccess"
   | "upworkProposalWritingAccess"
+  | "upworkAgencyOverviewAccess"
+  | "upworkAgencyOrganizationAccess"
+  | "upworkAgencyTransactionsAccess"
+  | "upworkAgencyBiddingAccess"
+  | "upworkAgencyInvitesAccess"
+  | "upworkAgencyContractProposalsAccess"
+  | "upworkAgencySubmitProposalAccess"
+  | "upworkAgencyWorkHistoryAccess"
+  | "upworkAgencyFreelancersAccess"
+  | "upworkAgencyRoomsAccess"
+  | "upworkAgencyJobsAccess"
+  | "upworkAgencyOntologyAccess"
+  | "upworkAgencyConnectionAccess"
   | "dashboardOverviewAccess"
   | "dashboardLeadsAccess"
   | "dashboardEmailAccess"
@@ -51,6 +64,19 @@ const FIELD_BY_MODULE: Record<
   // Proposal Writing) — a separate module from UPWORK/UPWORK_REQUESTS
   // above, same "not everyone needs everything" per-flag reasoning.
   UPWORK_PROPOSAL_WRITING: "upworkProposalWritingAccess",
+  UPWORK_AGENCY_OVERVIEW: "upworkAgencyOverviewAccess",
+  UPWORK_AGENCY_ORGANIZATION: "upworkAgencyOrganizationAccess",
+  UPWORK_AGENCY_TRANSACTIONS: "upworkAgencyTransactionsAccess",
+  UPWORK_AGENCY_BIDDING: "upworkAgencyBiddingAccess",
+  UPWORK_AGENCY_INVITES: "upworkAgencyInvitesAccess",
+  UPWORK_AGENCY_CONTRACT_PROPOSALS: "upworkAgencyContractProposalsAccess",
+  UPWORK_AGENCY_SUBMIT_PROPOSAL: "upworkAgencySubmitProposalAccess",
+  UPWORK_AGENCY_WORK_HISTORY: "upworkAgencyWorkHistoryAccess",
+  UPWORK_AGENCY_FREELANCERS: "upworkAgencyFreelancersAccess",
+  UPWORK_AGENCY_ROOMS: "upworkAgencyRoomsAccess",
+  UPWORK_AGENCY_JOBS: "upworkAgencyJobsAccess",
+  UPWORK_AGENCY_ONTOLOGY: "upworkAgencyOntologyAccess",
+  UPWORK_AGENCY_CONNECTION: "upworkAgencyConnectionAccess",
   // Per-tab Dashboard Center visibility (Part: Dashboard Center per-user
   // access, 2026-10-21) — replaces DashboardCenterTabs' hardcoded
   // FULL_ACCESS_ROLES/UPWORK_ONLY_ROLES role arrays with the same per-user

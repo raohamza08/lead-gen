@@ -12,7 +12,7 @@ import { UpworkInvitesService } from "./invites.service";
  *  other Upwork sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_INVITES")
 export class UpworkInvitesController {
   constructor(private readonly invites: UpworkInvitesService) {}
 

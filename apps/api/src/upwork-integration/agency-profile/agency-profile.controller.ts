@@ -17,7 +17,7 @@ import { UpdateOrganizationDto } from "./update-organization.dto";
  *  org-wide, externally-visible action, not a per-user preference. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_ORGANIZATION")
 export class UpworkAgencyProfileController {
   constructor(private readonly agencyProfile: UpworkAgencyProfileService) {}
 

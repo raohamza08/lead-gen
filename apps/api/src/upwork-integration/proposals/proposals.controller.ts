@@ -12,7 +12,7 @@ import { UpworkBiddingService } from "./proposals.service";
  *  other Upwork sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_BIDDING")
 export class UpworkProposalsController {
   constructor(private readonly bidding: UpworkBiddingService) {}
 

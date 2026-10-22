@@ -12,7 +12,7 @@ import { UpworkTransactionsService } from "./transactions.service";
  *  sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_TRANSACTIONS")
 export class UpworkTransactionsController {
   constructor(private readonly transactions: UpworkTransactionsService) {}
 

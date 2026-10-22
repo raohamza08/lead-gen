@@ -11,7 +11,7 @@ import { UpworkWorkHistoryService } from "./work-history.service";
  *  `upwork-api` route prefix as every other Upwork sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_WORK_HISTORY")
 export class UpworkWorkHistoryController {
   constructor(private readonly workHistory: UpworkWorkHistoryService) {}
 

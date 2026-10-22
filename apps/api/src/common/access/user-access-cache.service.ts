@@ -17,6 +17,19 @@ export interface UserAccessSnapshot {
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
   upworkProposalWritingAccess: boolean;
+  upworkAgencyOverviewAccess: boolean;
+  upworkAgencyOrganizationAccess: boolean;
+  upworkAgencyTransactionsAccess: boolean;
+  upworkAgencyBiddingAccess: boolean;
+  upworkAgencyInvitesAccess: boolean;
+  upworkAgencyContractProposalsAccess: boolean;
+  upworkAgencySubmitProposalAccess: boolean;
+  upworkAgencyWorkHistoryAccess: boolean;
+  upworkAgencyFreelancersAccess: boolean;
+  upworkAgencyRoomsAccess: boolean;
+  upworkAgencyJobsAccess: boolean;
+  upworkAgencyOntologyAccess: boolean;
+  upworkAgencyConnectionAccess: boolean;
   dashboardOverviewAccess: boolean;
   dashboardLeadsAccess: boolean;
   dashboardEmailAccess: boolean;
@@ -83,6 +96,19 @@ export class UserAccessCacheService {
           metaAdsAccess: true,
           upworkApiAccess: true,
           upworkProposalWritingAccess: true,
+          upworkAgencyOverviewAccess: true,
+          upworkAgencyOrganizationAccess: true,
+          upworkAgencyTransactionsAccess: true,
+          upworkAgencyBiddingAccess: true,
+          upworkAgencyInvitesAccess: true,
+          upworkAgencyContractProposalsAccess: true,
+          upworkAgencySubmitProposalAccess: true,
+          upworkAgencyWorkHistoryAccess: true,
+          upworkAgencyFreelancersAccess: true,
+          upworkAgencyRoomsAccess: true,
+          upworkAgencyJobsAccess: true,
+          upworkAgencyOntologyAccess: true,
+          upworkAgencyConnectionAccess: true,
           dashboardOverviewAccess: true,
           dashboardLeadsAccess: true,
           dashboardEmailAccess: true,

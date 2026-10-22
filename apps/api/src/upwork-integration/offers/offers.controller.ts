@@ -13,7 +13,7 @@ import { UpworkOffersService } from "./offers.service";
  *  sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_BIDDING")
 export class UpworkOffersController {
   constructor(private readonly offers: UpworkOffersService) {}
 

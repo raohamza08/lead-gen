@@ -17,7 +17,7 @@ import { SubmitProposalDto } from "./submit-proposal.dto";
  *  sub-controller. */
 @Controller("upwork-api")
 @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
-@RequiresModule("UPWORK_API")
+@RequiresModule("UPWORK_AGENCY_SUBMIT_PROPOSAL")
 export class UpworkSubmitProposalController {
   constructor(private readonly submitProposal: UpworkSubmitProposalService) {}
 
