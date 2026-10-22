@@ -764,6 +764,25 @@ export const api = {
         jobTitle: string | null;
       }[];
     }>("/upwork-api/connects-usage"),
+  // Bidding/proposals (Part: Upwork API integration — Bidding/proposals
+  // domain, 2026-10-22) — second of the 7 data domains backed by real
+  // synced data.
+  getUpworkApiProposals: () =>
+    request<{
+      countByStatus: Record<string, number>;
+      totalCount: number;
+      recent: {
+        id: string;
+        jobTitle: string | null;
+        freelancerName: string | null;
+        status: string;
+        statusReason: string | null;
+        chargeRateDisplay: string | null;
+        viewedByClient: boolean | null;
+        upworkCreatedAt: string | null;
+        upworkModifiedAt: string | null;
+      }[];
+    }>("/upwork-api/proposals"),
 
   // ---- Upwork Proposal Writing (gated by upworkProposalWritingAccess module flag) ----
   generateUpworkCoverLetter: (

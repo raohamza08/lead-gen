@@ -226,6 +226,7 @@ model Organization {
   upworkApiConnection           UpworkApiConnection?
   upworkConnectsSnapshots       UpworkConnectsSnapshot[]
   upworkConnectsTransactions    UpworkConnectsTransaction[]
+  upworkApiProposals            UpworkApiProposal[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -1995,6 +1996,48 @@ model UpworkConnectsTransaction {
   @@unique([orgId, dedupeKey])
   @@index([orgId, occurredAt])
   @@map("upwork_connects_transactions")
+}
+
+/// Real Upwork proposals/bids ledger (Part: Upwork API integration —
+/// Bidding/proposals domain, 2026-10-22) — from the real `vendorProposals`
+/// GraphQL query, confirmed live against real data (EurosHub: 14,000+
+/// proposals across statuses). `UpworkApi` prefix, NOT to be confused with
+/// the pre-existing `UpworkProposal` model above, which is this app's own
+/// internal manual proposal-tracking table (the `upwork` module), not data
+/// pulled from Upwork's actual API.
+///
+/// Retention: permanent, same reasoning as UpworkConnectsSnapshot/
+/// UpworkConnectsTransaction (Part: retention decision, 2026-10-22) — these
+/// are the org's OWN submitted proposals/bids, not bulk-copied third-party
+/// marketplace content; `jobTitle` is a short label carried along for
+/// display, same as on the Connects transaction ledger. Upwork DOES return
+/// a real, stable proposal ID here (unlike Connects transactions), so
+/// `upworkProposalId` is the real dedupe key, not a synthetic hash.
+model UpworkApiProposal {
+  id                 String       @id @default(uuid())
+  orgId              String       @map("org_id")
+  org                Organization @relation(fields: [orgId], references: [id])
+  upworkProposalId   String       @map("upwork_proposal_id")
+  freelancerUserId   String?      @map("freelancer_user_id")
+  freelancerName     String?      @map("freelancer_name")
+  jobId              String?      @map("job_id")
+  jobTitle           String?      @map("job_title")
+  chargeRateRaw      String?      @map("charge_rate_raw")
+  chargeRateCurrency String?      @map("charge_rate_currency")
+  chargeRateDisplay  String?      @map("charge_rate_display")
+  upfrontPaymentPct  Float?       @map("upfront_payment_pct")
+  status             String
+  statusReason       String?      @map("status_reason")
+  viewedByClient      Boolean?     @map("viewed_by_client")
+  upworkCreatedAt    DateTime?    @map("upwork_created_at")
+  upworkModifiedAt   DateTime?    @map("upwork_modified_at")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  updatedAt          DateTime     @updatedAt @map("updated_at")
+
+  @@unique([orgId, upworkProposalId])
+  @@index([orgId, status])
+  @@index([orgId, upworkModifiedAt])
+  @@map("upwork_api_proposals")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every

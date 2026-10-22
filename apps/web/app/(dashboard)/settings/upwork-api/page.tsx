@@ -23,9 +23,8 @@ interface ConnectionStatus {
 // below instead of a "pending" placeholder row. The other 6 domains follow
 // the same path one at a time (see upwork-integration.module.ts's docblock).
 const STUB_MODULES = [
-  { label: "Agency & profile management", hint: "Sync agency/freelancer profile details." },
+  { label: "Agency & profile management", hint: "Blocked by a missing Upwork scope — the company/companySelector queries both require a permission this app's Upwork credentials don't have." },
   { label: "Invite tracking", hint: "Track and respond to client invitations." },
-  { label: "Bidding & proposal data", hint: "Pull proposal/bid status and win rates." },
   { label: "Job discovery", hint: "Surface relevant job postings as they're posted." },
   { label: "Reporting", hint: "Weekly / monthly / yearly financial & performance reports." },
   { label: "Client communication monitoring", hint: "Internal concern-alerting only — no auto-replies." },
@@ -45,12 +44,14 @@ function StatusBadge({ status }: { status: ConnectionStatus["status"] }) {
  * ModuleAccessGuard on the backend regardless of whether someone finds
  * this URL directly.
  *
- * "connect / status / disconnect" and Connects usage (Part: Upwork API
- * integration, 2026-10-22 — the first of 7 data domains built against a
- * real, introspection-confirmed schema) are live. The remaining 6 domain
- * cards below mirror the application's own capability list and show live
- * once each one's backend stub (see apps/api/src/upwork-integration/
- * services/) is replaced with a real implementation, one at a time.
+ * "connect / status / disconnect", Connects usage, and Bidding/proposals
+ * (Part: Upwork API integration, 2026-10-22 — the first 2 of 7 data domains
+ * built against a real, introspection-confirmed schema) are live. The
+ * remaining domain cards below mirror the application's own capability list
+ * and show live once each one's backend stub (see apps/api/src/
+ * upwork-integration/services/) is replaced with a real implementation, one
+ * at a time. Agency & profile management was attempted and found genuinely
+ * blocked by a missing Upwork scope — see that card's own hint text.
  */
 export default function UpworkApiSettingsPage() {
   const queryClient = useQueryClient();
@@ -70,6 +71,13 @@ export default function UpworkApiSettingsPage() {
     enabled: Boolean(status?.connected),
   });
   const connects = connectsQuery.data;
+
+  const proposalsQuery = useQuery({
+    queryKey: ["upwork-api-proposals"],
+    queryFn: () => api.getUpworkApiProposals(),
+    enabled: Boolean(status?.connected),
+  });
+  const proposals = proposalsQuery.data;
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -275,6 +283,44 @@ export default function UpworkApiSettingsPage() {
                       { key: "amount", header: "Amount", render: (t) => t.amountDisplay, numeric: true },
                     ]}
                     rows={connects.recentTransactions}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {status?.connected && (
+        <SectionCard title="Bidding &amp; proposals" subtitle="Your real submitted proposals/bids, synced every 6 hours from Upwork's real API.">
+          {proposalsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
+          {proposalsQuery.error && <p className="text-sm text-bad">{(proposalsQuery.error as Error).message}</p>}
+          {proposals && proposals.totalCount === 0 && (
+            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting, then every 6 hours.</p>
+          )}
+          {proposals && proposals.totalCount > 0 && (
+            <div className="flex flex-col gap-4">
+              <KpiStrip>
+                {Object.entries(proposals.countByStatus)
+                  .filter(([, count]) => count > 0)
+                  .map(([status_, count]) => (
+                    <StatTile key={status_} label={status_} value={count} />
+                  ))}
+              </KpiStrip>
+
+              {proposals.recent.length > 0 && (
+                <div>
+                  <div className="mb-2 text-sm font-medium text-ink">Recently updated</div>
+                  <DataTable
+                    rowKey={(p) => p.id}
+                    columns={[
+                      { key: "job", header: "Job", render: (p) => p.jobTitle ?? "—" },
+                      { key: "freelancer", header: "Freelancer", render: (p) => p.freelancerName ?? "—" },
+                      { key: "status", header: "Status", render: (p) => p.status },
+                      { key: "rate", header: "Rate", render: (p) => p.chargeRateDisplay ?? "—", numeric: true },
+                      { key: "updated", header: "Updated", render: (p) => (p.upworkModifiedAt ? new Date(p.upworkModifiedAt).toLocaleString() : "—") },
+                    ]}
+                    rows={proposals.recent}
                   />
                 </div>
               )}

@@ -29,6 +29,37 @@ export interface ConnectUsageHistoryPage {
   hasNextPage: boolean;
 }
 
+/** Confirmed live statuses on `VendorProposalFilter.status_eq` — the schema
+ *  has no "all statuses" wildcard, each sync call picks one of these. */
+export const VENDOR_PROPOSAL_STATUSES = [
+  "Pending",
+  "Offered",
+  "Accepted",
+  "Declined",
+  "Withdrawn",
+  "Activated",
+  "Archived",
+  "Hired",
+] as const;
+export type VendorProposalStatus = (typeof VENDOR_PROPOSAL_STATUSES)[number];
+
+export interface VendorProposalNode {
+  id: string;
+  user: { id: string; name: string | null };
+  organization: { id: string; name: string | null };
+  marketplaceJobPosting: { id: string; content: { title: string } };
+  terms: { chargeRate: { rawValue: string; currency: string; displayValue: string }; upfrontPaymentPercent: number | null };
+  status: { status: string; reason: { reason: string } | null };
+  viewedByClient: boolean | null;
+  auditDetails: { createdDateTime: { displayValue: string }; modifiedDateTime: { displayValue: string } | null };
+}
+
+export interface VendorProposalsPage {
+  proposals: VendorProposalNode[];
+  endCursor: string | null;
+  hasNextPage: boolean;
+}
+
 class UpworkGraphQLError extends Error {}
 
 /**
@@ -106,6 +137,59 @@ export class UpworkGraphQLClient {
       `query { organization { id name } }`,
     );
     return data.organization.name;
+  }
+
+  /** One page of this org's own submitted proposals/bids, for a single
+   *  status (Part: Upwork API integration — Bidding/proposals domain,
+   *  2026-10-22, confirmed live against real data: EurosHub has 14,000+
+   *  real proposals across statuses). `vendorProposals` requires a single
+   *  `status_eq` per call — Upwork's schema has no "all statuses" or
+   *  date-range filter, so the sync service calls this once per status and
+   *  relies on sorting DESC by modified time + stopping early at an
+   *  already-seen ID for incremental syncs (see
+   *  UpworkProposalsSyncService). `connectsBid` is deliberately NOT
+   *  requested — confirmed live to be blocked by a scope this app doesn't
+   *  have (same class of gap as `companySelector`/`company`). */
+  async getVendorProposalsPage(
+    accessToken: string,
+    organizationId: string | null,
+    status: VendorProposalStatus,
+    after: string | null,
+    first = 100,
+  ): Promise<VendorProposalsPage> {
+    const data = await this.request<{
+      vendorProposals: { edges: { node: VendorProposalNode }[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } };
+    }>(
+      accessToken,
+      organizationId,
+      `query($filter: VendorProposalFilter!, $sort: VendorProposalSortAttribute!, $pagination: Pagination!) {
+        vendorProposals(filter: $filter, sortAttribute: $sort, pagination: $pagination) {
+          edges {
+            node {
+              id
+              user { id name }
+              organization { id name }
+              marketplaceJobPosting { id content { title } }
+              terms { chargeRate { rawValue currency displayValue } upfrontPaymentPercent }
+              status { status reason { reason } }
+              viewedByClient
+              auditDetails { createdDateTime { displayValue } modifiedDateTime { displayValue } }
+            }
+          }
+          pageInfo { endCursor hasNextPage }
+        }
+      }`,
+      {
+        filter: { status_eq: status },
+        sort: { field: "MODIFIEDDATETIME", sortOrder: "DESC" },
+        pagination: { first, ...(after ? { after } : {}) },
+      },
+    );
+    return {
+      proposals: data.vendorProposals.edges.map((e) => e.node),
+      endCursor: data.vendorProposals.pageInfo.endCursor,
+      hasNextPage: data.vendorProposals.pageInfo.hasNextPage,
+    };
   }
 
   /** Point-in-time Connects balance — confirmed live, real fields. */

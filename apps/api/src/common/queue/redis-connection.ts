@@ -101,4 +101,11 @@ export const QUEUE_NAMES = {
   // UPWORK_FOLLOW_UP_REMINDER, which belongs to the old internal
   // proposal-tracking `upwork` module, not this real API connection.
   UPWORK_CONNECTS_SYNC: "upwork-connects-sync",
+  // Periodic proposals/bids pull for every CONNECTED UpworkApiConnection
+  // (Part: Upwork API integration — Bidding/proposals domain, 2026-10-22) --
+  // see upwork-proposals-sync.worker.ts. Separate queue from
+  // UPWORK_CONNECTS_SYNC so a slow/large proposals backfill (walks 8
+  // statuses, paginated) never delays the much lighter Connects balance
+  // sync.
+  UPWORK_PROPOSALS_SYNC: "upwork-proposals-sync",
 } as const;

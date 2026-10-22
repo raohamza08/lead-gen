@@ -15,6 +15,9 @@ import { UpworkChatMonitoringService } from "./services/chat-monitoring.service"
 import { UpworkConnectsSyncQueue } from "./upwork-connects-sync.queue";
 import { UpworkConnectsSyncWorker } from "./upwork-connects-sync.worker";
 import { UpworkConnectsSyncService } from "./upwork-connects-sync.service";
+import { UpworkProposalsSyncQueue } from "./upwork-proposals-sync.queue";
+import { UpworkProposalsSyncWorker } from "./upwork-proposals-sync.worker";
+import { UpworkProposalsSyncService } from "./upwork-proposals-sync.service";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -33,19 +36,27 @@ import { UpworkConnectsSyncService } from "./upwork-connects-sync.service";
  *      (Briefly hidden from everyone but one hardcoded email instead; that
  *      was replaced with the standard flag per explicit user request —
  *      "make the module an access option... rather than hardcoding it".)
- *   2. Every per-domain service under ./services/ EXCEPT Connects usage
- *      (agency profile, invites, bidding, job discovery, reporting, chat
- *      monitoring) is still a deliberate stub that throws
+ *   2. Every per-domain service under ./services/ EXCEPT Connects usage and
+ *      Bidding/proposals (agency profile, invites, job discovery,
+ *      reporting, chat monitoring) is still a deliberate stub that throws
  *      ServiceUnavailableException, not a best-guess implementation against
  *      Upwork's real (GraphQL) data API — shipping unverified logic was
- *      explicitly ruled out ("i cannot take any risk on this one"). Connects
- *      usage went live 2026-10-22 (Part: Upwork API integration — real
- *      credentials arrived, first of the 7 domains built, one at a time,
- *      each verified by LIVE introspection against the real API before any
- *      Prisma model/service code was written — see UpworkConnectsSyncService
- *      and UpworkGraphQLClient.getConnectsSummary/getConnectUsageHistoryPage
- *      for the confirmed real query shapes). Replace each remaining stub's
- *      one method the same way — introspect first, build second — once each
+ *      explicitly ruled out ("i cannot take any risk on this one"). Both
+ *      live domains went live 2026-10-22 (Part: Upwork API integration —
+ *      real credentials arrived, built one domain at a time, each verified
+ *      by LIVE introspection against the real API before any Prisma
+ *      model/service code was written — see UpworkConnectsSyncService/
+ *      UpworkProposalsSyncService and the corresponding UpworkGraphQLClient
+ *      methods for the confirmed real query shapes). Note: "Agency &
+ *      profile management" (point 1) was ATTEMPTED next and found
+ *      genuinely blocked — the `company`/`companySelector` queries both
+ *      require a scope this app's Upwork permissions don't include
+ *      (confirmed live, same error class both times). Skip straight to
+ *      Invites (point 2, via `organization.vendorInvitations`, confirmed to
+ *      exist in-schema but not yet introspected in depth) or another
+ *      reachable domain next, not Agency profile, unless that scope gets
+ *      granted on Upwork's side first. Replace each remaining stub's one
+ *      method the same way — introspect first, build second — once each
  *      one's turn comes; the OAuth plumbing (UpworkOAuthClient,
  *      UpworkApiConnectionService, UpworkGraphQLClient) is already real and
  *      doesn't need to change.
@@ -98,6 +109,9 @@ import { UpworkConnectsSyncService } from "./upwork-connects-sync.service";
     UpworkConnectsSyncQueue,
     UpworkConnectsSyncWorker,
     UpworkConnectsSyncService,
+    UpworkProposalsSyncQueue,
+    UpworkProposalsSyncWorker,
+    UpworkProposalsSyncService,
   ],
 })
 export class UpworkIntegrationModule {}
