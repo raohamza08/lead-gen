@@ -186,11 +186,11 @@ export class UpworkGraphQLClient {
    *  2026-10-22, confirmed live against real data: EurosHub has 14,000+
    *  real proposals across statuses). `vendorProposals` requires a single
    *  `status_eq` per call — Upwork's schema has no "all statuses" or
-   *  date-range filter, so the sync service calls this once per status and
-   *  relies on sorting DESC by modified time + stopping early at an
-   *  already-seen ID for incremental syncs (see
-   *  UpworkProposalsSyncService). `connectsBid` is deliberately NOT
-   *  requested — confirmed live to be blocked by a scope this app doesn't
+   *  date-range filter, so the sync service calls this once per status,
+   *  always walking the full bounded page range every tick (see
+   *  UpworkProposalsSyncService's own docblock for why an early-stop
+   *  optimization here caused a real data-loss bug). `connectsBid` is
+   *  deliberately NOT requested — confirmed live to be blocked by a scope this app doesn't
    *  have (same class of gap as `companySelector`/`company`). */
   async getVendorProposalsPage(
     accessToken: string,
@@ -251,7 +251,16 @@ export class UpworkGraphQLClient {
    *  a raw internal code that doesn't map to any of its own enum's declared
    *  values, not something fixable client-side). `first` caps at 40,
    *  confirmed live ("query param limit can not be greater than 40") — a
-   *  different, higher cap than vendorProposals' 25. */
+   *  different, higher cap than vendorProposals' 25.
+   *
+   *  `pageInfo.hasNextPage` on THIS query is unreliable — confirmed live to
+   *  always come back `null` even when further pages genuinely exist (the
+   *  `endCursor` itself is real and correctly advances though — confirmed
+   *  walking 10 pages by cursor alone reached exactly totalCount unique
+   *  IDs with zero duplicates). Callers must not treat a falsy
+   *  `hasNextPage` as "no more pages" for this specific query — see
+   *  UpworkInvitesSyncService.syncStatus, which stops on an empty page
+   *  instead. */
   async getVendorInvitationsPage(
     accessToken: string,
     organizationId: string | null,

@@ -72,6 +72,15 @@ export class UpworkInvitesSyncService {
     }
   }
 
+  /** Terminates on an empty page, NOT on `page.hasNextPage` -- confirmed
+   *  live that `vendorInvitations.pageInfo.hasNextPage` always comes back
+   *  `null` for this query (unlike vendorProposals/connectUsageHistory,
+   *  where it's a real boolean), even when real further pages exist. The
+   *  `endCursor` itself IS real and correctly advances though (confirmed
+   *  live: walking by cursor until an empty page reached exactly 352/352
+   *  unique IDs, matching totalCount, with zero duplicates across 10
+   *  pages) -- so cursor-advance-until-empty is the only reliable stop
+   *  condition for this specific query. */
   private async syncStatus(
     orgId: string,
     accessToken: string,
@@ -88,7 +97,6 @@ export class UpworkInvitesSyncService {
 
       pages += 1;
       after = page.endCursor;
-      if (!page.hasNextPage) break;
     } while (after && pages < MAX_PAGES_PER_STATUS);
   }
 
