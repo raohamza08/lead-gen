@@ -22,12 +22,13 @@ export class UpworkMarketplaceJobsService {
     private readonly graphql: UpworkGraphQLClient,
   ) {}
 
-  async search(orgId: string, searchTerm: string | null) {
+  async search(orgId: string, searchTerm: string | null, after: string | null = null, first = 50) {
     return this.connection.withFreshTokenOnAuthFailure(orgId, async ({ accessToken, organizationId }) => {
-      const result = await this.graphql.searchMarketplaceJobs(accessToken, organizationId, searchTerm, 50);
+      const result = await this.graphql.searchMarketplaceJobs(accessToken, organizationId, searchTerm, first, after);
       return {
         totalCount: result.totalCount,
         dataScope: "public_marketplace" as const,
+        pageInfo: result.pageInfo ?? { endCursor: null, hasNextPage: false },
         jobs: result.edges.map((e) => ({
           id: e.node.id,
           title: e.node.title,
@@ -40,6 +41,7 @@ export class UpworkMarketplaceJobsService {
           engagement: e.node.engagement,
           engagementWeeks: e.node.engagementDuration?.weeks ?? null,
           recordNumber: e.node.recordNumber,
+          ciphertext: e.node.ciphertext,
           freelancersToHire: e.node.freelancersToHire,
           enterprise: e.node.enterprise,
           premium: e.node.premium,
@@ -52,9 +54,12 @@ export class UpworkMarketplaceJobsService {
           preferredFreelancerLocationMandatory: e.node.preferredFreelancerLocationMandatory ?? false,
           budgetDisplay: e.node.amount?.displayValue ?? (e.node.hourlyBudgetMin?.displayValue ? `${e.node.hourlyBudgetMin.displayValue}-${e.node.hourlyBudgetMax?.displayValue ?? "?"}/hr` : null),
           fixedAmount: e.node.amount?.displayValue ?? null,
+          fixedAmountRaw: e.node.amount?.rawValue ? Number(e.node.amount.rawValue) : null,
           hourlyBudgetType: e.node.hourlyBudgetType,
           hourlyBudgetMin: e.node.hourlyBudgetMin?.displayValue ?? null,
+          hourlyBudgetMinRaw: e.node.hourlyBudgetMin?.rawValue ? Number(e.node.hourlyBudgetMin.rawValue) : null,
           hourlyBudgetMax: e.node.hourlyBudgetMax?.displayValue ?? null,
+          hourlyBudgetMaxRaw: e.node.hourlyBudgetMax?.rawValue ? Number(e.node.hourlyBudgetMax.rawValue) : null,
           weeklyBudget: e.node.weeklyBudget?.displayValue ?? null,
           skills: e.node.skills.map((s) => ({ name: s.name, prettyName: s.prettyName, highlighted: s.highlighted ?? false })),
           client: {

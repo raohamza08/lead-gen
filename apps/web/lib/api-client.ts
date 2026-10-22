@@ -853,10 +853,16 @@ export const api = {
       }[];
     }>("/upwork-api/freelancer-profiles"),
   // Marketplace Job Postings + Job Details (spec Modules G + S).
-  getUpworkApiMarketplaceJobs: (q?: string) =>
-    request<{
+  getUpworkApiMarketplaceJobs: (q?: string, after?: string, first?: number) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (after) params.set("after", after);
+    if (first) params.set("first", String(first));
+    const qs = params.toString();
+    return request<{
       totalCount: number | null;
       dataScope: string;
+      pageInfo: { endCursor: string | null; hasNextPage: boolean };
       jobs: {
         id: string;
         title: string;
@@ -869,6 +875,7 @@ export const api = {
         engagement: string | null;
         engagementWeeks: number | null;
         recordNumber: string;
+        ciphertext: string;
         freelancersToHire: number;
         enterprise: boolean;
         premium: boolean;
@@ -881,9 +888,12 @@ export const api = {
         preferredFreelancerLocationMandatory: boolean;
         budgetDisplay: string | null;
         fixedAmount: string | null;
+        fixedAmountRaw: number | null;
         hourlyBudgetType: string | null;
         hourlyBudgetMin: string | null;
+        hourlyBudgetMinRaw: number | null;
         hourlyBudgetMax: string | null;
+        hourlyBudgetMaxRaw: number | null;
         weeklyBudget: string | null;
         skills: { name: string; prettyName: string; highlighted: boolean }[];
         client: {
@@ -897,7 +907,8 @@ export const api = {
           country: string | null;
         };
       }[];
-    }>(`/upwork-api/marketplace-jobs${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+    }>(`/upwork-api/marketplace-jobs${qs ? `?${qs}` : ""}`);
+  },
   // Ontology & Reference Data (spec Module F).
   getUpworkApiOntology: () =>
     request<{

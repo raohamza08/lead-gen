@@ -713,11 +713,31 @@ export class UpworkGraphQLClient {
    *  has no `name`/label field of its own (confirmed live — a query
    *  requesting one is rejected as FieldUndefined), so it would add a
    *  request without adding any real displayable data; `category`/
-   *  `subcategory` (flat strings) already cover that need. */
-  async searchMarketplaceJobs(accessToken: string, organizationId: string | null, searchTerm: string | null, first = 25) {
+   *  `subcategory` (flat strings) already cover that need.
+   *
+   *  `ciphertext` added (Part: "copy job link" real-URL fix, 2026-10-23
+   *  — the first attempt used `~<recordNumber>`, which the user
+   *  confirmed does NOT open the real job; `recordNumber` is just
+   *  Upwork's human-readable "Job ID" shown in their own UI footer, not
+   *  a URL slug). `ciphertext` is the real field: its live value already
+   *  comes back as `~02<id>` (confirmed live, e.g.
+   *  `~022113397773122080379`), matching Upwork's actual public job URL
+   *  pattern `upwork.com/jobs/~02...` — use it directly with no extra
+   *  prefix. Not independently browser-verified (Upwork's own site
+   *  403s any plain automated fetch, same Cloudflare protection
+   *  documented on UpworkJobFetcherService) — confidence here is from
+   *  the field's purpose-built name/shape, not a live page load. */
+  async searchMarketplaceJobs(
+    accessToken: string,
+    organizationId: string | null,
+    searchTerm: string | null,
+    first = 25,
+    after: string | null = null,
+  ) {
     const data = await this.request<{
       marketplaceJobPostingsSearch: {
         totalCount: number | null;
+        pageInfo: { endCursor: string | null; hasNextPage: boolean } | null;
         edges: {
           node: {
             id: string;
@@ -731,6 +751,7 @@ export class UpworkGraphQLClient {
             engagement: string | null;
             engagementDuration: { label: string; weeks: number } | null;
             recordNumber: string;
+            ciphertext: string;
             freelancersToHire: number;
             totalFreelancersToHire: number | null;
             enterprise: boolean;
@@ -767,11 +788,12 @@ export class UpworkGraphQLClient {
       `query($filter: MarketplaceJobPostingsSearchFilter) {
         marketplaceJobPostingsSearch(marketPlaceJobFilter: $filter) {
           totalCount
+          pageInfo { endCursor hasNextPage }
           edges {
             node {
               id title description category subcategory experienceLevel
               duration durationLabel engagement engagementDuration { label weeks }
-              recordNumber freelancersToHire totalFreelancersToHire
+              recordNumber ciphertext freelancersToHire totalFreelancersToHire
               enterprise premium applied
               createdDateTime publishedDateTime renewedDateTime totalApplicants
               preferredFreelancerLocation preferredFreelancerLocationMandatory
@@ -791,7 +813,7 @@ export class UpworkGraphQLClient {
           }
         }
       }`,
-      { filter: { pagination_eq: { first }, ...(searchTerm ? { searchExpression_eq: searchTerm } : {}) } },
+      { filter: { pagination_eq: { first, ...(after ? { after } : {}) }, ...(searchTerm ? { searchExpression_eq: searchTerm } : {}) } },
     );
     return data.marketplaceJobPostingsSearch;
   }

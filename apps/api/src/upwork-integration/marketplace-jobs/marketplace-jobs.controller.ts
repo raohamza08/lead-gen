@@ -17,7 +17,8 @@ export class UpworkMarketplaceJobsController {
   constructor(private readonly marketplaceJobs: UpworkMarketplaceJobsService) {}
 
   @Get("marketplace-jobs")
-  search(@CurrentUser() user: JwtClaims, @Query("q") q?: string) {
-    return this.marketplaceJobs.search(user.orgId, q ?? null);
+  search(@CurrentUser() user: JwtClaims, @Query("q") q?: string, @Query("after") after?: string, @Query("first") first?: string) {
+    const parsedFirst = first ? Math.min(Math.max(Number(first) || 50, 1), 50) : 50;
+    return this.marketplaceJobs.search(user.orgId, q ?? null, after ?? null, parsedFirst);
   }
 }
