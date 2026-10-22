@@ -24,7 +24,6 @@ interface ConnectionStatus {
 // rows. The remaining 4 domains follow the same path one at a time (see
 // upwork-integration.module.ts's docblock).
 const STUB_MODULES = [
-  { label: "Agency & profile management", hint: "Blocked by a missing Upwork scope — the company/companySelector queries both require a permission this app's Upwork credentials don't have." },
   { label: "Job discovery", hint: "Surface relevant job postings as they're posted." },
   { label: "Reporting", hint: "Weekly / monthly / yearly financial & performance reports." },
   { label: "Client communication monitoring", hint: "Internal concern-alerting only — no auto-replies." },
@@ -89,6 +88,13 @@ export default function UpworkApiSettingsPage() {
     enabled: Boolean(status?.connected),
   });
   const invites = invitesQuery.data;
+
+  const agencyProfileQuery = useQuery({
+    queryKey: ["upwork-api-agency-profile"],
+    queryFn: () => api.getUpworkApiAgencyProfile(),
+    enabled: Boolean(status?.connected),
+  });
+  const agencyProfile = agencyProfileQuery.data;
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -395,6 +401,40 @@ export default function UpworkApiSettingsPage() {
                     ]}
                     rows={invites.recent}
                   />
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {status?.connected && (
+        <SectionCard title="Organization &amp; Agency" subtitle="Real identity fields from Upwork's own organization record.">
+          {agencyProfileQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
+          {agencyProfileQuery.error && <p className="text-sm text-bad">{(agencyProfileQuery.error as Error).message}</p>}
+          {agencyProfile && (
+            <div className="flex flex-col gap-4">
+              <KpiStrip>
+                <StatTile label="Account type" value={agencyProfile.profile.type ?? "—"} />
+                <StatTile label="Upwork classification" value={agencyProfile.profile.flag?.agency ? "Agency" : agencyProfile.profile.flag?.individual ? "Individual" : "—"} />
+                <StatTile label="Active" value={agencyProfile.profile.active ? "Yes" : "No"} />
+                <StatTile label="Created" value={agencyProfile.profile.creationDate ? new Date(agencyProfile.profile.creationDate).toLocaleDateString() : "—"} />
+              </KpiStrip>
+              <div className="text-xs text-ink/50">
+                Upwork org ID {agencyProfile.profile.id} · legacy type {agencyProfile.profile.legacyType ?? "—"}
+                {agencyProfile.profile.flag && (
+                  <> · flags: {Object.entries(agencyProfile.profile.flag).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}</>
+                )}
+              </div>
+              {agencyProfile.companyDetailsAvailable && agencyProfile.companyDetails ? (
+                <div className="text-sm text-ink/70">
+                  Company: {agencyProfile.companyDetails.companyName ?? agencyProfile.companyDetails.name ?? "—"}
+                  {agencyProfile.companyDetails.city && <> · {agencyProfile.companyDetails.city}</>}
+                  {agencyProfile.companyDetails.staffsTotalCount != null && <> · {agencyProfile.companyDetails.staffsTotalCount} staff</>}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-[var(--line)] bg-ink/[0.03] px-3 py-2 text-xs text-ink/55">
+                  Company and staff details are unavailable: {agencyProfile.companyDetailsLimitation}
                 </div>
               )}
             </div>

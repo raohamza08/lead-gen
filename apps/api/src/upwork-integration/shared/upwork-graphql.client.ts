@@ -7,6 +7,54 @@ export interface CompanySelectorItem {
   organizationId: string;
 }
 
+/** `CurrentOrganization`'s identity fields — confirmed live, accessible
+ *  WITHOUT the scope that blocks `.company`/`.staffs` (see
+ *  getOrganizationCompanyDetails below). `flag` is the real agency/vendor/
+ *  client/individual classification Upwork itself assigns — confirmed live
+ *  for EurosHub: `{client:false, vendor:true, agency:true, individual:false}`,
+ *  i.e. Upwork's own backend agrees this account is an agency, not a
+ *  personal/individual account. */
+export interface OrganizationProfile {
+  id: string;
+  rid: string | null;
+  legacyId: string | null;
+  name: string | null;
+  type: "BUSINESS" | "SOLE_PROPRIETOR" | null;
+  legacyType: "CLIENT" | "VENDOR" | null;
+  active: boolean | null;
+  hidden: boolean | null;
+  photoUrl: string | null;
+  creationDate: string | null;
+  flag: { client: boolean; vendor: boolean; agency: boolean; individual: boolean } | null;
+  parentOrganization: { id: string; name: string | null } | null;
+}
+
+/** `CurrentOrganization.company` fields — confirmed live to be BLOCKED by a
+ *  missing Upwork app scope, same error class as `companySelector`
+ *  (Part: Upwork API integration — Organization domain, 2026-10-23):
+ *  "The client or authentication token doesn't have enough oauth2
+ *  permissions/scopes to access: [CurrentOrganization.company,
+ *  CurrentOrganization.staffs, ...]". Kept as a real type for when/if the
+ *  scope is ever granted — getOrganizationCompanyDetails returns null on
+ *  this specific failure rather than throwing, so callers can disclose
+ *  "unavailable" instead of fabricating data. */
+export interface OrganizationCompanyDetails {
+  id: string;
+  name: string | null;
+  description: string | null;
+  displayName: string | null;
+  logoURL: string | null;
+  companyName: string | null;
+  country: { name: string | null } | null;
+  state: string | null;
+  city: string | null;
+  zip: string | null;
+  timezone: string | null;
+  billingType: string | null;
+  summary: string | null;
+  staffsTotalCount: number | null;
+}
+
 export interface ConnectsSummary {
   organizationId: string;
   connectsBalance: number;
@@ -179,6 +227,86 @@ export class UpworkGraphQLClient {
       `query { organization { id name } }`,
     );
     return data.organization.name;
+  }
+
+  /** Real organization identity fields (Part: Upwork API integration —
+   *  Organization domain, 2026-10-23) — confirmed live, accessible without
+   *  the scope `.company`/`.staffs` require (see
+   *  getOrganizationCompanyDetails). This is the backbone of the
+   *  Organization & Agency module and of Agency Overview's identity card. */
+  async getOrganizationProfile(accessToken: string, organizationId: string | null): Promise<OrganizationProfile> {
+    const data = await this.request<{ organization: OrganizationProfile }>(
+      accessToken,
+      organizationId,
+      `query {
+        organization {
+          id rid legacyId name type legacyType active hidden photoUrl creationDate
+          flag { client vendor agency individual }
+          parentOrganization { id name }
+        }
+      }`,
+    );
+    return data.organization;
+  }
+
+  /** Best-effort fetch of `.company`/`.staffs` — confirmed live to be
+   *  blocked by a missing scope for this app's current Upwork credentials
+   *  (Part: Upwork API integration — Organization domain, 2026-10-23).
+   *  Returns null on that specific failure instead of throwing, so the
+   *  Organization module can disclose "unavailable" rather than fabricate
+   *  company/staff data. If Upwork ever grants the missing scope, this
+   *  starts returning real data with no caller-side change needed. */
+  async getOrganizationCompanyDetails(accessToken: string, organizationId: string | null): Promise<OrganizationCompanyDetails | null> {
+    try {
+      const data = await this.request<{
+        organization: {
+          company: Omit<OrganizationCompanyDetails, "staffsTotalCount"> | null;
+          staffs: { totalCount: number | null } | null;
+        };
+      }>(
+        accessToken,
+        organizationId,
+        `query {
+          organization {
+            company {
+              id name description displayName logoURL companyName
+              country { name } state city zip timezone billingType summary
+            }
+            staffs(pagination: { first: 1 }) { totalCount }
+          }
+        }`,
+      );
+      if (!data.organization.company) return null;
+      return { ...data.organization.company, staffsTotalCount: data.organization.staffs?.totalCount ?? null };
+    } catch (err) {
+      this.logger.warn(`Organization company/staffs details unavailable (expected if scope not granted): ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** Real, consequential write against the agency's live Upwork
+   *  organization record (Part: Upwork API integration — Organization
+   *  domain, 2026-10-23). `organizationName` is the only required field;
+   *  every other field is optional and left unset when not provided so a
+   *  partial update doesn't clobber fields the caller didn't intend to
+   *  touch. Confirmed via introspection, NOT yet exercised against the
+   *  real live API — this mutation changes real agency data on Upwork's
+   *  side, so it must go through an explicit user-confirmed save flow, not
+   *  be called speculatively. */
+  async updateOrganization(
+    accessToken: string,
+    organizationId: string | null,
+    input: { id: string; organizationName: string; hidden?: boolean; vatId?: string; phoneNumber?: string; timezone?: string },
+  ): Promise<{ id: string | null; success: boolean }> {
+    const data = await this.request<{ updateOrganization: { id: string | null; success: boolean } }>(
+      accessToken,
+      organizationId,
+      `mutation($input: UpdateOrganizationInput!) {
+        updateOrganization(input: $input) { id success }
+      }`,
+      { input },
+    );
+    return data.updateOrganization;
   }
 
   /** One page of this org's own submitted proposals/bids, for a single

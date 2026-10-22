@@ -747,6 +747,49 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ organizationId }),
     }),
+  // Organization & Agency (Part: Upwork API integration — Organization
+  // domain, 2026-10-23). company/staffs are null + companyDetailsAvailable
+  // false when blocked by a missing Upwork scope -- never fabricated.
+  getUpworkApiAgencyProfile: () =>
+    request<{
+      profile: {
+        id: string;
+        rid: string | null;
+        legacyId: string | null;
+        name: string | null;
+        type: "BUSINESS" | "SOLE_PROPRIETOR" | null;
+        legacyType: "CLIENT" | "VENDOR" | null;
+        active: boolean | null;
+        hidden: boolean | null;
+        photoUrl: string | null;
+        creationDate: string | null;
+        flag: { client: boolean; vendor: boolean; agency: boolean; individual: boolean } | null;
+        parentOrganization: { id: string; name: string | null } | null;
+      };
+      companyDetails: {
+        id: string;
+        name: string | null;
+        description: string | null;
+        displayName: string | null;
+        logoURL: string | null;
+        companyName: string | null;
+        country: { name: string | null } | null;
+        state: string | null;
+        city: string | null;
+        zip: string | null;
+        timezone: string | null;
+        billingType: string | null;
+        summary: string | null;
+        staffsTotalCount: number | null;
+      } | null;
+      companyDetailsAvailable: boolean;
+      companyDetailsLimitation: string | null;
+    }>("/upwork-api/agency-profile"),
+  updateUpworkApiOrganization: (input: { organizationName: string; hidden?: boolean; vatId?: string; phoneNumber?: string; timezone?: string }) =>
+    request<{ id: string | null; success: boolean }>("/upwork-api/organization", {
+      method: "PUT",
+      body: JSON.stringify(input),
+    }),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.
