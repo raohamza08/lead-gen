@@ -519,6 +519,27 @@ export class UpworkGraphQLClient {
     return data.transactionHistory.transactionDetail.transactionHistoryRow ?? [];
   }
 
+  /** Real offer listing (spec Module J) — schema confirmed via
+   *  introspection, but confirmed to fail live with a reproducible
+   *  Upwork-side `TRANSFORM_TIMEOUT` (Part: Upwork API integration —
+   *  Offers domain, 2026-10-23). Kept as a real method (not removed) so
+   *  UpworkOffersService can keep retrying live without a code change if
+   *  Upwork's backend issue ever clears — see that service's own
+   *  docblock. */
+  async getOffers(accessToken: string, organizationId: string | null, vendorOrgId: string) {
+    const data = await this.request<{ offersByAttributes: { offers: { id: string; title: string; state: string; createdDateTime: string | null; contractId: string | null }[] | null } }>(
+      accessToken,
+      organizationId,
+      `query($filter: SearchOffersByAttributesInput!) {
+        offersByAttributes(filter: $filter) {
+          offers { id title state createdDateTime contractId }
+        }
+      }`,
+      { filter: { ids: [vendorOrgId], searchAttribute: "VendorOrg" } },
+    );
+    return data.offersByAttributes.offers ?? [];
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(

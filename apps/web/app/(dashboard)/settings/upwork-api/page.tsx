@@ -24,6 +24,7 @@ interface ConnectionStatus {
 // rows. The remaining 4 domains follow the same path one at a time (see
 // upwork-integration.module.ts's docblock).
 const STUB_MODULES = [
+  { label: "Offers", hint: "Blocked by a reproducible Upwork backend error (offersByAttributes times out) — confirmed real schema, not a missing permission. Re-checked automatically on every load; will start working if Upwork's issue clears." },
   { label: "Job discovery", hint: "Surface relevant job postings as they're posted." },
   { label: "Reporting", hint: "Weekly / monthly / yearly financial & performance reports." },
   { label: "Client communication monitoring", hint: "Internal concern-alerting only — no auto-replies." },
