@@ -124,4 +124,8 @@ export const QUEUE_NAMES = {
   // UpworkApiConnection (Part: Upwork API integration — Work History
   // domain, 2026-10-23) -- see upwork-work-history-sync.worker.ts.
   UPWORK_WORK_HISTORY_SYNC: "upwork-work-history-sync",
+  // Periodic room-list pull for every CONNECTED UpworkApiConnection
+  // (Part: Upwork API integration — Rooms & Messages domain, 2026-10-23)
+  // -- see upwork-rooms-sync.worker.ts. Read-only, no send capability.
+  UPWORK_ROOMS_SYNC: "upwork-rooms-sync",
 } as const;

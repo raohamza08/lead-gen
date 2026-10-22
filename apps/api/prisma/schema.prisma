@@ -230,6 +230,7 @@ model Organization {
   upworkApiInvites              UpworkApiInvite[]
   upworkApiTransactions         UpworkApiTransaction[]
   upworkApiWorkHistoryEntries   UpworkApiWorkHistoryEntry[]
+  upworkApiRooms                UpworkApiRoom[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -2160,6 +2161,37 @@ model UpworkApiWorkHistoryEntry {
   @@unique([orgId, upworkContractId])
   @@index([orgId, freelancerUserId])
   @@map("upwork_api_work_history_entries")
+}
+
+/// Real conversation rooms (spec Module K: Rooms & Messages, Part: Upwork
+/// API integration — Rooms & Messages domain, 2026-10-23) — from the real
+/// `roomList` GraphQL query (confirmed live: no required filter, returns
+/// every room org-wide). READ ONLY -- this app never sends messages, per
+/// the spec's explicit requirement for this module, even though Upwork's
+/// schema has a real send/create mutation surface (createRoomStoryV2 etc)
+/// — those are deliberately not wired up anywhere in this module.
+///
+/// Retention: permanent, same reasoning as every other UpworkApi* table
+/// -- these are the agency's own real client/freelancer conversations,
+/// a core business record, not bulk third-party content.
+model UpworkApiRoom {
+  id                String       @id @default(uuid())
+  orgId             String       @map("org_id")
+  org               Organization @relation(fields: [orgId], references: [id])
+  upworkRoomId      String       @map("upwork_room_id")
+  roomName          String?      @map("room_name")
+  roomType          String?      @map("room_type")
+  numUsers          Int?         @map("num_users")
+  numUnread         Int?         @map("num_unread")
+  upworkCreatedAt   DateTime?    @map("upwork_created_at")
+  latestMessage     String?      @map("latest_message")
+  latestMessageAt   DateTime?    @map("latest_message_at")
+  latestMessageFrom String?      @map("latest_message_from")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+
+  @@unique([orgId, upworkRoomId])
+  @@map("upwork_api_rooms")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every

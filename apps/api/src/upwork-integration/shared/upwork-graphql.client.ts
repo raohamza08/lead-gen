@@ -601,6 +601,46 @@ export class UpworkGraphQLClient {
     return data.talentWorkHistory.workHistoryList ?? [];
   }
 
+  /** Real conversation room listing (spec Module K) — confirmed live, NO
+   *  required filter (returns every room org-wide). Read-only use only —
+   *  Upwork has a real send-message mutation surface
+   *  (createRoomStoryV2/etc.) but this method and this app never call
+   *  it, per the spec's explicit read-only requirement for this module. */
+  async getRoomList(accessToken: string, organizationId: string | null, first = 50) {
+    const data = await this.request<{
+      roomList: {
+        totalCount: number | null;
+        edges: {
+          node: {
+            id: string;
+            roomName: string | null;
+            roomType: string | null;
+            numUsers: number | null;
+            numUnread: number | null;
+            createdAtDateTime: string | null;
+            latestStory: { message: string | null; createdDateTime: string | null; user: { id: string; name: string | null } | null } | null;
+          };
+        }[];
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($pagination: Pagination) {
+        roomList(pagination: $pagination) {
+          totalCount
+          edges {
+            node {
+              id roomName roomType numUsers numUnread createdAtDateTime
+              latestStory { message createdDateTime user { id name } }
+            }
+          }
+        }
+      }`,
+      { pagination: { first } },
+    );
+    return data.roomList;
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(

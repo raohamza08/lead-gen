@@ -13,6 +13,7 @@ import { UpworkTransactionsModule } from "./transactions/transactions.module";
 import { UpworkOffersModule } from "./offers/offers.module";
 import { UpworkTimesheetsModule } from "./timesheets/timesheets.module";
 import { UpworkWorkHistoryModule } from "./work-history/work-history.module";
+import { UpworkRoomsModule } from "./rooms/rooms.module";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -90,6 +91,7 @@ import { UpworkWorkHistoryModule } from "./work-history/work-history.module";
     UpworkOffersModule,
     UpworkTimesheetsModule,
     UpworkWorkHistoryModule,
+    UpworkRoomsModule,
   ],
 })
 export class UpworkIntegrationModule {}
