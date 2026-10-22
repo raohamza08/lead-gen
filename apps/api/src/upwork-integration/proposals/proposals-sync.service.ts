@@ -59,6 +59,39 @@ function toDate(displayValue: string | undefined | null): Date | null {
  * A 401 deep into the 8-status walk re-runs the whole walk on retry --
  * acceptable since every upsert here is idempotent (dedup key = the real
  * Upwork proposal ID), not a correctness risk, just some repeated work.
+ *
+ * KNOWN UPSTREAM BUG, confirmed live, not fixable client-side (Part: Upwork
+ * API integration, 2026-10-22-23): `vendorProposals(filter: {status_eq})`
+ * does not reliably filter by the status it claims to. Confirmed two ways:
+ * (1) `status_eq: "Declined"` returned `totalCount: 2760` with the first 10
+ * nodes' own `status.status` field reading "Activated"/"Accepted" — NOT
+ * "Declined" — reproduced identically across two back-to-back calls (not a
+ * flake). (2) three separate full 8-status sync runs produced wildly
+ * different per-filter page counts each time (e.g. "Withdrawn" fetched 59,
+ * then 2700, then 2775 real items across three runs) while a single status
+ * queried completely in isolation (outside the 8-status loop) reliably
+ * returns its correct, stable `totalCount` every time (Hired: 3091, 3-for-3)
+ * — strongly suggesting Upwork's filter resolver is unreliable specifically
+ * under this kind of rapid sequential cross-filter querying, not a pure
+ * random fluke. `VendorProposalStatusFilterInput`'s enum values are
+ * confirmed to syntactically match `VENDOR_PROPOSAL_STATUSES` exactly
+ * (Accepted/Declined/Withdrawn/Offered/Activated/Archived/Hired/Pending),
+ * ruling out a naming mismatch on our end.
+ *
+ * Because each upsert stores the proposal's own real `status.status` field
+ * (not the filter value used to find it — see upsertProposal below), every
+ * row this ever stores has a CORRECT status regardless of this bug. What
+ * this bug costs us is COVERAGE, not correctness: walking all 8 (unreliable)
+ * filters may not union to the FULL real set of proposals in one tick, so
+ * the stored total can legitimately sit below Upwork's true historical
+ * count for a while. There is no confirmed workaround — `VendorProposalFilter`
+ * has no date-range or "all statuses" alternative (confirmed via
+ * introspection: only status_eq, annotations_eq, freelancerId_eq,
+ * organizationId_eq, jobPostingIds_any exist). Repeated 6-hourly ticks
+ * should still converge toward full coverage over time since upserts are
+ * idempotent and every tick samples the (buggy) filters independently, but
+ * this is NOT a guaranteed one-pass-complete backfill until Upwork fixes
+ * the underlying filter.
  */
 @Injectable()
 export class UpworkProposalsSyncService {
