@@ -79,8 +79,8 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
   { key: "metaAdsAccess", label: "Meta Ads" },
   {
     key: "upworkApiAccess",
-    label: "Upwork API",
-    hint: "Still pending Upwork's app approval — every data module behind this flag currently returns \"not live yet\". Safe to grant early since there's nothing live to expose.",
+    label: "Upwork Agency",
+    hint: "The full live Upwork Agency platform — Rooms & Messages, Marketplace Jobs, Proposals, Invites, Work History, Transactions, Organization, and the rest of the \"Upwork Agency\" sidebar group. Backed by a real connected Upwork account.",
   },
   {
     key: "upworkProposalWritingAccess",

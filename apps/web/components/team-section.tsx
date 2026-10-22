@@ -404,7 +404,11 @@ export function TeamSection() {
 
               <div className="border-t border-[var(--line)] pt-3">
                 <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Module &amp; account access</h4>
-                <PersonAccessPanel userId={m.id} />
+                {isPrimaryAdmin ? (
+                  <PersonAccessPanel userId={m.id} />
+                ) : (
+                  <p className="text-xs text-ink/50">Only the organization&apos;s primary admin can view or change module access.</p>
+                )}
               </div>
             </div>
           </Modal>

@@ -87,14 +87,23 @@ export class UsersController {
     return this.usersService.deleteUser(user.orgId, user.sub, id);
   }
 
+  /** Restricted to the primary admin only (explicit user request,
+   *  2026-10-23 — "the access enabling option should be for only primary
+   *  admin, remove from other admins"): every other ADMIN-role user used
+   *  to be able to grant/revoke any module for anyone, including other
+   *  admins, via this route. Same guard pair as transferPrimaryAdmin
+   *  below, distinct from the plain Role.ADMIN check RolesGuard already
+   *  does at the class level. */
   @Get(":id/access")
-  @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   getAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.usersService.getAccess(user.orgId, id);
   }
 
   @Patch(":id/access")
-  @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   updateAccess(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateUserAccessDto) {
     return this.usersService.updateAccess(user.orgId, user.sub, id, dto);
   }
