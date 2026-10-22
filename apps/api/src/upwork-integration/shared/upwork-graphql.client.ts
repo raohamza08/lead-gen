@@ -60,7 +60,21 @@ export interface VendorProposalsPage {
   hasNextPage: boolean;
 }
 
-class UpworkGraphQLError extends Error {}
+/** Exported (Part: real bug fix, 2026-10-22 — reactive token refresh) so
+ *  UpworkApiConnectionService.withFreshTokenOnAuthFailure can detect a real
+ *  401 from Upwork and force-refresh, instead of trusting our own
+ *  `tokenExpiresAt` estimate (confirmed unreliable live — see that method's
+ *  own docblock). `status` carries the HTTP status so callers don't have to
+ *  pattern-match on the message string, which varies ("Authentication
+ *  failed" vs GraphQL-layer error text). */
+export class UpworkGraphQLError extends Error {
+  constructor(
+    message: string,
+    public readonly status?: number,
+  ) {
+    super(message);
+  }
+}
 
 /**
  * Thin client for Upwork's actual GraphQL API — confirmed endpoint and
@@ -109,7 +123,7 @@ export class UpworkGraphQLClient {
     const payload = await res.json().catch(() => null);
     if (!res.ok || payload?.errors?.length) {
       const message = payload?.errors?.[0]?.message ?? `Upwork GraphQL request failed (${res.status})`;
-      throw new UpworkGraphQLError(message);
+      throw new UpworkGraphQLError(message, res.status);
     }
     return payload?.data as T;
   }

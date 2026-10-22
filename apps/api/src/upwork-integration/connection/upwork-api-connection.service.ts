@@ -8,7 +8,7 @@ import { apiPublicUrl } from "../../common/api-url";
 import { dashboardUrl } from "../../common/cors";
 import { UpworkOAuthClient } from "./upwork-oauth.client";
 import { UpworkOAuthStateStore } from "./upwork-oauth-state.store";
-import { UpworkGraphQLClient } from "../shared/upwork-graphql.client";
+import { UpworkGraphQLClient, UpworkGraphQLError } from "../shared/upwork-graphql.client";
 
 /**
  * Owns "connect / status / disconnect" for the single org-wide Upwork API
@@ -205,15 +205,26 @@ export class UpworkApiConnectionService {
     return { disconnected: true };
   }
 
-  /** Decrypts and returns a live, non-expired access token for the org's
-   *  connection, refreshing it first if it's within 5 minutes of expiry —
-   *  this is what every per-domain service in ./services/ will call once
-   *  its stub is replaced with a real implementation. Also returns
-   *  organizationId so callers can set it as the X-Upwork-API-TenantId
-   *  header (confirmed from Upwork's docs — see the schema's own docblock
-   *  on UpworkApiConnection); null there just means the header gets
-   *  omitted and Upwork falls back to the user's default org, per the same
-   *  docs. Throws if there's no connected, non-revoked account to use. */
+  /** Decrypts and returns a live access token for the org's connection,
+   *  proactively refreshing it first if it's within 5 minutes of our OWN
+   *  stored `tokenExpiresAt`. Also returns organizationId so callers can
+   *  set it as the X-Upwork-API-TenantId header (confirmed from Upwork's
+   *  docs — see the schema's own docblock on UpworkApiConnection); null
+   *  there just means the header gets omitted and Upwork falls back to the
+   *  user's default org, per the same docs. Throws if there's no
+   *  connected, non-revoked account to use.
+   *
+   *  LOAD-BEARING LIMITATION, confirmed live 2026-10-22 (real bug, found
+   *  investigating the first proposals backfill's 401s): this proactive
+   *  check only protects against OUR OWN `tokenExpiresAt` estimate running
+   *  out — it does nothing if Upwork's actual token lifetime is shorter
+   *  than what we computed from their token response's `expires_in`
+   *  (confirmed: a token well within our own 24h-out `tokenExpiresAt`
+   *  still got a real 401 "Authentication failed" from Upwork on a fresh
+   *  call). Don't rely on this method alone for a call that MUST succeed —
+   *  use `withFreshTokenOnAuthFailure` below, which reactively force-
+   *  refreshes and retries once on an actual 401 from Upwork, regardless
+   *  of what our own stored expiry says. */
   async getValidAccessToken(orgId: string): Promise<{ accessToken: string; organizationId: string | null }> {
     const connection = await this.prisma.upworkApiConnection.findUnique({ where: { orgId } });
     if (!connection || connection.status !== "CONNECTED") {
@@ -223,6 +234,19 @@ export class UpworkApiConnectionService {
     const expiresSoon = connection.tokenExpiresAt.getTime() - Date.now() < 5 * 60 * 1000;
     if (!expiresSoon) {
       return { accessToken: this.encryption.decrypt(connection.accessTokenEnc), organizationId: connection.organizationId };
+    }
+    return this.forceRefreshAccessToken(orgId);
+  }
+
+  /** Unconditionally exchanges the stored refresh token for a new access
+   *  token, regardless of what our own `tokenExpiresAt` says (Part: real
+   *  bug fix, 2026-10-22 — see getValidAccessToken's own docblock). Shares
+   *  the exact refresh-and-persist logic getValidAccessToken's proactive
+   *  path already used, just callable unconditionally too. */
+  async forceRefreshAccessToken(orgId: string): Promise<{ accessToken: string; organizationId: string | null }> {
+    const connection = await this.prisma.upworkApiConnection.findUnique({ where: { orgId } });
+    if (!connection || connection.status !== "CONNECTED") {
+      throw new BadRequestException("No active Upwork API connection — connect one in Settings > Upwork API first.");
     }
 
     const { clientId, clientSecret } = this.credentials();
@@ -245,6 +269,30 @@ export class UpworkApiConnectionService {
         where: { orgId },
         data: { status: "EXPIRED", lastSyncError: (err as Error).message.slice(0, 300) },
       });
+      throw err;
+    }
+  }
+
+  /** Runs `fn` with a valid token, and if Upwork itself rejects that token
+   *  with a 401 (regardless of what our own stored `tokenExpiresAt` claims
+   *  — see getValidAccessToken's own docblock for why that can't always be
+   *  trusted), force-refreshes once and retries `fn` exactly once more
+   *  before giving up. This is what every sync service should use instead
+   *  of calling getValidAccessToken directly, for exactly one real call
+   *  that must succeed if the connection is genuinely still valid. */
+  async withFreshTokenOnAuthFailure<T>(
+    orgId: string,
+    fn: (token: { accessToken: string; organizationId: string | null }) => Promise<T>,
+  ): Promise<T> {
+    const token = await this.getValidAccessToken(orgId);
+    try {
+      return await fn(token);
+    } catch (err) {
+      if (err instanceof UpworkGraphQLError && err.status === 401) {
+        this.logger.warn(`Upwork rejected a token for org ${orgId} with 401 despite our own tokenExpiresAt saying it was valid — force-refreshing and retrying once.`);
+        const refreshed = await this.forceRefreshAccessToken(orgId);
+        return fn(refreshed);
+      }
       throw err;
     }
   }

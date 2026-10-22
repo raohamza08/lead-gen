@@ -44,10 +44,14 @@ function toDate(displayValue: string | undefined | null): Date | null {
  * offer. The very first sync for a status has nothing to stop early on, so
  * it walks up to MAX_PAGES_PER_STATUS pages (a real, one-time backfill).
  *
- * Gets its access token via UpworkApiConnectionService.getValidAccessToken,
- * not a direct decrypt (Part: real bug fix, 2026-10-22 — same fix as
- * UpworkConnectsSyncService, see its own docblock: a direct decrypt never
- * checks/refreshes an expiring token).
+ * Uses UpworkApiConnectionService.withFreshTokenOnAuthFailure, not a plain
+ * getValidAccessToken (Part: real bug fix, 2026-10-22 — same fix as
+ * UpworkConnectsSyncService, see that method's own docblock: Upwork's real
+ * token lifetime can be shorter than our computed tokenExpiresAt, so a real
+ * 401 needs to force a refresh regardless of what our own estimate says).
+ * A 401 deep into the 8-status walk re-runs the whole walk on retry --
+ * acceptable since every upsert here is idempotent (dedup key = the real
+ * Upwork proposal ID), not a correctness risk, just some repeated work.
  */
 @Injectable()
 export class UpworkProposalsSyncService {
@@ -60,12 +64,12 @@ export class UpworkProposalsSyncService {
   ) {}
 
   async syncConnection(connectionRow: UpworkApiConnection): Promise<void> {
-    const { accessToken, organizationId } = await this.connection.getValidAccessToken(connectionRow.orgId);
-
     try {
-      for (const status of VENDOR_PROPOSAL_STATUSES) {
-        await this.syncStatus(connectionRow.orgId, accessToken, organizationId, status);
-      }
+      await this.connection.withFreshTokenOnAuthFailure(connectionRow.orgId, async ({ accessToken, organizationId }) => {
+        for (const status of VENDOR_PROPOSAL_STATUSES) {
+          await this.syncStatus(connectionRow.orgId, accessToken, organizationId, status);
+        }
+      });
       await this.prisma.upworkApiConnection.update({
         where: { id: connectionRow.id },
         data: { lastSyncAt: new Date(), lastSyncError: null },

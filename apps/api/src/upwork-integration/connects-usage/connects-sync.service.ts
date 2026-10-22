@@ -35,15 +35,12 @@ function dedupeKey(t: ConnectUsageTransaction): string {
  * "talk to Upwork + upsert into Postgres" for one connection, the worker
  * just owns "loop over every CONNECTED connection and call this."
  *
- * DOES go through UpworkApiConnectionService.getValidAccessToken (Part:
- * real bug fix, 2026-10-22 — found running the first live proposals
- * backfill: decrypting `connection.accessTokenEnc` directly, as this method
- * originally did, never checks or refreshes an expiring token, so every
- * sync after the first ~24h would silently start failing with a 401 the
- * moment the token actually expired. getValidAccessToken already has the
- * real "refresh if within 5 minutes of expiry" logic — this takes the one
- * extra Prisma query that costs over re-decrypting a possibly-stale token,
- * same as every other caller of that method). */
+ * Uses UpworkApiConnectionService.withFreshTokenOnAuthFailure, not a plain
+ * getValidAccessToken (Part: real bug fix, 2026-10-22 — confirmed live:
+ * Upwork's actual token lifetime can be far shorter than our own computed
+ * `tokenExpiresAt`, so a proactive-only refresh check isn't enough; a real
+ * 401 needs to trigger an unconditional force-refresh + one retry — see
+ * that method's own docblock). */
 @Injectable()
 export class UpworkConnectsSyncService {
   private readonly logger = new Logger(UpworkConnectsSyncService.name);
@@ -55,11 +52,11 @@ export class UpworkConnectsSyncService {
   ) {}
 
   async syncConnection(connectionRow: UpworkApiConnection): Promise<void> {
-    const { accessToken, organizationId } = await this.connection.getValidAccessToken(connectionRow.orgId);
-
     try {
-      await this.syncSnapshot(connectionRow.orgId, accessToken, organizationId);
-      await this.syncHistory(connectionRow.orgId, accessToken, organizationId);
+      await this.connection.withFreshTokenOnAuthFailure(connectionRow.orgId, async ({ accessToken, organizationId }) => {
+        await this.syncSnapshot(connectionRow.orgId, accessToken, organizationId);
+        await this.syncHistory(connectionRow.orgId, accessToken, organizationId);
+      });
       await this.prisma.upworkApiConnection.update({
         where: { id: connectionRow.id },
         data: { lastSyncAt: new Date(), lastSyncError: null },
