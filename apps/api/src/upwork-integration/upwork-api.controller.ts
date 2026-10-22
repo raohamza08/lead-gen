@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Post, Put, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { ModuleAccessGuard } from "../common/guards/module-access.guard";
@@ -14,6 +14,7 @@ import { UpworkConnectsUsageService } from "./services/connects-usage.service";
 import { UpworkJobDiscoveryService } from "./services/job-discovery.service";
 import { UpworkReportingService } from "./services/reporting.service";
 import { UpworkChatMonitoringService } from "./services/chat-monitoring.service";
+import { SetOrganizationIdDto } from "./dto/set-organization-id.dto";
 
 /**
  * Standard JwtAuthGuard + RolesGuard + ModuleAccessGuard stack, same as
@@ -66,6 +67,18 @@ export class UpworkApiController {
   @Roles(Role.ADMIN)
   disconnect(@CurrentUser() user: JwtClaims) {
     return this.connection.disconnect(user);
+  }
+
+  /** Manual organization-ID override (Part: Upwork API integration,
+   *  2026-10-22) — see UpworkApiConnectionService.setOrganizationId's own
+   *  docblock for why this exists (Upwork's automatic org-detection is
+   *  blocked by a scope this app doesn't have). ADMIN-only, same reasoning
+   *  as connect/disconnect: this changes which org every sync/read pulls
+   *  data from. */
+  @Put("organization-id")
+  @Roles(Role.ADMIN)
+  setOrganizationId(@CurrentUser() user: JwtClaims, @Body() dto: SetOrganizationIdDto) {
+    return this.connection.setOrganizationId(user, dto.organizationId);
   }
 
   @Get("agency-profile")

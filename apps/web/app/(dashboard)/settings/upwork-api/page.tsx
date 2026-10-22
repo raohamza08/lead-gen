@@ -10,6 +10,7 @@ interface ConnectionStatus {
   connected: boolean;
   status?: "CONNECTED" | "EXPIRED" | "DISCONNECTED" | "ERROR";
   scope?: string;
+  organizationId?: string | null;
   organizationName?: string | null;
   connectedAt?: string;
   tokenExpiresAt?: string;
@@ -74,6 +75,12 @@ export default function UpworkApiSettingsPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [orgIdInput, setOrgIdInput] = useState("");
+  const [savingOrgId, setSavingOrgId] = useState(false);
+
+  useEffect(() => {
+    if (status?.organizationId) setOrgIdInput(status.organizationId);
+  }, [status?.organizationId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -93,6 +100,23 @@ export default function UpworkApiSettingsPage() {
     } catch (err) {
       setError((err as Error).message);
       setConnecting(false);
+    }
+  }
+
+  async function saveOrganizationId() {
+    const trimmed = orgIdInput.trim();
+    if (!trimmed) return;
+    setSavingOrgId(true);
+    setError(null);
+    try {
+      const { organizationName } = await api.setUpworkApiOrganizationId(trimmed);
+      setNotice(`Organization set to "${organizationName}".`);
+      queryClient.invalidateQueries({ queryKey: ["upwork-api-status"] });
+      queryClient.invalidateQueries({ queryKey: ["upwork-api-connects-usage"] });
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSavingOrgId(false);
     }
   }
 
@@ -168,6 +192,40 @@ export default function UpworkApiSettingsPage() {
             {status.organizationName && <div className="text-xs text-ink/50">Organization: {status.organizationName}</div>}
             {status.scope && <div className="text-xs text-ink/50">Scope: {status.scope}</div>}
             {status.lastSyncError && <div className="mt-1 text-xs text-bad">{status.lastSyncError}</div>}
+
+            {/* Manual organization-ID override (Part: Upwork API
+                integration, 2026-10-22) — Upwork's automatic org-detection
+                is blocked by a scope this app doesn't have, so every call
+                silently defaults to the logged-in user's PERSONAL account
+                unless this is set explicitly. Find the real ID from the
+                agency's own public Upwork page (it's embedded in the
+                org-logo image URL, e.g. assets.static-upwork.com/org-logo/
+                &lt;id&gt;) or by granting the missing scope and letting Upwork's
+                own company selector resolve it instead. */}
+            <div className="mt-3 flex flex-col gap-1.5 border-t border-[var(--line)] pt-3">
+              <label className="text-xs font-medium text-ink/70">Organization ID (overrides which Upwork org data syncs from)</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={orgIdInput}
+                  onChange={(e) => setOrgIdInput(e.target.value)}
+                  placeholder="e.g. 1748384846860713984"
+                  className="h-9 flex-1 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+                />
+                <button
+                  type="button"
+                  disabled={savingOrgId || !orgIdInput.trim()}
+                  onClick={saveOrganizationId}
+                  className="h-9 shrink-0 rounded-md border border-[var(--line)] px-3 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                >
+                  {savingOrgId ? "Checking…" : "Save"}
+                </button>
+              </div>
+              <p className="text-[11px] text-ink/40">
+                Automatic detection is currently blocked by a missing Upwork app permission (company selector). Find your org&apos;s real ID on its
+                public Upwork agency page — it&apos;s embedded in the logo image URL.
+              </p>
+            </div>
           </div>
         ) : (
           <p className="text-sm text-ink/55">Not connected yet. Click &ldquo;Connect Upwork account&rdquo; above once Upwork approves the API application.</p>

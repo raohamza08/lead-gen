@@ -736,6 +736,17 @@ export const api = {
   getUpworkApiOAuthUrl: () => request("/upwork-api/connect") as Promise<{ url: string }>,
   getUpworkApiStatus: () => request("/upwork-api/status"),
   disconnectUpworkApi: () => request("/upwork-api/connection", { method: "DELETE" }),
+  // Manual organization-ID override (Part: Upwork API integration,
+  // 2026-10-22) — Upwork's automatic org-detection is blocked by a scope
+  // this app doesn't have, so every call defaults to the authenticating
+  // user's personal account unless this is set explicitly. Validates the
+  // ID live against Upwork and returns its real name, or throws with
+  // Upwork's own error if it's wrong.
+  setUpworkApiOrganizationId: (organizationId: string) =>
+    request<{ organizationId: string; organizationName: string }>("/upwork-api/organization-id", {
+      method: "PUT",
+      body: JSON.stringify({ organizationId }),
+    }),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.

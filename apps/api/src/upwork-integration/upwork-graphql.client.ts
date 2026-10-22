@@ -83,6 +83,31 @@ export class UpworkGraphQLClient {
     return payload?.data as T;
   }
 
+  /** Confirms a given tenant ID is real and returns its display name, by
+   *  sending it as X-Upwork-API-TenantId and reading back `organization.
+   *  name` (Part: Upwork API integration — manual org override, 2026-10-22,
+   *  real bug found: the `companySelector` query this app would otherwise
+   *  use to auto-discover an agency's organization ID is blocked by a scope
+   *  this app's Upwork permissions don't include, confirmed live — "The
+   *  client or authentication token doesn't have enough oauth2 permissions/
+   *  scopes to access: [CompanySelector.items, ...]". Every GraphQL call
+   *  made without an explicit tenant header silently defaults to the
+   *  authenticating USER's own personal account context, not any agency
+   *  they belong to — confirmed live against this org's real connection,
+   *  which was returning "Sheikh Nabeel Ali" (the personal account) instead
+   *  of "EurosHub" until this was diagnosed. `organization`/`company`
+   *  (singular, "current organization") queries work fine under the
+   *  granted scopes and respect whatever tenant header is sent, which is
+   *  what this method (and the manual override it backs) relies on. */
+  async getOrganizationName(accessToken: string, organizationId: string): Promise<string> {
+    const data = await this.request<{ organization: { id: string; name: string } }>(
+      accessToken,
+      organizationId,
+      `query { organization { id name } }`,
+    );
+    return data.organization.name;
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(

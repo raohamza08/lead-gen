@@ -151,12 +151,41 @@ export class UpworkApiConnectionService {
       connected: connection.status === "CONNECTED",
       status: connection.status,
       scope: connection.scope,
+      organizationId: connection.organizationId,
       organizationName: connection.organizationName,
       connectedAt: connection.connectedAt,
       tokenExpiresAt: connection.tokenExpiresAt,
       lastSyncAt: connection.lastSyncAt,
       lastSyncError: connection.lastSyncError,
     };
+  }
+
+  /** Manual organization-ID override (Part: Upwork API integration,
+   *  2026-10-22, real bug found — see UpworkGraphQLClient.getOrganizationName's
+   *  own docblock: the automatic `companySelector` lookup this app would
+   *  otherwise rely on is blocked by a scope this app's Upwork permissions
+   *  don't include, so every GraphQL call silently defaulted to the
+   *  authenticating user's PERSONAL account instead of any agency they
+   *  belong to). Validates the given ID by actually calling Upwork with it
+   *  as X-Upwork-API-TenantId and reading back the real organization name —
+   *  a typo'd/wrong ID surfaces as a real Upwork error here, not a silent
+   *  no-op, same fail-loud principle as every other write in this service. */
+  async setOrganizationId(user: JwtClaims, organizationId: string) {
+    const { accessToken } = await this.getValidAccessToken(user.orgId);
+    const organizationName = await this.graphql.getOrganizationName(accessToken, organizationId);
+    await this.prisma.upworkApiConnection.update({
+      where: { orgId: user.orgId },
+      data: { organizationId, organizationName },
+    });
+    this.auditLog.write({
+      orgId: user.orgId,
+      actorId: user.sub,
+      action: "UPWORK_API_ORGANIZATION_ID_SET",
+      entityType: "upworkApiConnection",
+      entityId: user.orgId,
+      metadata: { organizationId, organizationName },
+    });
+    return { organizationId, organizationName };
   }
 
   async disconnect(user: JwtClaims) {
