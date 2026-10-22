@@ -1,8 +1,8 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { UpworkApiConnection } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { EncryptionService } from "../../common/crypto/encryption.service";
 import { UpworkGraphQLClient, VENDOR_PROPOSAL_STATUSES, VendorProposalNode, VendorProposalStatus } from "../shared/upwork-graphql.client";
+import { UpworkApiConnectionService } from "../connection/upwork-api-connection.service";
 
 /** `vendorProposals` rejects `first` above some value between 25-50 with a
  *  generic "Input parameter provided has incorrect value" (code VJCA-6) --
@@ -43,6 +43,11 @@ function toDate(displayValue: string | undefined | null): Date | null {
  * makes repeat syncs cheap without needing a date filter the API doesn't
  * offer. The very first sync for a status has nothing to stop early on, so
  * it walks up to MAX_PAGES_PER_STATUS pages (a real, one-time backfill).
+ *
+ * Gets its access token via UpworkApiConnectionService.getValidAccessToken,
+ * not a direct decrypt (Part: real bug fix, 2026-10-22 — same fix as
+ * UpworkConnectsSyncService, see its own docblock: a direct decrypt never
+ * checks/refreshes an expiring token).
  */
 @Injectable()
 export class UpworkProposalsSyncService {
@@ -50,27 +55,26 @@ export class UpworkProposalsSyncService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly encryption: EncryptionService,
+    private readonly connection: UpworkApiConnectionService,
     private readonly graphql: UpworkGraphQLClient,
   ) {}
 
-  async syncConnection(connection: UpworkApiConnection): Promise<void> {
-    const accessToken = this.encryption.decrypt(connection.accessTokenEnc);
-    const organizationId = connection.organizationId;
+  async syncConnection(connectionRow: UpworkApiConnection): Promise<void> {
+    const { accessToken, organizationId } = await this.connection.getValidAccessToken(connectionRow.orgId);
 
     try {
       for (const status of VENDOR_PROPOSAL_STATUSES) {
-        await this.syncStatus(connection.orgId, accessToken, organizationId, status);
+        await this.syncStatus(connectionRow.orgId, accessToken, organizationId, status);
       }
       await this.prisma.upworkApiConnection.update({
-        where: { id: connection.id },
+        where: { id: connectionRow.id },
         data: { lastSyncAt: new Date(), lastSyncError: null },
       });
     } catch (err) {
       const message = (err as Error).message.slice(0, 300);
-      this.logger.warn(`Proposals sync failed for org ${connection.orgId}: ${message}`);
+      this.logger.warn(`Proposals sync failed for org ${connectionRow.orgId}: ${message}`);
       await this.prisma.upworkApiConnection.update({
-        where: { id: connection.id },
+        where: { id: connectionRow.id },
         data: { lastSyncError: message },
       });
       throw err;

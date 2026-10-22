@@ -2,8 +2,8 @@ import { createHash } from "crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { UpworkApiConnection } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { EncryptionService } from "../../common/crypto/encryption.service";
 import { UpworkGraphQLClient, ConnectUsageTransaction } from "../shared/upwork-graphql.client";
+import { UpworkApiConnectionService } from "../connection/upwork-api-connection.service";
 
 /** How far back to backfill on an org's very first sync (no prior
  *  UpworkConnectsTransaction rows) -- 2 years comfortably covers any
@@ -35,39 +35,40 @@ function dedupeKey(t: ConnectUsageTransaction): string {
  * "talk to Upwork + upsert into Postgres" for one connection, the worker
  * just owns "loop over every CONNECTED connection and call this."
  *
- * Does NOT go through UpworkApiConnectionService.getValidAccessToken -- that
- * method exists for request-time callers (a controller handling a live user
- * request) and takes an orgId, re-querying Prisma for the connection row
- * it's then given fresh again here; since the worker already loaded the
- * connection row to loop over it, this takes that row directly and
- * refreshes the token inline if needed, avoiding a redundant query.
- */
+ * DOES go through UpworkApiConnectionService.getValidAccessToken (Part:
+ * real bug fix, 2026-10-22 — found running the first live proposals
+ * backfill: decrypting `connection.accessTokenEnc` directly, as this method
+ * originally did, never checks or refreshes an expiring token, so every
+ * sync after the first ~24h would silently start failing with a 401 the
+ * moment the token actually expired. getValidAccessToken already has the
+ * real "refresh if within 5 minutes of expiry" logic — this takes the one
+ * extra Prisma query that costs over re-decrypting a possibly-stale token,
+ * same as every other caller of that method). */
 @Injectable()
 export class UpworkConnectsSyncService {
   private readonly logger = new Logger(UpworkConnectsSyncService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly encryption: EncryptionService,
+    private readonly connection: UpworkApiConnectionService,
     private readonly graphql: UpworkGraphQLClient,
   ) {}
 
-  async syncConnection(connection: UpworkApiConnection): Promise<void> {
-    const accessToken = this.encryption.decrypt(connection.accessTokenEnc);
-    const organizationId = connection.organizationId;
+  async syncConnection(connectionRow: UpworkApiConnection): Promise<void> {
+    const { accessToken, organizationId } = await this.connection.getValidAccessToken(connectionRow.orgId);
 
     try {
-      await this.syncSnapshot(connection.orgId, accessToken, organizationId);
-      await this.syncHistory(connection.orgId, accessToken, organizationId);
+      await this.syncSnapshot(connectionRow.orgId, accessToken, organizationId);
+      await this.syncHistory(connectionRow.orgId, accessToken, organizationId);
       await this.prisma.upworkApiConnection.update({
-        where: { id: connection.id },
+        where: { id: connectionRow.id },
         data: { lastSyncAt: new Date(), lastSyncError: null },
       });
     } catch (err) {
       const message = (err as Error).message.slice(0, 300);
-      this.logger.warn(`Connects sync failed for org ${connection.orgId}: ${message}`);
+      this.logger.warn(`Connects sync failed for org ${connectionRow.orgId}: ${message}`);
       await this.prisma.upworkApiConnection.update({
-        where: { id: connection.id },
+        where: { id: connectionRow.id },
         data: { lastSyncError: message },
       });
       throw err;
