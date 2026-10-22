@@ -115,4 +115,8 @@ export const QUEUE_NAMES = {
   // explicitly required bids and invites to be stored and shown as
   // distinct, separate domains, not merged into one "proposals" bucket.
   UPWORK_INVITES_SYNC: "upwork-invites-sync",
+  // Periodic financial-transaction pull for every CONNECTED
+  // UpworkApiConnection (Part: Upwork API integration — Transactions
+  // domain, 2026-10-23) -- see upwork-transactions-sync.worker.ts.
+  UPWORK_TRANSACTIONS_SYNC: "upwork-transactions-sync",
 } as const;

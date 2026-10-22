@@ -228,6 +228,7 @@ model Organization {
   upworkConnectsTransactions    UpworkConnectsTransaction[]
   upworkApiProposals            UpworkApiProposal[]
   upworkApiInvites              UpworkApiInvite[]
+  upworkApiTransactions         UpworkApiTransaction[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -2086,6 +2087,40 @@ model UpworkApiInvite {
   @@index([orgId, status])
   @@index([orgId, upworkModifiedAt])
   @@map("upwork_api_invites")
+}
+
+/// Real financial ledger (spec Module B: Transactions & Financial History,
+/// Part: Upwork API integration — Transactions domain, 2026-10-23) — from
+/// the real `transactionHistory` GraphQL query, confirmed live against
+/// real data (service fees, fixed-price invoices, Connects purchase fees,
+/// freelancer refunds). Upwork returns a real, stable `recordId`, so that
+/// is the dedupe key, not a synthetic hash (same reasoning as
+/// UpworkApiProposal/UpworkApiInvite). `description` is free text that
+/// embeds contract/client references (e.g. "Contract ID: 44230098...
+/// Client: Aaliyah A") — Upwork does not expose these as separate
+/// structured fields on this row type, confirmed via introspection.
+///
+/// Retention: permanent — this is the org's own financial ledger, not
+/// bulk-copied third-party content, same reasoning as every other
+/// UpworkApi* table.
+model UpworkApiTransaction {
+  id                 String       @id @default(uuid())
+  orgId              String       @map("org_id")
+  org                Organization @relation(fields: [orgId], references: [id])
+  upworkRecordId     String       @map("upwork_record_id")
+  occurredAt         DateTime?    @map("occurred_at")
+  type               String?
+  accountingSubtype  String?      @map("accounting_subtype")
+  description        String?
+  amountRaw          String?      @map("amount_raw")
+  amountCurrency     String?      @map("amount_currency")
+  amountDisplay      String?      @map("amount_display")
+  paymentStatus      String?      @map("payment_status")
+  createdAt          DateTime     @default(now()) @map("created_at")
+
+  @@unique([orgId, upworkRecordId])
+  @@index([orgId, occurredAt])
+  @@map("upwork_api_transactions")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every

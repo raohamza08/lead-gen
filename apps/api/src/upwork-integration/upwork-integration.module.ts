@@ -9,6 +9,7 @@ import { UpworkJobDiscoveryModule } from "./job-discovery/job-discovery.module";
 import { UpworkReportingModule } from "./reporting/reporting.module";
 import { UpworkChatMonitoringModule } from "./chat-monitoring/chat-monitoring.module";
 import { UpworkCommonEntitiesModule } from "./common-entities/common-entities.module";
+import { UpworkTransactionsModule } from "./transactions/transactions.module";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -82,6 +83,7 @@ import { UpworkCommonEntitiesModule } from "./common-entities/common-entities.mo
     UpworkReportingModule,
     UpworkChatMonitoringModule,
     UpworkCommonEntitiesModule,
+    UpworkTransactionsModule,
   ],
 })
 export class UpworkIntegrationModule {}

@@ -136,6 +136,16 @@ export interface VendorInvitationsPage {
   hasNextPage: boolean;
 }
 
+export interface TransactionHistoryRow {
+  recordId: string | null;
+  transactionCreationDate: string | null;
+  type: string | null;
+  description: string | null;
+  accountingSubtype: string | null;
+  transactionAmount: { rawValue: string; currency: string; displayValue: string } | null;
+  paymentStatus: string | null;
+}
+
 /** Exported (Part: real bug fix, 2026-10-22 — reactive token refresh) so
  *  UpworkApiConnectionService.withFreshTokenOnAuthFailure can detect a real
  *  401 from Upwork and force-refresh, instead of trusting our own
@@ -464,6 +474,49 @@ export class UpworkGraphQLClient {
       `query { regions { id name parentRegion { id name } } }`,
     );
     return data.regions;
+  }
+
+  /** The org's own accounting-entity ID — real top-level query, no args,
+   *  confirmed live (Part: Upwork API integration — Transactions domain,
+   *  2026-10-23). Required as `aceIds_any` on `transactionHistory` below —
+   *  there's no way to query transaction history without it first. */
+  async getAccountingEntityId(accessToken: string, organizationId: string | null): Promise<string> {
+    const data = await this.request<{ accountingEntity: { id: string } }>(accessToken, organizationId, `query { accountingEntity { id } }`);
+    return data.accountingEntity.id;
+  }
+
+  /** Real financial ledger (spec Module B) — confirmed live against real
+   *  data: service fees, fixed-price invoices, Connects purchase fees,
+   *  freelancer refunds, all with real contract/client references embedded
+   *  in `description` (Upwork does not expose these as separate structured
+   *  fields on this row type, confirmed via introspection —
+   *  TransactionHistoryRow has no contractId/clientId field, only free-text
+   *  description). Date range is required (`transactionDateTime_bt`), no
+   *  "all time" option. */
+  async getTransactionHistory(
+    accessToken: string,
+    organizationId: string | null,
+    accountingEntityId: string,
+    rangeStart: string,
+    rangeEnd: string,
+  ): Promise<TransactionHistoryRow[]> {
+    const data = await this.request<{ transactionHistory: { transactionDetail: { transactionHistoryRow: TransactionHistoryRow[] | null } } }>(
+      accessToken,
+      organizationId,
+      `query($filter: TransactionHistoryFilter!) {
+        transactionHistory(transactionHistoryFilter: $filter) {
+          transactionDetail {
+            transactionHistoryRow {
+              recordId transactionCreationDate type description accountingSubtype
+              transactionAmount { rawValue currency displayValue }
+              paymentStatus
+            }
+          }
+        }
+      }`,
+      { filter: { aceIds_any: [accountingEntityId], transactionDateTime_bt: { rangeStart, rangeEnd } } },
+    );
+    return data.transactionHistory.transactionDetail.transactionHistoryRow ?? [];
   }
 
   /** Point-in-time Connects balance — confirmed live, real fields. */
