@@ -22,5 +22,6 @@ import { UpworkConnectsSyncService } from "./connects-sync.service";
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkConnectsUsageController],
   providers: [UpworkConnectsUsageService, UpworkConnectsSyncQueue, UpworkConnectsSyncWorker, UpworkConnectsSyncService],
+  exports: [UpworkConnectsUsageService],
 })
 export class UpworkConnectsUsageModule {}

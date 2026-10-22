@@ -70,6 +70,13 @@ export default function UpworkApiSettingsPage() {
   });
   const status = statusQuery.data;
 
+  const overviewQuery = useQuery({
+    queryKey: ["upwork-api-agency-overview"],
+    queryFn: () => api.getUpworkApiAgencyOverview(),
+    enabled: Boolean(status?.connected),
+  });
+  const overview = overviewQuery.data;
+
   const connectsQuery = useQuery({
     queryKey: ["upwork-api-connects-usage"],
     queryFn: () => api.getUpworkApiConnectsUsage(),
@@ -224,6 +231,47 @@ export default function UpworkApiSettingsPage() {
         <div className="rounded-lg border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-3 py-2 text-sm text-good">
           {notice}
         </div>
+      )}
+
+      {status?.connected && overview && (
+        <SectionCard
+          title="Agency Overview"
+          subtitle={`Composite summary${overview.organizationName ? ` for ${overview.organizationName}` : ""} — every number here is a direct read from an already-verified module below, nothing fabricated.`}
+        >
+          <div className="flex flex-col gap-4">
+            <KpiStrip>
+              <StatTile label="Connects balance" value={overview.connects?.unavailable ? "—" : overview.connects?.balance ?? "—"} />
+              <StatTile label="Proposals" value={overview.proposals?.unavailable ? "—" : overview.proposals?.totalCount ?? "—"} />
+              <StatTile label="Invites" value={overview.invites?.unavailable ? "—" : overview.invites?.totalCount ?? "—"} />
+              <StatTile label="Transactions" value={overview.transactions?.unavailable ? "—" : overview.transactions?.totalCount ?? "—"} />
+              <StatTile label="Freelancers tracked" value={overview.freelancerProfiles?.unavailable ? "—" : overview.freelancerProfiles?.totalCount ?? "—"} />
+              <StatTile label="Rooms" value={overview.rooms?.unavailable ? "—" : overview.rooms?.totalCount ?? "—"} />
+            </KpiStrip>
+            {overview.agencyFlag && (
+              <div className="text-xs text-ink/50">
+                Upwork's own classification: {Object.entries(overview.agencyFlag).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}
+              </div>
+            )}
+            <div>
+              <div className="mb-2 text-sm font-medium text-ink">Not available (disclosed, not fabricated)</div>
+              <div className="flex flex-col gap-1.5">
+                {([
+                  ["Contracts", overview.contracts],
+                  ["Offers", overview.offers],
+                  ["Timesheets", overview.timesheets],
+                  ["Snapshots", overview.snapshots],
+                  ["Activity", overview.activity],
+                  ["Client Proposals", overview.clientProposals],
+                ] as const).map(([label, info]) => info?.unavailable && (
+                  <div key={label} className="flex flex-wrap items-baseline gap-2 text-xs">
+                    <span className="font-medium text-ink/70">{label}:</span>
+                    <span className="text-ink/50">{info.reason}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </SectionCard>
       )}
 
       <SectionCard title="Connection">

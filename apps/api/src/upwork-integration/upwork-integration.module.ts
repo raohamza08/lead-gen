@@ -23,6 +23,7 @@ import { UpworkSnapshotsModule } from "./snapshots/snapshots.module";
 import { UpworkContractProposalsModule } from "./contract-proposals/contract-proposals.module";
 import { UpworkClientProposalsModule } from "./client-proposals/client-proposals.module";
 import { UpworkSubmitProposalModule } from "./submit-proposal/submit-proposal.module";
+import { UpworkAgencyOverviewModule } from "./agency-overview/agency-overview.module";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -110,6 +111,7 @@ import { UpworkSubmitProposalModule } from "./submit-proposal/submit-proposal.mo
     UpworkContractProposalsModule,
     UpworkClientProposalsModule,
     UpworkSubmitProposalModule,
+    UpworkAgencyOverviewModule,
   ],
 })
 export class UpworkIntegrationModule {}

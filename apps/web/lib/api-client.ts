@@ -836,6 +836,31 @@ export const api = {
         feedbackToClientScore: number | null;
       }[];
     }>("/upwork-api/work-history"),
+  // Agency Overview (Part: Upwork API integration — Agency Overview
+  // domain, 2026-10-23) -- pure composition of already-verified domain
+  // services, adds no new Upwork API calls of its own.
+  getUpworkApiAgencyOverview: () =>
+    request<{
+      connected: boolean;
+      status: string;
+      organizationName?: string | null;
+      lastSyncAt?: string | null;
+      lastSyncError?: string | null;
+      agencyFlag?: { client: boolean; vendor: boolean; agency: boolean; individual: boolean } | null;
+      connects?: { balance?: number; unavailable?: boolean; reason?: string };
+      proposals?: { totalCount?: number; unavailable?: boolean; reason?: string };
+      invites?: { totalCount?: number; unavailable?: boolean; reason?: string };
+      transactions?: { totalCount?: number; unavailable?: boolean; reason?: string };
+      workHistory?: { totalCount?: number; freelancerCount?: number; unavailable?: boolean; reason?: string };
+      freelancerProfiles?: { totalCount?: number; unavailable?: boolean; reason?: string };
+      rooms?: { totalCount?: number; totalUnread?: number; unavailable?: boolean; reason?: string };
+      contracts?: { unavailable: boolean; reason: string };
+      offers?: { unavailable: boolean; reason: string };
+      timesheets?: { unavailable: boolean; reason: string };
+      snapshots?: { unavailable: boolean; reason: string };
+      activity?: { unavailable: boolean; reason: string };
+      clientProposals?: { unavailable: boolean; reason: string };
+    }>("/upwork-api/agency-overview"),
   // Rooms & Messages (Part: Upwork API integration — Rooms & Messages
   // domain, 2026-10-23) -- read-only, no send-message capability.
   getUpworkApiRooms: () =>

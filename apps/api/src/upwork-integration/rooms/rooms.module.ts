@@ -14,5 +14,6 @@ import { UpworkRoomsSyncService } from "./rooms-sync.service";
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkRoomsController],
   providers: [UpworkRoomsService, UpworkRoomsSyncQueue, UpworkRoomsSyncWorker, UpworkRoomsSyncService],
+  exports: [UpworkRoomsService],
 })
 export class UpworkRoomsModule {}

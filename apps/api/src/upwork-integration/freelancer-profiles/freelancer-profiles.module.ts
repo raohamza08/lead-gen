@@ -19,5 +19,6 @@ import { UpworkFreelancerProfilesSyncService } from "./freelancer-profiles-sync.
     UpworkFreelancerProfilesSyncWorker,
     UpworkFreelancerProfilesSyncService,
   ],
+  exports: [UpworkFreelancerProfilesService],
 })
 export class UpworkFreelancerProfilesModule {}

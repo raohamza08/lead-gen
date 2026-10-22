@@ -12,5 +12,6 @@ import { UpworkAgencyProfileService } from "./agency-profile.service";
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkAgencyProfileController],
   providers: [UpworkAgencyProfileService],
+  exports: [UpworkAgencyProfileService],
 })
 export class UpworkAgencyProfileModule {}

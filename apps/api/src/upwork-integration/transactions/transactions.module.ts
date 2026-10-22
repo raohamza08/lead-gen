@@ -14,5 +14,6 @@ import { UpworkTransactionsSyncService } from "./transactions-sync.service";
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkTransactionsController],
   providers: [UpworkTransactionsService, UpworkTransactionsSyncQueue, UpworkTransactionsSyncWorker, UpworkTransactionsSyncService],
+  exports: [UpworkTransactionsService],
 })
 export class UpworkTransactionsModule {}

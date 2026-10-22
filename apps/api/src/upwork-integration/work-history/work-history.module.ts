@@ -14,5 +14,6 @@ import { UpworkWorkHistorySyncService } from "./work-history-sync.service";
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkWorkHistoryController],
   providers: [UpworkWorkHistoryService, UpworkWorkHistorySyncQueue, UpworkWorkHistorySyncWorker, UpworkWorkHistorySyncService],
+  exports: [UpworkWorkHistoryService],
 })
 export class UpworkWorkHistoryModule {}

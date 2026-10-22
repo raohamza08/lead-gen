@@ -16,5 +16,6 @@ import { UpworkInvitesSyncService } from "./invites-sync.service";
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkInvitesController],
   providers: [UpworkInvitesService, UpworkInvitesSyncQueue, UpworkInvitesSyncWorker, UpworkInvitesSyncService],
+  exports: [UpworkInvitesService],
 })
 export class UpworkInvitesModule {}

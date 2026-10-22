@@ -15,5 +15,6 @@ import { UpworkProposalsSyncService } from "./proposals-sync.service";
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkProposalsController],
   providers: [UpworkBiddingService, UpworkProposalsSyncQueue, UpworkProposalsSyncWorker, UpworkProposalsSyncService],
+  exports: [UpworkBiddingService],
 })
 export class UpworkProposalsModule {}
