@@ -140,14 +140,8 @@ function DashboardCenterTabs() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        {/* text-page-title, not text-lg (Part: Dashboard Center readability
-            pass, 2026-10-21, explicit user request — "make the dashboards
-            like this [the new nav/header] as well") — this page renders its
-            own heading rather than going through DashboardCenterShell
-            (whose `compact` mode every individual tab uses instead), so it
-            had drifted from the shell redesign's bolder page-title scale. */}
-        <h1 className="text-page-title tracking-tight">Dashboard Center</h1>
-        <p className="mt-1 text-sm text-ink/55">Cross-module BI — every dashboard in one place, switched with a tab instead of a page reload.</p>
+        <h1 className="text-lg font-semibold tracking-tight">Dashboard Center</h1>
+        <p className="mt-0.5 text-xs text-ink/50">Cross-module BI — every dashboard in one place, switched with a tab instead of a page reload.</p>
       </div>
 
       <div className="overflow-x-auto pb-1">

@@ -42,7 +42,7 @@ export function Tabs({
             // catch (Tailwind bakes the whole `data-[state=active]:` prefix
             // into one literal class token, not a separate `text-white`
             // token that selector could match).
-            className="rounded-full px-3 py-1.5 text-sm font-medium text-ink/65 transition-colors duration-fast
+            className="rounded-full px-3 py-1.5 text-xs font-medium text-ink/65 transition-colors duration-fast
               hover:bg-ink/5 data-[state=active]:bg-primary data-[state=active]:text-[rgb(var(--accent-contrast-rgb))]"
           >
             {t.label}

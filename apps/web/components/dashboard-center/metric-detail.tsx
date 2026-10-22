@@ -62,15 +62,15 @@ export function MetricDetail({
   return (
     <div className="flex flex-col gap-3 text-sm">
       {definition && <p className="text-ink/70">{definition}</p>}
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
         {rows.map((r, i) => (
           <div key={i} className="contents">
-            <dt className="text-ink/55">{r.label}</dt>
+            <dt className="text-ink/50">{r.label}</dt>
             <dd className="tabular text-right font-medium text-ink">{r.value}</dd>
           </div>
         ))}
       </dl>
-      {footnote && <p className="text-xs text-ink/45">{footnote}</p>}
+      {footnote && <p className="text-[11px] text-ink/40">{footnote}</p>}
     </div>
   );
 }

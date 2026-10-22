@@ -458,16 +458,23 @@ select, option {
    last child needs the explicit overrides below. */
 .kpi-strip {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+  /* 135px -> 160px (Part: Dashboard Center readability pass round 2,
+     2026-10-22, explicit user request — "text is going outside the box...
+     properly aligned, proper spacing" — the Upwork tab's longer labels
+     ("Conversion Rate — Bidding", "Connect Cost — Bids") were wrapping to
+     2-3 lines while their row neighbors stayed single-line, producing a
+     jagged, uneven grid. A wider minimum column is the actual fix for
+     that -- shrinking the label text back down alone wasn't enough for
+     labels this long. */
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
 }
 .kpi-cell {
   background: var(--surface);
-  /* Roomier than the original 14px 18px (Part: Dashboard Center readability
-     pass, 2026-10-21, explicit user request — "make the dashboards like
-     this [the new nav/header] as well... fonts and everything") — matches
-     the more generous breathing room already used in the redesigned shell
-     rather than this page's original denser BI-template spacing. */
-  padding: 18px 20px;
+  /* Back to the original, denser padding (Part: Dashboard Center
+     readability pass round 2, 2026-10-22, explicit user request — "the
+     goal is to make it small, clean... not make it bigger"). The previous
+     pass's roomier 18px/20px padding went the wrong direction. */
+  padding: 14px 18px;
   font: inherit;
   /* Centered, not inherited (Part: premium dark theme pass v4, 2026-10-19,
      explicit user request — "center align these tabs", clarified to mean
@@ -501,27 +508,34 @@ select, option {
   background: rgb(var(--accent-rgb) / 0.1);
 }
 .kpi-label {
-  /* 12px -> 13px, plain --ink at reduced opacity instead of --ink-muted
-     (Part: Dashboard Center readability pass, 2026-10-21) — --ink-muted is a
-     fixed hex, so it can't adapt to a user's accent/theme choice the way the
-     rest of this redesign's text does; --ink/65 matches the muted-label
-     convention already used everywhere else in the app (e.g. kpi-label's
-     equivalent on every other card is `text-ink/55`-ish). */
-  font-size: 13px;
-  color: rgb(var(--ink-rgb) / 0.65);
+  /* Back to 12px/--ink-muted (Part: Dashboard Center readability pass round
+     2, 2026-10-22, explicit user request — "not make it bigger... make it
+     small, clean"). The wider .kpi-strip column above is what actually
+     fixes long labels wrapping badly -- this never needed to get bigger. */
+  font-size: 12px;
+  color: var(--ink-muted);
 }
 .kpi-value {
-  margin-top: 5px;
-  font-size: 29px;
-  font-weight: 700;
+  margin-top: 4px;
+  /* 28px/600, not the previous pass's 29px/700 (Part: Dashboard Center
+     readability pass round 2, 2026-10-22, explicit user request — "too
+     much bold, making the text look messy"). */
+  font-size: 28px;
+  font-weight: 600;
   line-height: 1.1;
   letter-spacing: -0.01em;
   white-space: nowrap;
 }
 .kpi-hint {
-  margin-top: 6px;
-  font-size: 13px;
-  color: rgb(var(--ink-rgb) / 0.65);
+  margin-top: 5px;
+  /* Smaller than the label, not the same size (Part: Dashboard Center
+     readability pass round 2, 2026-10-22) — a hint like "Based on recorded
+     purchases — $0.1500/connect" is supplementary, and at label-size it was
+     wrapping to 3 lines and ballooning that one cell far taller than its
+     row neighbors. */
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ink-muted);
 }
 
 .card-interactive {

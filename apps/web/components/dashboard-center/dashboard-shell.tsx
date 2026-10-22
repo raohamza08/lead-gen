@@ -61,13 +61,13 @@ export function DashboardCenterShell({
               role (profile/page.tsx already uses it), closer to the
               mockup's 24-26px title than the old 18px. */}
           <h1 className="text-page-title tracking-tight">{title}</h1>
-          {/* text-sm, not text-xs (Part: Dashboard Center readability pass,
-              2026-10-21, explicit user request — "make the dashboards like
-              this [the new nav/header] as well"). */}
-          {subtitle && <p className="mt-1 text-sm text-ink/55">{subtitle}</p>}
+          {/* Back to text-xs (Part: Dashboard Center readability pass round
+              2, 2026-10-22, explicit user request — "not make it bigger...
+              make it small, clean"). */}
+          {subtitle && <p className="mt-0.5 text-xs text-ink/50">{subtitle}</p>}
         </div>
       )}
-      {compact && subtitle && <p className="text-sm text-ink/55">{subtitle}</p>}
+      {compact && subtitle && <p className="text-xs text-ink/50">{subtitle}</p>}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <DashboardDateRangeBar value={dateRange} onChange={onDateRangeChange} />
@@ -106,12 +106,12 @@ export function NotBuiltYet({ dataSources }: { dataSources: string[] }) {
   return (
     <div className="card flex flex-col items-center gap-3 px-4 py-12 text-center">
       <p className="text-sm font-medium text-ink/70">This dashboard hasn&apos;t been built yet</p>
-      <p className="max-w-md text-sm text-ink/50">
+      <p className="max-w-md text-xs text-ink/45">
         No numbers are shown here rather than fabricated ones. When built, this page will compute its metrics from:
       </p>
       <ul className="flex max-w-md flex-wrap justify-center gap-1.5">
         {dataSources.map((s) => (
-          <li key={s} className="rounded-full bg-ink/5 px-2 py-1 text-xs text-ink/60">
+          <li key={s} className="rounded-full bg-ink/5 px-2 py-1 text-[11px] text-ink/60">
             {s}
           </li>
         ))}
