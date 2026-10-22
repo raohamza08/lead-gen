@@ -27,6 +27,19 @@ const PAGE_SIZE = 50;
  * tested this session). READ ONLY, see
  * UpworkGraphQLClient.getRoomListPage's own docblock — this never calls
  * any of Upwork's real send-message mutations.
+ *
+ * Full-replace, not append-only: after upserting every room seen this
+ * pass, deletes any `UpworkApiRoom` row for this org whose
+ * `upworkRoomId` wasn't in that set. Needed because of a real incident
+ * (2026-10-23): this connection was bound to the wrong Upwork tenant
+ * (the user's personal account, not the EurosHub agency) for a while,
+ * so ~242 personal-account rooms were already stored under this orgId.
+ * Pointing the connection at the real agency tenant returns a
+ * completely different room-ID set (confirmed live) — a plain upsert
+ * would leave both accounts' rooms mixed together permanently instead
+ * of showing only what's really in the now-correct account. This also
+ * self-heals the normal case of a room actually disappearing/getting
+ * archived on Upwork's side.
  */
 @Injectable()
 export class UpworkRoomsSyncService {
@@ -40,6 +53,7 @@ export class UpworkRoomsSyncService {
 
   async syncConnection(connectionRow: UpworkApiConnection): Promise<void> {
     try {
+      const seenRoomIds: string[] = [];
       await this.connection.withFreshTokenOnAuthFailure(connectionRow.orgId, async ({ accessToken, organizationId }) => {
         let after: string | null = null;
         let pages = 0;
@@ -65,9 +79,16 @@ export class UpworkRoomsSyncService {
               });
             }),
           );
+          seenRoomIds.push(...page.edges.map((e) => e.node.id));
           pages += 1;
           after = page.pageInfo?.endCursor ?? null;
         } while (after && pages < MAX_PAGES);
+      });
+      // Full-replace (see docblock above) — drop anything stored for this
+      // org that this pass didn't see, so a tenant switch or an
+      // archived-on-Upwork's-side room can't linger forever.
+      await this.prisma.upworkApiRoom.deleteMany({
+        where: { orgId: connectionRow.orgId, upworkRoomId: { notIn: seenRoomIds } },
       });
       await this.prisma.upworkApiConnection.update({
         where: { id: connectionRow.id },
