@@ -468,8 +468,13 @@ export const api = {
     request(`/users/${id}/access`, { method: "PATCH", body: JSON.stringify(body) }),
   getAuditLogs: (params: Record<string, string> = {}) =>
     request(`/admin/audit-logs?${new URLSearchParams(params).toString()}`),
-  updateProfile: (body: { displayName?: string; jobTitle?: string; phone?: string }) =>
-    request("/users/me/profile", { method: "PATCH", body: JSON.stringify(body) }),
+  updateProfile: (body: {
+    displayName?: string;
+    jobTitle?: string;
+    phone?: string;
+    upworkChatReminderEnabled?: boolean;
+    upworkChatReminderThresholdMinutes?: number;
+  }) => request("/users/me/profile", { method: "PATCH", body: JSON.stringify(body) }),
   changePassword: (body: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
     request("/users/me/password", { method: "POST", body: JSON.stringify(body) }),
   removeAvatar: () => request("/users/me/avatar", { method: "DELETE" }),

@@ -231,6 +231,7 @@ model Organization {
   upworkApiTransactions         UpworkApiTransaction[]
   upworkApiWorkHistoryEntries   UpworkApiWorkHistoryEntry[]
   upworkApiRooms                UpworkApiRoom[]
+  upworkRoomReminderStates      UpworkRoomReminderState[]
   upworkApiFreelancerProfiles   UpworkApiFreelancerProfile[]
   upworkApiSubmittedProposals   UpworkApiSubmittedProposal[]
   upworkRequests                UpworkRequest[]
@@ -382,8 +383,20 @@ model User {
   phone                       String?
   avatarStorageKey            String?      @map("avatar_storage_key")
   avatarMimeType              String?      @map("avatar_mime_type")
+  /// Pending-chat-response desktop reminders (Part: Rooms & Messages
+  /// desktop notifications, 2026-10-23, explicit user request). Separate
+  /// from NotificationPreference.desktopEnabled above (the general "do
+  /// desktop popups fire at all" switch) — this is the specific "do I
+  /// want THIS reminder" opt-in plus its own threshold, since not every
+  /// admin wants chat-pending pings even if they want desktop
+  /// notifications generally. Off by default, 15-minute default
+  /// threshold, matching "keep the default threshold at 15 minutes
+  /// unless the user changes it."
+  upworkChatReminderEnabled           Boolean @default(false) @map("upwork_chat_reminder_enabled")
+  upworkChatReminderThresholdMinutes  Int     @default(15) @map("upwork_chat_reminder_threshold_minutes")
   createdAt                   DateTime     @default(now()) @map("created_at")
 
+  upworkRoomReminderStates      UpworkRoomReminderState[]
   assignedLeads                 Lead[]                  @relation("AssignedUser")
   reviewNotes                   ReviewNote[]
   linkedinActivities            LinkedinActivity[]
@@ -2221,6 +2234,30 @@ model UpworkApiRoom {
 
   @@unique([orgId, upworkRoomId])
   @@map("upwork_api_rooms")
+}
+
+/// Tracks which room/message a given user has already gotten a desktop
+/// "pending chat response" reminder for (Part: Rooms & Messages desktop
+/// notifications, 2026-10-23). One row per (org, user, room) — NOT
+/// append-only — `lastNotifiedMessageAt` just advances each time; a new
+/// incoming message bumps `UpworkApiRoom.latestMessageAt` past the
+/// stored value here, which makes that room eligible for a fresh
+/// reminder again. Per-user (not per-org) because each user can set
+/// their own reminder threshold, so the same room can be "already
+/// notified" for one user while still pending for another who hasn't
+/// hit their own threshold yet.
+model UpworkRoomReminderState {
+  id                    String       @id @default(uuid())
+  orgId                 String       @map("org_id")
+  org                   Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  userId                String       @map("user_id")
+  user                  User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upworkRoomId          String       @map("upwork_room_id")
+  lastNotifiedMessageAt DateTime     @map("last_notified_message_at")
+  notifiedAt            DateTime     @default(now()) @map("notified_at")
+
+  @@unique([orgId, userId, upworkRoomId])
+  @@map("upwork_room_reminder_states")
 }
 
 /// Real freelancer profile aggregates (spec Module H: Freelancer Profiles,

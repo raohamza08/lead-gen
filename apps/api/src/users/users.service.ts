@@ -466,6 +466,8 @@ export class UsersService {
         jobTitle: true,
         phone: true,
         avatarStorageKey: true,
+        upworkChatReminderEnabled: true,
+        upworkChatReminderThresholdMinutes: true,
       },
     });
     if (!user) return null;
@@ -478,7 +480,16 @@ export class UsersService {
    * 2026-08-31) — distinct from `name` (set at account creation by an
    * admin) and from role/module access (admin-only, see updateAccess).
    */
-  async updateProfile(userId: string, patch: { displayName?: string; jobTitle?: string; phone?: string }) {
+  async updateProfile(
+    userId: string,
+    patch: {
+      displayName?: string;
+      jobTitle?: string;
+      phone?: string;
+      upworkChatReminderEnabled?: boolean;
+      upworkChatReminderThresholdMinutes?: number;
+    },
+  ) {
     await this.prisma.user.update({ where: { id: userId }, data: patch });
     return this.getSelf((await this.prisma.user.findUniqueOrThrow({ where: { id: userId } })).orgId, userId);
   }

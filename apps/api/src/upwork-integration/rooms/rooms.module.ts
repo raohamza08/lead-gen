@@ -6,6 +6,8 @@ import { UpworkRoomsService } from "./rooms.service";
 import { UpworkRoomsSyncQueue } from "./rooms-sync.queue";
 import { UpworkRoomsSyncWorker } from "./rooms-sync.worker";
 import { UpworkRoomsSyncService } from "./rooms-sync.service";
+import { UpworkRoomPendingReminderQueue } from "./upwork-room-pending-reminder.queue";
+import { UpworkRoomPendingReminderWorker } from "./upwork-room-pending-reminder.worker";
 
 /** Rooms & Messages domain (spec Module K) — LIVE, READ ONLY (Part:
  *  Upwork API integration — Rooms & Messages domain, 2026-10-23).
@@ -13,7 +15,14 @@ import { UpworkRoomsSyncService } from "./rooms-sync.service";
 @Module({
   imports: [UpworkSharedModule, UpworkConnectionModule],
   controllers: [UpworkRoomsController],
-  providers: [UpworkRoomsService, UpworkRoomsSyncQueue, UpworkRoomsSyncWorker, UpworkRoomsSyncService],
+  providers: [
+    UpworkRoomsService,
+    UpworkRoomsSyncQueue,
+    UpworkRoomsSyncWorker,
+    UpworkRoomsSyncService,
+    UpworkRoomPendingReminderQueue,
+    UpworkRoomPendingReminderWorker,
+  ],
   exports: [UpworkRoomsService],
 })
 export class UpworkRoomsModule {}

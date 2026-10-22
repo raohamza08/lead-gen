@@ -134,4 +134,11 @@ export const QUEUE_NAMES = {
   // Profiles domain, 2026-10-23) -- see
   // upwork-freelancer-profiles-sync.worker.ts.
   UPWORK_FREELANCER_PROFILES_SYNC: "upwork-freelancer-profiles-sync",
+  // Scans UpworkApiRoom for rooms with a real unread message older than
+  // each opted-in user's own threshold and sends a desktop-notification
+  // reminder (Part: Rooms & Messages desktop notifications, 2026-10-23,
+  // explicit user request) -- see upwork-room-pending-reminder.worker.ts.
+  // Pure DB read, no Upwork API calls, so this can run frequently without
+  // any rate-limit/budget concern (unlike the sync queues above).
+  UPWORK_ROOM_PENDING_REMINDER: "upwork-room-pending-reminder",
 } as const;
