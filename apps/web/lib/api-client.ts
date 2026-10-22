@@ -836,6 +836,23 @@ export const api = {
         feedbackToClientScore: number | null;
       }[];
     }>("/upwork-api/work-history"),
+  // Rooms & Messages (Part: Upwork API integration — Rooms & Messages
+  // domain, 2026-10-23) -- read-only, no send-message capability.
+  getUpworkApiRooms: () =>
+    request<{
+      totalCount: number;
+      totalUnread: number;
+      rooms: {
+        id: string;
+        roomName: string | null;
+        roomType: string | null;
+        numUsers: number | null;
+        numUnread: number | null;
+        latestMessage: string | null;
+        latestMessageAt: string | null;
+        latestMessageFrom: string | null;
+      }[];
+    }>("/upwork-api/rooms"),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.

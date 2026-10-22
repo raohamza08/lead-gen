@@ -112,6 +112,13 @@ export default function UpworkApiSettingsPage() {
   });
   const workHistory = workHistoryQuery.data;
 
+  const roomsQuery = useQuery({
+    queryKey: ["upwork-api-rooms"],
+    queryFn: () => api.getUpworkApiRooms(),
+    enabled: Boolean(status?.connected),
+  });
+  const rooms = roomsQuery.data;
+
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -523,6 +530,35 @@ export default function UpworkApiSettingsPage() {
                   />
                 </div>
               )}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {status?.connected && (
+        <SectionCard title="Rooms &amp; Messages" subtitle="Read-only conversation listing, synced every 30 minutes. No send-message capability exists in this app.">
+          {roomsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
+          {roomsQuery.error && <p className="text-sm text-bad">{(roomsQuery.error as Error).message}</p>}
+          {rooms && rooms.totalCount === 0 && (
+            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting, then every 30 minutes.</p>
+          )}
+          {rooms && rooms.totalCount > 0 && (
+            <div className="flex flex-col gap-4">
+              <KpiStrip>
+                <StatTile label="Rooms" value={rooms.totalCount} />
+                <StatTile label="Unread messages" value={rooms.totalUnread} />
+              </KpiStrip>
+              <DataTable
+                rowKey={(r) => r.id}
+                columns={[
+                  { key: "room", header: "Room", render: (r) => r.roomName ?? "—" },
+                  { key: "type", header: "Type", render: (r) => r.roomType ?? "—" },
+                  { key: "latest", header: "Latest message", render: (r) => <span className="line-clamp-1 max-w-xs">{r.latestMessage ?? "—"}</span> },
+                  { key: "from", header: "From", render: (r) => r.latestMessageFrom ?? "—" },
+                  { key: "unread", header: "Unread", render: (r) => r.numUnread ?? 0, numeric: true },
+                ]}
+                rows={rooms.rooms.slice(0, 50)}
+              />
             </div>
           )}
         </SectionCard>

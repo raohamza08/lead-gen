@@ -606,7 +606,7 @@ export class UpworkGraphQLClient {
    *  Upwork has a real send-message mutation surface
    *  (createRoomStoryV2/etc.) but this method and this app never call
    *  it, per the spec's explicit read-only requirement for this module. */
-  async getRoomList(accessToken: string, organizationId: string | null, first = 50) {
+  async getRoomListPage(accessToken: string, organizationId: string | null, after: string | null, first = 50) {
     const data = await this.request<{
       roomList: {
         totalCount: number | null;
@@ -621,6 +621,7 @@ export class UpworkGraphQLClient {
             latestStory: { message: string | null; createdDateTime: string | null; user: { id: string; name: string | null } | null } | null;
           };
         }[];
+        pageInfo: { endCursor: string | null; hasNextPage: boolean | null } | null;
       };
     }>(
       accessToken,
@@ -634,9 +635,10 @@ export class UpworkGraphQLClient {
               latestStory { message createdDateTime user { id name } }
             }
           }
+          pageInfo { endCursor hasNextPage }
         }
       }`,
-      { pagination: { first } },
+      { pagination: { first, ...(after ? { after } : {}) } },
     );
     return data.roomList;
   }
