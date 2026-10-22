@@ -85,9 +85,30 @@ export class UpworkApiConnectionService {
       const { clientId, clientSecret } = this.credentials();
       const token = await this.client.exchangeCodeForToken(clientId, clientSecret, code, this.callbackRedirectUri());
       const tokenExpiresAt = new Date(Date.now() + token.expiresInSec * 1000);
+
+      // Real incident (2026-10-23): a reconnect (token expired, or a
+      // deliberate disconnect+reconnect) silently wiped out the manual
+      // organizationId override from setOrganizationId below — every
+      // reconnect re-ran getDefaultOrganization, which ALWAYS resolves to
+      // the authenticating user's personal account (companySelector,
+      // the only way to auto-discover an agency org, is permanently
+      // scope-blocked — see getOrganizationName's own docblock), and the
+      // `update` branch below used to overwrite organizationId/
+      // organizationName with that every time regardless of what was
+      // already stored. Confirmed live: every Upwork sync (invites, rooms,
+      // transactions, ...) silently started reading the wrong account
+      // again after a reconnect, with no error anywhere — this is why a
+      // previously-fixed "wrong account" symptom can reappear later
+      // without anyone touching Settings. Fix: only set organizationId/
+      // organizationName from the OAuth default on a genuinely NEW
+      // connection (create branch) or when nothing is stored yet; an
+      // existing value (default or manually corrected) survives a
+      // reconnect untouched. The explicit setOrganizationId override
+      // below remains the only way to deliberately change it.
+      const existing = await this.prisma.upworkApiConnection.findUnique({ where: { orgId: pending.orgId }, select: { organizationId: true } });
       // Best-effort — see UpworkGraphQLClient's own docblock for why a
       // failure here never blocks the connection itself.
-      const org = await this.graphql.getDefaultOrganization(token.accessToken);
+      const org = existing?.organizationId ? null : await this.graphql.getDefaultOrganization(token.accessToken);
 
       await this.prisma.upworkApiConnection.upsert({
         where: { orgId: pending.orgId },
@@ -109,8 +130,7 @@ export class UpworkApiConnectionService {
           refreshTokenEnc: this.encryption.encrypt(token.refreshToken),
           tokenExpiresAt,
           scope: token.scope,
-          organizationId: org?.organizationId,
-          organizationName: org?.title,
+          ...(existing?.organizationId ? {} : { organizationId: org?.organizationId, organizationName: org?.title }),
           status: "CONNECTED",
           connectedByUserId: pending.userId,
           connectedAt: new Date(),
