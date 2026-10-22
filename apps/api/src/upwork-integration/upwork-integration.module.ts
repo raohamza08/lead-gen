@@ -18,6 +18,7 @@ import { UpworkOntologyModule } from "./ontology/ontology.module";
 import { UpworkPublicUserModule } from "./public-user/public-user.module";
 import { UpworkMarketplaceJobsModule } from "./marketplace-jobs/marketplace-jobs.module";
 import { UpworkFreelancerProfilesModule } from "./freelancer-profiles/freelancer-profiles.module";
+import { UpworkActivityModule } from "./activity/activity.module";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -100,6 +101,7 @@ import { UpworkFreelancerProfilesModule } from "./freelancer-profiles/freelancer
     UpworkPublicUserModule,
     UpworkMarketplaceJobsModule,
     UpworkFreelancerProfilesModule,
+    UpworkActivityModule,
   ],
 })
 export class UpworkIntegrationModule {}
