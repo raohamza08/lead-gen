@@ -63,7 +63,7 @@ export default function UpworkAgencyOverviewPage() {
       {overview.agencyFlag && (
         <SectionCard title="Agency identity">
           <p className="text-sm text-ink/70">
-            Upwork's own classification: {Object.entries(overview.agencyFlag).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}
+            Upwork&apos;s own classification: {Object.entries(overview.agencyFlag).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}
           </p>
           {overview.lastSyncAt && <p className="mt-1 text-xs text-ink/50">Last sync: {new Date(overview.lastSyncAt).toLocaleString()}</p>}
         </SectionCard>

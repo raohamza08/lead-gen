@@ -249,7 +249,7 @@ export default function UpworkApiSettingsPage() {
             </KpiStrip>
             {overview.agencyFlag && (
               <div className="text-xs text-ink/50">
-                Upwork's own classification: {Object.entries(overview.agencyFlag).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}
+                Upwork&apos;s own classification: {Object.entries(overview.agencyFlag).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}
               </div>
             )}
             <div>

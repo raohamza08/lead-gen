@@ -29,7 +29,7 @@ export default function MarketplaceJobsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Marketplace Jobs</h1>
-      <p className="text-xs text-ink/50">Live public marketplace data — real third-party job postings, not this agency's own records. Not synced or stored.</p>
+      <p className="text-xs text-ink/50">Live public marketplace data — real third-party job postings, not this agency&apos;s own records. Not synced or stored.</p>
 
       <SectionCard title="Search">
         <form

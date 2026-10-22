@@ -53,7 +53,7 @@ export default function BiddingPage() {
 
       <SectionCard title="Offers" subtitle="Not currently available.">
         <p className="text-xs text-ink/50">
-          Blocked by a reproducible Upwork backend error (offersByAttributes times out) — confirmed real schema, not a missing permission. Re-checked automatically; will start working if Upwork's issue clears.
+          Blocked by a reproducible Upwork backend error (offersByAttributes times out) — confirmed real schema, not a missing permission. Re-checked automatically; will start working if Upwork&apos;s issue clears.
         </p>
       </SectionCard>
     </div>

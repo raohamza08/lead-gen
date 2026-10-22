@@ -27,7 +27,7 @@ export default function OntologyPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Ontology & Reference Data</h1>
-      <p className="text-xs text-ink/50">Upwork's own skill/category taxonomy — a reference library, not agency-specific data.</p>
+      <p className="text-xs text-ink/50">Upwork&apos;s own skill/category taxonomy — a reference library, not agency-specific data.</p>
 
       <SectionCard title="Categories">
         {ontologyQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}

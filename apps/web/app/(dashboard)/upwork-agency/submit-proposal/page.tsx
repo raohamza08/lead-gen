@@ -72,11 +72,11 @@ export default function SubmitProposalPage() {
       <SectionCard title="Proposal details">
         <div className="flex flex-col gap-3 max-w-xl">
           <label className="text-xs font-medium text-ink/70">
-            Selected Contractor ID (from the job's contractor-selection data)
+            Selected Contractor ID (from the job&apos;s contractor-selection data)
             <input className="mt-1 h-9 w-full rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm" value={form.selectedContractorId} onChange={(e) => setForm({ ...form, selectedContractorId: e.target.value })} />
           </label>
           <label className="text-xs font-medium text-ink/70">
-            Freelancer's oDeskUserID
+            Freelancer&apos;s oDeskUserID
             <input className="mt-1 h-9 w-full rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm" value={form.oDeskUserID} onChange={(e) => setForm({ ...form, oDeskUserID: e.target.value })} />
           </label>
           <label className="text-xs font-medium text-ink/70">
