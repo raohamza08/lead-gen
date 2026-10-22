@@ -643,6 +643,53 @@ export class UpworkGraphQLClient {
     return data.roomList;
   }
 
+  /** Real skill ontology (spec Module F: Ontology & Reference Data) —
+   *  confirmed live. `limit` is required (confirmed via introspection —
+   *  unlike countries/languages/regions, this one does NOT return
+   *  everything unconditionally). Field is `preferredLabel`, not
+   *  `prefLabel` (confirmed live — an earlier guess using `prefLabel`
+   *  failed validation). */
+  async getOntologySkills(accessToken: string, organizationId: string | null, limit: number, offset = 0) {
+    const data = await this.request<{ ontologySkills: { id: string; ontologyId: string; preferredLabel: string; definition: string | null }[] }>(
+      accessToken,
+      organizationId,
+      `query($limit: Int!, $offset: Int) { ontologySkills(limit: $limit, offset: $offset) { id ontologyId preferredLabel definition } }`,
+      { limit, offset },
+    );
+    return data.ontologySkills;
+  }
+
+  /** Real occupation-category reference list (spec Module F) — confirmed
+   *  via introspection to take no args (same "always returns everything"
+   *  shape as countries/languages/regions). */
+  async getOntologyCategories(accessToken: string, organizationId: string | null) {
+    const data = await this.request<{ ontologyCategories: { id: string; preferredLabel: string }[] }>(
+      accessToken,
+      organizationId,
+      `query { ontologyCategories { id preferredLabel } }`,
+    );
+    return data.ontologyCategories;
+  }
+
+  /** Real public user lookup (spec Module O) — confirmed live schema:
+   *  `userDetails(id!)` returns `PiiUser` (id, nid, rid, name, firstName,
+   *  lastName, photoUrl, publicUrl, email, location). Despite the "Pii"
+   *  type name, this is reached via the publicly-scoped userDetails
+   *  query per the granted scope, not a private-data bypass — still,
+   *  `email` is deliberately NOT requested here to stay conservative on
+   *  what this app stores about people who aren't the connected account
+   *  itself. Requires a specific known ID — no bulk/directory listing
+   *  exists in the schema. */
+  async getUserDetails(accessToken: string, organizationId: string | null, id: string) {
+    const data = await this.request<{ userDetails: { id: string; name: string | null; firstName: string | null; lastName: string | null; photoUrl: string | null; publicUrl: string | null } }>(
+      accessToken,
+      organizationId,
+      `query($id: ID!) { userDetails(id: $id) { id name firstName lastName photoUrl publicUrl } }`,
+      { id },
+    );
+    return data.userDetails;
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(
