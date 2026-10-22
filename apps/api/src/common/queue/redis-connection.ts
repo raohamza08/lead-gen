@@ -119,4 +119,9 @@ export const QUEUE_NAMES = {
   // UpworkApiConnection (Part: Upwork API integration — Transactions
   // domain, 2026-10-23) -- see upwork-transactions-sync.worker.ts.
   UPWORK_TRANSACTIONS_SYNC: "upwork-transactions-sync",
+  // Periodic work-history pull for every known freelancer (sourced from
+  // UpworkApiProposal/UpworkApiInvite freelancerUserId) per CONNECTED
+  // UpworkApiConnection (Part: Upwork API integration — Work History
+  // domain, 2026-10-23) -- see upwork-work-history-sync.worker.ts.
+  UPWORK_WORK_HISTORY_SYNC: "upwork-work-history-sync",
 } as const;

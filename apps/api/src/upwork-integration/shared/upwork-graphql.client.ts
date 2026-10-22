@@ -540,6 +540,67 @@ export class UpworkGraphQLClient {
     return data.offersByAttributes.offers ?? [];
   }
 
+  /** Real timesheet listing (spec Module E) — schema confirmed, see
+   *  UpworkTimesheetsService's own docblock for a confirmed live 403:
+   *  this is blocked by a team-level Upwork permission on the connected
+   *  user, not an OAuth scope. Date args must be "YYYY-MM-DD" (confirmed
+   *  live — full ISO-8601 timestamps fail with a parse error). */
+  async getContractTimeReport(accessToken: string, organizationId: string | null, orgIdFilter: string, rangeStart: string, rangeEnd: string) {
+    const data = await this.request<{
+      contractTimeReport: {
+        totalCount: number | null;
+        edges: { node: { dateWorkedOn: string; freelancer: { id: string; name: string | null } | null; task: string | null; totalHoursWorked: number | null; totalCharges: number | null } }[];
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($filter: TimeReportFilter!, $pagination: Pagination) {
+        contractTimeReport(filter: $filter, pagination: $pagination) {
+          totalCount
+          edges { node { dateWorkedOn freelancer { id name } task totalHoursWorked totalCharges } }
+        }
+      }`,
+      { filter: { organizationId_eq: orgIdFilter, timeReportDate_bt: { rangeStart, rangeEnd } }, pagination: { first: 100 } },
+    );
+    return data.contractTimeReport;
+  }
+
+  /** Real per-contract work history for ONE freelancer (spec Module T) —
+   *  confirmed live, real data (32 real contracts for a test freelancer:
+   *  titles, dates, status, totalCharge, hours, feedback scores).
+   *  `talentWorkHistory` requires a specific `personId` — there is no
+   *  bulk/org-wide listing, confirmed via introspection (no filter-less
+   *  "all freelancers" mode exists). Field is `workHistoryList`, not
+   *  `edges` (confirmed live — this type is NOT a standard Relay
+   *  connection despite having `totalCount`). */
+  async getTalentWorkHistory(accessToken: string, organizationId: string | null, personId: string) {
+    const data = await this.request<{
+      talentWorkHistory: {
+        totalCount: number | null;
+        workHistoryList: {
+          contract: { id: string; startDate: string | null; endDate: string | null; status: string | null; title: string | null } | null;
+          contractAggregate: { totalCharge: string | null; hours: string | null } | null;
+          feedback: { feedbackToFreelancer: { score: number | null } | null; feedbackToClient: { score: number | null } | null } | null;
+        }[] | null;
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($filter: TalentWorkHistoryFilterInput) {
+        talentWorkHistory(filter: $filter) {
+          totalCount
+          workHistoryList {
+            contract { id startDate endDate status title }
+            contractAggregate { totalCharge hours }
+            feedback { feedbackToFreelancer { score } feedbackToClient { score } }
+          }
+        }
+      }`,
+      { filter: { personId } },
+    );
+    return data.talentWorkHistory.workHistoryList ?? [];
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(

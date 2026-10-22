@@ -25,6 +25,7 @@ interface ConnectionStatus {
 // upwork-integration.module.ts's docblock).
 const STUB_MODULES = [
   { label: "Offers", hint: "Blocked by a reproducible Upwork backend error (offersByAttributes times out) — confirmed real schema, not a missing permission. Re-checked automatically on every load; will start working if Upwork's issue clears." },
+  { label: "Timesheets", hint: "Blocked by a team-level Upwork permission on the connected account (view hourly/charges data) — must be granted inside Upwork's own team management, not this app. Confirmed real schema otherwise, re-checked automatically." },
   { label: "Job discovery", hint: "Surface relevant job postings as they're posted." },
   { label: "Reporting", hint: "Weekly / monthly / yearly financial & performance reports." },
   { label: "Client communication monitoring", hint: "Internal concern-alerting only — no auto-replies." },
@@ -103,6 +104,13 @@ export default function UpworkApiSettingsPage() {
     enabled: Boolean(status?.connected),
   });
   const transactions = transactionsQuery.data;
+
+  const workHistoryQuery = useQuery({
+    queryKey: ["upwork-api-work-history"],
+    queryFn: () => api.getUpworkApiWorkHistory(),
+    enabled: Boolean(status?.connected),
+  });
+  const workHistory = workHistoryQuery.data;
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -478,6 +486,40 @@ export default function UpworkApiSettingsPage() {
                       { key: "amount", header: "Amount", render: (t) => t.amountDisplay ? `${t.amountDisplay} ${t.amountCurrency ?? ""}` : "—", numeric: true },
                     ]}
                     rows={transactions.recent}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {status?.connected && (
+        <SectionCard title="Work History" subtitle="Per-contract work history for freelancers with a verified proposal/invite relationship to this agency — never a blanket personal pull.">
+          {workHistoryQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
+          {workHistoryQuery.error && <p className="text-sm text-bad">{(workHistoryQuery.error as Error).message}</p>}
+          {workHistory && workHistory.totalCount === 0 && (
+            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting, then every 6 hours.</p>
+          )}
+          {workHistory && workHistory.totalCount > 0 && (
+            <div className="flex flex-col gap-4">
+              <KpiStrip>
+                <StatTile label="Contracts" value={workHistory.totalCount} />
+                <StatTile label="Freelancers covered" value={workHistory.freelancerCount} />
+              </KpiStrip>
+              {workHistory.recent.length > 0 && (
+                <div>
+                  <div className="mb-2 text-sm font-medium text-ink">Recent contracts</div>
+                  <DataTable
+                    rowKey={(e) => e.id}
+                    columns={[
+                      { key: "freelancer", header: "Freelancer", render: (e) => e.freelancerName ?? "—" },
+                      { key: "title", header: "Contract", render: (e) => <span className="line-clamp-1 max-w-xs">{e.title ?? "—"}</span> },
+                      { key: "status", header: "Status", render: (e) => e.status ?? "—" },
+                      { key: "charge", header: "Charged", render: (e) => e.totalCharge ?? "—", numeric: true },
+                      { key: "feedback", header: "Feedback", render: (e) => (e.feedbackToFreelancerScore != null ? `${e.feedbackToFreelancerScore}★` : "—") },
+                    ]}
+                    rows={workHistory.recent}
                   />
                 </div>
               )}

@@ -816,6 +816,26 @@ export const api = {
         paymentStatus: string | null;
       }[];
     }>("/upwork-api/transactions"),
+  // Work History (Part: Upwork API integration — Work History domain,
+  // 2026-10-23) -- scoped to freelancers with a verified agency
+  // relationship (proposal/invite history), never a blanket personal pull.
+  getUpworkApiWorkHistory: () =>
+    request<{
+      totalCount: number;
+      freelancerCount: number;
+      recent: {
+        id: string;
+        freelancerName: string | null;
+        title: string | null;
+        status: string | null;
+        startDate: string | null;
+        endDate: string | null;
+        totalCharge: string | null;
+        totalHours: string | null;
+        feedbackToFreelancerScore: number | null;
+        feedbackToClientScore: number | null;
+      }[];
+    }>("/upwork-api/work-history"),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.

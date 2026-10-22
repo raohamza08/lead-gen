@@ -229,6 +229,7 @@ model Organization {
   upworkApiProposals            UpworkApiProposal[]
   upworkApiInvites              UpworkApiInvite[]
   upworkApiTransactions         UpworkApiTransaction[]
+  upworkApiWorkHistoryEntries   UpworkApiWorkHistoryEntry[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -2121,6 +2122,44 @@ model UpworkApiTransaction {
   @@unique([orgId, upworkRecordId])
   @@index([orgId, occurredAt])
   @@map("upwork_api_transactions")
+}
+
+/// Real per-contract work history for freelancers this agency has WORKED
+/// WITH (spec Module T: Work History, Part: Upwork API integration —
+/// Work History domain, 2026-10-23) — from the real `talentWorkHistory`
+/// GraphQL query, confirmed live against real data (32 real contracts for
+/// one freelancer: titles, dates, status, totalCharge, hours, feedback
+/// scores). `talentWorkHistory` requires a specific `personId` -- there is
+/// no bulk/org-wide listing -- so this is synced per KNOWN freelancer,
+/// sourced from freelancerUserId already present on our own
+/// UpworkApiProposal/UpworkApiInvite rows. This is exactly the spec's own
+/// "verified agency relationship" scoping requirement: only freelancers we
+/// have real, verified proposal/invite history with get their work
+/// history synced, never a blanket personal-work-history pull.
+///
+/// Retention: permanent, same reasoning as every other UpworkApi* table.
+/// Upwork's own contract `id` is the real dedupe key (globally unique).
+model UpworkApiWorkHistoryEntry {
+  id                       String       @id @default(uuid())
+  orgId                    String       @map("org_id")
+  org                      Organization @relation(fields: [orgId], references: [id])
+  freelancerUserId         String       @map("freelancer_user_id")
+  freelancerName           String?      @map("freelancer_name")
+  upworkContractId         String       @map("upwork_contract_id")
+  title                    String?
+  status                   String?
+  startDate                DateTime?    @map("start_date")
+  endDate                  DateTime?    @map("end_date")
+  totalCharge              String?      @map("total_charge")
+  totalHours               String?      @map("total_hours")
+  feedbackToFreelancerScore Float?      @map("feedback_to_freelancer_score")
+  feedbackToClientScore     Float?      @map("feedback_to_client_score")
+  createdAt                DateTime     @default(now()) @map("created_at")
+  updatedAt                DateTime     @updatedAt @map("updated_at")
+
+  @@unique([orgId, upworkContractId])
+  @@index([orgId, freelancerUserId])
+  @@map("upwork_api_work_history_entries")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every
