@@ -96,6 +96,13 @@ export default function UpworkApiSettingsPage() {
   });
   const agencyProfile = agencyProfileQuery.data;
 
+  const transactionsQuery = useQuery({
+    queryKey: ["upwork-api-transactions"],
+    queryFn: () => api.getUpworkApiTransactions(),
+    enabled: Boolean(status?.connected),
+  });
+  const transactions = transactionsQuery.data;
+
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -435,6 +442,42 @@ export default function UpworkApiSettingsPage() {
               ) : (
                 <div className="rounded-lg border border-[var(--line)] bg-ink/[0.03] px-3 py-2 text-xs text-ink/55">
                   Company and staff details are unavailable: {agencyProfile.companyDetailsLimitation}
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+      )}
+
+      {status?.connected && (
+        <SectionCard title="Transactions &amp; Financial History" subtitle="Real financial ledger synced every 6 hours from Upwork's real API — fees, invoices, withdrawals, refunds.">
+          {transactionsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
+          {transactionsQuery.error && <p className="text-sm text-bad">{(transactionsQuery.error as Error).message}</p>}
+          {transactions && transactions.totalCount === 0 && (
+            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting, then every 6 hours.</p>
+          )}
+          {transactions && transactions.totalCount > 0 && (
+            <div className="flex flex-col gap-4">
+              <KpiStrip>
+                <StatTile label="Total transactions" value={transactions.totalCount} />
+                {transactions.countBySubtype.slice(0, 3).map((s) => (
+                  <StatTile key={`${s.subtype}-${s.currency}`} label={s.subtype ?? "Other"} value={s.count} />
+                ))}
+              </KpiStrip>
+
+              {transactions.recent.length > 0 && (
+                <div>
+                  <div className="mb-2 text-sm font-medium text-ink">Recent transactions</div>
+                  <DataTable
+                    rowKey={(t) => t.id}
+                    columns={[
+                      { key: "date", header: "Date", render: (t) => (t.occurredAt ? new Date(t.occurredAt).toLocaleDateString() : "—") },
+                      { key: "subtype", header: "Type", render: (t) => t.accountingSubtype ?? t.type ?? "—" },
+                      { key: "description", header: "Description", render: (t) => <span className="line-clamp-1 max-w-xs">{t.description ?? "—"}</span> },
+                      { key: "amount", header: "Amount", render: (t) => t.amountDisplay ? `${t.amountDisplay} ${t.amountCurrency ?? ""}` : "—", numeric: true },
+                    ]}
+                    rows={transactions.recent}
+                  />
                 </div>
               )}
             </div>

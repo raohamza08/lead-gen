@@ -799,6 +799,23 @@ export const api = {
       regions: { id: string; name: string; parentRegion: { id: string; name: string } | null }[];
       cachedAt: string;
     }>("/upwork-api/common-entities"),
+  // Transactions & Financial History (Part: Upwork API integration —
+  // Transactions domain, 2026-10-23).
+  getUpworkApiTransactions: () =>
+    request<{
+      totalCount: number;
+      countBySubtype: { subtype: string | null; currency: string | null; count: number }[];
+      recent: {
+        id: string;
+        occurredAt: string | null;
+        type: string | null;
+        accountingSubtype: string | null;
+        description: string | null;
+        amountDisplay: string | null;
+        amountCurrency: string | null;
+        paymentStatus: string | null;
+      }[];
+    }>("/upwork-api/transactions"),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.
