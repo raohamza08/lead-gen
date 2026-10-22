@@ -836,6 +836,72 @@ export const api = {
         feedbackToClientScore: number | null;
       }[];
     }>("/upwork-api/work-history"),
+  // Freelancer Profiles (spec Module H).
+  getUpworkApiFreelancerProfiles: () =>
+    request<{
+      totalCount: number;
+      profiles: {
+        id: string;
+        freelancerUserId: string;
+        freelancerName: string | null;
+        topRatedStatus: string | null;
+        totalEarnings: number | null;
+        totalJobs: number | null;
+        totalFeedback: number | null;
+        lastWorkedOn: string | null;
+        skills: string[];
+      }[];
+    }>("/upwork-api/freelancer-profiles"),
+  // Marketplace Job Postings + Job Details (spec Modules G + S).
+  getUpworkApiMarketplaceJobs: (q?: string) =>
+    request<{
+      totalCount: number | null;
+      dataScope: string;
+      jobs: {
+        id: string;
+        title: string;
+        description: string;
+        category: string | null;
+        subcategory: string | null;
+        experienceLevel: string | null;
+        createdDateTime: string;
+        publishedDateTime: string;
+        totalApplicants: number;
+        budgetDisplay: string | null;
+      }[];
+    }>(`/upwork-api/marketplace-jobs${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  // Ontology & Reference Data (spec Module F).
+  getUpworkApiOntology: () =>
+    request<{
+      categories: { id: string; preferredLabel: string }[];
+      skills: { id: string; ontologyId: string; preferredLabel: string; definition: string | null }[];
+      cachedAt: string;
+    }>("/upwork-api/ontology"),
+  // Contract Proposals (spec Module L), read-only.
+  getUpworkApiContractProposals: (page = 1) =>
+    request<{
+      totalCount: number;
+      page: number;
+      contracts: { id: string; referenceContractRid: string | null; createdDate: string | null; jobTitle: string | null; clientName: string | null }[];
+    }>(`/upwork-api/contract-proposals?page=${page}`),
+  // Submit Proposals to Jobs (spec Module Q) -- real mutation, real
+  // Connects spend. Requires confirmed: true after explicit user review.
+  submitUpworkApiProposal: (input: {
+    confirmed: boolean;
+    selectedContractorId: string;
+    oDeskUserID: string;
+    jobReference: string;
+    chargedAmount: number;
+    coverLetter: string;
+    occupationId?: string;
+    estimatedDuration?: number;
+    questions?: { question: string; answer: string }[];
+    attachments?: string[];
+  }) =>
+    request<{ newProposalId: string | null; status: string | null; error: string | null }>("/upwork-api/submit-proposal", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
   // Agency Overview (Part: Upwork API integration — Agency Overview
   // domain, 2026-10-23) -- pure composition of already-verified domain
   // services, adds no new Upwork API calls of its own.

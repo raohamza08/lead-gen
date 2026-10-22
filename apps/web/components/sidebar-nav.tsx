@@ -486,10 +486,30 @@ const WORKSPACES: Workspace[] = [
           { href: "/upwork/job-feed", label: "Job Feed", moduleFlag: "upworkProposalWritingAccess", icon: RssIcon },
         ],
       },
-      // Standard module-flag gate (Part: Upwork API integration,
-      // 2026-10-12) -- folded into this workspace instead of a standalone
-      // top-level link (Part: EBOS-inspired shell redesign, 2026-10-21).
-      { type: "link", href: "/settings/upwork-api", label: "Upwork API", icon: PlugIcon, moduleFlag: "upworkApiAccess" },
+      // Dedicated per-domain routes (Part: Upwork API integration --
+      // enterprise module build-out, 2026-10-23) -- replaces the single
+      // "Upwork API" settings-page link with one route per real domain
+      // module, each gated by the same upworkApiAccess flag the backend
+      // already enforces per-route via ModuleAccessGuard.
+      {
+        type: "group",
+        label: "Upwork Agency",
+        links: [
+          { href: "/upwork-agency", label: "Overview", moduleFlag: "upworkApiAccess", icon: GridIcon },
+          { href: "/upwork-agency/organization", label: "Organization", moduleFlag: "upworkApiAccess", icon: PlugIcon },
+          { href: "/upwork-agency/transactions", label: "Transactions", moduleFlag: "upworkApiAccess", icon: ChartIcon },
+          { href: "/upwork-agency/bidding", label: "Bidding & Proposals", moduleFlag: "upworkApiAccess", icon: FileIcon },
+          { href: "/upwork-agency/invites", label: "Invites", moduleFlag: "upworkApiAccess", icon: SendIcon },
+          { href: "/upwork-agency/contract-proposals", label: "Contract Proposals", moduleFlag: "upworkApiAccess", icon: ClipboardIcon },
+          { href: "/upwork-agency/submit-proposal", label: "Submit Proposal", moduleFlag: "upworkApiAccess", icon: StarIcon },
+          { href: "/upwork-agency/work-history", label: "Work History", moduleFlag: "upworkApiAccess", icon: ClockIcon },
+          { href: "/upwork-agency/freelancers", label: "Freelancers", moduleFlag: "upworkApiAccess", icon: UserIcon },
+          { href: "/upwork-agency/rooms", label: "Rooms & Messages", moduleFlag: "upworkApiAccess", icon: ChatIcon },
+          { href: "/upwork-agency/jobs", label: "Marketplace Jobs", moduleFlag: "upworkApiAccess", icon: RssIcon },
+          { href: "/upwork-agency/ontology", label: "Ontology", moduleFlag: "upworkApiAccess", icon: TagIcon },
+          { href: "/settings/upwork-api", label: "Connection Settings", moduleFlag: "upworkApiAccess", icon: GearIcon },
+        ],
+      },
     ],
   },
   {
