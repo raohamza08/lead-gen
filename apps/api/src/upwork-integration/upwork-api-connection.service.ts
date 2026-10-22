@@ -136,8 +136,19 @@ export class UpworkApiConnectionService {
   async getStatus(orgId: string) {
     const connection = await this.prisma.upworkApiConnection.findUnique({ where: { orgId } });
     if (!connection) return { connected: false as const };
+    // Real bug, not a frontend issue (found 2026-10-22 investigating "the
+    // disconnect button isn't working"): `connected` used to be hardcoded
+    // `true` here whenever a connection ROW existed at all, regardless of
+    // its `status`. disconnect() deliberately keeps the row (for history/
+    // audit, doesn't delete it) and only flips `status` to DISCONNECTED --
+    // so this endpoint kept reporting `connected: true` forever after the
+    // very first connect, and the Settings page's button never switched
+    // back to "Connect Upwork account" no matter how many times someone
+    // disconnected. Confirmed live: disconnect() itself worked correctly
+    // every time (status really did flip to DISCONNECTED in the database,
+    // audit log recorded each call) -- only this read was wrong.
     return {
-      connected: true as const,
+      connected: connection.status === "CONNECTED",
       status: connection.status,
       scope: connection.scope,
       organizationName: connection.organizationName,
