@@ -206,7 +206,7 @@ function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: Freelance
         </div>
       )}
       {!match && profiles.length > 0 && (
-        <p className="text-xs text-ink/45">No freelancer profile's niche matches this job closely — review manually before applying.</p>
+        <p className="text-xs text-ink/45">No freelancer profile&apos;s niche matches this job closely — review manually before applying.</p>
       )}
 
       <div className="flex flex-wrap items-center gap-1.5">
