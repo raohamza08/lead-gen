@@ -12,6 +12,9 @@ import { UpworkConnectsUsageService } from "./services/connects-usage.service";
 import { UpworkJobDiscoveryService } from "./services/job-discovery.service";
 import { UpworkReportingService } from "./services/reporting.service";
 import { UpworkChatMonitoringService } from "./services/chat-monitoring.service";
+import { UpworkConnectsSyncQueue } from "./upwork-connects-sync.queue";
+import { UpworkConnectsSyncWorker } from "./upwork-connects-sync.worker";
+import { UpworkConnectsSyncService } from "./upwork-connects-sync.service";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -30,16 +33,22 @@ import { UpworkChatMonitoringService } from "./services/chat-monitoring.service"
  *      (Briefly hidden from everyone but one hardcoded email instead; that
  *      was replaced with the standard flag per explicit user request —
  *      "make the module an access option... rather than hardcoding it".)
- *   2. Every per-domain service under ./services/ (agency profile, invites,
- *      bidding, Connects usage, job discovery, reporting, chat monitoring)
- *      is a deliberate stub that throws ServiceUnavailableException, not a
- *      best-guess implementation against Upwork's real (GraphQL) data API —
- *      we don't have credentials to test against yet, and shipping
- *      unverified logic here was explicitly ruled out ("i cannot take any
- *      risk on this one"). Replace each stub's one method with a real call
- *      once the app is approved and the schema is confirmed; the OAuth
- *      plumbing (UpworkOAuthClient, UpworkApiConnectionService,
- *      UpworkGraphQLClient) is already real and doesn't need to change.
+ *   2. Every per-domain service under ./services/ EXCEPT Connects usage
+ *      (agency profile, invites, bidding, job discovery, reporting, chat
+ *      monitoring) is still a deliberate stub that throws
+ *      ServiceUnavailableException, not a best-guess implementation against
+ *      Upwork's real (GraphQL) data API — shipping unverified logic was
+ *      explicitly ruled out ("i cannot take any risk on this one"). Connects
+ *      usage went live 2026-10-22 (Part: Upwork API integration — real
+ *      credentials arrived, first of the 7 domains built, one at a time,
+ *      each verified by LIVE introspection against the real API before any
+ *      Prisma model/service code was written — see UpworkConnectsSyncService
+ *      and UpworkGraphQLClient.getConnectsSummary/getConnectUsageHistoryPage
+ *      for the confirmed real query shapes). Replace each remaining stub's
+ *      one method the same way — introspect first, build second — once each
+ *      one's turn comes; the OAuth plumbing (UpworkOAuthClient,
+ *      UpworkApiConnectionService, UpworkGraphQLClient) is already real and
+ *      doesn't need to change.
  *
  * Constraints confirmed from Upwork's own docs (developer/documentation/
  * graphql/api/docs, checked 2026-10-12) that the real implementations must
@@ -49,9 +58,18 @@ import { UpworkChatMonitoringService } from "./services/chat-monitoring.service"
  *     organizationId (omit it and Upwork silently falls back to the user's
  *     default org, which is fine for a single-org agency but worth being
  *     deliberate about).
- *   - "we don't allow storing data for more than 24 hours" — any new table
- *     holding synced data needs a TTL/refresh design, not a permanent cache
- *     (see UpworkApiConnection's own schema docblock).
+ *   - "we don't allow storing data for more than 24 hours" (Upwork's own
+ *     docs; a 2026-08 terms rewrite may have broadened this further — exact
+ *     current wording unverifiable, see the 2026-10-22 retention decision
+ *     below) — any new table holding RICH synced content (job descriptions,
+ *     messages, proposal text) needs a TTL/refresh design, not a permanent
+ *     cache. Explicit user decision 2026-10-22: numbers about the org's OWN
+ *     account state (Connects balance/spend history, financial totals) are
+ *     a different category — our own derived business records, not
+ *     bulk-copied Upwork Content — and ARE stored permanently (see
+ *     UpworkConnectsSnapshot/UpworkConnectsTransaction's own docblocks).
+ *     Apply the same rich-content-TTL vs. own-metric-permanent split to each
+ *     remaining domain, don't default to permanent everywhere.
  *   - Rate limits: 300 requests/min per IP, 40,000/day — sync workers need
  *     real backoff on HTTP 429, not just retry-until-it-works.
  *   - GraphQL errors come back as HTTP 200 with an `errors` array (only
@@ -77,6 +95,9 @@ import { UpworkChatMonitoringService } from "./services/chat-monitoring.service"
     UpworkJobDiscoveryService,
     UpworkReportingService,
     UpworkChatMonitoringService,
+    UpworkConnectsSyncQueue,
+    UpworkConnectsSyncWorker,
+    UpworkConnectsSyncService,
   ],
 })
 export class UpworkIntegrationModule {}

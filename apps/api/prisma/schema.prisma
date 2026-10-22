@@ -224,6 +224,8 @@ model Organization {
   upworkConnectPurchases        UpworkConnectPurchase[]
   benchmarks                    Benchmark[]
   upworkApiConnection           UpworkApiConnection?
+  upworkConnectsSnapshots       UpworkConnectsSnapshot[]
+  upworkConnectsTransactions    UpworkConnectsTransaction[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
   upworkProposalDrafts          UpworkProposalDraft[]
@@ -1923,6 +1925,76 @@ model UpworkApiConnection {
   updatedAt         DateTime                  @updatedAt @map("updated_at")
 
   @@map("upwork_api_connections")
+}
+
+/// Periodic Connects-balance reading (Part: Upwork API integration — Connects
+/// usage domain, 2026-10-22) — one row per sync tick per org, from the real
+/// `connectsSummary` GraphQL query (confirmed live against a real token, not
+/// guessed: fields are `connectsBalance`/`rolloverBalance`/
+/// `connectsBalanceFree`/`connectsBalancePaid`, all Int).
+///
+/// Retention: permanent, by design (Part: Upwork API integration, retention
+/// decision, 2026-10-22, explicit user request to store Connects history
+/// despite Upwork's own 24h-cache restriction on "Upwork Content") — this is
+/// a number about the ORG'S OWN account balance, not bulk-copied marketplace
+/// content, and is exactly the "our own account state over time" category
+/// the retention decision carved out for permanent storage. Unlike
+/// UpworkConnectsTransaction below, there's no natural external ID to dedupe
+/// on — each row is just "the balance was X at time T," so every sync tick
+/// legitimately adds a new row rather than upserting one.
+model UpworkConnectsSnapshot {
+  id                  String       @id @default(uuid())
+  orgId               String       @map("org_id")
+  org                 Organization @relation(fields: [orgId], references: [id])
+  capturedAt          DateTime     @default(now()) @map("captured_at")
+  connectsBalance     Int          @map("connects_balance")
+  rolloverBalance     Int          @map("rollover_balance")
+  connectsBalanceFree Int          @map("connects_balance_free")
+  connectsBalancePaid Int          @map("connects_balance_paid")
+  createdAt           DateTime     @default(now()) @map("created_at")
+
+  @@index([orgId, capturedAt])
+  @@map("upwork_connects_snapshots")
+}
+
+/// Real per-transaction Connects spend/credit ledger (Part: Upwork API
+/// integration — Connects usage domain, 2026-10-22) — from the real
+/// `connectUsageHistory` GraphQL query (confirmed live, cursor-paginated via
+/// `Pagination{after,first}`/`PageInfo{endCursor,hasNextPage}`). This is the
+/// actual "Connects history" the user asked for — individual DEBIT/CREDIT/
+/// REFUND_CREDIT events with a reason code (e.g. JOB_BID,
+/// REFUND_JOB_CLOSE_NO_HIRE, PAID_INVITATION_BADGE) and, when applicable,
+/// the associated job's id/title.
+///
+/// Retention: permanent, same reasoning as UpworkConnectsSnapshot above —
+/// this is our own spend ledger against our own purchased Connects, not bulk
+/// marketplace content; `jobTitle` is a short label, not the job's full
+/// content. Upwork's API does not return a transaction ID for these rows
+/// (confirmed via introspection — ConnectUsageTransaction has no `id`
+/// field), so there is no natural external key to upsert on; `dedupeKey` is
+/// a synthetic one computed from every field the API DOES return
+/// (org+timestamp+type+reason+amount+jobId), so re-syncing an overlapping
+/// date window (the sync worker always re-fetches a small trailing overlap
+/// to catch late-arriving rows) is idempotent via @@unique rather than
+/// risking duplicate rows.
+model UpworkConnectsTransaction {
+  id              String       @id @default(uuid())
+  orgId           String       @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  dedupeKey       String       @map("dedupe_key")
+  occurredAt      DateTime     @map("occurred_at")
+  transactionType String       @map("transaction_type")
+  reason          String?
+  amountRaw       String       @map("amount_raw")
+  amountCurrency  String       @map("amount_currency")
+  amountDisplay   String       @map("amount_display")
+  jobId           String?      @map("job_id")
+  jobTitle        String?      @map("job_title")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  @@unique([orgId, dedupeKey])
+  @@index([orgId, occurredAt])
+  @@map("upwork_connects_transactions")
 }
 
 // Cross-sequence suppression list (Part C6 / I4 / I5) — checked before every

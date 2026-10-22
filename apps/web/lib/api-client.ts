@@ -736,6 +736,23 @@ export const api = {
   getUpworkApiOAuthUrl: () => request("/upwork-api/connect") as Promise<{ url: string }>,
   getUpworkApiStatus: () => request("/upwork-api/status"),
   disconnectUpworkApi: () => request("/upwork-api/connection", { method: "DELETE" }),
+  // Connects usage (Part: Upwork API integration — Connects usage domain,
+  // 2026-10-22) — the first of the 7 data domains backed by real synced
+  // data instead of a "not live yet" error.
+  getUpworkApiConnectsUsage: () =>
+    request<{
+      current: { connectsBalance: number; rolloverBalance: number; connectsBalanceFree: number; connectsBalancePaid: number; capturedAt: string } | null;
+      history: { capturedAt: string; connectsBalance: number }[];
+      recentTransactions: {
+        id: string;
+        occurredAt: string;
+        transactionType: "CREDIT" | "DEBIT" | "REFUND_CREDIT";
+        reason: string | null;
+        amountDisplay: string;
+        jobId: string | null;
+        jobTitle: string | null;
+      }[];
+    }>("/upwork-api/connects-usage"),
 
   // ---- Upwork Proposal Writing (gated by upworkProposalWritingAccess module flag) ----
   generateUpworkCoverLetter: (

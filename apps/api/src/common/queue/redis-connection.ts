@@ -95,4 +95,10 @@ export const QUEUE_NAMES = {
   // Upwork follow-up reminders, 2026-09-30) -- see
   // upwork-follow-up-reminder.worker.ts.
   UPWORK_FOLLOW_UP_REMINDER: "upwork-follow-up-reminder",
+  // Periodic Connects-balance + transaction-history pull for every CONNECTED
+  // UpworkApiConnection (Part: Upwork API integration — Connects usage
+  // domain, 2026-10-22) -- see upwork-connects-sync.worker.ts. Separate from
+  // UPWORK_FOLLOW_UP_REMINDER, which belongs to the old internal
+  // proposal-tracking `upwork` module, not this real API connection.
+  UPWORK_CONNECTS_SYNC: "upwork-connects-sync",
 } as const;

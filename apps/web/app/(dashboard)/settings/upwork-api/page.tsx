@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
-import { SectionCard } from "../../../../components/chart-kit";
+import { SectionCard, KpiStrip, StatTile, MiniTrendCard, DataTable, AXIS_PROPS, GRID_PROPS, TOOLTIP_STYLE } from "../../../../components/chart-kit";
 import { Spinner } from "../../../../components/spinner";
 
 interface ConnectionStatus {
@@ -17,11 +17,14 @@ interface ConnectionStatus {
   lastSyncError?: string | null;
 }
 
+// Connects usage monitoring removed from this list (Part: Upwork API
+// integration, 2026-10-22) — it's live now, rendered as a real SectionCard
+// below instead of a "pending" placeholder row. The other 6 domains follow
+// the same path one at a time (see upwork-integration.module.ts's docblock).
 const STUB_MODULES = [
   { label: "Agency & profile management", hint: "Sync agency/freelancer profile details." },
   { label: "Invite tracking", hint: "Track and respond to client invitations." },
   { label: "Bidding & proposal data", hint: "Pull proposal/bid status and win rates." },
-  { label: "Connects usage monitoring", hint: "Track Connects balance and spend." },
   { label: "Job discovery", hint: "Surface relevant job postings as they're posted." },
   { label: "Reporting", hint: "Weekly / monthly / yearly financial & performance reports." },
   { label: "Client communication monitoring", hint: "Internal concern-alerting only — no auto-replies." },
@@ -41,11 +44,12 @@ function StatusBadge({ status }: { status: ConnectionStatus["status"] }) {
  * ModuleAccessGuard on the backend regardless of whether someone finds
  * this URL directly.
  *
- * Only "connect / status / disconnect" actually does anything right now.
- * The seven domain cards below mirror the application's own capability
- * list and show live once each one's backend stub (see
- * apps/api/src/upwork-integration/services/) is replaced with a real
- * implementation after Upwork approves the app.
+ * "connect / status / disconnect" and Connects usage (Part: Upwork API
+ * integration, 2026-10-22 — the first of 7 data domains built against a
+ * real, introspection-confirmed schema) are live. The remaining 6 domain
+ * cards below mirror the application's own capability list and show live
+ * once each one's backend stub (see apps/api/src/upwork-integration/
+ * services/) is replaced with a real implementation, one at a time.
  */
 export default function UpworkApiSettingsPage() {
   const queryClient = useQueryClient();
@@ -58,6 +62,13 @@ export default function UpworkApiSettingsPage() {
     queryFn: () => api.getUpworkApiCallbackUrl(),
   });
   const status = statusQuery.data;
+
+  const connectsQuery = useQuery({
+    queryKey: ["upwork-api-connects-usage"],
+    queryFn: () => api.getUpworkApiConnectsUsage(),
+    enabled: Boolean(status?.connected),
+  });
+  const connects = connectsQuery.data;
 
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -162,6 +173,57 @@ export default function UpworkApiSettingsPage() {
           <p className="text-sm text-ink/55">Not connected yet. Click &ldquo;Connect Upwork account&rdquo; above once Upwork approves the API application.</p>
         )}
       </SectionCard>
+
+      {status?.connected && (
+        <SectionCard title="Connects usage" subtitle="Live balance and spend history, synced every 6 hours from Upwork's real API.">
+          {connectsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
+          {connectsQuery.error && <p className="text-sm text-bad">{(connectsQuery.error as Error).message}</p>}
+          {connects && !connects.current && (
+            <p className="text-sm text-ink/55">No sync has run yet — the first sync happens shortly after connecting, then every 6 hours.</p>
+          )}
+          {connects?.current && (
+            <div className="flex flex-col gap-4">
+              <KpiStrip>
+                <StatTile label="Connects Balance" value={connects.current.connectsBalance} />
+                <StatTile label="Free" value={connects.current.connectsBalanceFree} />
+                <StatTile label="Paid" value={connects.current.connectsBalancePaid} />
+                <StatTile label="Rollover" value={connects.current.rolloverBalance} />
+              </KpiStrip>
+
+              {connects.history.length > 1 && (
+                <MiniTrendCard
+                  label="Balance over time"
+                  value={String(connects.current.connectsBalance)}
+                  color="var(--accent)"
+                  data={connects.history.map((h) => ({ date: new Date(h.capturedAt).toLocaleDateString(), balance: h.connectsBalance }))}
+                  dataKey="balance"
+                  xKey="date"
+                  axisProps={AXIS_PROPS}
+                  gridProps={GRID_PROPS}
+                  tooltipProps={TOOLTIP_STYLE}
+                />
+              )}
+
+              {connects.recentTransactions.length > 0 && (
+                <div>
+                  <div className="mb-2 text-sm font-medium text-ink">Recent transactions</div>
+                  <DataTable
+                    rowKey={(t) => t.id}
+                    columns={[
+                      { key: "date", header: "Date", render: (t) => new Date(t.occurredAt).toLocaleString() },
+                      { key: "type", header: "Type", render: (t) => t.transactionType },
+                      { key: "reason", header: "Reason", render: (t) => t.reason ?? "—" },
+                      { key: "job", header: "Job", render: (t) => t.jobTitle ?? "—" },
+                      { key: "amount", header: "Amount", render: (t) => t.amountDisplay, numeric: true },
+                    ]}
+                    rows={connects.recentTransactions}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </SectionCard>
+      )}
 
       <SectionCard title="Upwork app registration">
         <p className="mb-2 text-xs text-ink/55">Use this exact callback/redirect URL in Upwork&apos;s API application form.</p>
