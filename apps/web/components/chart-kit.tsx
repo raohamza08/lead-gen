@@ -254,10 +254,16 @@ export function DataTable<T>({
   columns,
   rows,
   rowKey,
+  onRowClick,
 }: {
   columns: TableColumn<T>[];
   rows: T[];
   rowKey: (row: T, index: number) => string;
+  /** Opt-in (Part: click-through detail views, 2026-10-23, explicit user
+   *  request — "it should be clickable so i can click and see all the
+   *  details in it") — every other DataTable call site is unaffected,
+   *  rows only become clickable when a caller passes this. */
+  onRowClick?: (row: T) => void;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -279,7 +285,11 @@ export function DataTable<T>({
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={rowKey(row, i)} className="border-b border-[var(--line)] last:border-0">
+            <tr
+              key={rowKey(row, i)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={`border-b border-[var(--line)] last:border-0 ${onRowClick ? "cursor-pointer transition-colors hover:bg-ink/[0.04]" : ""}`}
+            >
               {columns.map((col) => (
                 <td
                   key={col.key}

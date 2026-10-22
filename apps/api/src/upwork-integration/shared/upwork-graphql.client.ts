@@ -702,7 +702,18 @@ export class UpworkGraphQLClient {
    *  live that the separate `jobPosting(jobPostingId!)` detail query is
    *  blocked with a real 403 ("Authorization failed") for jobs this
    *  agency hasn't itself interacted with, so Module S (Job Details)
-   *  is served from this same search result, not a second query. */
+   *  is served from this same search result, not a second query.
+   *
+   *  Full field set below (Part: Marketplace Jobs detail view + niche
+   *  categorization, 2026-10-23, explicit user request — "I need all the
+   *  details not just basic") confirmed live via GraphQL introspection
+   *  of the real `MarketplaceJobPostingSearchResult` type before adding
+   *  any field here — not guessed. `occupations.category`/`subCategories`
+   *  deliberately omitted: introspection showed `MarketplaceJobPostingSearchOccupation`
+   *  has no `name`/label field of its own (confirmed live — a query
+   *  requesting one is rejected as FieldUndefined), so it would add a
+   *  request without adding any real displayable data; `category`/
+   *  `subcategory` (flat strings) already cover that need. */
   async searchMarketplaceJobs(accessToken: string, organizationId: string | null, searchTerm: string | null, first = 25) {
     const data = await this.request<{
       marketplaceJobPostingsSearch: {
@@ -715,12 +726,38 @@ export class UpworkGraphQLClient {
             category: string | null;
             subcategory: string | null;
             experienceLevel: string | null;
+            duration: string | null;
+            durationLabel: string | null;
+            engagement: string | null;
+            engagementDuration: { label: string; weeks: number } | null;
+            recordNumber: string;
+            freelancersToHire: number;
+            totalFreelancersToHire: number | null;
+            enterprise: boolean;
+            premium: boolean;
+            applied: boolean;
             createdDateTime: string;
             publishedDateTime: string;
+            renewedDateTime: string | null;
             totalApplicants: number;
+            preferredFreelancerLocation: string[] | null;
+            preferredFreelancerLocationMandatory: boolean | null;
             amount: { rawValue: string; currency: string; displayValue: string } | null;
+            hourlyBudgetType: string | null;
             hourlyBudgetMin: { rawValue: string; currency: string; displayValue: string } | null;
             hourlyBudgetMax: { rawValue: string; currency: string; displayValue: string } | null;
+            weeklyBudget: { rawValue: string; currency: string; displayValue: string } | null;
+            skills: { name: string; prettyName: string; highlighted: boolean | null }[];
+            client: {
+              totalHires: number;
+              totalPostedJobs: number;
+              totalReviews: number;
+              totalFeedback: number;
+              verificationStatus: string | null;
+              hasFinancialPrivacy: boolean;
+              totalSpent: { displayValue: string } | null;
+              location: { country: string | null } | null;
+            };
           };
         }[];
       };
@@ -733,10 +770,23 @@ export class UpworkGraphQLClient {
           edges {
             node {
               id title description category subcategory experienceLevel
-              createdDateTime publishedDateTime totalApplicants
+              duration durationLabel engagement engagementDuration { label weeks }
+              recordNumber freelancersToHire totalFreelancersToHire
+              enterprise premium applied
+              createdDateTime publishedDateTime renewedDateTime totalApplicants
+              preferredFreelancerLocation preferredFreelancerLocationMandatory
               amount { rawValue currency displayValue }
+              hourlyBudgetType
               hourlyBudgetMin { rawValue currency displayValue }
               hourlyBudgetMax { rawValue currency displayValue }
+              weeklyBudget { rawValue currency displayValue }
+              skills { name prettyName highlighted }
+              client {
+                totalHires totalPostedJobs totalReviews totalFeedback
+                verificationStatus hasFinancialPrivacy
+                totalSpent { displayValue }
+                location { country }
+              }
             }
           }
         }

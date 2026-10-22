@@ -1,12 +1,29 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile, DataTable } from "../../../../components/chart-kit";
+import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
 
+interface Proposal {
+  id: string;
+  jobTitle: string | null;
+  freelancerName: string | null;
+  status: string;
+  statusReason: string | null;
+  chargeRateDisplay: string | null;
+  viewedByClient: boolean | null;
+  upworkCreatedAt: string | null;
+  upworkModifiedAt: string | null;
+}
+
 /** Bidding & Proposals (spec Module J's data + Offers disclosure).
- *  Part: Upwork API integration — enterprise UI shell, 2026-10-23. */
+ *  Part: Upwork API integration — enterprise UI shell, 2026-10-23. Rows
+ *  are clickable (Part: click-through detail views, 2026-10-23, explicit
+ *  user request) — every field already fetched from Upwork is shown in
+ *  the detail drawer, not just the table's 5 summary columns. */
 export default function BiddingPage() {
   const statusQuery = useQuery({ queryKey: ["upwork-api-status"], queryFn: () => api.getUpworkApiStatus() as Promise<UpworkConnectionStatus> });
   const status = statusQuery.data;
@@ -15,6 +32,8 @@ export default function BiddingPage() {
   const proposalsQuery = useQuery({ queryKey: ["upwork-api-proposals"], queryFn: () => api.getUpworkApiProposals(), enabled: connected });
   const proposals = proposalsQuery.data;
 
+  const [selected, setSelected] = useState<Proposal | null>(null);
+
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Bidding & Proposals" />;
 
@@ -22,7 +41,7 @@ export default function BiddingPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Bidding & Proposals</h1>
       <p className="text-xs text-ink/50">
-        Your real submitted proposals/bids{status?.organizationName ? ` for ${status.organizationName}` : ""}, synced every 6 hours.
+        Your real submitted proposals/bids{status?.organizationName ? ` for ${status.organizationName}` : ""}, synced every 6 hours. Click a row for full details.
       </p>
 
       <SectionCard title="Proposals">
@@ -38,6 +57,7 @@ export default function BiddingPage() {
             </KpiStrip>
             <DataTable
               rowKey={(p) => p.id}
+              onRowClick={(p) => setSelected(p)}
               columns={[
                 { key: "job", header: "Job", render: (p) => p.jobTitle ?? "—" },
                 { key: "freelancer", header: "Freelancer", render: (p) => p.freelancerName ?? "—" },
@@ -56,6 +76,41 @@ export default function BiddingPage() {
           Blocked by a reproducible Upwork backend error (offersByAttributes times out) — confirmed real schema, not a missing permission. Re-checked automatically; will start working if Upwork&apos;s issue clears.
         </p>
       </SectionCard>
+
+      <Modal open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} variant="drawer-right" title={selected?.jobTitle ?? "Proposal"} contentClassName="w-full max-w-lg">
+        {selected && (
+          <dl className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <dt className="text-ink/50">Status</dt>
+              <dd className="font-medium text-ink">{selected.status}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Status reason</dt>
+              <dd className="font-medium text-ink">{selected.statusReason ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Freelancer</dt>
+              <dd className="font-medium text-ink">{selected.freelancerName ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Rate</dt>
+              <dd className="font-medium text-ink">{selected.chargeRateDisplay ?? "—"}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Viewed by client</dt>
+              <dd className="font-medium text-ink">{selected.viewedByClient == null ? "—" : selected.viewedByClient ? "Yes" : "No"}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Created</dt>
+              <dd className="font-medium text-ink">{selected.upworkCreatedAt ? new Date(selected.upworkCreatedAt).toLocaleString() : "—"}</dd>
+            </div>
+            <div className="col-span-2">
+              <dt className="text-ink/50">Last updated</dt>
+              <dd className="font-medium text-ink">{selected.upworkModifiedAt ? new Date(selected.upworkModifiedAt).toLocaleString() : "—"}</dd>
+            </div>
+          </dl>
+        )}
+      </Modal>
     </div>
   );
 }

@@ -864,10 +864,38 @@ export const api = {
         category: string | null;
         subcategory: string | null;
         experienceLevel: string | null;
+        duration: string | null;
+        durationLabel: string | null;
+        engagement: string | null;
+        engagementWeeks: number | null;
+        recordNumber: string;
+        freelancersToHire: number;
+        enterprise: boolean;
+        premium: boolean;
+        applied: boolean;
         createdDateTime: string;
         publishedDateTime: string;
+        renewedDateTime: string | null;
         totalApplicants: number;
+        preferredFreelancerLocation: string[];
+        preferredFreelancerLocationMandatory: boolean;
         budgetDisplay: string | null;
+        fixedAmount: string | null;
+        hourlyBudgetType: string | null;
+        hourlyBudgetMin: string | null;
+        hourlyBudgetMax: string | null;
+        weeklyBudget: string | null;
+        skills: { name: string; prettyName: string; highlighted: boolean }[];
+        client: {
+          totalHires: number;
+          totalPostedJobs: number;
+          totalReviews: number;
+          totalFeedback: number;
+          verificationStatus: string | null;
+          hasFinancialPrivacy: boolean;
+          totalSpentDisplay: string | null;
+          country: string | null;
+        };
       }[];
     }>(`/upwork-api/marketplace-jobs${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   // Ontology & Reference Data (spec Module F).
