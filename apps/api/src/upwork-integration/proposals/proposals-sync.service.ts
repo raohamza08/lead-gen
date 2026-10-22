@@ -1,16 +1,24 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { UpworkApiConnection } from "@prisma/client";
-import { PrismaService } from "../common/prisma/prisma.service";
-import { EncryptionService } from "../common/crypto/encryption.service";
-import { UpworkGraphQLClient, VENDOR_PROPOSAL_STATUSES, VendorProposalNode, VendorProposalStatus } from "./upwork-graphql.client";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { EncryptionService } from "../../common/crypto/encryption.service";
+import { UpworkGraphQLClient, VENDOR_PROPOSAL_STATUSES, VendorProposalNode, VendorProposalStatus } from "../shared/upwork-graphql.client";
 
-const PAGE_SIZE = 100;
+/** `vendorProposals` rejects `first` above some value between 25-50 with a
+ *  generic "Input parameter provided has incorrect value" (code VJCA-6) --
+ *  confirmed live: 100 and 50 both fail, 25 works. This is a different,
+ *  stricter cap than connectUsageHistory's (which accepted 100 fine) -- not
+ *  a global pagination limit, specific to this query. Found the hard way:
+ *  the first real backfill attempt failed outright on this before any
+ *  pagination had a chance to run. */
+const PAGE_SIZE = 25;
 /** Hard ceiling on pages fetched per status per sync tick, same safety
  *  reasoning as UpworkConnectsSyncService's own cap — a pathological volume
  *  or a cursor-advancement bug can't turn one tick into an unbounded loop.
- *  100 pages * 100/page = 10,000 proposals per status per tick, already
- *  generous against EurosHub's real largest bucket (Archived: 5,405). */
-const MAX_PAGES_PER_STATUS = 100;
+ *  400 pages * 25/page = 10,000 proposals per status per tick, still
+ *  generous against EurosHub's real largest bucket (Archived: 5,405) even
+ *  at the smaller page size. */
+const MAX_PAGES_PER_STATUS = 400;
 
 function toDate(displayValue: string | undefined | null): Date | null {
   if (!displayValue) return null;

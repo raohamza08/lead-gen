@@ -1,5 +1,5 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
-import { UpworkApiConnectionService } from "../upwork-api-connection.service";
+import { UpworkApiConnectionService } from "../connection/upwork-api-connection.service";
 
 /**
  * Job discovery — point 6 of the Upwork API application ("Job discovery"):

@@ -1,14 +1,14 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtClaims } from "@leadgen/types";
-import { PrismaService } from "../common/prisma/prisma.service";
-import { EncryptionService } from "../common/crypto/encryption.service";
-import { AuditLogService } from "../audit-log/audit-log.service";
-import { apiPublicUrl } from "../common/api-url";
-import { dashboardUrl } from "../common/cors";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { EncryptionService } from "../../common/crypto/encryption.service";
+import { AuditLogService } from "../../audit-log/audit-log.service";
+import { apiPublicUrl } from "../../common/api-url";
+import { dashboardUrl } from "../../common/cors";
 import { UpworkOAuthClient } from "./upwork-oauth.client";
 import { UpworkOAuthStateStore } from "./upwork-oauth-state.store";
-import { UpworkGraphQLClient } from "./upwork-graphql.client";
+import { UpworkGraphQLClient } from "../shared/upwork-graphql.client";
 
 /**
  * Owns "connect / status / disconnect" for the single org-wide Upwork API

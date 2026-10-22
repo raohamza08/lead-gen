@@ -1,9 +1,9 @@
 import { createHash } from "crypto";
 import { Injectable, Logger } from "@nestjs/common";
 import { UpworkApiConnection } from "@prisma/client";
-import { PrismaService } from "../common/prisma/prisma.service";
-import { EncryptionService } from "../common/crypto/encryption.service";
-import { UpworkGraphQLClient, ConnectUsageTransaction } from "./upwork-graphql.client";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { EncryptionService } from "../../common/crypto/encryption.service";
+import { UpworkGraphQLClient, ConnectUsageTransaction } from "../shared/upwork-graphql.client";
 
 /** How far back to backfill on an org's very first sync (no prior
  *  UpworkConnectsTransaction rows) -- 2 years comfortably covers any

@@ -1,8 +1,8 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Worker } from "bullmq";
-import { PrismaService } from "../common/prisma/prisma.service";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
-import { UpworkProposalsSyncService } from "./upwork-proposals-sync.service";
+import { PrismaService } from "../../common/prisma/prisma.service";
+import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
+import { UpworkProposalsSyncService } from "./proposals-sync.service";
 
 /** Consumes the repeatable "tick" job from UpworkProposalsSyncQueue -- same
  *  "walk every CONNECTED connection sequentially, one failure doesn't block

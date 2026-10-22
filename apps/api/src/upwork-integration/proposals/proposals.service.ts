@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma/prisma.service";
-import { VENDOR_PROPOSAL_STATUSES } from "../upwork-graphql.client";
+import { VENDOR_PROPOSAL_STATUSES } from "../shared/upwork-graphql.client";
 
 const RECENT_LIMIT = 50;
 

@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 /** 6 hours -- same cadence as UpworkConnectsSyncQueue; proposals/bids don't
  *  need finer granularity than that for a dashboard-level view. */

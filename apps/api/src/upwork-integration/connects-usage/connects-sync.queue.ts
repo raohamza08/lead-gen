@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 /** 6 hours -- a Connects balance changes on discrete events (bids,
  *  invitations, refunds), not continuously, so this doesn't need Meta Ads'

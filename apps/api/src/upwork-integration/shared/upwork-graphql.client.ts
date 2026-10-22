@@ -155,7 +155,10 @@ export class UpworkGraphQLClient {
     organizationId: string | null,
     status: VendorProposalStatus,
     after: string | null,
-    first = 100,
+    // Confirmed live: 50/100 both rejected with "Input parameter provided
+    // has incorrect value" (code VJCA-6), 25 works — a stricter, specific
+    // cap for this query, different from connectUsageHistory's.
+    first = 25,
   ): Promise<VendorProposalsPage> {
     const data = await this.request<{
       vendorProposals: { edges: { node: VendorProposalNode }[]; pageInfo: { endCursor: string | null; hasNextPage: boolean } };
