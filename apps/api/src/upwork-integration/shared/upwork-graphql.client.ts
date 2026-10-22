@@ -436,6 +436,36 @@ export class UpworkGraphQLClient {
     };
   }
 
+  /** Static Upwork reference data (spec Module M: Common Entities) —
+   *  confirmed live (Part: Upwork API integration — Common Entities
+   *  domain, 2026-10-23): 254 countries, 150 languages, 28 regions, all
+   *  real. No filter/pagination args exist on any of these three queries
+   *  (confirmed via introspection) — each always returns its full list. */
+  async getCountries(accessToken: string, organizationId: string | null) {
+    const data = await this.request<{
+      countries: { id: string; name: string; twoLetterAbbreviation: string | null; threeLetterAbbreviation: string | null; region: string; phoneCode: string | null; active: boolean | null }[];
+    }>(accessToken, organizationId, `query { countries { id name twoLetterAbbreviation threeLetterAbbreviation region phoneCode active } }`);
+    return data.countries;
+  }
+
+  async getLanguages(accessToken: string, organizationId: string | null) {
+    const data = await this.request<{ languages: { iso639Code: string; englishName: string; active: boolean }[] }>(
+      accessToken,
+      organizationId,
+      `query { languages { iso639Code englishName active } }`,
+    );
+    return data.languages;
+  }
+
+  async getRegions(accessToken: string, organizationId: string | null) {
+    const data = await this.request<{ regions: { id: string; name: string; parentRegion: { id: string; name: string } | null }[] }>(
+      accessToken,
+      organizationId,
+      `query { regions { id name parentRegion { id name } } }`,
+    );
+    return data.regions;
+  }
+
   /** Point-in-time Connects balance — confirmed live, real fields. */
   async getConnectsSummary(accessToken: string, organizationId: string | null): Promise<ConnectsSummary> {
     const data = await this.request<{ connectsSummary: ConnectsSummary }>(

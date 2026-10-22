@@ -790,6 +790,15 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
+  // Common Entities (Part: Upwork API integration — Common Entities domain,
+  // 2026-10-23) -- static Upwork reference data, 24h server-side cache.
+  getUpworkApiCommonEntities: () =>
+    request<{
+      countries: { id: string; name: string; twoLetterAbbreviation: string | null; threeLetterAbbreviation: string | null; region: string; phoneCode: string | null; active: boolean | null }[];
+      languages: { iso639Code: string; englishName: string; active: boolean }[];
+      regions: { id: string; name: string; parentRegion: { id: string; name: string } | null }[];
+      cachedAt: string;
+    }>("/upwork-api/common-entities"),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.

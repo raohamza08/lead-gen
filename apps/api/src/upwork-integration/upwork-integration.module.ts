@@ -8,6 +8,7 @@ import { UpworkInvitesModule } from "./invites/invites.module";
 import { UpworkJobDiscoveryModule } from "./job-discovery/job-discovery.module";
 import { UpworkReportingModule } from "./reporting/reporting.module";
 import { UpworkChatMonitoringModule } from "./chat-monitoring/chat-monitoring.module";
+import { UpworkCommonEntitiesModule } from "./common-entities/common-entities.module";
 
 /**
  * The real Upwork API OAuth integration (Part: Upwork API integration,
@@ -44,6 +45,19 @@ import { UpworkChatMonitoringModule } from "./chat-monitoring/chat-monitoring.mo
  *                          its own already-scaffolded module/folder, not
  *                          bolted onto an existing one.
  *
+ * KNOWN SCOPE GAP, confirmed live, blocks several planned modules (Part:
+ * Upwork API integration — enterprise module audit, 2026-10-23): the
+ * entire Contracts surface (`vendorContracts`, and `ContractDetails`'s
+ * cross-organization fields like `vendorOrganization`) is blocked by a
+ * missing scope — same error class as `company`/`companySelector`/
+ * `organization.staffs`: "The client or authentication token doesn't have
+ * enough oauth2 permissions/scopes to access: [...]". This affects any
+ * module that needs a real contract listing or cross-org contract detail
+ * (Agency Overview's "active/historical contracts", Timesheets' contract
+ * references, Work History). Do not build a Contracts module assuming
+ * this works — re-confirm live first if the missing scope is ever granted
+ * on Upwork's Developer Portal.
+ *
  * Every domain controller shares the same `@Controller("upwork-api")`
  * prefix and identical guard stack (JwtAuthGuard, RolesGuard,
  * ModuleAccessGuard, `@RequiresModule("UPWORK_API")`) — NestJS supports
@@ -67,6 +81,7 @@ import { UpworkChatMonitoringModule } from "./chat-monitoring/chat-monitoring.mo
     UpworkJobDiscoveryModule,
     UpworkReportingModule,
     UpworkChatMonitoringModule,
+    UpworkCommonEntitiesModule,
   ],
 })
 export class UpworkIntegrationModule {}
