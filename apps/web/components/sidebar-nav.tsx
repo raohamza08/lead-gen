@@ -522,6 +522,7 @@ const WORKSPACES: Workspace[] = [
           { href: "/upwork-agency/work-history", label: "Work History", moduleFlag: "upworkAgencyWorkHistoryAccess", icon: ClockIcon },
           { href: "/upwork-agency/freelancers", label: "Freelancers", moduleFlag: "upworkAgencyFreelancersAccess", icon: UserIcon },
           { href: "/upwork-agency/rooms", label: "Rooms & Messages", moduleFlag: "upworkAgencyRoomsAccess", icon: ChatIcon },
+          { href: "/upwork-agency/delayed-responses", label: "Delayed Responses", moduleFlag: "upworkAgencyRoomsAccess", icon: ClockIcon },
           { href: "/upwork-agency/jobs", label: "Marketplace Jobs", moduleFlag: "upworkAgencyJobsAccess", icon: RssIcon },
           { href: "/upwork-agency/ontology", label: "Ontology", moduleFlag: "upworkAgencyOntologyAccess", icon: TagIcon },
           { href: "/settings/upwork-api", label: "Connection Settings", moduleFlag: "upworkAgencyConnectionAccess", icon: GearIcon },

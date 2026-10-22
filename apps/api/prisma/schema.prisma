@@ -231,6 +231,7 @@ model Organization {
   upworkApiTransactions         UpworkApiTransaction[]
   upworkApiWorkHistoryEntries   UpworkApiWorkHistoryEntry[]
   upworkApiRooms                UpworkApiRoom[]
+  upworkApiRoomMessages         UpworkApiRoomMessage[]
   upworkRoomReminderStates      UpworkRoomReminderState[]
   upworkApiFreelancerProfiles   UpworkApiFreelancerProfile[]
   upworkApiSubmittedProposals   UpworkApiSubmittedProposal[]
@@ -2229,11 +2230,53 @@ model UpworkApiRoom {
   latestMessage     String?      @map("latest_message")
   latestMessageAt   DateTime?    @map("latest_message_at")
   latestMessageFrom String?      @map("latest_message_from")
+  /// Org-wide "last viewed in Outly" marker (Part: Rooms & Messages read
+  /// state, 2026-10-23, explicit user request — "after opening the chat,
+  /// the count badge is not going, make sure it works properly"). This
+  /// is NOT Upwork's own unread flag (`numUnread` above, synced
+  /// read-only from Upwork — this app never calls any mark-read/send
+  /// mutation on Upwork's side, by design) — it's a local overlay: the
+  /// badge shown in Outly reads as cleared once `locallyReadAt` is at or
+  /// after `latestMessageAt`, until a genuinely newer message arrives
+  /// and pushes `latestMessageAt` past it again. The real synced
+  /// `numUnread` is preserved untouched underneath.
+  locallyReadAt     DateTime?    @map("locally_read_at")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
   @@unique([orgId, upworkRoomId])
   @@map("upwork_api_rooms")
+}
+
+/// Real per-room message history (Part: Rooms & Messages chat history,
+/// 2026-10-23, explicit user request — "the communication chat should
+/// clearly state the messages... client... freelancer... mention the
+/// name of freelancer who is communicating with the client"). Separate
+/// from UpworkApiRoom's own `latestMessage*` columns (which only ever
+/// hold the single newest message, used for the room list) — this holds
+/// every message synced for a room. `senderIsAgency` is a derived best-
+/// effort flag (see UpworkRoomsSyncService's own docblock for how it's
+/// computed — Upwork gives each individual freelancer their OWN personal
+/// organization id on every message, not one shared agency id, so this
+/// can't be a simple id comparison), kept alongside the real
+/// `senderName`/`senderOrgName` rather than replacing them, so a wrong
+/// guess on direction never hides who actually said what.
+model UpworkApiRoomMessage {
+  id             String       @id @default(uuid())
+  orgId          String       @map("org_id")
+  org            Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  upworkRoomId   String       @map("upwork_room_id")
+  upworkStoryId  String       @map("upwork_story_id")
+  message        String?
+  senderName     String?      @map("sender_name")
+  senderOrgName  String?      @map("sender_org_name")
+  senderIsAgency Boolean      @map("sender_is_agency")
+  createdAt      DateTime     @map("created_at")
+  syncedAt       DateTime     @default(now()) @map("synced_at")
+
+  @@unique([orgId, upworkStoryId])
+  @@index([orgId, upworkRoomId, createdAt])
+  @@map("upwork_api_room_messages")
 }
 
 /// Tracks which room/message a given user has already gotten a desktop

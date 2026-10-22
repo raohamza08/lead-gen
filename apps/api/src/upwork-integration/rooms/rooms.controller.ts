@@ -1,4 +1,4 @@
-import { Controller, Get, Post, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Post, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { ModuleAccessGuard } from "../../common/guards/module-access.guard";
@@ -26,6 +26,22 @@ export class UpworkRoomsController {
   @Get("rooms")
   listRooms(@CurrentUser() user: JwtClaims) {
     return this.rooms.listRooms(user.orgId);
+  }
+
+  @Get("rooms-delayed")
+  listDelayedResponses(@CurrentUser() user: JwtClaims) {
+    return this.rooms.listDelayedResponses(user.orgId);
+  }
+
+  @Get("rooms/:id/messages")
+  getRoomMessages(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.rooms.getRoomMessages(user.orgId, id);
+  }
+
+  @Post("rooms/:id/mark-read")
+  async markRoomRead(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    await this.rooms.markRoomRead(user.orgId, id);
+    return { read: true };
   }
 
   @Post("rooms/resync")

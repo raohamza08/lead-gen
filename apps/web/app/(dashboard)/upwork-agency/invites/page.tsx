@@ -39,6 +39,7 @@ export default function InvitesPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const all = invites?.recent ?? [];
+  const unanswered = useMemo(() => all.filter((i) => i.status === "Pending"), [all]);
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return all
@@ -62,6 +63,22 @@ export default function InvitesPage() {
       <p className="text-xs text-ink/50">
         Client invitations your freelancers received{status?.organizationName ? ` under ${status.organizationName}` : ""}, synced every 6 hours — tracked separately from Bidding & Proposals. Click a row for full details.
       </p>
+
+      {unanswered.length > 0 && (
+        <SectionCard title={`Unanswered invites (${unanswered.length})`} subtitle="New agency invites that haven't been accepted, declined, or withdrawn yet.">
+          <DataTable
+            rowKey={(i) => i.id}
+            onRowClick={(i) => setSelected(i)}
+            columns={[
+              { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—" },
+              { key: "client", header: "Client", render: (i) => i.clientName ?? "—" },
+              { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—" },
+              { key: "received", header: "Received", render: (i) => (i.upworkCreatedAt ? new Date(i.upworkCreatedAt).toLocaleString() : "—") },
+            ]}
+            rows={unanswered}
+          />
+        </SectionCard>
+      )}
 
       <SectionCard title="Invites">
         {invitesQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}

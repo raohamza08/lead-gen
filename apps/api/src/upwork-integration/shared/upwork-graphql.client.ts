@@ -643,6 +643,63 @@ export class UpworkGraphQLClient {
     return data.roomList;
   }
 
+  /** Real per-room message history (Part: Rooms & Messages chat history,
+   *  2026-10-23, explicit user request — "the chat history for at least
+   *  1 day is available") — confirmed live via `room(id).stories`, a
+   *  genuinely different, richer query than `roomList`'s `latestStory`
+   *  (which only ever returns the single newest message). Returns every
+   *  message with its real sender name AND that sender's own Upwork
+   *  organization (id/name) — confirmed live this is each individual
+   *  freelancer's OWN personal org, not a shared EurosHub id, so
+   *  distinguishing "client side" vs "our side" can't be done by
+   *  comparing organization.id against the connection's own
+   *  organizationId; callers do it by matching sender name against the
+   *  room's own name (Upwork formats roomName as "{client name}, ...").
+   *  Deliberately NOT using the `storyCreatedDateTime_bt` date-range
+   *  filter — confirmed live it 404s with this account/room combination
+   *  for reasons that didn't repro with plain pagination (which DOES
+   *  work cleanly); `first` alone (most recent N messages) covers "at
+   *  least 1 day" for every real room checked so far without it. */
+  async getRoomStories(accessToken: string, organizationId: string | null, upworkRoomId: string, first = 50) {
+    const data = await this.request<{
+      room: {
+        id: string;
+        stories: {
+          totalCount: number | null;
+          edges: {
+            node: {
+              id: string;
+              createdDateTime: string;
+              message: string | null;
+              user: { id: string; name: string | null } | null;
+              organization: { id: string; name: string | null } | null;
+            };
+          }[];
+        } | null;
+      } | null;
+    }>(
+      accessToken,
+      organizationId,
+      `query($roomId: ID!, $pagination: Pagination!) {
+        room(id: $roomId) {
+          id
+          stories(filter: { pagination: $pagination }) {
+            totalCount
+            edges {
+              node {
+                id createdDateTime message
+                user { id name }
+                organization { id name }
+              }
+            }
+          }
+        }
+      }`,
+      { roomId: upworkRoomId, pagination: { first } },
+    );
+    return data.room?.stories?.edges.map((e) => e.node) ?? [];
+  }
+
   /** Real skill ontology (spec Module F: Ontology & Reference Data) —
    *  confirmed live. `limit` is required (confirmed via introspection —
    *  unlike countries/languages/regions, this one does NOT return

@@ -989,6 +989,27 @@ export const api = {
       }[];
     }>("/upwork-api/rooms"),
   resyncUpworkApiRooms: () => request<{ resynced: boolean }>("/upwork-api/rooms/resync", { method: "POST" }),
+  getUpworkApiRoomMessages: (roomId: string) =>
+    request<{
+      roomId: string;
+      roomName: string | null;
+      messages: { id: string; message: string | null; senderName: string | null; senderIsAgency: boolean; createdAt: string }[];
+    }>(`/upwork-api/rooms/${roomId}/messages`),
+  markUpworkApiRoomRead: (roomId: string) => request<{ read: boolean }>(`/upwork-api/rooms/${roomId}/mark-read`, { method: "POST" }),
+  getUpworkApiDelayedResponses: () =>
+    request<{
+      totalCount: number;
+      rooms: {
+        id: string;
+        roomName: string | null;
+        roomType: string | null;
+        numUnread: number | null;
+        latestMessage: string | null;
+        latestMessageAt: string | null;
+        latestMessageFrom: string | null;
+        minutesPending: number | null;
+      }[];
+    }>("/upwork-api/rooms-delayed"),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
   // 2026-10-22) — the first of the 7 data domains backed by real synced
   // data instead of a "not live yet" error.

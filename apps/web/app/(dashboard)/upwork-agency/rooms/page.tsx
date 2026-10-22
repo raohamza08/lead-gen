@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
-import { SectionCard, KpiStrip, StatTile } from "../../../../components/chart-kit";
+import { SectionCard } from "../../../../components/chart-kit";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
 
 interface MeWithReminderSettings {
@@ -100,17 +100,65 @@ function timeAgo(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
+/** Real conversation thread for the selected room (Part: Rooms &
+ *  Messages chat history, 2026-10-23, explicit user request — real
+ *  message history, left/right by sender, freelancer name shown).
+ *  Fetches on selection; the backend fetches live from Upwork right
+ *  away if nothing's cached yet for this room ("when a chat is opened
+ *  from below and it doesn't have any of its communication, the api
+ *  should fetch the recent communication right away"). Client messages
+ *  (left, neutral) vs agency/freelancer messages (right, accent) are
+ *  distinguished by `senderIsAgency` — a best-effort heuristic computed
+ *  server-side (see UpworkRoomsSyncService.isSenderAgencySide's own
+ *  docblock) since Upwork gives no explicit "which side" field; the
+ *  real sender name is always shown regardless, so a wrong guess on
+ *  side never hides who actually said what. */
+function ConversationThread({ roomId }: { roomId: string }) {
+  const messagesQuery = useQuery({
+    queryKey: ["upwork-api-room-messages", roomId],
+    queryFn: () => api.getUpworkApiRoomMessages(roomId),
+  });
+  const messages = messagesQuery.data?.messages ?? [];
+
+  if (messagesQuery.isLoading) return <p className="text-sm text-ink/50">Loading conversation…</p>;
+  if (messagesQuery.error) return <p className="text-sm text-bad">{(messagesQuery.error as Error).message}</p>;
+  if (messages.length === 0) return <p className="text-sm text-ink/50">No messages found for this room.</p>;
+
+  return (
+    <div className="flex flex-col gap-2.5">
+      {messages.map((m) => (
+        <div key={m.id} className={`flex flex-col gap-0.5 ${m.senderIsAgency ? "items-end" : "items-start"}`}>
+          <div
+            className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm ${
+              m.senderIsAgency ? "rounded-tr-sm bg-accent text-white" : "rounded-tl-sm bg-ink/[0.06] text-ink"
+            }`}
+          >
+            {m.message || <span className="italic opacity-60">(no text)</span>}
+          </div>
+          <p className="px-1 text-[11px] text-ink/40">
+            {m.senderName ?? "Unknown"}
+            {m.senderIsAgency ? " (freelancer)" : " (client)"} · {new Date(m.createdAt).toLocaleString()}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** Rooms & Messages (spec Module K), read-only. Part: Upwork API
  *  integration — enterprise UI shell, 2026-10-23. Rebuilt into a 3-panel
  *  chat-app layout to match the user's "Dark Mode Rooms & Messages
  *  Dashboard" reference image, using the app's own orange/near-black dark
- *  tokens rather than the mockup's purple. Every field shown is real
- *  (`UpworkApiRoom`'s stored columns) — the mockup's multi-message
- *  thread, member-status list, shared files, and tasks/activity tabs
- *  have no backing data and are intentionally omitted rather than
- *  fabricated, with a short disclosure instead. No send-message
- *  capability exists anywhere in this app, by explicit instruction. */
+ *  tokens rather than the mockup's purple. Real chat history added
+ *  2026-10-23 (see ConversationThread above) — every field shown is
+ *  real; member-status list, shared files, and tasks/activity tabs have
+ *  no backing data and are intentionally omitted rather than fabricated,
+ *  with a short disclosure instead. No send-message capability exists
+ *  anywhere in this app, by explicit instruction. KPI strip removed
+ *  2026-10-23 per explicit user feedback ("remove this from the rooms
+ *  module top"). */
 export default function RoomsPage() {
+  const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ["upwork-api-status"], queryFn: () => api.getUpworkApiStatus() as Promise<UpworkConnectionStatus> });
   const connected = Boolean(statusQuery.data?.connected);
 
@@ -150,11 +198,28 @@ export default function RoomsPage() {
 
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
 
+  // Marks the room read in Outly the moment it's opened (Part: Rooms &
+  // Messages read state, 2026-10-23, explicit user request — "after
+  // opening the chat, the count badge is not going, make sure it works
+  // properly"). Optimistically zeroes the badge in the cached list too,
+  // so it clears instantly instead of waiting for a refetch.
+  function selectRoom(id: string) {
+    setSelectedId(id);
+    api.markUpworkApiRoomRead(id).then(() => {
+      queryClient.setQueryData(["upwork-api-rooms"], (old: typeof rooms) =>
+        old
+          ? {
+              ...old,
+              totalUnread: Math.max(0, old.totalUnread - (old.rooms.find((r) => r.id === id)?.numUnread ?? 0)),
+              rooms: old.rooms.map((r) => (r.id === id ? { ...r, numUnread: 0 } : r)),
+            }
+          : old,
+      );
+    });
+  }
+
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Rooms & Messages" />;
-
-  const roomsWithUnread = allRooms.filter((r) => (r.numUnread ?? 0) > 0).length;
-  const totalParticipants = allRooms.reduce((sum, r) => sum + (r.numUsers ?? 0), 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -177,175 +242,155 @@ export default function RoomsPage() {
       )}
 
       {rooms && rooms.totalCount > 0 && (
-        <>
-          <KpiStrip>
-            <StatTile label="Total rooms" value={rooms.totalCount} />
-            <StatTile label="Unread messages" value={rooms.totalUnread} />
-            <StatTile label="Rooms with unread" value={roomsWithUnread} active={unreadOnly} onClick={() => setUnreadOnly((v) => !v)} />
-            <StatTile label="Total participants" value={totalParticipants} />
-          </KpiStrip>
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr_300px]">
-            <SectionCard title="All rooms">
-              <div className="flex flex-col gap-3">
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search rooms…"
-                  className="h-9 w-full rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
-                />
-                <div className="flex items-center gap-2">
-                  {types.length > 0 && (
-                    <select
-                      value={typeFilter}
-                      onChange={(e) => setTypeFilter(e.target.value)}
-                      className="h-9 flex-1 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
-                    >
-                      <option value="all">All types</option>
-                      {types.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink/60">
-                    <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
-                    Unread only
-                  </label>
-                </div>
-                {(search !== "" || typeFilter !== "all" || unreadOnly) && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearch("");
-                      setTypeFilter("all");
-                      setUnreadOnly(false);
-                    }}
-                    className="self-start text-xs text-accent hover:underline"
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr_300px]">
+          <SectionCard title="All rooms">
+            <div className="flex flex-col gap-3">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search rooms…"
+                className="h-9 w-full rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+              />
+              <div className="flex items-center gap-2">
+                {types.length > 0 && (
+                  <select
+                    value={typeFilter}
+                    onChange={(e) => setTypeFilter(e.target.value)}
+                    className="h-9 flex-1 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
                   >
-                    Clear filters
-                  </button>
+                    <option value="all">All types</option>
+                    {types.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
                 )}
+                <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink/60">
+                  <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
+                  Unread only
+                </label>
+              </div>
+              {(search !== "" || typeFilter !== "all" || unreadOnly) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearch("");
+                    setTypeFilter("all");
+                    setUnreadOnly(false);
+                  }}
+                  className="self-start text-xs text-accent hover:underline"
+                >
+                  Clear filters
+                </button>
+              )}
 
-                <div className="flex max-h-[520px] flex-col gap-1 overflow-y-auto">
-                  {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink/50">No rooms match.</p>}
-                  {filtered.map((r) => {
-                    const isSelected = selected?.id === r.id;
-                    return (
-                      <button
-                        key={r.id}
-                        type="button"
-                        onClick={() => setSelectedId(r.id)}
-                        className={`flex items-start gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors ${
-                          isSelected ? "border border-accent/30 bg-accent/12" : "border border-transparent hover:bg-ink/[0.04]"
-                        }`}
-                      >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
-                          {initials(r.roomName)}
+              <div className="flex max-h-[520px] flex-col gap-1 overflow-y-auto">
+                {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink/50">No rooms match.</p>}
+                {filtered.map((r) => {
+                  const isSelected = selected?.id === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => selectRoom(r.id)}
+                      className={`flex items-start gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors ${
+                        isSelected ? "border border-accent/30 bg-accent/12" : "border border-transparent hover:bg-ink/[0.04]"
+                      }`}
+                    >
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
+                        {initials(r.roomName)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="truncate text-sm font-medium text-ink">{r.roomName ?? "Untitled room"}</span>
+                          <span className="shrink-0 text-[10px] text-ink/40">{timeAgo(r.latestMessageAt)}</span>
                         </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center justify-between gap-2">
-                            <span className="truncate text-sm font-medium text-ink">{r.roomName ?? "Untitled room"}</span>
-                            <span className="shrink-0 text-[10px] text-ink/40">{timeAgo(r.latestMessageAt)}</span>
-                          </span>
-                          <span className="mt-0.5 flex items-center justify-between gap-2">
-                            <span className="truncate text-xs text-ink/50">{r.latestMessage ?? "No messages yet"}</span>
-                            {(r.numUnread ?? 0) > 0 && (
-                              <span className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                                {r.numUnread}
-                              </span>
-                            )}
-                          </span>
+                        <span className="mt-0.5 flex items-center justify-between gap-2">
+                          <span className="truncate text-xs text-ink/50">{r.latestMessage ?? "No messages yet"}</span>
+                          {(r.numUnread ?? 0) > 0 && (
+                            <span className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                              {r.numUnread}
+                            </span>
+                          )}
                         </span>
-                      </button>
-                    );
-                  })}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard title={selected ? selected.roomName ?? "Untitled room" : "Conversation"}>
+            {!selected ? (
+              <p className="text-sm text-ink/50">Select a room to view its conversation.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="flex items-center gap-3 border-b border-[var(--line)] pb-3">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent">
+                    {initials(selected.roomName)}
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium text-ink">{selected.roomName ?? "Untitled room"}</p>
+                    <p className="text-xs text-ink/50">
+                      {selected.numUsers ?? "—"} members · {selected.roomType ?? "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="max-h-[480px] overflow-y-auto">
+                  <ConversationThread roomId={selected.id} />
+                </div>
+
+                <p className="mt-2 rounded-lg border border-[var(--line)] bg-ink/[0.02] px-3 py-2 text-xs text-ink/45">
+                  Sending messages isn&apos;t supported in this app.
+                </p>
+              </div>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Room details">
+            {!selected ? (
+              <p className="text-sm text-ink/50">Select a room to see its details.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col items-center gap-2 border-b border-[var(--line)] pb-4 text-center">
+                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/15 text-base font-semibold text-accent">
+                    {initials(selected.roomName)}
+                  </span>
+                  <p className="text-sm font-medium text-ink">{selected.roomName ?? "Untitled room"}</p>
+                </div>
+
+                <dl className="flex flex-col gap-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <dt className="text-ink/50">Room type</dt>
+                    <dd className="font-medium text-ink">{selected.roomType ?? "—"}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-ink/50">Members</dt>
+                    <dd className="font-medium text-ink">{selected.numUsers ?? "—"}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-ink/50">Unread</dt>
+                    <dd className="font-medium text-ink">{selected.numUnread ?? 0}</dd>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <dt className="text-ink/50">Last activity</dt>
+                    <dd className="font-medium text-ink">
+                      {selected.latestMessageAt ? new Date(selected.latestMessageAt).toLocaleDateString() : "—"}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="rounded-lg border border-[var(--line)] bg-ink/[0.02] px-3 py-2 text-[11px] text-ink/45">
+                  Member names/online status, shared files, tasks, and activity logs aren&apos;t synced from Upwork for rooms — only the fields
+                  above are real.
                 </div>
               </div>
-            </SectionCard>
-
-            <SectionCard title={selected ? selected.roomName ?? "Untitled room" : "Conversation"}>
-              {!selected ? (
-                <p className="text-sm text-ink/50">Select a room to view its latest message.</p>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <div className="flex items-center gap-3 border-b border-[var(--line)] pb-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent">
-                      {initials(selected.roomName)}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-ink">{selected.roomName ?? "Untitled room"}</p>
-                      <p className="text-xs text-ink/50">
-                        {selected.numUsers ?? "—"} members · {selected.roomType ?? "—"}
-                      </p>
-                    </div>
-                  </div>
-
-                  {selected.latestMessage ? (
-                    <div className="flex flex-col gap-1">
-                      <div className="max-w-[80%] rounded-xl rounded-tl-sm bg-ink/[0.05] px-3.5 py-2.5 text-sm text-ink">
-                        {selected.latestMessage}
-                      </div>
-                      <p className="px-1 text-[11px] text-ink/40">
-                        {selected.latestMessageFrom ?? "Unknown"} ·{" "}
-                        {selected.latestMessageAt ? new Date(selected.latestMessageAt).toLocaleString() : "—"}
-                      </p>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-ink/50">No messages yet in this room.</p>
-                  )}
-
-                  <p className="mt-2 rounded-lg border border-[var(--line)] bg-ink/[0.02] px-3 py-2 text-xs text-ink/45">
-                    Only the most recent message per room is synced from Upwork — full conversation history isn&apos;t available here. Sending
-                    messages isn&apos;t supported in this app.
-                  </p>
-                </div>
-              )}
-            </SectionCard>
-
-            <SectionCard title="Room details">
-              {!selected ? (
-                <p className="text-sm text-ink/50">Select a room to see its details.</p>
-              ) : (
-                <div className="flex flex-col gap-4">
-                  <div className="flex flex-col items-center gap-2 border-b border-[var(--line)] pb-4 text-center">
-                    <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/15 text-base font-semibold text-accent">
-                      {initials(selected.roomName)}
-                    </span>
-                    <p className="text-sm font-medium text-ink">{selected.roomName ?? "Untitled room"}</p>
-                  </div>
-
-                  <dl className="flex flex-col gap-2.5 text-xs">
-                    <div className="flex items-center justify-between">
-                      <dt className="text-ink/50">Room type</dt>
-                      <dd className="font-medium text-ink">{selected.roomType ?? "—"}</dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-ink/50">Members</dt>
-                      <dd className="font-medium text-ink">{selected.numUsers ?? "—"}</dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-ink/50">Unread</dt>
-                      <dd className="font-medium text-ink">{selected.numUnread ?? 0}</dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-ink/50">Last activity</dt>
-                      <dd className="font-medium text-ink">
-                        {selected.latestMessageAt ? new Date(selected.latestMessageAt).toLocaleDateString() : "—"}
-                      </dd>
-                    </div>
-                  </dl>
-
-                  <div className="rounded-lg border border-[var(--line)] bg-ink/[0.02] px-3 py-2 text-[11px] text-ink/45">
-                    Member names/online status, shared files, tasks, and activity logs aren&apos;t synced from Upwork for rooms — only the fields
-                    above are real.
-                  </div>
-                </div>
-              )}
-            </SectionCard>
-          </div>
-        </>
+            )}
+          </SectionCard>
+        </div>
       )}
     </div>
   );

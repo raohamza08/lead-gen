@@ -29,6 +29,16 @@ const PAGE_SIZE = 50;
  *  calls/tick (~384/day) without paying for the whole catalog each time. */
 const QUICK_SYNC_PAGES = 2;
 
+/** Real message history for the top N most recently active rooms (Part:
+ *  Rooms & Messages chat history, 2026-10-23, explicit user request —
+ *  "the 30 chats that are on top, their chat history for at least 1 day
+ *  is available"). Only rooms whose `latestMessageAt` has moved past
+ *  what's already cached get fetched each tick, not all 30
+ *  unconditionally — keeps the real added cost proportional to actual
+ *  new activity instead of a flat 30 calls every 15 minutes. */
+const TOP_ROOMS_FOR_MESSAGE_SYNC = 30;
+const ROOM_MESSAGE_PAGE_SIZE = 50;
+
 /**
  * Rooms & Messages sync logic (spec Module K, Part: Upwork API
  * integration — Rooms & Messages domain, 2026-10-23) — same split as
@@ -88,12 +98,17 @@ export class UpworkRoomsSyncService {
   }
 
   /** Walks up to `maxPages` pages starting from the most recent room,
-   *  upserting each one. Returns the set of room IDs seen, so a full
-   *  pass can use it for the full-replace delete — a partial (quick)
-   *  pass must NOT use it for that, since "not seen in the first 2
-   *  pages" says nothing about whether a room still exists. */
-  private async upsertPages(connectionRow: UpworkApiConnection, maxPages: number): Promise<string[]> {
-    const seenRoomIds: string[] = [];
+   *  upserting each one. Returns each room seen (id/name/latestMessageAt),
+   *  so a full pass can use the id list for the full-replace delete and
+   *  the quick pass can use the richer data to decide which rooms need a
+   *  message-history sync too — a partial (quick) pass must NOT use the
+   *  id list for deletion, since "not seen in the first 2 pages" says
+   *  nothing about whether a room still exists. */
+  private async upsertPages(
+    connectionRow: UpworkApiConnection,
+    maxPages: number,
+  ): Promise<{ upworkRoomId: string; roomName: string | null; latestMessageAt: Date | null }[]> {
+    const seen: { upworkRoomId: string; roomName: string | null; latestMessageAt: Date | null }[] = [];
     await this.connection.withFreshTokenOnAuthFailure(connectionRow.orgId, async ({ accessToken, organizationId }) => {
       let after: string | null = null;
       let pages = 0;
@@ -119,21 +134,27 @@ export class UpworkRoomsSyncService {
             });
           }),
         );
-        seenRoomIds.push(...page.edges.map((e) => e.node.id));
+        seen.push(
+          ...page.edges.map((e) => ({
+            upworkRoomId: e.node.id,
+            roomName: e.node.roomName,
+            latestMessageAt: toDate(e.node.latestStory?.createdDateTime),
+          })),
+        );
         pages += 1;
         after = page.pageInfo?.endCursor ?? null;
       } while (after && pages < maxPages);
     });
-    return seenRoomIds;
+    return seen;
   }
 
   /** FULL sync — every room, full-replace delete. Run every 6 hours by
    *  the worker's "full-tick" job. */
   async syncConnectionFull(connectionRow: UpworkApiConnection): Promise<void> {
     try {
-      const seenRoomIds = await this.upsertPages(connectionRow, MAX_PAGES);
+      const seen = await this.upsertPages(connectionRow, MAX_PAGES);
       await this.prisma.upworkApiRoom.deleteMany({
-        where: { orgId: connectionRow.orgId, upworkRoomId: { notIn: seenRoomIds } },
+        where: { orgId: connectionRow.orgId, upworkRoomId: { notIn: seen.map((s) => s.upworkRoomId) } },
       });
       await this.prisma.upworkApiConnection.update({
         where: { id: connectionRow.id },
@@ -150,11 +171,37 @@ export class UpworkRoomsSyncService {
     }
   }
 
-  /** QUICK sync — just the most-recently-active rooms, no deletion. Run
-   *  every 15 minutes by the worker's "quick-tick" job. */
+  /** QUICK sync — most-recently-active rooms, no deletion, then real
+   *  message history for the top TOP_ROOMS_FOR_MESSAGE_SYNC of those
+   *  that actually have new activity since what's cached. Run every 15
+   *  minutes by the worker's "quick-tick" job. */
   async syncConnectionQuick(connectionRow: UpworkApiConnection): Promise<void> {
     try {
-      await this.upsertPages(connectionRow, QUICK_SYNC_PAGES);
+      const seen = await this.upsertPages(connectionRow, QUICK_SYNC_PAGES);
+      const topRooms = [...seen]
+        .filter((r) => r.latestMessageAt)
+        .sort((a, b) => b.latestMessageAt!.getTime() - a.latestMessageAt!.getTime())
+        .slice(0, TOP_ROOMS_FOR_MESSAGE_SYNC);
+
+      if (topRooms.length > 0) {
+        const cachedNewest = await this.prisma.upworkApiRoomMessage.groupBy({
+          by: ["upworkRoomId"],
+          where: { orgId: connectionRow.orgId, upworkRoomId: { in: topRooms.map((r) => r.upworkRoomId) } },
+          _max: { createdAt: true },
+        });
+        const cachedNewestByRoom = new Map(cachedNewest.map((c) => [c.upworkRoomId, c._max.createdAt]));
+
+        for (const room of topRooms) {
+          const cachedAt = cachedNewestByRoom.get(room.upworkRoomId) ?? null;
+          if (cachedAt && room.latestMessageAt && cachedAt.getTime() >= room.latestMessageAt.getTime()) continue;
+          try {
+            await this.syncMessagesForRoom(connectionRow, room.upworkRoomId, room.roomName);
+          } catch (err) {
+            this.logger.warn(`Message sync failed for room ${room.upworkRoomId} (org ${connectionRow.orgId}): ${(err as Error).message}`);
+          }
+        }
+      }
+
       await this.prisma.upworkApiConnection.update({
         where: { id: connectionRow.id },
         data: { lastSyncAt: new Date(), lastSyncError: null },
@@ -168,5 +215,55 @@ export class UpworkRoomsSyncService {
       });
       throw err;
     }
+  }
+
+  /** Best-effort "is this message from our side (the agency/freelancer)
+   *  or the client's side" (Part: Rooms & Messages chat history,
+   *  2026-10-23). Confirmed live: Upwork gives each individual
+   *  freelancer their OWN personal organization id on every message
+   *  (not one shared EurosHub id), so this can't be a simple id
+   *  comparison against the connection's own organizationId. Instead
+   *  matches the sender's first name against the room's own name —
+   *  Upwork formats `roomName` as "{client name}, ..." (confirmed live
+   *  across every room checked, e.g. room "Jamie Yoon, Deli Inc- Home"
+   *  has messages from "Jamie Y." — the client — and "Zainab Z." — the
+   *  freelancer). A sender whose first name doesn't match the room name
+   *  is treated as our side. This is a derived heuristic, not a real
+   *  Upwork field — the real `senderName` is always stored alongside it
+   *  regardless, so a wrong guess here never hides who actually said
+   *  what (see UpworkApiRoomMessage's own schema docblock). */
+  private isSenderAgencySide(senderName: string | null, roomName: string | null): boolean {
+    if (!senderName) return false;
+    if (!roomName) return true;
+    const senderFirstName = senderName.trim().split(/\s+/)[0]?.toLowerCase();
+    if (!senderFirstName) return true;
+    return !roomName.toLowerCase().includes(senderFirstName);
+  }
+
+  /** Fetches and upserts real message history for one room (Part: Rooms
+   *  & Messages chat history, 2026-10-23) — used both by the quick
+   *  tick's top-30 sweep above and by UpworkRoomsService's on-demand
+   *  fetch when a room is opened with nothing cached yet. */
+  async syncMessagesForRoom(connectionRow: UpworkApiConnection, upworkRoomId: string, roomName: string | null): Promise<void> {
+    await this.connection.withFreshTokenOnAuthFailure(connectionRow.orgId, async ({ accessToken, organizationId }) => {
+      const stories = await this.graphql.getRoomStories(accessToken, organizationId, upworkRoomId, ROOM_MESSAGE_PAGE_SIZE);
+      if (stories.length === 0) return;
+      await this.prisma.$transaction(
+        stories.map((s) => {
+          const data = {
+            message: s.message,
+            senderName: s.user?.name ?? null,
+            senderOrgName: s.organization?.name ?? null,
+            senderIsAgency: this.isSenderAgencySide(s.user?.name ?? null, roomName),
+            createdAt: toDate(s.createdDateTime) ?? new Date(),
+          };
+          return this.prisma.upworkApiRoomMessage.upsert({
+            where: { orgId_upworkStoryId: { orgId: connectionRow.orgId, upworkStoryId: s.id } },
+            create: { orgId: connectionRow.orgId, upworkRoomId, upworkStoryId: s.id, ...data },
+            update: data,
+          });
+        }),
+      );
+    });
   }
 }
