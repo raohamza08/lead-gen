@@ -9,6 +9,9 @@ import { AGENT_LABELS } from "../../../lib/agent-labels";
 import { ALLOWED_TRANSITIONS, PIPELINE_STAGE_ORDER, PipelineStage, isValidRewind } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 import { AgentPulse, LoadingRow, Spinner } from "../../../components/spinner";
+import { InitialsAvatar } from "../../../components/avatar";
+import { LeadsSidebar, LeadsSidebarFilter } from "../../../components/leads/leads-sidebar";
+import { InlineField, SplitPrimaryButton } from "../../../components/open-item-workspace";
 
 interface AgentRunSummary {
   agent: string;
@@ -343,6 +346,22 @@ export default function PipelinePage() {
   const [deleteStage, setDeleteStage] = useState("");
   const [deletingStage, setDeletingStage] = useState(false);
   const [verifyProgress, setVerifyProgress] = useState<{ done: number; total: number } | null>(null);
+  // Sidebar view filter (Part: full UI redesign per UI.md, Pipeline mockup)
+  // — client-side only, filters which cards land in byStage below; null
+  // means "All leads" / no filter.
+  const [sidebarFilter, setSidebarFilter] = useState<LeadsSidebarFilter>(null);
+  // "+ New lead" inline form (Part: full UI redesign — wires up
+  // api.createManualLead + api.promoteLeadsToPipeline, both of which
+  // already existed on the backend/client with no UI anywhere calling
+  // them until now).
+  const [newLeadOpen, setNewLeadOpen] = useState(false);
+  const [newLeadName, setNewLeadName] = useState("");
+  const [newLeadWebsite, setNewLeadWebsite] = useState("");
+  const [newLeadEmail, setNewLeadEmail] = useState("");
+  const [newLeadIndustry, setNewLeadIndustry] = useState("");
+  const [newLeadSaving, setNewLeadSaving] = useState(false);
+  const [newLeadError, setNewLeadError] = useState<string | null>(null);
+  const currentUserId = getCurrentUser()?.sub;
   // How many cards are rendered per column, independent of how many exist —
   // a column used to render its whole list at once, so the page grew taller
   // as leads piled up in one stage. Fixed-height scrollable columns now
@@ -506,6 +525,57 @@ export default function PipelinePage() {
     return grouped;
   }, [promotedLeads]);
 
+  // Sidebar counts (Part: full UI redesign per UI.md) — always computed
+  // against the REAL unfiltered set, so a count never changes just because
+  // a different filter happens to be active.
+  const sidebarCounts = useMemo(() => {
+    const now = Date.now();
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const recentCutoff = now - 48 * 3600 * 1000;
+    let my = 0, hot = 0, today = 0, unassigned = 0, recent = 0;
+    for (const l of promotedLeads) {
+      if (currentUserId && l.assignedUserId === currentUserId) my++;
+      if ((l.score?.leadScore ?? 0) >= 75) hot++;
+      const activityAt = l.lastActivityAt ? new Date(l.lastActivityAt).getTime() : null;
+      if (activityAt && activityAt >= todayStart) today++;
+      if (!l.assignedUserId) unassigned++;
+      if (new Date(l.createdAt).getTime() >= recentCutoff) recent++;
+    }
+    return { my, all: promotedLeads.length, hot, today, unassigned, recent };
+  }, [promotedLeads, currentUserId]);
+
+  // Which leads the board actually renders — unfiltered unless a sidebar
+  // view is active. byStage above stays unfiltered throughout (it backs
+  // the admin "Delete stage…" control, which must always target the REAL
+  // full stage, not a narrowed view).
+  const filteredLeads = useMemo(() => {
+    if (!sidebarFilter) return promotedLeads;
+    const now = Date.now();
+    const todayStart = new Date().setHours(0, 0, 0, 0);
+    const recentCutoff = now - 48 * 3600 * 1000;
+    return promotedLeads.filter((l) => {
+      if (sidebarFilter === "my") return currentUserId && l.assignedUserId === currentUserId;
+      if (sidebarFilter === "hot") return (l.score?.leadScore ?? 0) >= 75;
+      if (sidebarFilter === "today") {
+        const activityAt = l.lastActivityAt ? new Date(l.lastActivityAt).getTime() : null;
+        return Boolean(activityAt && activityAt >= todayStart);
+      }
+      if (sidebarFilter === "unassigned") return !l.assignedUserId;
+      if (sidebarFilter === "recent") return new Date(l.createdAt).getTime() >= recentCutoff;
+      return true;
+    });
+  }, [promotedLeads, sidebarFilter, currentUserId]);
+
+  const filteredByStage = useMemo(() => {
+    const grouped = new Map<string, LeadRow[]>();
+    for (const lead of filteredLeads) {
+      const stage = lead.pipelineState!.stage;
+      if (!grouped.has(stage)) grouped.set(stage, []);
+      grouped.get(stage)!.push(lead);
+    }
+    return grouped;
+  }, [filteredLeads]);
+
   async function moveTo(lead: LeadRow, stage: string) {
     const from = lead.pipelineState?.stage ?? null;
     if (!canDrop(from, stage)) return;
@@ -645,8 +715,70 @@ export default function PipelinePage() {
     }
   }
 
+  /** "+ New lead" (Part: full UI redesign per UI.md, Pipeline mockup) —
+   *  create (api.createManualLead, POST /leads/manual, already existed
+   *  with no UI anywhere calling it) then immediately promote into this
+   *  pipeline (api.promoteLeadsToPipeline, same situation) so it actually
+   *  shows up on this board rather than sitting unseen in Lead Room. */
+  async function submitNewLead() {
+    if (!newLeadName.trim()) return;
+    setNewLeadSaving(true);
+    setNewLeadError(null);
+    try {
+      const result = (await api.createManualLead({
+        companyName: newLeadName.trim(),
+        website: newLeadWebsite.trim() || undefined,
+        email: newLeadEmail.trim() || undefined,
+        industry: newLeadIndustry.trim() || undefined,
+      })) as { leadId: string };
+      await api.promoteLeadsToPipeline({ leadId: result.leadId });
+      setNewLeadName("");
+      setNewLeadWebsite("");
+      setNewLeadEmail("");
+      setNewLeadIndustry("");
+      setNewLeadOpen(false);
+      invalidateLeads();
+    } catch (err) {
+      setNewLeadError((err as Error).message);
+    } finally {
+      setNewLeadSaving(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
+      {/* Ribbon-style action toolbar (Part: full UI redesign per UI.md,
+          Section 6.3) — scoped to the one real action this page can
+          honestly offer without fabricating bulk-select/archive/flag
+          functionality that doesn't exist anywhere in this app's data
+          model (see leads-sidebar.tsx's own docblock for the same
+          reasoning applied to the sidebar). */}
+      <div className="flex items-center gap-2 border-b border-[var(--line)] pb-3">
+        <SplitPrimaryButton label="New lead" onClick={() => setNewLeadOpen((v) => !v)} disabled={newLeadSaving} />
+      </div>
+
+      {newLeadOpen && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitNewLead();
+          }}
+          className="card flex flex-col gap-1 p-3"
+        >
+          <InlineField label="Company" value={newLeadName} onChange={setNewLeadName} placeholder="Company name" large />
+          <InlineField label="Website" value={newLeadWebsite} onChange={setNewLeadWebsite} placeholder="https://…" />
+          <InlineField label="Email" value={newLeadEmail} onChange={setNewLeadEmail} placeholder="contact@company.com" />
+          <InlineField label="Industry" value={newLeadIndustry} onChange={setNewLeadIndustry} placeholder="e.g. Healthcare" />
+          {newLeadError && <p className="mt-1 text-xs text-bad">{newLeadError}</p>}
+          <div className="mt-2 flex items-center gap-2">
+            <SplitPrimaryButton label={newLeadSaving ? "Adding…" : "Add lead"} onClick={submitNewLead} disabled={newLeadSaving || !newLeadName.trim()} />
+            <button type="button" onClick={() => setNewLeadOpen(false)} className="text-xs text-ink/50 hover:underline">
+              Cancel
+            </button>
+          </div>
+        </form>
+      )}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
@@ -689,7 +821,10 @@ export default function PipelinePage() {
               </button>
             </div>
           )}
-          <span className="text-xs text-ink/50">{promotedLeads.length} leads</span>
+          <span className="text-xs text-ink/50">
+            {filteredLeads.length} lead{filteredLeads.length === 1 ? "" : "s"}
+            {sidebarFilter && ` (of ${promotedLeads.length})`}
+          </span>
         </div>
       </div>
 
@@ -707,9 +842,11 @@ export default function PipelinePage() {
       {leadsQuery.isLoading ? (
         <LoadingRow label="Loading pipeline…" />
       ) : (
-      <div className="flex gap-3 overflow-x-auto pb-3">
+      <div className="flex gap-4">
+      <LeadsSidebar counts={sidebarCounts} filter={sidebarFilter} onFilterChange={setSidebarFilter} />
+      <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto pb-3">
         {COLUMNS.map((stage) => {
-          const cards = byStage.get(stage) ?? [];
+          const cards = filteredByStage.get(stage) ?? [];
           const visibleCards = cards.slice(0, visibleCountFor(stage));
           const from = dragging?.pipelineState?.stage ?? null;
           const droppable = dragging ? canDrop(from, stage) : false;
@@ -748,7 +885,12 @@ export default function PipelinePage() {
               </header>
 
               {stage === PipelineStage.READY_FOR_OUTREACH && (() => {
-                const unverifiedCount = cards.filter((l) => !l.verifiedEmail && l.email).length;
+                // Deliberately byStage (the real, unfiltered column), not
+                // `cards` — "Verify emails" always targets the column's
+                // true full contents regardless of any active sidebar
+                // view filter, so the button's own count never disagrees
+                // with what verifyAllInReady() actually verifies.
+                const unverifiedCount = (byStage.get(stage) ?? []).filter((l) => !l.verifiedEmail && l.email).length;
                 return (
                   <div className="border-b border-[var(--line)] px-3 py-2">
                     <button
@@ -786,23 +928,28 @@ export default function PipelinePage() {
                     } ${busy === lead.id ? "opacity-50" : ""}`}
                   >
                     <Link href={`/leads/${lead.id}`} className="block">
-                      <div className="flex items-center gap-1.5">
-                        <div className="truncate font-medium leading-snug text-ink">{lead.companyName}</div>
-                        <SourceBadge source={lead.sourceLayer} />
-                        {stage === PipelineStage.READY_FOR_OUTREACH && !lead.verifiedEmail && (
-                          <span
-                            className="shrink-0 rounded-full bg-[rgb(var(--bad-rgb)/0.12)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-bad"
-                            title={lead.email ? "Email not yet verified — outreach won't start until it is" : "No email on this lead"}
-                          >
-                            Unverified
-                          </span>
-                        )}
-                      </div>
-                      <div className="mt-1.5 flex items-center justify-between gap-2">
-                        <span className="truncate text-ink/55">{lead.industry ?? "—"}</span>
-                        <span className={`tabular font-semibold ${scoreTone(lead.score?.leadScore)}`}>
-                          {lead.score?.leadScore ?? "—"}
-                        </span>
+                      <div className="flex items-start gap-2">
+                        <InitialsAvatar seed={lead.id} label={lead.companyName} sizeClass="h-7 w-7 shrink-0 text-[10px]" />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <div className="truncate font-medium leading-snug text-ink">{lead.companyName}</div>
+                            <SourceBadge source={lead.sourceLayer} />
+                          </div>
+                          {stage === PipelineStage.READY_FOR_OUTREACH && !lead.verifiedEmail && (
+                            <span
+                              className="mt-1 inline-block shrink-0 rounded-full bg-[rgb(var(--bad-rgb)/0.12)] px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-bad"
+                              title={lead.email ? "Email not yet verified — outreach won't start until it is" : "No email on this lead"}
+                            >
+                              Unverified
+                            </span>
+                          )}
+                          <div className="mt-1 flex items-center justify-between gap-2">
+                            <span className="truncate text-ink/55">{lead.industry ?? "—"}</span>
+                            <span className={`tabular font-semibold ${scoreTone(lead.score?.leadScore)}`}>
+                              {lead.score?.leadScore ?? "—"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                       {lead.country && (
                         <div className="mt-1 text-[11px] text-ink/40">{lead.country}</div>
@@ -861,6 +1008,7 @@ export default function PipelinePage() {
             </section>
           );
         })}
+      </div>
       </div>
       )}
     </div>
