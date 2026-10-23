@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
-import { SectionCard } from "../../../../components/chart-kit";
 import { Spinner } from "../../../../components/spinner";
+import { SettingsShell } from "../../../../components/settings-shell";
 
 interface Settings {
   agencyBackground: string;
@@ -128,112 +128,157 @@ export default function UpworkProposalWritingSettingsPage() {
         <Spinner className="h-4 w-4" />
       ) : (
         <>
-          <SectionCard title="Agency / freelancer background">
-            <p className="mb-2 text-xs text-ink/55">
-              Who&apos;s writing this — services offered, strengths, differentiators. Every letter is written in the voice of an individual
-              freelancer (never an agency); the generator weaves this in naturally and never invents anything beyond what&apos;s here.
-            </p>
-            <textarea
-              value={form.agencyBackground}
-              onChange={(e) => setForm({ ...form, agencyBackground: e.target.value })}
-              rows={5}
-              className="w-full rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
-              placeholder="e.g. I'm a Shopify + web design freelancer specializing in DTC fashion/beauty brands..."
-            />
-          </SectionCard>
-
-          <SectionCard title="Writing instructions">
-            <p className="mb-2 text-xs text-ink/55">Tone, structure, must-include rules, things to avoid — the main prompt the generator follows.</p>
-            <textarea
-              value={form.instructions}
-              onChange={(e) => setForm({ ...form, instructions: e.target.value })}
-              rows={10}
-              className="w-full rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
-            />
-          </SectionCard>
-
-          <SectionCard title="Proposal length (Bidding SOP)">
-            <p className="mb-2 text-xs text-ink/55">
-              The generator classifies each job as technical or non-technical/graphics and writes within the matching limit below. Soft targets,
-              not hard cutoffs.
-            </p>
-            <div className="flex flex-wrap gap-6">
-              <label className="flex flex-col gap-1 text-xs text-ink/60">
-                Technical jobs
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={30}
-                    max={1000}
-                    value={form.technicalWordLimit}
-                    onChange={(e) => setForm({ ...form, technicalWordLimit: Number(e.target.value) })}
-                    className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
-                  />
-                  <span className="text-sm text-ink/55">words max</span>
-                </div>
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-ink/60">
-                Non-technical / graphics jobs
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={30}
-                    max={1000}
-                    value={form.nonTechnicalWordLimit}
-                    onChange={(e) => setForm({ ...form, nonTechnicalWordLimit: Number(e.target.value) })}
-                    className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
-                  />
-                  <span className="text-sm text-ink/55">words max</span>
-                </div>
-              </label>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Excluded client countries">
-            <p className="mb-2 text-xs text-ink/55">
-              Clients based in these countries get a clear warning on the generated proposal — it still generates, the decision to bid stays
-              yours.
-            </p>
-            <ExcludedCountries countries={form.excludedCountries} onChange={(next) => setForm({ ...form, excludedCountries: next })} />
-          </SectionCard>
-
-          <SectionCard title="Client activity criteria">
-            <p className="mb-2 text-xs text-ink/55">
-              A client within the window below with zero hires is treated as brand-new (no track record yet, worth a shot). Past that window,
-              they&apos;re judged on hires per year — Upwork doesn&apos;t expose a &quot;jobs posted&quot; count, so hires/year is the closest
-              real signal of how much work a client actually has.
-            </p>
-            <div className="flex flex-wrap gap-6">
-              <label className="flex flex-col gap-1 text-xs text-ink/60">
-                New-client window
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={24}
-                    value={form.newClientWindowMonths}
-                    onChange={(e) => setForm({ ...form, newClientWindowMonths: Number(e.target.value) })}
-                    className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
-                  />
-                  <span className="text-sm text-ink/55">months</span>
-                </div>
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-ink/60">
-                Minimum activity
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={50}
-                    value={form.minHiresPerYear}
-                    onChange={(e) => setForm({ ...form, minHiresPerYear: Number(e.target.value) })}
-                    className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
-                  />
-                  <span className="text-sm text-ink/55">hires/year, below which flags as low-activity</span>
-                </div>
-              </label>
-            </div>
-          </SectionCard>
+          <SettingsShell
+            title="Settings"
+            categories={[
+              {
+                id: "proposal-writing",
+                label: "Proposal Writing",
+                sections: [
+                  {
+                    id: "background",
+                    label: "Agency background",
+                    content: (
+                      <div>
+                        <h3 className="mb-1 text-sm font-semibold text-ink">Agency / freelancer background</h3>
+                        <p className="mb-3 text-xs text-ink/55">
+                          Who&apos;s writing this — services offered, strengths, differentiators. Every letter is written in the voice of an
+                          individual freelancer (never an agency); the generator weaves this in naturally and never invents anything beyond
+                          what&apos;s here.
+                        </p>
+                        <textarea
+                          value={form.agencyBackground}
+                          onChange={(e) => setForm({ ...form, agencyBackground: e.target.value })}
+                          rows={8}
+                          className="w-full rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                          placeholder="e.g. I'm a Shopify + web design freelancer specializing in DTC fashion/beauty brands..."
+                        />
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "instructions",
+                    label: "Writing instructions",
+                    content: (
+                      <div>
+                        <h3 className="mb-1 text-sm font-semibold text-ink">Writing instructions</h3>
+                        <p className="mb-3 text-xs text-ink/55">
+                          Tone, structure, must-include rules, things to avoid — the main prompt the generator follows.
+                        </p>
+                        <textarea
+                          value={form.instructions}
+                          onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+                          rows={16}
+                          className="w-full rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                        />
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "length",
+                    label: "Proposal length",
+                    content: (
+                      <div>
+                        <h3 className="mb-1 text-sm font-semibold text-ink">Proposal length (Bidding SOP)</h3>
+                        <p className="mb-3 text-xs text-ink/55">
+                          The generator classifies each job as technical or non-technical/graphics and writes within the matching limit below.
+                          Soft targets, not hard cutoffs.
+                        </p>
+                        <div className="flex flex-wrap gap-6">
+                          <label className="flex flex-col gap-1 text-xs text-ink/60">
+                            Technical jobs
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={30}
+                                max={1000}
+                                value={form.technicalWordLimit}
+                                onChange={(e) => setForm({ ...form, technicalWordLimit: Number(e.target.value) })}
+                                className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                              />
+                              <span className="text-sm text-ink/55">words max</span>
+                            </div>
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs text-ink/60">
+                            Non-technical / graphics jobs
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={30}
+                                max={1000}
+                                value={form.nonTechnicalWordLimit}
+                                onChange={(e) => setForm({ ...form, nonTechnicalWordLimit: Number(e.target.value) })}
+                                className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                              />
+                              <span className="text-sm text-ink/55">words max</span>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "countries",
+                    label: "Excluded countries",
+                    content: (
+                      <div>
+                        <h3 className="mb-1 text-sm font-semibold text-ink">Excluded client countries</h3>
+                        <p className="mb-3 text-xs text-ink/55">
+                          Clients based in these countries get a clear warning on the generated proposal — it still generates, the decision to
+                          bid stays yours.
+                        </p>
+                        <ExcludedCountries countries={form.excludedCountries} onChange={(next) => setForm({ ...form, excludedCountries: next })} />
+                      </div>
+                    ),
+                  },
+                  {
+                    id: "activity",
+                    label: "Client activity",
+                    content: (
+                      <div>
+                        <h3 className="mb-1 text-sm font-semibold text-ink">Client activity criteria</h3>
+                        <p className="mb-3 text-xs text-ink/55">
+                          A client within the window below with zero hires is treated as brand-new (no track record yet, worth a shot). Past
+                          that window, they&apos;re judged on hires per year — Upwork doesn&apos;t expose a &quot;jobs posted&quot; count, so
+                          hires/year is the closest real signal of how much work a client actually has.
+                        </p>
+                        <div className="flex flex-wrap gap-6">
+                          <label className="flex flex-col gap-1 text-xs text-ink/60">
+                            New-client window
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={24}
+                                value={form.newClientWindowMonths}
+                                onChange={(e) => setForm({ ...form, newClientWindowMonths: Number(e.target.value) })}
+                                className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                              />
+                              <span className="text-sm text-ink/55">months</span>
+                            </div>
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs text-ink/60">
+                            Minimum activity
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min={0}
+                                max={50}
+                                value={form.minHiresPerYear}
+                                onChange={(e) => setForm({ ...form, minHiresPerYear: Number(e.target.value) })}
+                                className="w-24 rounded-md border border-[var(--line)] bg-transparent px-3 py-2 text-sm outline-none focus:border-accent"
+                              />
+                              <span className="text-sm text-ink/55">hires/year, below which flags as low-activity</span>
+                            </div>
+                          </label>
+                        </div>
+                      </div>
+                    ),
+                  },
+                ],
+              },
+            ]}
+          />
 
           <div>
             <button
