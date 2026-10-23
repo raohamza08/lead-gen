@@ -498,6 +498,13 @@ export default function MarketplaceJobsPage() {
         jobs: MarketplaceJob[];
       }>,
     enabled: connected,
+    // Auto-refreshes so newly posted jobs show up without a manual reload
+    // (Part: Marketplace Jobs live updates, 2026-10-23, explicit user
+    // request — "set the new jobs... to every 5 sec update"). React
+    // Query's default refetchIntervalInBackground: false already pauses
+    // this while the tab isn't focused, so it's not polling Upwork's live
+    // API from idle/background tabs.
+    refetchInterval: 5000,
   });
   const jobs = jobsQuery.data;
 

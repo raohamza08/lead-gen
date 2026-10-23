@@ -133,13 +133,23 @@ export class ModuleAccessGuard implements CanActivate {
     const request = context.switchToHttp().getRequest();
     const user: JwtClaims | undefined = request.user;
     if (!user) return false;
-    if (user.role === Role.ADMIN) return true;
+
+    // Fetched once, before the ADMIN bypass check (Part: role-change
+    // staleness fix, 2026-10-23, explicit bug report — a user demoted from
+    // admin back to manager still had full access) — `user.role` is the
+    // JWT's claim at login/refresh time, not current DB state, and nothing
+    // revokes an outstanding access token on a role change. Checking
+    // `user.role === Role.ADMIN` directly let a just-demoted user's stale
+    // token keep bypassing every module flag below until that token
+    // naturally expired. Same cache this guard already used for the
+    // per-module fields, just consulted for the bypass too now.
+    const record = await this.userAccess.get(user.sub);
+    if ((record?.role as Role | undefined) === Role.ADMIN) return true;
 
     // Array means OR: any one of the listed modules' flags being true is
     // enough (see RequiresModule's own docblock for why this exists).
     const modules = Array.isArray(requiredModule) ? requiredModule : [requiredModule];
     const fields = modules.map((m) => FIELD_BY_MODULE[m]);
-    const record = await this.userAccess.get(user.sub);
     const granted = fields.some((field) => record?.[field]);
     if (!granted) {
       this.denialLogger.log(user, `missing ${fields.join(" or ")}`, context.switchToHttp().getRequest().route?.path);
