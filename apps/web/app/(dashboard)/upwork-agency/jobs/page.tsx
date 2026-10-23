@@ -63,7 +63,31 @@ interface FreelancerProfile {
 }
 
 const JUST_POSTED_WINDOW_MIN = 15;
-const STOPWORDS = new Set(["and", "the", "for", "with", "development", "design", "services"]);
+/** Confirmed against real production niches (Part: profile-matching fix,
+ *  2026-10-23, explicit bug report — a web-dev job was suggested to a
+ *  graphic designer). Freelancer niches are written as taglines
+ *  ("Senior Graphic Designer | Canva, Photoshop & Visual Branding
+ *  Expert"), and "expert"/"specialist"/"senior"/"professional"/
+ *  "experienced" show up as filler in most of them regardless of actual
+ *  trade — 5 of the 18 real profiles in this org contain "expert" alone.
+ *  Job titles use the exact same filler words just as often, so without
+ *  stripping them a web-dev job can out-score the correct web developer
+ *  by coincidentally matching a designer's leftover "senior"/"expert"
+ *  instead of anything specialty-specific. */
+const STOPWORDS = new Set([
+  "and",
+  "the",
+  "for",
+  "with",
+  "development",
+  "design",
+  "services",
+  "expert",
+  "specialist",
+  "senior",
+  "professional",
+  "experienced",
+]);
 const PAGE_SIZE_OPTIONS = [15, 25, 50];
 
 function minutesAgo(iso: string): number {
@@ -174,9 +198,19 @@ function matchProfile(job: MarketplaceJob, profiles: FreelancerProfile[]): { pro
   let best: { profile: FreelancerProfile; score: number; matchedWords: string[] } | null = null;
   for (const profile of profiles) {
     const words = nicheWordList(profile.niche);
+    if (words.length === 0) continue;
     const matchedWords = words.filter((w) => haystack.includes(w));
-    if (matchedWords.length > 0 && (!best || matchedWords.length > best.score)) {
-      best = { profile, score: matchedWords.length, matchedWords };
+    if (matchedWords.length === 0) continue;
+    // Scored as the FRACTION of this niche's own words that showed up, not
+    // the raw count (Part: profile-matching fix, 2026-10-23) — raw count
+    // structurally favored whichever profile had the longest, most
+    // flowery niche tagline, since more words means more chances to
+    // coincidentally match something, regardless of actual relevance. Raw
+    // count still breaks a tie between two profiles with the same
+    // fraction matched.
+    const score = matchedWords.length / words.length;
+    if (!best || score > best.score || (score === best.score && matchedWords.length > best.matchedWords.length)) {
+      best = { profile, score, matchedWords };
     }
   }
   return best ? { profile: best.profile, matchedWords: best.matchedWords } : null;
