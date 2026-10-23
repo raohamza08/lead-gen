@@ -81,52 +81,6 @@ function PendingChatReminderSettings() {
   );
 }
 
-/** Fires one real notification through the full production path
- *  (NotificationsService.notify -> Socket.IO -> notifications-bell's
- *  desktop branch) so the user can verify an actual OS popup appears,
- *  not just the in-app bell — added 2026-10-23 after a confirmed stale-
- *  closure bug in useRealtimeEvent meant the bell's handler was frozen on
- *  the preferences value from first page load and desktop popups could
- *  never fire even after enabling them. Always visible, independent of
- *  PendingChatReminderSettings above, so it can verify the general
- *  desktopEnabled path even once the one-time enable button is gone. */
-function TestDesktopNotificationButton() {
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  async function sendTest() {
-    setState("sending");
-    setErrorMsg(null);
-    try {
-      await api.sendTestDesktopNotification();
-      setState("sent");
-    } catch (err) {
-      setErrorMsg((err as Error).message);
-      setState("error");
-    }
-  }
-
-  return (
-    <div className="flex flex-col gap-1">
-      <button
-        type="button"
-        disabled={state === "sending"}
-        onClick={sendTest}
-        className="h-8 w-fit rounded-md border border-[var(--line)] px-3 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-      >
-        {state === "sending" ? "Sending…" : "Send test desktop notification"}
-      </button>
-      {state === "sent" && (
-        <p className="text-[11px] text-good">
-          Sent — a real OS notification should appear now, even if this tab is focused. If you only see it in the bell above, desktop notifications
-          aren&apos;t enabled yet (browser permission and/or the toggle on your Profile page).
-        </p>
-      )}
-      {state === "error" && <p className="text-[11px] text-bad">{errorMsg}</p>}
-    </div>
-  );
-}
-
 /** Rooms & Messages (spec Module K), read-only. Part: Upwork API
  *  integration — enterprise UI shell, 2026-10-23. Rebuilt into a 3-panel
  *  chat-app layout to match the user's "Dark Mode Rooms & Messages
@@ -214,7 +168,6 @@ export default function RoomsPage() {
       </div>
 
       <PendingChatReminderSettings />
-      <TestDesktopNotificationButton />
 
       {roomsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
 
