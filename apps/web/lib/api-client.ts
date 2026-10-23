@@ -314,6 +314,8 @@ export const api = {
     request<{ promoted: number }>("/leads/promote-to-pipeline", { method: "POST", body: JSON.stringify(body) }),
   bulkDeleteLeads: (leadIds: string[]) =>
     request<{ deleted: number }>("/leads/bulk-delete", { method: "POST", body: JSON.stringify({ leadIds }) }),
+  bulkAssignLeads: (leadIds: string[], assignedUserId: string | null) =>
+    request<{ assigned: number }>("/leads/bulk-assign", { method: "POST", body: JSON.stringify({ leadIds, assignedUserId }) }),
   getNicheFilters: () => request("/niche-filters"),
   getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
   deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),

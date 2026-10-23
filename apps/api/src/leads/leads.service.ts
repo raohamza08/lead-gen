@@ -462,6 +462,31 @@ export class LeadsService {
     return { deleted: result.count };
   }
 
+  /** Bulk "Assign" (Part: full UI redesign per UI.md, Pipeline ribbon —
+   *  `assignedUserId` already existed on Lead with no mutation endpoint
+   *  anywhere, real gap this closes rather than a cosmetic one). Scoped
+   *  to `orgId` same as removeByIds, so one org can never reassign
+   *  another's leads even with a guessed id. `assignedUserId: null`
+   *  unassigns. */
+  async bulkAssign(orgId: string, leadIds: string[], assignedUserId: string | null, actorId?: string) {
+    if (assignedUserId) {
+      const user = await this.prisma.user.findFirst({ where: { id: assignedUserId, orgId }, select: { id: true } });
+      if (!user) throw new NotFoundException("Assignee not found in this organization");
+    }
+    const result = await this.prisma.lead.updateMany({
+      where: { orgId, id: { in: leadIds } },
+      data: { assignedUserId },
+    });
+    this.auditLog.write({
+      orgId,
+      actorId,
+      action: "LEADS_BULK_ASSIGNED",
+      entityType: "lead",
+      metadata: { count: result.count, leadIds, assignedUserId },
+    });
+    return { assigned: result.count };
+  }
+
   /**
    * Lead Room's "Move to Pipeline" action — the human-add paths
    * (createManual/importLeads/EmailHub addToLead, all via insertManualLead)

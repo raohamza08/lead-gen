@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { useRealtimeRefetch } from "../../../lib/realtime";
@@ -12,6 +12,8 @@ import { Button } from "../../../components/ui/button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { Tabs } from "../../../components/ui/tabs";
 import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../components/ui/table";
+import { InitialsAvatar } from "../../../components/avatar";
+import { EmailSidebar } from "../../../components/email-hub/email-sidebar";
 
 interface Account {
   id: string;
@@ -27,6 +29,7 @@ interface Tag {
 }
 
 interface Stats {
+  total: number;
   connectedAccounts: number;
   unread: number;
   important: number;
@@ -83,10 +86,15 @@ interface Message {
  *  client-side filter on thread.leadId. "Sent" *is* first-class (folder:
  *  "SENT" on the row, synced from the mailbox's real Sent folder — see
  *  ImapReaderProvider.findSentMailbox), so it maps directly. */
-function statusForView(view: string | null): "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" | "SENT" {
+function statusForView(view: string | null): "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" | "POSSIBLE_LEADS" | "SENT" {
   if (view === "important") return "IMPORTANT";
   if (view === "ignored") return "IGNORED";
   if (view === "leads") return "LEADS";
+  // Real backend statuses (Part: full UI redesign per UI.md — UNREAD and
+  // POSSIBLE_LEADS already existed in ListMessagesQuery; nothing in this
+  // view switcher routed to either one before this).
+  if (view === "unread") return "UNREAD";
+  if (view === "possible-leads") return "POSSIBLE_LEADS";
   if (view === "sent") return "SENT";
   return "ALL";
 }
@@ -135,9 +143,18 @@ export default function EmailHubPage() {
 }
 
 function EmailHubPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const view = searchParams?.get("view") ?? null;
   const queryClient = useQueryClient();
+
+  // Sidebar view switcher (Part: full UI redesign per UI.md) — pushes the
+  // same `?view=` URL sidebar-nav.tsx's own Email Hub links already use,
+  // so bookmarking/sharing a filtered view and the global nav's active-
+  // link highlighting both keep working unchanged.
+  function changeView(next: string | null) {
+    router.push(next ? `/email-hub?view=${next}` : "/email-hub");
+  }
 
   const [accountId, setAccountId] = useState<string>("");
   const [search, setSearch] = useState("");
@@ -155,6 +172,7 @@ function EmailHubPageContent() {
   const [newTagName, setNewTagName] = useState("");
   const [actionError, setActionError] = useState<string | null>(null);
   const [confirmingLeadId, setConfirmingLeadId] = useState<string | null>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const status = statusForView(view);
   // "Tracked" isn't a message-list status at all (it's HubEmailOpenTracking
@@ -336,6 +354,8 @@ function EmailHubPageContent() {
     if (view === "important") return "Important";
     if (view === "ignored") return "Ignored";
     if (view === "leads") return "Leads";
+    if (view === "possible-leads") return "Possible Leads";
+    if (view === "unread") return "Unread";
     if (view === "followups") return "Follow-ups";
     if (view === "sent") return "Sent";
     if (view === "tracked") return "Tracked";
@@ -348,6 +368,116 @@ function EmailHubPageContent() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Ribbon-style action toolbar (Part: full UI redesign per UI.md,
+          Section 6.3). Select rows (checkbox, left of each) to enable
+          Delete/Flag/Mark read; everything here already existed as the
+          page's own bulk-action toolbar, just repositioned to always be
+          visible (disabled when nothing's selected) instead of only
+          appearing once something is checked, and "Flag" is this app's
+          real existing isImportant/★ toggle under the mockup's naming.
+          The rest of the real bulk actions (Mark unread, Ignore sender/
+          domain, Unignore, Add tag) live under "…" rather than widening
+          the row further. No "Archive" or "Assign" button — neither
+          concept exists on InboundEmailMessage (no archived/flagged-for-
+          user field, and email messages have no assignedUserId the way
+          Lead does), so there's nothing real to wire them to. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-3">
+        <Button size="sm" onClick={() => setShowCompose(true)}>
+          + New email
+        </Button>
+        <span className="h-6 w-px bg-[var(--line)]" />
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={selected.size === 0 || bulkActionMutation.isPending}
+          onClick={() => window.confirm(`Delete ${selected.size} message(s)? This removes them from the Email Hub, not the real mailbox.`) && bulkAction("DELETE")}
+        >
+          Delete
+        </Button>
+        <Button variant="ghost" size="sm" disabled={selected.size === 0 || bulkActionMutation.isPending} onClick={() => bulkAction("IMPORTANT")}>
+          Flag
+        </Button>
+        <Button variant="ghost" size="sm" disabled={selected.size === 0 || bulkActionMutation.isPending} onClick={() => bulkAction("READ")}>
+          Mark read
+        </Button>
+        <div className="relative">
+          <Button variant="ghost" size="sm" onClick={() => setMoreOpen((v) => !v)}>
+            …
+          </Button>
+          {moreOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded border border-[var(--line)] bg-surface py-1 shadow-lg">
+              <button
+                disabled={selected.size === 0 || bulkActionMutation.isPending}
+                onClick={() => {
+                  bulkAction("UNREAD");
+                  setMoreOpen(false);
+                }}
+                className="block w-full px-3 py-1.5 text-left text-sm text-ink/80 hover:bg-ink/5 disabled:opacity-40"
+              >
+                Mark unread
+              </button>
+              <button
+                disabled={selected.size === 0 || bulkActionMutation.isPending}
+                onClick={() => {
+                  bulkAction("IGNORE", undefined, "SENDER");
+                  setMoreOpen(false);
+                }}
+                className="block w-full px-3 py-1.5 text-left text-sm text-ink/80 hover:bg-ink/5 disabled:opacity-40"
+              >
+                Ignore sender
+              </button>
+              <button
+                disabled={selected.size === 0 || bulkActionMutation.isPending}
+                onClick={() => {
+                  bulkAction("IGNORE", undefined, "DOMAIN");
+                  setMoreOpen(false);
+                }}
+                title="Mutes every sender at the selected messages' domain(s), not just these exact addresses"
+                className="block w-full px-3 py-1.5 text-left text-sm text-ink/80 hover:bg-ink/5 disabled:opacity-40"
+              >
+                Ignore domain
+              </button>
+              <button
+                disabled={selected.size === 0 || bulkActionMutation.isPending}
+                onClick={() => {
+                  bulkAction("UNIGNORE");
+                  setMoreOpen(false);
+                }}
+                className="block w-full px-3 py-1.5 text-left text-sm text-ink/80 hover:bg-ink/5 disabled:opacity-40"
+              >
+                Unignore
+              </button>
+              {tags.length > 0 && (
+                <>
+                  <div className="my-1 h-px bg-[var(--line)]" />
+                  {tags.map((t) => (
+                    <button
+                      key={t.id}
+                      disabled={selected.size === 0 || bulkActionMutation.isPending}
+                      onClick={() => {
+                        bulkAction("ADD_TAG", t.id);
+                        setMoreOpen(false);
+                      }}
+                      className="block w-full px-3 py-1.5 text-left text-sm text-ink/80 hover:bg-ink/5 disabled:opacity-40"
+                    >
+                      Add tag: {t.name}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+        {selected.size > 0 && (
+          <span className="ml-1 flex items-center gap-2 text-xs text-ink/50">
+            {selected.size} selected
+            <button type="button" onClick={() => setSelected(new Set())} className="text-accent hover:underline">
+              Clear
+            </button>
+          </span>
+        )}
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <h1 className="text-lg font-semibold tracking-tight">{viewTitle}</h1>
@@ -356,14 +486,9 @@ function EmailHubPageContent() {
               fresh load even though it's quietly re-verifying. */}
           {messagesQuery.isFetching && !messagesQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
         </div>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={() => setShowTagManager((v) => !v)}>
-            Manage tags
-          </Button>
-          <Button size="sm" onClick={() => setShowCompose(true)}>
-            New email
-          </Button>
-        </div>
+        <Button variant="secondary" size="sm" onClick={() => setShowTagManager((v) => !v)}>
+          Manage tags
+        </Button>
       </div>
 
       {statsQuery.data && (
@@ -460,6 +585,19 @@ function EmailHubPageContent() {
         </div>
       )}
 
+      <div className="flex gap-4">
+      <EmailSidebar
+        counts={{
+          total: statsQuery.data?.total ?? 0,
+          unread: statsQuery.data?.unread ?? 0,
+          leads: statsQuery.data?.leadsFromEmail ?? 0,
+          possibleLeads: statsQuery.data?.possibleLeads ?? 0,
+          accounts: statsQuery.data?.connectedAccounts ?? 0,
+        }}
+        view={view}
+        onViewChange={changeView}
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-4">
       {/* Account switcher — All accounts + one tab per connected mailbox
           (Part: Individual Account View / Unified Inbox toggle). */}
       {accounts.length === 0 && !accountsQuery.isLoading ? (
@@ -499,52 +637,6 @@ function EmailHubPageContent() {
         </select>
       </div>
 
-      {/* Bulk action toolbar */}
-      {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--line)] bg-ink/5 px-3 py-2 text-xs">
-          <span className="font-medium">{selected.size} selected</span>
-          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("READ")}>Mark read</Button>
-          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNREAD")}>Mark unread</Button>
-          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IMPORTANT")}>Mark important</Button>
-          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("IGNORE", undefined, "SENDER")}>Ignore sender</Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={bulkActionMutation.isPending}
-            onClick={() => bulkAction("IGNORE", undefined, "DOMAIN")}
-            title="Mutes every sender at the selected messages' domain(s), not just these exact addresses"
-          >
-            Ignore domain
-          </Button>
-          <Button variant="secondary" size="sm" disabled={bulkActionMutation.isPending} onClick={() => bulkAction("UNIGNORE")}>Unignore</Button>
-          {tags.length > 0 && (
-            <select
-              disabled={bulkActionMutation.isPending}
-              onChange={(e) => e.target.value && bulkAction("ADD_TAG", e.target.value)}
-              defaultValue=""
-              className="rounded border border-[var(--line)] bg-transparent px-2 py-1"
-            >
-              <option value="" disabled>
-                Add tag…
-              </option>
-              {tags.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
-          )}
-          <Button
-            variant="danger"
-            size="sm"
-            disabled={bulkActionMutation.isPending}
-            onClick={() => window.confirm(`Delete ${selected.size} message(s)? This removes them from the Email Hub, not the real mailbox.`) && bulkAction("DELETE")}
-          >
-            Delete
-          </Button>
-        </div>
-      )}
-
       {/* Message list */}
       {messagesQuery.isLoading ? (
         <div className="card">
@@ -573,14 +665,21 @@ function EmailHubPageContent() {
                   </span>
                 </Td>
                 <Td>
-                  {m.folder === "SENT" ? (
-                    <div>{m.toEmails.join(", ") || "(no recipient)"}</div>
-                  ) : (
-                    <>
-                      <div>{m.fromName || m.fromEmail}</div>
-                      <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
-                    </>
-                  )}
+                  <div className="flex items-center gap-2">
+                    <InitialsAvatar
+                      seed={m.folder === "SENT" ? m.toEmails[0] ?? m.id : m.fromEmail}
+                      label={m.folder === "SENT" ? m.toEmails[0] : m.fromName || m.fromEmail}
+                      sizeClass="h-7 w-7 shrink-0 text-[10px]"
+                    />
+                    {m.folder === "SENT" ? (
+                      <div>{m.toEmails.join(", ") || "(no recipient)"}</div>
+                    ) : (
+                      <div>
+                        <div>{m.fromName || m.fromEmail}</div>
+                        <div className="text-xs font-normal text-ink/50">{m.fromEmail}</div>
+                      </div>
+                    )}
+                  </div>
                 </Td>
                 <Td>
                   <div className="flex items-center gap-1.5">
@@ -670,6 +769,8 @@ function EmailHubPageContent() {
             Next →
           </Button>
         </div>
+      </div>
+      </div>
       </div>
 
       {openThreadId && (

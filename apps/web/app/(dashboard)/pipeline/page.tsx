@@ -362,6 +362,104 @@ export default function PipelinePage() {
   const [newLeadSaving, setNewLeadSaving] = useState(false);
   const [newLeadError, setNewLeadError] = useState<string | null>(null);
   const currentUserId = getCurrentUser()?.sub;
+
+  // Card multi-select + ribbon bulk actions (Part: full UI redesign per
+  // UI.md, Pipeline mockup — explicit user follow-up that the first pass
+  // left too much of the ribbon non-functional). Real endpoints: Delete
+  // (api.bulkDeleteLeads, already existed), Move stage (loops
+  // api.advanceStage per lead, same transition rules as a drag-drop),
+  // Assign (api.bulkAssignLeads — new endpoint added for this, since
+  // `assignedUserId` existed on Lead with no mutation path anywhere in
+  // the app until now). "Mark done" maps onto the real WON stage — this
+  // app has no separate "done" concept, but WON is the real terminal
+  // "this lead is done" state the pipeline already has.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [moveStageOpen, setMoveStageOpen] = useState(false);
+  const orgUsersQuery = useQuery({
+    queryKey: ["org-users-for-assign"],
+    queryFn: () => api.getUsers() as Promise<{ id: string; name: string; email: string }[]>,
+    enabled: assignOpen,
+  });
+
+  function toggleSelected(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  function clearSelection() {
+    setSelectedIds(new Set());
+  }
+
+  async function bulkDeleteSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Permanently delete ${ids.length} lead${ids.length === 1 ? "" : "s"}?\n\nThis removes their full history — scores, review notes, and any emails already sent — and cannot be undone.`,
+      )
+    )
+      return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.bulkDeleteLeads(ids);
+      clearSelection();
+      invalidateLeads();
+    } catch (err) {
+      setError(`Could not delete selected leads: ${(err as Error).message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function bulkMoveSelected(targetStage: string) {
+    const ids = [...selectedIds];
+    setMoveStageOpen(false);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    const targets = promotedLeads.filter((l) => ids.includes(l.id));
+    const movable = targets.filter((l) => canDrop(l.pipelineState?.stage ?? null, targetStage));
+    try {
+      await Promise.all(movable.map((l) => api.advanceStage(l.id, targetStage)));
+      invalidateLeads();
+      clearSelection();
+      if (movable.length < targets.length) {
+        setNotice(`Moved ${movable.length} of ${targets.length} — the rest aren't eligible for "${LABELS[targetStage] ?? targetStage}" from their current stage.`);
+      }
+    } catch (err) {
+      setError(`Could not move selected leads: ${(err as Error).message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  async function bulkAssignSelected(userId: string | null) {
+    const ids = [...selectedIds];
+    setAssignOpen(false);
+    if (ids.length === 0) return;
+    setBulkBusy(true);
+    setError(null);
+    try {
+      await api.bulkAssignLeads(ids, userId);
+      invalidateLeads();
+      clearSelection();
+    } catch (err) {
+      setError(`Could not assign selected leads: ${(err as Error).message}`);
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
+  function bulkMarkDone() {
+    bulkMoveSelected(PipelineStage.WON);
+  }
+
   // How many cards are rendered per column, independent of how many exist —
   // a column used to render its whole list at once, so the page grew taller
   // as leads piled up in one stage. Fixed-height scrollable columns now
@@ -748,13 +846,95 @@ export default function PipelinePage() {
   return (
     <div className="flex flex-col gap-4">
       {/* Ribbon-style action toolbar (Part: full UI redesign per UI.md,
-          Section 6.3) — scoped to the one real action this page can
-          honestly offer without fabricating bulk-select/archive/flag
-          functionality that doesn't exist anywhere in this app's data
-          model (see leads-sidebar.tsx's own docblock for the same
-          reasoning applied to the sidebar). */}
-      <div className="flex items-center gap-2 border-b border-[var(--line)] pb-3">
+          Section 6.3). Select one or more cards (checkbox, top-left of
+          each) to enable Delete/Move stage/Assign/Mark done — every one
+          calls a real endpoint (Move stage reuses the same
+          advance-stage transition rules as a drag-drop; Assign is a new
+          api.bulkAssignLeads endpoint added for this, since
+          `assignedUserId` existed on Lead with nothing anywhere able to
+          set it). No "Archive" or "Flag" button — neither concept exists
+          anywhere in the Lead schema (no archived/flagged field), and
+          this app doesn't ship controls that quietly do nothing. */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--line)] pb-3">
         <SplitPrimaryButton label="New lead" onClick={() => setNewLeadOpen((v) => !v)} disabled={newLeadSaving} />
+        <span className="h-6 w-px bg-[var(--line)]" />
+        <button
+          type="button"
+          disabled={selectedIds.size === 0 || bulkBusy}
+          onClick={bulkDeleteSelected}
+          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-40"
+        >
+          Delete
+        </button>
+        <div className="relative">
+          <button
+            type="button"
+            disabled={selectedIds.size === 0 || bulkBusy}
+            onClick={() => setMoveStageOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-40"
+          >
+            Move stage
+          </button>
+          {moveStageOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded border border-[var(--line)] bg-surface py-1 shadow-lg">
+              {COLUMNS.map((stage) => (
+                <button
+                  key={stage}
+                  type="button"
+                  onClick={() => bulkMoveSelected(stage)}
+                  className="block w-full px-3 py-1.5 text-left text-sm text-ink/80 hover:bg-ink/5"
+                >
+                  {LABELS[stage] ?? stage}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="relative">
+          <button
+            type="button"
+            disabled={selectedIds.size === 0 || bulkBusy}
+            onClick={() => setAssignOpen((v) => !v)}
+            className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-40"
+          >
+            Assign
+          </button>
+          {assignOpen && (
+            <div className="absolute left-0 top-full z-20 mt-1 w-56 rounded border border-[var(--line)] bg-surface py-1 shadow-lg">
+              {orgUsersQuery.isLoading && <p className="px-3 py-1.5 text-xs text-ink/50">Loading…</p>}
+              {orgUsersQuery.data?.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => bulkAssignSelected(u.id)}
+                  className="block w-full truncate px-3 py-1.5 text-left text-sm text-ink/80 hover:bg-ink/5"
+                >
+                  {u.name || u.email}
+                </button>
+              ))}
+              <button type="button" onClick={() => bulkAssignSelected(null)} className="block w-full px-3 py-1.5 text-left text-sm text-ink/50 hover:bg-ink/5">
+                Unassign
+              </button>
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          disabled={selectedIds.size === 0 || bulkBusy}
+          onClick={bulkMarkDone}
+          title="Moves selected leads to Won — this app has no separate 'done' concept, Won is the real terminal stage"
+          className="flex items-center gap-1.5 rounded px-2.5 py-1.5 text-sm text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-40"
+        >
+          Mark done
+        </button>
+        {selectedIds.size > 0 && (
+          <span className="ml-1 flex items-center gap-2 text-xs text-ink/50">
+            {selectedIds.size} selected
+            <button type="button" onClick={clearSelection} className="text-accent hover:underline">
+              Clear
+            </button>
+          </span>
+        )}
       </div>
 
       {newLeadOpen && (
@@ -923,11 +1103,21 @@ export default function PipelinePage() {
                       setDragging(null);
                       setHoverStage(null);
                     }}
-                    className={`card card-interactive cursor-grab p-2.5 text-xs active:cursor-grabbing ${
+                    className={`card card-interactive relative cursor-grab p-2.5 text-xs active:cursor-grabbing ${
                       dragging?.id === lead.id ? "drag-ghost" : ""
-                    } ${busy === lead.id ? "opacity-50" : ""}`}
+                    } ${busy === lead.id ? "opacity-50" : ""} ${selectedIds.has(lead.id) ? "outline outline-1 outline-accent -outline-offset-1" : ""}`}
                   >
-                    <Link href={`/leads/${lead.id}`} className="block">
+                    <input
+                      type="checkbox"
+                      draggable={false}
+                      checked={selectedIds.has(lead.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onChange={() => toggleSelected(lead.id)}
+                      className="absolute right-2 top-2 z-10"
+                      aria-label={`Select ${lead.companyName}`}
+                    />
+                    <Link href={`/leads/${lead.id}`} className="block pr-4">
                       <div className="flex items-start gap-2">
                         <InitialsAvatar seed={lead.id} label={lead.companyName} sizeClass="h-7 w-7 shrink-0 text-[10px]" />
                         <div className="min-w-0 flex-1">
