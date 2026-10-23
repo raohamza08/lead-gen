@@ -842,6 +842,43 @@ export const api = {
         feedbackToClientScore: number | null;
       }[];
     }>("/upwork-api/work-history"),
+  // Agency Tools (Part: Upwork API integration — companySelector/Talent
+  // Search/Work Diary/Team Invite, 2026-10-23) — primary-admin only.
+  getUpworkApiOrganizations: () =>
+    request<{ title: string; organizationId: string; organizationRid: string | null; organizationType: string | null; organizationLegacyType: string | null }[]>(
+      "/upwork-api/agency-tools/organizations",
+    ),
+  searchUpworkTalent: (keyword: string, after?: string | null) => {
+    const params = new URLSearchParams({ keyword });
+    if (after) params.set("after", after);
+    return request<{
+      totalCount: number;
+      endCursor: string | null;
+      hasNextPage: boolean;
+      results: { shortName: string | null; ciphertext: string | null }[];
+    }>(`/upwork-api/agency-tools/talent-search?${params.toString()}`);
+  },
+  listUpworkWorkDiaryContracts: () =>
+    request<{ upworkContractId: string; title: string | null; freelancerName: string | null; status: string | null }[]>(
+      "/upwork-api/agency-tools/work-diary/contracts",
+    ),
+  getUpworkWorkDiary: (contractId: string, date: string) =>
+    request<{
+      workDiaryMetadata: { timezoneOffset: string } | null;
+      workDiaryTimeCells: {
+        cellDateTime: { displayValue: string } | null;
+        activityLevel: number | null;
+        memo: string | null;
+        hasScreenshot: boolean | null;
+        screenshotImageUrlMedium: string | null;
+        task: { description: string | null } | null;
+      }[];
+    }>(`/upwork-api/agency-tools/work-diary?contractId=${encodeURIComponent(contractId)}&date=${encodeURIComponent(date)}`),
+  inviteUpworkTeamMember: (body: { email: string; targetOrganizationId: string; landingUrl: string }) =>
+    request<{
+      succeeded: { id: string; token: string | null }[];
+      failed: { code: string | null; message: string | null; invitation: { username: string | null } | null }[];
+    }>("/upwork-api/agency-tools/invite-to-team", { method: "POST", body: JSON.stringify(body) }),
   // Freelancer Profiles (spec Module H).
   getUpworkApiFreelancerProfiles: () =>
     request<{

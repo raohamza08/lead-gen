@@ -51,6 +51,10 @@ interface NavLink {
    *  the group header itself then only shows if at least one child link
    *  survives this filtering (see filterItems below). */
   moduleFlag?: ModuleFlag | ModuleFlag[];
+  /** Same meaning as NavItem's own requiresPrimaryAdmin below, for a link
+   *  nested inside a group (Part: Agency Tools, 2026-10-23) — overrides
+   *  moduleFlag entirely when set; see filterItems' group-link filtering. */
+  requiresPrimaryAdmin?: boolean;
 }
 
 type ModuleFlag =
@@ -525,6 +529,15 @@ const WORKSPACES: Workspace[] = [
           { href: "/upwork-agency/delayed-responses", label: "Delayed Responses", moduleFlag: "upworkAgencyRoomsAccess", icon: ClockIcon },
           { href: "/upwork-agency/jobs", label: "Marketplace Jobs", moduleFlag: "upworkAgencyJobsAccess", icon: RssIcon },
           { href: "/upwork-agency/ontology", label: "Ontology", moduleFlag: "upworkAgencyOntologyAccess", icon: TagIcon },
+          // Agency Tools (Part: Upwork API integration, 2026-10-23) — real
+          // capabilities found via live schema introspection, gated to the
+          // primary admin only (not a module flag) per explicit user
+          // request: "keep it to me for now, I'll see later whom to give
+          // access... do not change any [access] settings". requiresPrimaryAdmin
+          // bypasses the moduleFlag check entirely (see the filter below).
+          { href: "/upwork-agency/talent-search", label: "Talent Search", requiresPrimaryAdmin: true, icon: UserIcon },
+          { href: "/upwork-agency/work-diary", label: "Work Diary", requiresPrimaryAdmin: true, icon: EyeIcon },
+          { href: "/upwork-agency/team-invite", label: "Team Invite", requiresPrimaryAdmin: true, icon: SendIcon },
           { href: "/settings/upwork-api", label: "Connection Settings", moduleFlag: "upworkAgencyConnectionAccess", icon: GearIcon },
         ],
       },
@@ -754,7 +767,15 @@ export function SidebarNav({
         if (item.type !== "group") return item;
         // Per-link filtering (Part: Upwork Requests, 2026-10-01) -- a no-op
         // for every group whose links don't set their own moduleFlag.
-        return { ...item, links: item.links.filter((l) => flagGranted(l.moduleFlag)) };
+        // requiresPrimaryAdmin checked here too (Part: Agency Tools,
+        // 2026-10-23) -- the top-level filter below only ever applied this
+        // to standalone links outside a group (System Logs); nested group
+        // links like Talent Search/Work Diary/Team Invite never reached
+        // that check at all and would have shown to everyone.
+        return {
+          ...item,
+          links: item.links.filter((l) => (l.requiresPrimaryAdmin ? isPrimaryAdmin : flagGranted(l.moduleFlag))),
+        };
       })
       .filter((item) => {
         if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;

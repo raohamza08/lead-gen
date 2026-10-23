@@ -70,6 +70,16 @@ export default function UpworkApiSettingsPage() {
   });
   const status = statusQuery.data;
 
+  // Primary-admin-only endpoint — 403s silently for anyone else, which is
+  // fine here: the picker list just doesn't render, the manual text field
+  // below still works for everyone the module flag already lets in.
+  const organizationsQuery = useQuery({
+    queryKey: ["upwork-api-organizations"],
+    queryFn: () => api.getUpworkApiOrganizations(),
+    enabled: Boolean(status?.connected),
+    retry: false,
+  });
+
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
@@ -193,16 +203,32 @@ export default function UpworkApiSettingsPage() {
             {status.lastSyncError && <div className="mt-1 text-xs text-bad">Last sync warning: {status.lastSyncError}</div>}
 
             {/* Manual organization-ID override (Part: Upwork API
-                integration, 2026-10-22) — Upwork's automatic org-detection
-                is blocked by a scope this app doesn't have, so every call
-                silently defaults to the logged-in user's PERSONAL account
-                unless this is set explicitly. Find the real ID from the
-                agency's own public Upwork page (it's embedded in the
-                org-logo image URL, e.g. assets.static-upwork.com/org-logo/
-                &lt;id&gt;) or by granting the missing scope and letting Upwork's
-                own company selector resolve it instead. */}
+                integration, 2026-10-22; org picker added 2026-10-23) — a
+                fresh OAuth connect always lands on the personal account by
+                default (Upwork's own companySelector always puts it first
+                in the list), not any agency, unless this is set explicitly.
+                The list below is real, live companySelector data — pick one
+                to fill the field, still requires the explicit Save click
+                below, same as typing it by hand. */}
             <div className="mt-3 flex flex-col gap-1.5 border-t border-[var(--line)] pt-3">
               <label className="text-xs font-medium text-ink/70">Organization ID (overrides which Upwork org data syncs from)</label>
+              {organizationsQuery.data && organizationsQuery.data.length > 0 && (
+                <div className="flex flex-col gap-1">
+                  {organizationsQuery.data.map((o) => (
+                    <button
+                      key={o.organizationId}
+                      type="button"
+                      onClick={() => setOrgIdInput(o.organizationId)}
+                      className="flex items-center justify-between gap-2 rounded-md border border-[var(--line)] px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-ink/5"
+                    >
+                      <span className="text-ink/80">
+                        {o.title} <span className="text-ink/40">({o.organizationLegacyType ?? o.organizationType ?? "—"})</span>
+                      </span>
+                      <span className="shrink-0 text-ink/40">{o.organizationId}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -220,10 +246,7 @@ export default function UpworkApiSettingsPage() {
                   {savingOrgId ? "Checking…" : "Save"}
                 </button>
               </div>
-              <p className="text-[11px] text-ink/40">
-                Automatic detection is currently blocked by a missing Upwork app permission (company selector). Find your org&apos;s real ID on its
-                public Upwork agency page — it&apos;s embedded in the logo image URL.
-              </p>
+              <p className="text-[11px] text-ink/40">Click one of the real organizations above to fill the field, then Save — or type an ID by hand.</p>
             </div>
           </div>
         ) : status?.status === "EXPIRED" || status?.status === "ERROR" ? (

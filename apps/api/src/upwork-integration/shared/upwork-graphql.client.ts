@@ -216,20 +216,19 @@ export class UpworkGraphQLClient {
 
   /** Confirms a given tenant ID is real and returns its display name, by
    *  sending it as X-Upwork-API-TenantId and reading back `organization.
-   *  name` (Part: Upwork API integration — manual org override, 2026-10-22,
-   *  real bug found: the `companySelector` query this app would otherwise
-   *  use to auto-discover an agency's organization ID is blocked by a scope
-   *  this app's Upwork permissions don't include, confirmed live — "The
-   *  client or authentication token doesn't have enough oauth2 permissions/
-   *  scopes to access: [CompanySelector.items, ...]". Every GraphQL call
-   *  made without an explicit tenant header silently defaults to the
-   *  authenticating USER's own personal account context, not any agency
-   *  they belong to — confirmed live against this org's real connection,
-   *  which was returning "Sheikh Nabeel Ali" (the personal account) instead
-   *  of "EurosHub" until this was diagnosed. `organization`/`company`
-   *  (singular, "current organization") queries work fine under the
-   *  granted scopes and respect whatever tenant header is sent, which is
-   *  what this method (and the manual override it backs) relies on. */
+   *  name` (Part: Upwork API integration — manual org override, 2026-10-22).
+   *  `companySelector` itself is NOT blocked (corrected 2026-10-23 — an
+   *  earlier version of this comment over-generalized from a test that
+   *  also requested the one genuinely-blocked nested field, `CompanySelect
+   *  orItem.typeTitle`; see listOrganizations above, confirmed live
+   *  returning all 4 real orgs on this connection). The real problem
+   *  `getDefaultOrganization` has is that it only ever reads `items[0]`,
+   *  which happens to be the personal/sole-proprietor account, not any
+   *  agency — every GraphQL call made without an explicit tenant header
+   *  also silently defaults to that same personal context. `organization`/
+   *  `company` (singular, "current organization") queries work fine under
+   *  the granted scopes and respect whatever tenant header is sent, which
+   *  is what this method (and the manual override it backs) relies on. */
   async getOrganizationName(accessToken: string, organizationId: string): Promise<string> {
     const data = await this.request<{ organization: { id: string; name: string } }>(
       accessToken,
@@ -1075,5 +1074,157 @@ export class UpworkGraphQLClient {
       this.logger.warn(`companySelector request failed: ${(err as Error).message}`);
       return null;
     }
+  }
+
+  /** Full `companySelector` list — every real Upwork org/account this
+   *  user belongs to (Part: Upwork API integration — organization
+   *  picker, 2026-10-23). `getDefaultOrganization` above only ever
+   *  reads `items[0]`, which is why a fresh OAuth connect always lands
+   *  on the user's personal/sole-proprietor account first (confirmed
+   *  live: item[0] is "Sheikh Nabeel Ali", a personal SoleProprietor
+   *  account — EurosHub is item[2]) — this lets a picker show every
+   *  option instead of guessing. `typeTitle` is deliberately excluded
+   *  (confirmed live: blocked by a missing scope — "[CompanySelectorItem.
+   *  typeTitle]" — distinct from the rest of this query, which works
+   *  fine; an earlier docblock here claiming the whole query was
+   *  blocked was from a test that included typeTitle and over-
+   *  generalized the error). */
+  async listOrganizations(accessToken: string): Promise<
+    { title: string; organizationId: string; organizationRid: string | null; organizationType: string | null; organizationLegacyType: string | null }[]
+  > {
+    const data = await this.request<{
+      companySelector: {
+        items: { title: string; organizationId: string; organizationRid: string | null; organizationType: string | null; organizationLegacyType: string | null }[];
+      };
+    }>(
+      accessToken,
+      null,
+      `query { companySelector { items { title organizationId organizationRid organizationType organizationLegacyType } } }`,
+    );
+    return data.companySelector.items;
+  }
+
+  /** Public talent search (Part: Upwork API integration — Talent Search,
+   *  2026-10-23) — `freelancerProfileSearchRecords` with `userType:
+   *  Freelancer`. Confirmed live: results come back as
+   *  `UserFreelancerProfilesSearchRecord`, exposing only `shortName`
+   *  (Upwork's own privacy-truncated "First L." display name, same
+   *  convention as its public UI — not a bug) and `ciphertext` (the
+   *  real public-profile URL slug, same field/shape as marketplace
+   *  jobs' own `ciphertext`); `userProfile` on this record type
+   *  resolved to null for every result tested live, so no richer
+   *  profile fields (skills/rate/location) are available through this
+   *  specific query — disclosed as such to the caller rather than
+   *  guessed. */
+  async searchFreelancerTalent(
+    accessToken: string,
+    organizationId: string | null,
+    keyword: string,
+    first = 20,
+    after: string | null = null,
+  ): Promise<{ totalCount: number; endCursor: string | null; hasNextPage: boolean; results: { shortName: string | null; ciphertext: string | null }[] }> {
+    const data = await this.request<{
+      freelancerProfileSearchRecords: {
+        totalCount: number;
+        pageInfo: { endCursor: string | null; hasNextPage: boolean } | null;
+        edges: { node: { __typename: string; shortName?: string | null; ciphertext?: string | null } }[];
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `query($f: FreelancerProfileSearchFilter!, $p: Pagination!) {
+        freelancerProfileSearchRecords(searchFilter: $f, pagination: $p) {
+          totalCount
+          pageInfo { endCursor hasNextPage }
+          edges {
+            node {
+              __typename
+              ... on UserFreelancerProfilesSearchRecord { shortName ciphertext }
+              ... on FreelancerProfilesSearchRecord { shortName ciphertext }
+            }
+          }
+        }
+      }`,
+      { f: { userType: "Freelancer", keyword }, p: { first, after } },
+    );
+    return {
+      totalCount: data.freelancerProfileSearchRecords.totalCount,
+      endCursor: data.freelancerProfileSearchRecords.pageInfo?.endCursor ?? null,
+      hasNextPage: data.freelancerProfileSearchRecords.pageInfo?.hasNextPage ?? false,
+      results: data.freelancerProfileSearchRecords.edges.map((e) => ({ shortName: e.node.shortName ?? null, ciphertext: e.node.ciphertext ?? null })),
+    };
+  }
+
+  /** Real per-contract work diary — activity levels, memos, screenshot
+   *  flags/thumbnails (Part: Upwork API integration — Work Diary,
+   *  2026-10-23). Confirmed live and genuinely distinct from
+   *  `contractTimeReport` (hourly totals/charges), which is BLOCKED by
+   *  a missing TEAM-level Upwork permission ("no access of any team(s)
+   *  for [view_gds_hourly_data_from_client, view_gds_charges_data_from_
+   *  client]") — same class of gap as the Timesheets domain's own
+   *  block, confirmed live, not guessed. `date` must be `YYYYMMDD`
+   *  (confirmed live — `YYYY-MM-DD`/`YYYY/MM/DD`/`MM/DD/YYYY` all 400). */
+  async getWorkDiaryContract(accessToken: string, organizationId: string | null, contractId: string, dateYYYYMMDD: string) {
+    const data = await this.request<{
+      workDiaryContract: {
+        workDiaryMetadata: { timezoneOffset: string } | null;
+        workDiaryTimeCells: {
+          cellDateTime: { displayValue: string } | null;
+          activityLevel: number | null;
+          memo: string | null;
+          hasScreenshot: boolean | null;
+          screenshotImageUrlMedium: string | null;
+          task: { description: string | null } | null;
+        }[];
+      } | null;
+    }>(
+      accessToken,
+      organizationId,
+      `query($input: WorkDiaryContractInput!) {
+        workDiaryContract(workDiaryContractInput: $input) {
+          workDiaryMetadata { timezoneOffset }
+          workDiaryTimeCells { cellDateTime { displayValue } activityLevel memo hasScreenshot screenshotImageUrlMedium task { description } }
+        }
+      }`,
+      { input: { contractId, date: dateYYYYMMDD } },
+    );
+    return data.workDiaryContract;
+  }
+
+  /** Invites a real person to join this Upwork agency's team (Part:
+   *  Upwork API integration — Team Invite, 2026-10-23). `flow:
+   *  AGENCY_INVITE_TO_TEAM` confirmed live as a real enum value on
+   *  `InviteToTeamFlow` matching this exact use case (distinct from the
+   *  many `HELP_ME_HIRE_*` flows, which are for inviting a freelancer
+   *  found via search to a JOB, not the agency's own team roster).
+   *  NEVER test-executed with a real email — no safe recipient existed
+   *  to verify against without actually sending someone a real
+   *  invitation, so this is schema-verified (introspection) but not
+   *  live-verified end-to-end. Sends a real email on Upwork's side —
+   *  this is a genuine, irreversible side effect once called. */
+  async inviteToTeam(
+    accessToken: string,
+    organizationId: string | null,
+    inviteeEmail: string,
+    invitedToTopLevelOrganizationId: string,
+    landingUrl: string,
+  ) {
+    const data = await this.request<{
+      inviteToTeam: {
+        succeeded: { id: string; token: string | null }[];
+        failed: { code: string | null; message: string | null; invitation: { username: string | null } | null }[];
+      };
+    }>(
+      accessToken,
+      organizationId,
+      `mutation($invitations: [InvitationToTeamInput!]!) {
+        inviteToTeam(invitations: $invitations) {
+          succeeded { id token }
+          failed { code message invitation { username } }
+        }
+      }`,
+      { invitations: [{ flow: "AGENCY_INVITE_TO_TEAM", inviteeEmail, invitedToTopLevelOrganizationId, landingUrl }] },
+    );
+    return data.inviteToTeam;
   }
 }
