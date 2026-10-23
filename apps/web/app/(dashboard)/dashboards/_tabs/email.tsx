@@ -95,7 +95,6 @@ export function EmailTab() {
     <DashboardCenterShell
       compact
       title="Email Campaign Dashboard"
-      subtitle="Sending funnel, queue health, sequence steps, and response timing — sourced from EmailMessage/EmailEvent."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => {

@@ -35,10 +35,6 @@ export default function SocialMediaOverviewPage() {
           <h1 className="text-lg font-semibold tracking-tight">Social Media</h1>
           {statsQuery.isFetching && !statsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
         </div>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Connect accounts, draft and schedule posts across platforms, and automate what happens when a
-          new lead comes in.
-        </p>
       </div>
 
       {statsQuery.error ? (

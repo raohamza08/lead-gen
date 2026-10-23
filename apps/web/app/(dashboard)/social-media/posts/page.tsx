@@ -90,7 +90,6 @@ export default function PostsPage() {
           <h1 className="text-lg font-semibold tracking-tight">Posts</h1>
           {postsQuery.isFetching && !postsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
         </div>
-        <p className="mt-0.5 text-xs text-ink/50">Every post, at whatever stage it&apos;s in.</p>
       </div>
 
       <div className="flex flex-wrap gap-1 rounded-lg border border-[var(--line)] p-1">

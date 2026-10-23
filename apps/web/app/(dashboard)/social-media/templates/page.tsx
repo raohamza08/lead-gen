@@ -79,7 +79,6 @@ export default function TemplatesPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Templates</h1>
-        <p className="mt-0.5 text-xs text-ink/50">Content templates and hashtag groups, available from the composer.</p>
       </div>
 
       {error && (

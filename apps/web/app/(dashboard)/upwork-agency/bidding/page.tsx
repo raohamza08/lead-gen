@@ -51,9 +51,6 @@ export default function BiddingPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Bidding & Proposals</h1>
-      <p className="text-xs text-ink/50">
-        Your real submitted proposals/bids{status?.organizationName ? ` for ${status.organizationName}` : ""}, synced every 6 hours. Click a row for full details.
-      </p>
 
       <SectionCard title="Proposals">
         {proposalsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}

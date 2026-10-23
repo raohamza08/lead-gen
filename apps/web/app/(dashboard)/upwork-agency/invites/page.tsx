@@ -60,9 +60,6 @@ export default function InvitesPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Invites</h1>
-      <p className="text-xs text-ink/50">
-        Client invitations your freelancers received{status?.organizationName ? ` under ${status.organizationName}` : ""}, synced every 6 hours — tracked separately from Bidding & Proposals. Click a row for full details.
-      </p>
 
       {unanswered.length > 0 && (
         <SectionCard title={`Unanswered invites (${unanswered.length})`} subtitle="New agency invites that haven't been accepted, declined, or withdrawn yet.">

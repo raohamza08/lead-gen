@@ -141,7 +141,6 @@ function DashboardCenterTabs() {
     <div className="flex flex-col gap-5">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Dashboard Center</h1>
-        <p className="mt-0.5 text-xs text-ink/50">Cross-module BI — every dashboard in one place, switched with a tab instead of a page reload.</p>
       </div>
 
       <div className="overflow-x-auto pb-1">

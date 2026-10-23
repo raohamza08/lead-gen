@@ -121,13 +121,6 @@ export default function MetaAdsSettingsPage() {
             <h1 className="text-lg font-semibold tracking-tight">Meta Ads Settings</h1>
             {accountsQuery.isFetching && !accountsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
-          <p className="mt-0.5 text-xs text-ink/50">
-            Connect the Meta ad account(s) you want reported in{" "}
-            <a href="/dashboards?tab=meta-ads" className="text-accent hover:underline">
-              Meta Ads
-            </a>
-            . Read-only — this never posts or changes anything in your ad account.
-          </p>
         </div>
         <button
           type="button"

@@ -39,13 +39,6 @@ export function PlatformAccountsList({ platform, label }: { platform: string; la
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">{label}</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Accounts connected for {label}. Connect more from{" "}
-          <Link href="/social-media/accounts" className="text-accent hover:underline">
-            Accounts
-          </Link>
-          .
-        </p>
       </div>
 
       {error && (

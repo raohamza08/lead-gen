@@ -221,13 +221,6 @@ export function UpworkRequestsSection() {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-sm font-semibold tracking-tight">{isBD ? "Team weekly target" : isPM ? "Your requests this week" : "Weekly target"}</h2>
-            <p className="mt-0.5 text-xs text-ink/55">
-              {isPM
-                ? "What you requested, and what came in through Bidding/Invite for those profiles."
-                : isBD
-                  ? "Every approved request across the team, and what's come in through Bidding/Invite so far — shared across everyone with your role."
-                  : "Org-wide requested vs. onboarded hours for the selected period. Filter by Project Manager (who asked) or Business Developer (who approved)."}
-            </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <select value={range} onChange={(e) => setRange(e.target.value as RangeName)} className="rounded border border-[var(--line)] bg-transparent px-2.5 py-1.5 text-xs">

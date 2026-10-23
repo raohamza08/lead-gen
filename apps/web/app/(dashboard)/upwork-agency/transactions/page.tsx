@@ -62,7 +62,7 @@ export default function TransactionsPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Transactions & Financial History</h1>
 
-      <SectionCard title="Connects usage" subtitle="Live balance and spend history, synced every 6 hours.">
+      <SectionCard title="Connects usage">
         {connectsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
         {connects?.current && (
           <KpiStrip>
@@ -74,7 +74,7 @@ export default function TransactionsPage() {
         )}
       </SectionCard>
 
-      <SectionCard title="Transactions" subtitle="Real financial ledger synced every 6 hours — fees, invoices, withdrawals, refunds. Click a row for full details.">
+      <SectionCard title="Transactions">
         {transactionsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
         {transactionsQuery.error && <p className="text-sm text-bad">{(transactionsQuery.error as Error).message}</p>}
         {transactions && transactions.totalCount === 0 && <p className="text-sm text-ink/55">No transactions found.</p>}

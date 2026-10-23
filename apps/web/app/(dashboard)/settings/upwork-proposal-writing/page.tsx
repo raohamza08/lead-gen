@@ -112,9 +112,6 @@ export default function UpworkProposalWritingSettingsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Proposal Writing Settings</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Controls how the Proposal Writing generator writes cover letters and evaluates jobs against the Bidding SOP — editable any time.
-        </p>
       </div>
 
       {error && (

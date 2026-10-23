@@ -24,7 +24,7 @@ export default function OrganizationPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Organization & Agency</h1>
-      <SectionCard title="Identity" subtitle="Real identity fields from Upwork's own organization record.">
+      <SectionCard title="Identity">
         {profileQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
         {profileQuery.error && <p className="text-sm text-bad">{(profileQuery.error as Error).message}</p>}
         {profile && (
@@ -35,12 +35,6 @@ export default function OrganizationPage() {
               <StatTile label="Active" value={profile.profile.active ? "Yes" : "No"} />
               <StatTile label="Created" value={profile.profile.creationDate ? new Date(profile.profile.creationDate).toLocaleDateString() : "—"} />
             </KpiStrip>
-            <div className="text-xs text-ink/50">
-              Upwork org ID {profile.profile.id} · legacy type {profile.profile.legacyType ?? "—"}
-              {profile.profile.flag && (
-                <> · flags: {Object.entries(profile.profile.flag).filter(([, v]) => v).map(([k]) => k).join(", ") || "none"}</>
-              )}
-            </div>
             {profile.companyDetailsAvailable && profile.companyDetails ? (
               <div className="text-sm text-ink/70">
                 Company: {profile.companyDetails.companyName ?? profile.companyDetails.name ?? "—"}

@@ -965,11 +965,6 @@ export default function PipelinePage() {
             <h1 className="text-lg font-semibold tracking-tight">Pipeline</h1>
             {leadsQuery.isFetching && !leadsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
-          <p className="mt-0.5 text-xs text-ink/55">
-            Drag a card to move it. Only valid next stages accept a drop — the same rules the
-            automation follows, so a manual move can&apos;t create a state the sequencer won&apos;t
-            understand.
-          </p>
         </div>
         <div className="flex items-center gap-3">
           {isAdmin && (

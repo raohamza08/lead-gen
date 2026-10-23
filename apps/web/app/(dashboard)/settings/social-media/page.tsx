@@ -263,14 +263,6 @@ export default function SocialMediaSettingsPage() {
           ← General settings
         </Link>
         <h1 className="mt-1 text-lg font-semibold tracking-tight">Social Media Settings</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Per-account defaults, approval requirements, and who can publish or approve. Adding and connecting
-          accounts happens on the{" "}
-          <Link href="/social-media/accounts" className="text-accent hover:underline">
-            Accounts
-          </Link>{" "}
-          page.
-        </p>
       </div>
 
       {error && (

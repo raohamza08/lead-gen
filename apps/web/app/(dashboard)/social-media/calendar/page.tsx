@@ -146,7 +146,6 @@ export default function CalendarPage() {
             <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
             {postsQuery.isFetching && !postsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
-          <p className="mt-0.5 text-xs text-ink/50">Scheduled and published posts, by day.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex rounded-md border border-[var(--line)] p-0.5 text-xs">

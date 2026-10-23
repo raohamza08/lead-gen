@@ -52,7 +52,6 @@ export default function WorkHistoryPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Work History</h1>
-      <p className="text-xs text-ink/50">Per-contract work history for freelancers with a verified proposal/invite relationship to this agency — never a blanket personal pull. Click a row for full details.</p>
 
       <SectionCard title="Contracts">
         {workHistoryQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}

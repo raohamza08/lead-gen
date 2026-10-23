@@ -52,7 +52,6 @@ export default function ContractProposalsPage() {
   return (
     <div className="flex flex-col gap-6">
       <h1 className="text-lg font-semibold tracking-tight">Contract Proposals</h1>
-      <p className="text-xs text-ink/50">Read-only, live from Upwork — contract-formation-stage proposals for this agency team. Click a row for full details.</p>
 
       <SectionCard title="Contract proposals">
         {contractProposalsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}

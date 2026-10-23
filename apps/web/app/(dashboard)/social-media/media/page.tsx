@@ -92,7 +92,6 @@ export default function MediaLibraryPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Media Library</h1>
-          <p className="mt-0.5 text-xs text-ink/50">Images and video, shared across every post you compose.</p>
         </div>
         <label className="rounded-md bg-accent px-4 py-2 text-sm text-white cursor-pointer">
           {uploading ? "Uploading…" : "Upload"}

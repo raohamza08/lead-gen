@@ -515,10 +515,6 @@ export default function UpworkProposalWritingPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Proposal Writing</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Paste an Upwork job link — the system fetches the job and client details, evaluates it against the Bidding SOP, and writes a cover
-          letter from it.
-        </p>
       </div>
 
       <SectionCard title="Generate">

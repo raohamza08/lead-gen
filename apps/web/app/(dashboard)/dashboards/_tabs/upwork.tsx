@@ -225,7 +225,6 @@ export function UpworkTab() {
     <DashboardCenterShell
       compact
       title="Upwork Dashboard"
-      subtitle="Bids, invites, and win rate. Dollar-cost metrics require at least one connect purchase entered below — Upwork's API exposes no pricing data."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => {
@@ -420,11 +419,7 @@ export function UpworkTab() {
         </div>
       )}
 
-      <SectionCard
-        title="Requests"
-        subtitle="Project Manager hour requests for the selected period — see the Requests tab under Upwork Proposals to review/approve individual requests."
-        expandable
-      >
+      <SectionCard title="Requests" expandable>
         {requestsQuery.isLoading && <SkeletonCard className="h-32" />}
         {requestsQuery.error && <ErrorState message={(requestsQuery.error as Error).message} onRetry={() => requestsQuery.refetch()} />}
         {requestsQuery.data && (
@@ -491,7 +486,6 @@ export function UpworkTab() {
 
       <SectionCard
         title="Connect purchase ledger"
-        subtitle="Upload Upwork's own Transaction Report CSV, or add purchases manually — recorded purchases replace the $0.15/connect estimate above with your actual invoiced rate"
         actions={
           isAdmin ? (
             <div className="flex items-center gap-2">
@@ -699,7 +693,6 @@ export function UpworkTab() {
       {submitters.length > 0 && (
         <ChartWithTable
           title="By submitter"
-          subtitle="Grouped by free-text submitter name + profile — may fragment on typos/casing since it's not a User relation. Onboarded hours lines up against the Requests page's per-profile requested hours."
           expandable
           chart={
             <ResponsiveContainer width="100%" height={Math.max(140, submitters.length * 40)}>

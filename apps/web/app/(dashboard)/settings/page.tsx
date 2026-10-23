@@ -20,9 +20,6 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Settings</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Users and company identity. Module-specific settings live with their module.
-        </p>
       </div>
 
       <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -31,27 +28,18 @@ export default function SettingsPage() {
           className="card card-interactive p-5"
         >
           <h2 className="text-sm font-semibold tracking-tight">Lead Generation Settings</h2>
-          <p className="mt-1 text-xs text-ink/50">
-            Niche targeting, outreach sending accounts, case studies, and agent prompts.
-          </p>
         </Link>
         <Link
           href="/settings/email-hub"
           className="card card-interactive p-5"
         >
           <h2 className="text-sm font-semibold tracking-tight">Email Hub Settings</h2>
-          <p className="mt-1 text-xs text-ink/50">
-            Connected mailboxes, per-user access, and tags for the unified inbox.
-          </p>
         </Link>
         <Link
           href="/settings/social-media"
           className="card card-interactive p-5"
         >
           <h2 className="text-sm font-semibold tracking-tight">Social Media Settings</h2>
-          <p className="mt-1 text-xs text-ink/50">
-            Per-account defaults, approval requirements, and who can publish or approve.
-          </p>
         </Link>
         {isAdmin && (
           <Link
@@ -59,9 +47,6 @@ export default function SettingsPage() {
             className="card card-interactive p-5"
           >
             <h2 className="text-sm font-semibold tracking-tight">Proposal Writing Settings</h2>
-            <p className="mt-1 text-xs text-ink/50">
-              Agency background, tone/instructions, and target length for the AI cover-letter generator.
-            </p>
           </Link>
         )}
       </section>

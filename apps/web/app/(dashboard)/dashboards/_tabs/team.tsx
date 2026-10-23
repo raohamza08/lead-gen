@@ -102,7 +102,6 @@ export function TeamTab() {
     <DashboardCenterShell
       compact
       title="Team Performance Dashboard"
-      subtitle="Upwork bidding and invite outcomes, per submitter"
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => upworkQuery.refetch()}

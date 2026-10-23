@@ -814,10 +814,6 @@ function TrackedEmailsView({ query }: { query: { data?: TrackedEmail[]; isLoadin
     <div className="flex flex-col gap-4">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Tracked</h1>
-        <p className="mt-0.5 text-xs text-ink/55">
-          Every email sent with &quot;Track email&quot; checked. A verified open also sends you a real-time
-          notification; a raw-only open (common for Gmail recipients — see below) does not.
-        </p>
       </div>
       {query.isLoading ? (
         <div className="card">

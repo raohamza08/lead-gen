@@ -54,7 +54,6 @@ export function PipelineTab() {
     <DashboardCenterShell
       compact
       title="Pipeline Dashboard"
-      subtitle="Stage funnel, average dwell time per stage, and how long active leads have been sitting in their current stage."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => {
@@ -155,7 +154,6 @@ export function PipelineTab() {
       {!timingQuery.isLoading && timing.length === 0 && (
         <SectionCard
           title="Average time in stage"
-          subtitle="Computed from LeadStageHistory, tracked only since 2026-09-30 — stages with a small sample size are shown as-is rather than hidden, so the limited history is visible"
         >
           <p className="py-6 text-center text-xs text-ink/45">
             Not enough historical data yet — stage-transition history only started being recorded 2026-09-30.
@@ -170,7 +168,6 @@ export function PipelineTab() {
         // separately below) would otherwise plot as a false zero-minute bar.
         <ChartWithTable
           title="Average time in stage"
-          subtitle="Computed from LeadStageHistory, tracked only since 2026-09-30 — stages with a small sample size are shown as-is rather than hidden, so the limited history is visible"
           expandable
           chart={
             timing.filter((t) => t.avgMinutesInStage !== undefined).length === 0 ? (

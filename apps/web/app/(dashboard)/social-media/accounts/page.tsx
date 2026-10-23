@@ -190,13 +190,6 @@ export default function SocialAccountsPage() {
             <h1 className="text-lg font-semibold tracking-tight">Accounts</h1>
             {accountsQuery.isFetching && !accountsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
-          <p className="mt-0.5 text-xs text-ink/50">
-            Connect one row per platform account. Per-account defaults and access grants live in{" "}
-            <a href="/settings/social-media" className="text-accent hover:underline">
-              Settings
-            </a>
-            .
-          </p>
         </div>
         <button
           type="button"
