@@ -32,11 +32,30 @@ const config: Config = {
         border: "rgb(var(--ink-rgb) / <alpha-value>)",
       },
       fontFamily: {
-        // General Sans first (Part: premium dark theme pass v3) — loaded via
-        // Fontshare in app/layout.tsx's <head>; the rest is Tailwind's own
-        // default sans stack as fallback while the webfont loads/if it fails.
-        sans: ["General Sans", "ui-sans-serif", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
+        // Segoe UI stack (Part: full UI redesign per UI.md, 2026-10-23,
+        // Section 3) — replaces the previous premium theme's General Sans.
+        // Segoe UI itself isn't web-licensed outside Windows, hence the
+        // spec's own suggested substitutes as fallbacks before the generic
+        // sans-serif stack.
+        sans: ["Segoe UI", "Segoe UI Web (West European)", "-apple-system", "BlinkMacSystemFont", "Roboto", "Helvetica Neue", "Inter", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+      },
+      // Spec Section 5: "almost everything uses 4px border radius... Nothing
+      // uses large/pill radii except circular avatars (border-radius: 50%)
+      // and circular icon buttons." Overriding Tailwind's own scale rather
+      // than touching every one of the hundreds of existing `rounded-md`/
+      // `rounded-lg` utility classes across every page — `rounded-full` is
+      // deliberately left at Tailwind's default (9999px) since the spec
+      // explicitly keeps that one case pill/circular.
+      borderRadius: {
+        none: "0px",
+        sm: "4px",
+        DEFAULT: "4px",
+        md: "4px",
+        lg: "4px",
+        xl: "4px",
+        "2xl": "4px",
+        "3xl": "4px",
       },
       // Typography scale (Part: UI/UX Redesign, 2026-09-01) — names sizes
       // already in production use rather than inventing new ones, so this is

@@ -43,13 +43,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        {/* General Sans (Part: premium dark theme pass v3) — the reference
-            dashboards' rounded geometric display face; wired through
-            tailwind.config.ts's fontFamily.sans so the existing font-sans
-            class on <body> below picks it up everywhere, no per-component
-            changes. */}
-        <link rel="preconnect" href="https://api.fontshare.com" />
-        <link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
+        {/* No webfont link needed (Part: full UI redesign per UI.md,
+            2026-10-23) — Segoe UI is a system font on Windows; everywhere
+            else falls through to tailwind.config.ts's fontFamily.sans
+            system-font fallback stack. */}
       </head>
       <body className="min-h-screen font-sans antialiased">{children}</body>
     </html>
