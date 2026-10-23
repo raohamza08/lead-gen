@@ -58,6 +58,15 @@
   --chart-grid: #e1e2e5;
   --chart-axis: #c3c5c9;
   --ink-muted: #616161;
+  /* App-rail background (Part: full UI redesign per UI.md, Section 4 —
+     "App-rail / toolbar-area gray... Left icon rail background, disabled
+     button background") and views-pane selected-row background (Section 4
+     — "Selected-folder gray... Selected item in the views/folder pane").
+     Kept as their own tokens rather than aliased to --surface/--line since
+     the spec measures them as distinct flat grays, not derived from
+     another color. */
+  --rail-bg: #f0f0f0;
+  --selected-bg: #e6e6e6;
 
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -132,6 +141,8 @@
     --chart-grid: #3b3a39;
     --chart-axis: #605e5c;
     --ink-muted: #c8c6c4;
+    --rail-bg: #201f1e;
+    --selected-bg: #3b3a39;
 
     --series-1: #4a97ea;
     --series-2: #e06730;
@@ -482,29 +493,18 @@ select, option {
   background: var(--line);
 }
 
-/* Active/selected nav item (Part: full UI redesign per UI.md, 2026-10-23) —
-   replaces the old glowing gradient pill with the spec's own two rules
-   (Section 8): "needs attention"/active uses a flat 3px solid-blue bar on
-   the left edge, and selection is an outline with a white/surface
-   background, never a filled pill. Same rule in both themes — the spec
-   defines no separate dark treatment, and the blue accent already works
-   against both. kept scoped to one class name so sidebar-nav.tsx (and its
-   future Task #3 rebuild) only needs one toggle. */
+/* Selected item in the views/folder pane (Part: full UI redesign per
+   UI.md, 2026-10-23, Section 6.4) — replaces the old glowing gradient pill
+   with the spec's own specific rule for THIS component: "background
+   #E6E6E6, text weight bumps up" — flat, no fill color, no left bar (the
+   rail's own active workspace uses the spec's separate 3px-left-bar rule
+   instead, Section 6.2 — handled directly in sidebar-nav.tsx's renderRail,
+   not through this class). Same rule in both themes; dark mode's
+   --selected-bg is its own Fluent-neutral value, not derived from --line. */
 .sidebar-nav-active {
-  position: relative;
-  background-color: rgb(var(--accent-rgb) / 0.08) !important;
+  background-color: var(--selected-bg) !important;
   color: var(--ink) !important;
   font-weight: 600;
-}
-.sidebar-nav-active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 2px;
-  bottom: 2px;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--accent);
 }
 .text-white.sidebar-nav-active {
   color: var(--ink) !important;

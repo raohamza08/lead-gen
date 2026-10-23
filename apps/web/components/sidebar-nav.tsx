@@ -51,6 +51,10 @@ interface NavLink {
    *  the group header itself then only shows if at least one child link
    *  survives this filtering (see filterItems below). */
   moduleFlag?: ModuleFlag | ModuleFlag[];
+  /** Same meaning as NavItem's own requiresPrimaryAdmin below, for a link
+   *  nested inside a group (Part: Agency Tools, 2026-10-23) — overrides
+   *  moduleFlag entirely when set; see filterItems' group-link filtering. */
+  requiresPrimaryAdmin?: boolean;
 }
 
 type ModuleFlag =
@@ -525,6 +529,15 @@ const WORKSPACES: Workspace[] = [
           { href: "/upwork-agency/delayed-responses", label: "Delayed Responses", moduleFlag: "upworkAgencyRoomsAccess", icon: ClockIcon },
           { href: "/upwork-agency/jobs", label: "Marketplace Jobs", moduleFlag: "upworkAgencyJobsAccess", icon: RssIcon },
           { href: "/upwork-agency/ontology", label: "Ontology", moduleFlag: "upworkAgencyOntologyAccess", icon: TagIcon },
+          // Agency Tools (Part: Upwork API integration, 2026-10-23) — real
+          // capabilities found via live schema introspection, gated to the
+          // primary admin only (not a module flag) per explicit user
+          // request: "keep it to me for now, I'll see later whom to give
+          // access... do not change any [access] settings". requiresPrimaryAdmin
+          // bypasses the moduleFlag check entirely (see the filter below).
+          { href: "/upwork-agency/talent-search", label: "Talent Search", requiresPrimaryAdmin: true, icon: UserIcon },
+          { href: "/upwork-agency/work-diary", label: "Work Diary", requiresPrimaryAdmin: true, icon: EyeIcon },
+          { href: "/upwork-agency/team-invite", label: "Team Invite", requiresPrimaryAdmin: true, icon: SendIcon },
           { href: "/settings/upwork-api", label: "Connection Settings", moduleFlag: "upworkAgencyConnectionAccess", icon: GearIcon },
         ],
       },
@@ -754,7 +767,15 @@ export function SidebarNav({
         if (item.type !== "group") return item;
         // Per-link filtering (Part: Upwork Requests, 2026-10-01) -- a no-op
         // for every group whose links don't set their own moduleFlag.
-        return { ...item, links: item.links.filter((l) => flagGranted(l.moduleFlag)) };
+        // requiresPrimaryAdmin checked here too (Part: Agency Tools,
+        // 2026-10-23) -- the top-level filter below only ever applied this
+        // to standalone links outside a group (System Logs); nested group
+        // links like Talent Search/Work Diary/Team Invite never reached
+        // that check at all and would have shown to everyone.
+        return {
+          ...item,
+          links: item.links.filter((l) => (l.requiresPrimaryAdmin ? isPrimaryAdmin : flagGranted(l.moduleFlag))),
+        };
       })
       .filter((item) => {
         if (item.type === "link" && item.requiresPrimaryAdmin) return isPrimaryAdmin;
@@ -823,11 +844,11 @@ export function SidebarNav({
                 href={item.href}
                 onClick={onNavigate}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors duration-fast ${
-                  active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                className={`flex items-center gap-2.5 rounded px-3 py-2 text-sm transition-colors duration-fast ${
+                  active ? "sidebar-nav-active" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                 }`}
               >
-                {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                {Icon && <Icon className="h-5 w-5 shrink-0" />}
                 {item.label}
               </Link>
             );
@@ -858,11 +879,11 @@ export function SidebarNav({
                       onClick={onNavigate}
                       aria-current={active ? "page" : undefined}
                       className={`flex flex-1 items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
-                        active ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                        active ? "sidebar-nav-active" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                       }`}
                     >
                       <span className="flex items-center gap-2">
-                        {LinkIcon && <LinkIcon className="h-4 w-4 shrink-0" />}
+                        {LinkIcon && <LinkIcon className="h-5 w-5 shrink-0" />}
                         {link.label}
                       </span>
                       {count > 0 && (
@@ -904,11 +925,11 @@ export function SidebarNav({
                               onClick={onNavigate}
                               aria-current={childActive ? "page" : undefined}
                               className={`nav-tick flex items-center justify-between rounded-lg px-3 py-1.5 text-sm transition-colors duration-fast ${
-                                childActive ? "bg-primary sidebar-nav-active font-medium text-white shadow-sm" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
+                                childActive ? "sidebar-nav-active" : "text-ink/65 hover:bg-ink/5 hover:text-ink"
                               }`}
                             >
                               <span className="flex items-center gap-2">
-                                {ChildIcon && <ChildIcon className="h-4 w-4 shrink-0" />}
+                                {ChildIcon && <ChildIcon className="h-5 w-5 shrink-0" />}
                                 {child.label}
                               </span>
                               {childCount > 0 && (
@@ -935,17 +956,22 @@ export function SidebarNav({
     );
   }
 
-  /** The icon rail itself (Part: EBOS-inspired shell redesign, 2026-10-21) —
-   *  solid accent fill (EBOS uses teal; this keeps Outly's own orange, per
-   *  explicit user decision), accent-contrast text/icons for the same
-   *  readability reason Tabs' active-state text already uses that token
-   *  instead of plain white (see that component's own comment). "Inbox"
-   *  gets an aggregate badge (Email Hub unread + Social Media unread) since
-   *  it's the one workspace bundling two separately-badged groups. */
+  /** The app-switcher rail (Part: full UI redesign per UI.md, 2026-10-23,
+   *  Section 6.2) — 49px wide, flat `--rail-bg` gray (not a colored fill),
+   *  icon-only 40x46px hit targets (the workspace label now only shows as
+   *  a tooltip via `title`, matching the spec's own icon-only rail — it
+   *  never shows text labels next to rail icons). Active workspace gets
+   *  the spec's one reused "needs attention" rule: a 3px solid blue bar
+   *  flush against the icon cell's left edge (Section 8, rule 1) instead
+   *  of the previous filled/tinted pill. "Inbox" keeps its real aggregate
+   *  unread badge (Email Hub + Social Media) — the spec doesn't show rail
+   *  badges in Outlook's own Mail/Calendar icons, but this is genuine
+   *  real-data functionality worth keeping, and a small flat corner badge
+   *  doesn't conflict with anything the spec actually specifies. */
   function renderRail(onNavigate?: () => void) {
     const inboxBadge = (stats?.unread ?? 0) + (socialStats?.unread ?? 0);
     return (
-      <div className="flex w-[68px] shrink-0 flex-col items-center gap-1 bg-accent py-3">
+      <div className="flex w-[49px] shrink-0 flex-col items-center gap-1 bg-[var(--rail-bg)] py-2">
         {visibleWorkspaces.map((ws) => {
           const active = ws.id === activeWorkspaceId;
           const Icon = ws.icon;
@@ -956,14 +982,14 @@ export function SidebarNav({
               href={ws.defaultHref}
               onClick={onNavigate}
               title={ws.label}
-              className={`relative flex w-14 flex-col items-center gap-1 rounded-xl py-2.5 text-[10px] font-medium transition-colors duration-fast ${
-                active ? "bg-black/10 text-[rgb(var(--accent-contrast-rgb))]" : "text-[rgb(var(--accent-contrast-rgb))]/70 hover:bg-black/5"
+              className={`relative flex h-[46px] w-10 items-center justify-center rounded transition-colors duration-fast ${
+                active ? "text-accent" : "text-[#424242] hover:bg-black/5"
               }`}
             >
+              {active && <span aria-hidden className="absolute left-0 top-1 bottom-1 w-[3px] rounded-r bg-accent" />}
               <Icon className="h-5 w-5" />
-              <span>{ws.label}</span>
               {badge > 0 && (
-                <span className="tabular absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-bad px-1 text-[9px] font-semibold text-white">
+                <span className="tabular absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-bad px-1 text-[9px] font-semibold text-white">
                   {badge > 99 ? "99+" : badge}
                 </span>
               )}
@@ -981,7 +1007,7 @@ export function SidebarNav({
           drawer below takes over instead. */}
       <div className="hidden h-full shrink-0 md:flex">
         {renderRail()}
-        <nav className="relative flex h-full w-48 shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3">
+        <nav className="relative flex h-full w-[214px] shrink-0 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] p-3">
           <div className="relative z-10 flex flex-1 flex-col gap-1 overflow-y-auto">{renderPanel()}</div>
         </nav>
       </div>
@@ -992,7 +1018,7 @@ export function SidebarNav({
           <div className="absolute inset-0 bg-ink/40 backdrop-blur-[1px]" onClick={onMobileClose} aria-hidden />
           <div className="animate-slide-in-left absolute inset-y-0 left-0 flex shadow-lg">
             {renderRail(onMobileClose)}
-            <nav className="flex w-56 flex-col gap-1 overflow-y-auto border-r border-[var(--line)] bg-surface p-3">
+            <nav className="flex w-[214px] flex-col gap-1 overflow-y-auto border-r border-[var(--line)] bg-paper p-3">
               <div className="relative z-10 flex flex-1 flex-col gap-1">{renderPanel(onMobileClose)}</div>
             </nav>
           </div>
