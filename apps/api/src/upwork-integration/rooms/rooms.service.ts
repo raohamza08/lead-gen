@@ -46,32 +46,41 @@ export class UpworkRoomsService {
     };
   }
 
-  /** Rooms unanswered for 15+ minutes, trailing 7 days (Part: Delayed
-   *  Responses module, 2026-10-23, explicit user request — "the chats
-   *  that are unanswered for last 15 mins or more for one week should
-   *  go there"). Uses the real synced `numUnread`/`latestMessageAt`, not
-   *  the local `locallyReadAt` overlay — opening a room in Outly clears
-   *  its badge (see displayedUnread above) but doesn't mean the client
-   *  actually got a reply, which is what this list is tracking. Same
-   *  "pending" definition as UpworkRoomPendingReminderWorker's desktop
-   *  reminders — see that worker's own docblock for why numUnread>0 is
-   *  the honest proxy available here. */
+  /** Rooms where the CLIENT's latest message has gone unanswered for
+   *  15+ minutes, trailing 7 days (Part: Delayed Responses module,
+   *  2026-10-23, explicit user request — "the chats that are unanswered
+   *  for last 15 mins or more for one week should go there"; corrected
+   *  2026-10-23 same day, explicit user feedback — "it should only
+   *  disappear from this module once the freelancer has responded to
+   *  the person", NOT once someone on our side merely opens/views the
+   *  room in Outly). Deliberately does NOT use `numUnread` or
+   *  `locallyReadAt` at all anymore — both can be cleared just by
+   *  looking at a room, which isn't a real response. The real signal is
+   *  direction: a room only counts as unanswered while its own latest
+   *  message is still from the CLIENT side (via UpworkRoomsSyncService.
+   *  isSenderAgencySide against the room's own cached `latestMessageFrom`/
+   *  `roomName` — no per-message history sync needed for this check).
+   *  The moment the freelancer actually replies on Upwork, the next
+   *  sync tick updates `latestMessageFrom` to the freelancer's name,
+   *  this check flips, and the room drops off this list on its own —
+   *  nothing in Outly needs to "mark" anything for that to happen. */
   async listDelayedResponses(orgId: string, thresholdMinutes = 15, windowDays = 7) {
     const now = Date.now();
     const rooms = await this.prisma.upworkApiRoom.findMany({
       where: {
         orgId,
-        numUnread: { gt: 0 },
         latestMessageAt: { lte: new Date(now - thresholdMinutes * 60000), gte: new Date(now - windowDays * 24 * 60 * 60000) },
       },
       orderBy: { latestMessageAt: "asc" },
     });
+    const pending = rooms.filter((r) => !this.roomsSync.isSenderAgencySide(r.latestMessageFrom, r.roomName));
     return {
-      totalCount: rooms.length,
-      rooms: rooms.map((r) => ({
+      totalCount: pending.length,
+      rooms: pending.map((r) => ({
         id: r.id,
         roomName: r.roomName,
         roomType: r.roomType,
+        numUsers: r.numUsers,
         numUnread: r.numUnread,
         latestMessage: r.latestMessage,
         latestMessageAt: r.latestMessageAt,
