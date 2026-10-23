@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { NotificationCategory } from "@prisma/client";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
@@ -67,5 +67,22 @@ export class NotificationsController {
   @Patch("preferences")
   updatePreferences(@CurrentUser() user: JwtClaims, @Body() dto: UpdateNotificationPreferencesDto) {
     return this.notifications.updatePreferences(user.sub, dto);
+  }
+
+  /** Fires one real notification through the exact same path production
+   *  reminders use (NotificationsService.notify -> Socket.IO -> the bell
+   *  component's desktop-notification branch) — lets a user verify their
+   *  desktop popup actually works without waiting for a real pending-chat
+   *  reminder to fire. Targets only the calling user. */
+  @Post("test-desktop")
+  sendTestDesktop(@CurrentUser() user: JwtClaims) {
+    return this.notifications.notify(user.orgId, {
+      category: NotificationCategory.SYSTEM,
+      type: "UPWORK_ROOM_PENDING_RESPONSE",
+      title: "Test desktop notification",
+      message: "If you see this as a real desktop popup (not just here in the bell), desktop notifications are working.",
+      severity: "WARNING",
+      recipientUserIds: [user.sub],
+    });
   }
 }

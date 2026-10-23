@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { ConversationThread, initials, timeAgo } from "../../../../components/upwork-room-conversation";
 
 interface MeWithReminderSettings {
   upworkChatReminderEnabled: boolean;
@@ -80,67 +81,48 @@ function PendingChatReminderSettings() {
   );
 }
 
-function initials(name: string | null): string {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
+/** Fires one real notification through the full production path
+ *  (NotificationsService.notify -> Socket.IO -> notifications-bell's
+ *  desktop branch) so the user can verify an actual OS popup appears,
+ *  not just the in-app bell — added 2026-10-23 after a confirmed stale-
+ *  closure bug in useRealtimeEvent meant the bell's handler was frozen on
+ *  the preferences value from first page load and desktop popups could
+ *  never fire even after enabling them. Always visible, independent of
+ *  PendingChatReminderSettings above, so it can verify the general
+ *  desktopEnabled path even once the one-time enable button is gone. */
+function TestDesktopNotificationButton() {
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-function timeAgo(iso: string | null): string {
-  if (!iso) return "—";
-  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (diffMin < 1) return "now";
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d`;
-  return new Date(iso).toLocaleDateString();
-}
-
-/** Real conversation thread for the selected room (Part: Rooms &
- *  Messages chat history, 2026-10-23, explicit user request — real
- *  message history, left/right by sender, freelancer name shown).
- *  Fetches on selection; the backend fetches live from Upwork right
- *  away if nothing's cached yet for this room ("when a chat is opened
- *  from below and it doesn't have any of its communication, the api
- *  should fetch the recent communication right away"). Client messages
- *  (left, neutral) vs agency/freelancer messages (right, accent) are
- *  distinguished by `senderIsAgency` — a best-effort heuristic computed
- *  server-side (see UpworkRoomsSyncService.isSenderAgencySide's own
- *  docblock) since Upwork gives no explicit "which side" field; the
- *  real sender name is always shown regardless, so a wrong guess on
- *  side never hides who actually said what. */
-function ConversationThread({ roomId }: { roomId: string }) {
-  const messagesQuery = useQuery({
-    queryKey: ["upwork-api-room-messages", roomId],
-    queryFn: () => api.getUpworkApiRoomMessages(roomId),
-  });
-  const messages = messagesQuery.data?.messages ?? [];
-
-  if (messagesQuery.isLoading) return <p className="text-sm text-ink/50">Loading conversation…</p>;
-  if (messagesQuery.error) return <p className="text-sm text-bad">{(messagesQuery.error as Error).message}</p>;
-  if (messages.length === 0) return <p className="text-sm text-ink/50">No messages found for this room.</p>;
+  async function sendTest() {
+    setState("sending");
+    setErrorMsg(null);
+    try {
+      await api.sendTestDesktopNotification();
+      setState("sent");
+    } catch (err) {
+      setErrorMsg((err as Error).message);
+      setState("error");
+    }
+  }
 
   return (
-    <div className="flex flex-col gap-2.5">
-      {messages.map((m) => (
-        <div key={m.id} className={`flex flex-col gap-0.5 ${m.senderIsAgency ? "items-end" : "items-start"}`}>
-          <div
-            className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm ${
-              m.senderIsAgency ? "rounded-tr-sm bg-accent text-white" : "rounded-tl-sm bg-ink/[0.06] text-ink"
-            }`}
-          >
-            {m.message || <span className="italic opacity-60">(no text)</span>}
-          </div>
-          <p className="px-1 text-[11px] text-ink/40">
-            {m.senderName ?? "Unknown"}
-            {m.senderIsAgency ? " (freelancer)" : " (client)"} · {new Date(m.createdAt).toLocaleString()}
-          </p>
-        </div>
-      ))}
+    <div className="flex flex-col gap-1">
+      <button
+        type="button"
+        disabled={state === "sending"}
+        onClick={sendTest}
+        className="h-8 w-fit rounded-md border border-[var(--line)] px-3 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+      >
+        {state === "sending" ? "Sending…" : "Send test desktop notification"}
+      </button>
+      {state === "sent" && (
+        <p className="text-[11px] text-good">
+          Sent — a real OS notification should appear now, even if this tab is focused. If you only see it in the bell above, desktop notifications
+          aren&apos;t enabled yet (browser permission and/or the toggle on your Profile page).
+        </p>
+      )}
+      {state === "error" && <p className="text-[11px] text-bad">{errorMsg}</p>}
     </div>
   );
 }
@@ -232,6 +214,7 @@ export default function RoomsPage() {
       </div>
 
       <PendingChatReminderSettings />
+      <TestDesktopNotificationButton />
 
       {roomsQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
 
@@ -339,9 +322,7 @@ export default function RoomsPage() {
                   </div>
                 </div>
 
-                <div className="max-h-[480px] overflow-y-auto">
-                  <ConversationThread roomId={selected.id} />
-                </div>
+                <ConversationThread roomId={selected.id} />
 
                 <p className="mt-2 rounded-lg border border-[var(--line)] bg-ink/[0.02] px-3 py-2 text-xs text-ink/45">
                   Sending messages isn&apos;t supported in this app.

@@ -405,6 +405,7 @@ export const api = {
   getNotificationPreferences: () => request("/notifications/preferences"),
   updateNotificationPreferences: (body: Record<string, unknown>) =>
     request("/notifications/preferences", { method: "PATCH", body: JSON.stringify(body) }),
+  sendTestDesktopNotification: () => request("/notifications/test-desktop", { method: "POST" }),
   getAutomationSettings: () => request("/settings/organization/automation"),
   updateAutomationSettings: (body: Record<string, unknown>) =>
     request("/settings/organization/automation", { method: "PATCH", body: JSON.stringify(body) }),
@@ -1003,6 +1004,7 @@ export const api = {
         id: string;
         roomName: string | null;
         roomType: string | null;
+        numUsers: number | null;
         numUnread: number | null;
         latestMessage: string | null;
         latestMessageAt: string | null;

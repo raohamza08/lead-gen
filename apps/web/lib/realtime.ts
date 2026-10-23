@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
 import { getAccessToken } from "./api-client";
 
@@ -37,14 +37,28 @@ function getSocket(): Socket | null {
  * manual refresh or a polling interval to see current state.
  */
 export function useRealtimeEvent<T = unknown>(event: string, handler: (payload: T) => void): void {
+  // The socket subscription itself only (re)runs when `event` changes, but
+  // `handler` closures over whatever state/props were current on whichever
+  // render last ran this hook — without this ref, a handler that reads
+  // state (e.g. a notification preference loaded after mount) would stay
+  // forever stuck reading its value from the FIRST render, since the
+  // effect below never re-subscribes to pick up a newer closure. Confirmed
+  // real bug (Part: desktop notifications, 2026-10-23): preferences loaded
+  // async after mount, so every handler relying on them silently saw `null`
+  // forever even once the real preference arrived.
+  const handlerRef = useRef(handler);
+  useEffect(() => {
+    handlerRef.current = handler;
+  }, [handler]);
+
   useEffect(() => {
     const s = getSocket();
     if (!s) return;
-    s.on(event, handler);
+    const wrapped = (payload: T) => handlerRef.current(payload);
+    s.on(event, wrapped);
     return () => {
-      s.off(event, handler);
+      s.off(event, wrapped);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event]);
 }
 
