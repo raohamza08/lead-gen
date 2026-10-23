@@ -15,6 +15,7 @@ import { ReportEmailDraftFailureDto } from "./dto/report-email-draft-failure.dto
 import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { PromoteToPipelineDto } from "./dto/promote-to-pipeline.dto";
 import { BulkDeleteLeadsDto } from "./dto/bulk-delete-leads.dto";
+import { BulkAssignLeadsDto } from "./dto/bulk-assign-leads.dto";
 import { VerifyEmailsDto } from "./dto/verify-emails.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -360,6 +361,17 @@ export class LeadsController {
   @Roles(Role.ADMIN)
   removeByIds(@CurrentUser() user: JwtClaims, @Body() dto: BulkDeleteLeadsDto) {
     return this.leadsService.removeByIds(user.orgId, dto.leadIds, user.sub);
+  }
+
+  /** Pipeline ribbon's "Assign" action (Part: full UI redesign per UI.md) —
+   *  same role set as advance-stage/rewind below, not ADMIN-only like
+   *  delete, since assigning leads is routine sales-team work. */
+  @Post("bulk-assign")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
+  bulkAssign(@CurrentUser() user: JwtClaims, @Body() dto: BulkAssignLeadsDto) {
+    return this.leadsService.bulkAssign(user.orgId, dto.leadIds, dto.assignedUserId ?? null, user.sub);
   }
 
   // ADMIN only: unlike other deletes in this app (niche filter, email

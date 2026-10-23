@@ -314,6 +314,8 @@ export const api = {
     request<{ promoted: number }>("/leads/promote-to-pipeline", { method: "POST", body: JSON.stringify(body) }),
   bulkDeleteLeads: (leadIds: string[]) =>
     request<{ deleted: number }>("/leads/bulk-delete", { method: "POST", body: JSON.stringify({ leadIds }) }),
+  bulkAssignLeads: (leadIds: string[], assignedUserId: string | null) =>
+    request<{ assigned: number }>("/leads/bulk-assign", { method: "POST", body: JSON.stringify({ leadIds, assignedUserId }) }),
   getNicheFilters: () => request("/niche-filters"),
   getFilterDeletionImpact: (id: string) => request(`/niche-filters/${id}/deletion-impact`),
   deleteNicheFilter: (id: string) => request(`/niche-filters/${id}`, { method: "DELETE" }),
@@ -405,6 +407,7 @@ export const api = {
   getNotificationPreferences: () => request("/notifications/preferences"),
   updateNotificationPreferences: (body: Record<string, unknown>) =>
     request("/notifications/preferences", { method: "PATCH", body: JSON.stringify(body) }),
+  sendTestDesktopNotification: () => request("/notifications/test-desktop", { method: "POST" }),
   getAutomationSettings: () => request("/settings/organization/automation"),
   updateAutomationSettings: (body: Record<string, unknown>) =>
     request("/settings/organization/automation", { method: "PATCH", body: JSON.stringify(body) }),
@@ -841,6 +844,43 @@ export const api = {
         feedbackToClientScore: number | null;
       }[];
     }>("/upwork-api/work-history"),
+  // Agency Tools (Part: Upwork API integration — companySelector/Talent
+  // Search/Work Diary/Team Invite, 2026-10-23) — primary-admin only.
+  getUpworkApiOrganizations: () =>
+    request<{ title: string; organizationId: string; organizationRid: string | null; organizationType: string | null; organizationLegacyType: string | null }[]>(
+      "/upwork-api/agency-tools/organizations",
+    ),
+  searchUpworkTalent: (keyword: string, after?: string | null) => {
+    const params = new URLSearchParams({ keyword });
+    if (after) params.set("after", after);
+    return request<{
+      totalCount: number;
+      endCursor: string | null;
+      hasNextPage: boolean;
+      results: { shortName: string | null; ciphertext: string | null }[];
+    }>(`/upwork-api/agency-tools/talent-search?${params.toString()}`);
+  },
+  listUpworkWorkDiaryContracts: () =>
+    request<{ upworkContractId: string; title: string | null; freelancerName: string | null; status: string | null }[]>(
+      "/upwork-api/agency-tools/work-diary/contracts",
+    ),
+  getUpworkWorkDiary: (contractId: string, date: string) =>
+    request<{
+      workDiaryMetadata: { timezoneOffset: string } | null;
+      workDiaryTimeCells: {
+        cellDateTime: { displayValue: string } | null;
+        activityLevel: number | null;
+        memo: string | null;
+        hasScreenshot: boolean | null;
+        screenshotImageUrlMedium: string | null;
+        task: { description: string | null } | null;
+      }[];
+    }>(`/upwork-api/agency-tools/work-diary?contractId=${encodeURIComponent(contractId)}&date=${encodeURIComponent(date)}`),
+  inviteUpworkTeamMember: (body: { email: string; targetOrganizationId: string; landingUrl: string }) =>
+    request<{
+      succeeded: { id: string; token: string | null }[];
+      failed: { code: string | null; message: string | null; invitation: { username: string | null } | null }[];
+    }>("/upwork-api/agency-tools/invite-to-team", { method: "POST", body: JSON.stringify(body) }),
   // Freelancer Profiles (spec Module H).
   getUpworkApiFreelancerProfiles: () =>
     request<{
@@ -1003,6 +1043,7 @@ export const api = {
         id: string;
         roomName: string | null;
         roomType: string | null;
+        numUsers: number | null;
         numUnread: number | null;
         latestMessage: string | null;
         latestMessageAt: string | null;

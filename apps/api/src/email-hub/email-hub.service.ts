@@ -16,7 +16,7 @@ import { apiPublicUrl } from "../common/api-url";
 
 export interface ListMessagesQuery {
   accountId?: string;
-  status?: "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" | "SENT";
+  status?: "UNREAD" | "IMPORTANT" | "IGNORED" | "ALL" | "LEADS" | "POSSIBLE_LEADS" | "SENT";
   tagIds?: string[];
   sender?: string;
   dateFrom?: string;
@@ -256,6 +256,11 @@ export class EmailHubService {
       ...(query.status === "LEADS"
         ? { isIgnored: false, OR: [{ thread: { leadId: { not: null } } }, { suggestedCategory: "POSSIBLE_LEAD" }] }
         : {}),
+      // Distinct from LEADS above — AI-suggested but not yet confirmed via
+      // "Add to Lead" (Part: full UI redesign per UI.md — same scope as
+      // computeStats' own possibleLeads tile, which until now had no
+      // dedicated view to actually open from the sidebar).
+      ...(query.status === "POSSIBLE_LEADS" ? { isIgnored: false, suggestedCategory: "POSSIBLE_LEAD", thread: { leadId: null } } : {}),
       ...(query.tagIds?.length ? { tags: { some: { tagId: { in: query.tagIds } } } } : {}),
       ...(query.sender ? { fromEmail: { contains: query.sender, mode: "insensitive" } } : {}),
       ...(query.hasAttachments !== undefined ? { hasAttachments: query.hasAttachments } : {}),
@@ -943,8 +948,12 @@ export class EmailHubService {
     };
     const since = (days: number) => new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
-    const [connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored, possibleLeads] =
+    const [total, connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored, possibleLeads] =
       await Promise.all([
+        // Unified Inbox's own sidebar total (Part: full UI redesign per
+        // UI.md) — same scope (INBOX, not ignored) as the unread/important
+        // tiles above, just every message instead of a filtered subset.
+        this.prisma.inboundEmailMessage.count({ where: { ...scope, isIgnored: false } }),
         this.prisma.emailAccount.count({
           where: { orgId, inboundSyncEnabled: true, ...(accountIds ? { id: { in: accountIds } } : {}) },
         }),
@@ -963,6 +972,6 @@ export class EmailHubService {
         }),
       ]);
 
-    return { connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored, possibleLeads };
+    return { total, connectedAccounts, unread, important, receivedToday, receivedThisWeek, leadsFromEmail, ignored, possibleLeads };
   }
 }
