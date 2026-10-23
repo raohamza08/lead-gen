@@ -61,8 +61,21 @@ function contrastTripletFor(hex: string): string {
  *  removed, even though the admin only picked one color. `lighten` is
  *  kept defined (still a real, reasonable utility) but unused by this
  *  call now. */
+/** Also caches to localStorage (Part: accent FOUC fix, 2026-10-23) — the
+ *  authoritative value lives server-side, so there's no way to read it
+ *  synchronously before first paint on the next load. app/layout.tsx's
+ *  THEME_INIT_SCRIPT reads this same key to apply it before React even
+ *  mounts; this effect then confirms/corrects it a moment later once the
+ *  real fetch resolves, same as it always did. */
 function applyAccent(hex: string | null) {
   const root = document.documentElement.style;
+  try {
+    if (hex) localStorage.setItem("org-accent-color", hex);
+    else localStorage.removeItem("org-accent-color");
+  } catch {
+    // localStorage can throw in some privacy modes — the CSS override below
+    // still applies for this load, it just won't survive a reload.
+  }
   if (!hex) {
     root.removeProperty("--accent-rgb");
     root.removeProperty("--accent-2-rgb");
