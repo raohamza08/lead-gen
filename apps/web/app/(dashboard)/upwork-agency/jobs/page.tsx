@@ -216,8 +216,15 @@ function matchProfile(job: MarketplaceJob, profiles: FreelancerProfile[]): { pro
   return best ? { profile: best.profile, matchedWords: best.matchedWords } : null;
 }
 
-function Badge({ children, tone }: { children: React.ReactNode; tone?: "accent" | "good" | "neutral" }) {
-  const cls = tone === "accent" ? "bg-accent/15 text-accent" : tone === "good" ? "bg-good/15 text-good" : "bg-ink/8 text-ink/60";
+function Badge({ children, tone }: { children: React.ReactNode; tone?: "accent" | "good" | "bad" | "neutral" }) {
+  const cls =
+    tone === "accent"
+      ? "bg-accent/15 text-accent"
+      : tone === "good"
+        ? "bg-good/15 text-good"
+        : tone === "bad"
+          ? "bg-bad/15 text-bad"
+          : "bg-ink/8 text-ink/60";
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${cls}`}>{children}</span>;
 }
 
@@ -250,7 +257,11 @@ function JobRow({ job, profiles, onOpen }: { job: MarketplaceJob; profiles: Free
             {match && <Badge tone="good">Apply as {match.profile.name}</Badge>}
             {job.budgetDisplay && <Badge>{job.budgetDisplay}</Badge>}
             {job.experienceLevel && <Badge>{job.experienceLevel}</Badge>}
-            {job.client.verificationStatus === "VERIFIED" && <Badge tone="good">Payment verified</Badge>}
+            {job.client.verificationStatus === "VERIFIED" ? (
+              <Badge tone="good">Payment verified</Badge>
+            ) : (
+              <Badge tone="bad">Payment not verified</Badge>
+            )}
             {job.applied && <Badge tone="good">Applied</Badge>}
             <span className="text-[11px] text-ink/40">{job.totalApplicants} applicants</span>
           </div>
@@ -401,7 +412,9 @@ function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: Freelance
         <dl className="grid grid-cols-2 gap-3 text-xs">
           <div>
             <dt className="text-ink/50">Payment verification</dt>
-            <dd className="font-medium text-ink">{job.client.verificationStatus ?? "—"}</dd>
+            <dd className={`font-medium ${job.client.verificationStatus === "VERIFIED" ? "text-good" : "text-bad"}`}>
+              {job.client.verificationStatus === "VERIFIED" ? "Verified" : `Not verified${job.client.verificationStatus ? ` (${job.client.verificationStatus})` : ""}`}
+            </dd>
           </div>
           <div>
             <dt className="text-ink/50">Country</dt>
@@ -467,7 +480,13 @@ export default function MarketplaceJobsPage() {
   const [budgetMax, setBudgetMax] = useState("");
   const [maxApplicants, setMaxApplicants] = useState("");
   const [profileFilter, setProfileFilter] = useState("all");
-  const [paymentVerifiedOnly, setPaymentVerifiedOnly] = useState(false);
+  // Defaults to checked (Part: Marketplace Jobs payment-verification fix,
+  // 2026-10-23, explicit user request — "check by default payment verified
+  // option"). Still a real toggle, not a hardcoded filter: unchecking it
+  // shows unverified-client jobs too, now clearly badged as such (see
+  // JobRow/JobDetail's "Payment not verified" badge) rather than silently
+  // missing an indicator.
+  const [paymentVerifiedOnly, setPaymentVerifiedOnly] = useState(true);
 
   const currentCursor = cursorStack[pageIndex] ?? null;
   const jobsQuery = useQuery({
@@ -530,7 +549,7 @@ export default function MarketplaceJobsPage() {
     budgetMaxNum != null ||
     maxApplicantsNum != null ||
     profileFilter !== "all" ||
-    paymentVerifiedOnly;
+    !paymentVerifiedOnly; // default is checked, so "changed" means unchecked
 
   function clearFilters() {
     setCategoryFilter("all");
@@ -542,7 +561,7 @@ export default function MarketplaceJobsPage() {
     setBudgetMax("");
     setMaxApplicants("");
     setProfileFilter("all");
-    setPaymentVerifiedOnly(false);
+    setPaymentVerifiedOnly(true);
   }
 
   const sorted = useMemo(() => {
