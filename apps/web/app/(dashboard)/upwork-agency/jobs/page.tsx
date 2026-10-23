@@ -54,7 +54,43 @@ interface MarketplaceJob {
     totalSpentDisplay: string | null;
     country: string | null;
   };
+  activity: {
+    invitesSent: number;
+    totalInvitedToInterview: number;
+    totalHired: number;
+    totalUnansweredInvites: number;
+    totalOffered: number;
+    lastClientActivity: string | null;
+    avgBidRate: string | null;
+    minBidRate: string | null;
+    maxBidRate: string | null;
+  } | null;
 }
+
+type ClientInsights =
+  | { available: false }
+  | {
+      available: true;
+      avgHourlyRate: string | null;
+      totalAssignments: number | null;
+      activeAssignments: number | null;
+      totalJobsWithHires: number | null;
+      hiredInPast: boolean | null;
+      feedbackCount: number | null;
+      score: number | null;
+      jobsFilled: number | null;
+      jobsOpen: number | null;
+      jobsPosted: number | null;
+      projectType: string | null;
+      talentType: string | null;
+      preferredCountries: string[];
+      minHoursPerWeek: number | null;
+      minJobSuccessScore: number | null;
+      shouldHavePortfolio: boolean;
+      risingTalent: boolean;
+      workHistoryCounts: { ongoingHourly: number; ongoingFixed: number; completedHourly: number; completedFixed: number; other: number };
+      workHistorySampleSize: number;
+    };
 
 interface FreelancerProfile {
   id: string;
@@ -279,6 +315,20 @@ function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: Freelance
   const match = matchProfile(job, profiles);
   const url = jobUrl(job);
 
+  // Fetched only when this specific job's detail panel is actually open
+  // (Part: Marketplace Jobs complete-details fix, 2026-10-24, explicit
+  // user request — client's ongoing/completed hourly vs fixed job counts
+  // and average hourly rate paid). Separate, heavier per-job query —
+  // see UpworkMarketplaceJobsService.getClientInsights's own docblock for
+  // why this isn't part of the list's bulk search, and why it genuinely
+  // comes back `available: false` for a real minority of jobs (not an
+  // error — some job postings 403 this specific Upwork query).
+  const insightsQuery = useQuery({
+    queryKey: ["upwork-api-marketplace-job-client-insights", job.id],
+    queryFn: () => api.getUpworkApiMarketplaceJobClientInsights(job.id) as Promise<ClientInsights>,
+  });
+  const insights = insightsQuery.data;
+
   async function copyLink() {
     await navigator.clipboard.writeText(url);
     setCopied(true);
@@ -392,6 +442,38 @@ function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: Freelance
         )}
       </dl>
 
+      {job.activity && (
+        <div>
+          <h4 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink/55">Activity on this job</h4>
+          <dl className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <dt className="text-ink/50">Proposals</dt>
+              <dd className="font-medium text-ink">{job.totalApplicants}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Interviewing</dt>
+              <dd className="font-medium text-ink">{job.activity.totalInvitedToInterview}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Invites sent</dt>
+              <dd className="font-medium text-ink">{job.activity.invitesSent}</dd>
+            </div>
+            <div>
+              <dt className="text-ink/50">Unanswered invites</dt>
+              <dd className="font-medium text-ink">{job.activity.totalUnansweredInvites}</dd>
+            </div>
+            {job.activity.avgBidRate && (
+              <div className="col-span-2">
+                <dt className="text-ink/50">Other freelancers&apos; bids</dt>
+                <dd className="font-medium text-ink">
+                  {job.activity.minBidRate ?? "?"}–{job.activity.maxBidRate ?? "?"}/hr (avg {job.activity.avgBidRate}/hr)
+                </dd>
+              </div>
+            )}
+          </dl>
+        </div>
+      )}
+
       {job.skills.length > 0 && (
         <div>
           <h4 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink/55">Skills</h4>
@@ -445,6 +527,90 @@ function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: Freelance
             <dd className="font-medium text-ink">{job.client.hasFinancialPrivacy ? "Private" : job.client.totalSpentDisplay ?? "—"}</dd>
           </div>
         </dl>
+      </div>
+
+      <div>
+        <h4 className="mb-1.5 text-xs font-medium uppercase tracking-wide text-ink/55">Client insights</h4>
+        {insightsQuery.isLoading && <p className="text-xs text-ink/45">Loading…</p>}
+        {insights && !insights.available && (
+          <p className="text-xs text-ink/45">Not available for this job — Upwork restricts this data for a minority of postings.</p>
+        )}
+        {insights?.available && (
+          <div className="flex flex-col gap-3 text-xs">
+            <dl className="grid grid-cols-2 gap-3">
+              <div>
+                <dt className="text-ink/50">Avg. hourly rate paid</dt>
+                <dd className="font-medium text-ink">{insights.avgHourlyRate ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-ink/50">Jobs posted / filled / open</dt>
+                <dd className="font-medium text-ink">
+                  {insights.jobsPosted ?? "—"} / {insights.jobsFilled ?? "—"} / {insights.jobsOpen ?? "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink/50">Hires (lifetime)</dt>
+                <dd className="font-medium text-ink">{insights.totalJobsWithHires ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-ink/50">Feedback score</dt>
+                <dd className="font-medium text-ink">
+                  {insights.score != null ? insights.score.toFixed(2) : "—"} ({insights.feedbackCount ?? 0} reviews)
+                </dd>
+              </div>
+              <div>
+                <dt className="text-ink/50">Project type</dt>
+                <dd className="font-medium text-ink">{insights.projectType ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-ink/50">Talent type</dt>
+                <dd className="font-medium text-ink">{insights.talentType === "ANY" ? "Any" : insights.talentType ?? "—"}</dd>
+              </div>
+              {insights.minHoursPerWeek != null && (
+                <div>
+                  <dt className="text-ink/50">Min. hours/week</dt>
+                  <dd className="font-medium text-ink">{insights.minHoursPerWeek}</dd>
+                </div>
+              )}
+              {insights.preferredCountries.length > 0 && (
+                <div className="col-span-2">
+                  <dt className="text-ink/50">Preferred countries</dt>
+                  <dd className="font-medium text-ink">{insights.preferredCountries.join(", ")}</dd>
+                </div>
+              )}
+            </dl>
+
+            <div>
+              <p className="mb-1 text-ink/50">
+                Client&apos;s other jobs, by type and status (from the last {insights.workHistorySampleSize} job
+                {insights.workHistorySampleSize === 1 ? "" : "s"} on record)
+              </p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div className="rounded-md border border-[var(--line)] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-ink/50">Ongoing hourly</p>
+                  <p className="font-medium text-ink">{insights.workHistoryCounts.ongoingHourly}</p>
+                </div>
+                <div className="rounded-md border border-[var(--line)] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-ink/50">Ongoing fixed</p>
+                  <p className="font-medium text-ink">{insights.workHistoryCounts.ongoingFixed}</p>
+                </div>
+                <div className="rounded-md border border-[var(--line)] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-ink/50">Completed hourly</p>
+                  <p className="font-medium text-ink">{insights.workHistoryCounts.completedHourly}</p>
+                </div>
+                <div className="rounded-md border border-[var(--line)] px-2 py-1.5 text-center">
+                  <p className="text-[10px] text-ink/50">Completed fixed</p>
+                  <p className="font-medium text-ink">{insights.workHistoryCounts.completedFixed}</p>
+                </div>
+              </div>
+              {insights.workHistoryCounts.other > 0 && (
+                <p className="mt-1 text-[11px] text-ink/40">
+                  +{insights.workHistoryCounts.other} more with an unclear status — not counted as ongoing or completed.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <p className="text-[11px] text-ink/40">Record #{job.recordNumber} · Upwork ID {job.id}</p>
