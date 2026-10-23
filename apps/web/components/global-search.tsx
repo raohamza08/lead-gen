@@ -75,7 +75,13 @@ export function GlobalSearch() {
   return (
     <Popover open={open} onOpenChange={(o) => !o && close()}>
       <PopoverAnchor asChild>
-        <label className="glass-surface flex w-full max-w-md items-center gap-2 rounded-full border border-[var(--line)] px-3.5 py-2 text-ink/45">
+        {/* White 4px-radius pill on the blue top bar (Part: full UI redesign
+            per UI.md, Section 6.1 — "white rounded pill (radius 4px),
+            height 32px, width ~350-400px"). Fixed light colors rather than
+            the ink/surface tokens every other instance of this app uses,
+            since this sits on the brand-blue bar in BOTH themes, not on
+            --surface. */}
+        <label className="flex h-8 w-full max-w-[380px] items-center gap-2 rounded bg-white px-3 text-[#616161]">
           <svg aria-hidden width="15" height="15" viewBox="0 0 24 24" fill="none" className="shrink-0">
             <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
             <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -84,10 +90,10 @@ export function GlobalSearch() {
             type="text"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search..."
-            className="min-w-0 flex-1 bg-transparent text-sm text-ink placeholder:text-ink/40 focus:outline-none"
+            placeholder="Search"
+            className="min-w-0 flex-1 bg-transparent text-sm text-[#242424] placeholder:text-[#616161] focus:outline-none"
           />
-          <kbd className="shrink-0 rounded border border-[var(--line)] px-1.5 py-0.5 text-[10px] text-ink/40">Ctrl K</kbd>
+          <kbd className="shrink-0 rounded border border-[#e0e0e0] px-1.5 py-0.5 text-[10px] text-[#616161]">Ctrl K</kbd>
         </label>
       </PopoverAnchor>
       <PopoverContent align="center" className="max-h-[70vh] w-[420px] overflow-y-auto p-2" onOpenAutoFocus={(e) => e.preventDefault()}>

@@ -12,21 +12,18 @@ type Theme = "light" | "dark" | "system";
  * concrete value, so the OS preference keeps applying when the user changes it
  * later — resolving it once would freeze the choice at whatever it was.
  *
- * Defaults to "dark", not "system" (Part: premium dark theme pass v4 fix,
- * 2026-10-19) — matches app/layout.tsx's THEME_INIT_SCRIPT, which now does
- * the same for the same reason: "system" meant a default-light browser saw
- * the old untouched light theme and none of this app's actual dark-mode
- * design work. Must stay in sync with that script's fallback, or this
- * effect would overwrite the init script's dark default back to "system"
- * (and therefore back to light, for most visitors) on every page load.
- * "system" is still a real, explicit choice available from the toggle —
- * only the *default before any choice* changed.
+ * Defaults to "light", not "system" (Part: full UI redesign per UI.md,
+ * 2026-10-23 — reverses the previous dark-default fix now that the design
+ * language itself has flipped; see app/layout.tsx's THEME_INIT_SCRIPT for
+ * the full reasoning, which this must stay in sync with). "system" is
+ * still a real, explicit choice available from the toggle — only the
+ * *default before any choice* changed.
  */
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
-    const stored = (window.localStorage.getItem("theme") as Theme) ?? "dark";
+    const stored = (window.localStorage.getItem("theme") as Theme) ?? "light";
     setTheme(stored);
     apply(stored);
   }, []);
@@ -54,7 +51,10 @@ export function ThemeToggle() {
       // guessing what a symbol means.
       aria-label={`Theme: ${theme}. Click to change.`}
       title={`Theme: ${theme}`}
-      className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+      // 48x48 white icon button, matching the top bar's other icon buttons
+      // (Part: full UI redesign per UI.md, Section 6.1) — fixed white
+      // rather than text-ink since this sits on --accent in both themes.
+      className="flex h-12 w-12 items-center justify-center rounded text-base text-white transition-colors hover:bg-white/15"
     >
       <span aria-hidden>{icon}</span>
     </button>

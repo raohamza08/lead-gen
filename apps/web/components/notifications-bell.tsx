@@ -264,9 +264,14 @@ export function NotificationsBell() {
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
+      {/* 48x48 white icon button on the blue top bar (Part: full UI redesign
+          per UI.md, Section 6.1 — "evenly spaced 48x48 icon buttons" with a
+          "subtle light-gray rounded-rect background on hover", Section 7).
+          Fixed white rather than text-ink since this sits on --accent in
+          both themes, not on --surface. */}
       <PopoverTrigger
         aria-label="Notifications"
-        className="relative rounded-lg p-2 text-ink/70 transition-colors duration-fast hover:bg-ink/5"
+        className="relative flex h-12 w-12 items-center justify-center rounded text-white transition-colors duration-fast hover:bg-white/15"
       >
         <span aria-hidden>🔔</span>
         {unreadTotal > 0 && (
