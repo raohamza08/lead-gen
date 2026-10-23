@@ -32,12 +32,14 @@ function pendingLabel(minutes: number | null): string {
  *  the chats that are unanswered for last 15 mins or more for one week
  *  should go there"; rebuilt into the same 3-panel layout as Rooms &
  *  Messages 2026-10-23 — "update the delayed responses tab same like
- *  the rooms messages tab" — rather than a plain table). Reuses
- *  UpworkApiRoom's real `numUnread`/`latestMessageAt` — no new sync,
- *  same "pending" definition as the desktop reminder worker. Opening a
- *  room here marks it read in Outly (same local-overlay mechanism as
- *  Rooms & Messages) and removes it from this list, since it's no
- *  longer pending once viewed. */
+ *  the rooms messages tab" — rather than a plain table). Corrected
+ *  2026-10-23 same day, explicit user feedback — opening a room here no
+ *  longer removes it from the list; the backend's own
+ *  `listDelayedResponses` (see UpworkRoomsService's docblock) already
+ *  only drops a room once the freelancer has actually replied on
+ *  Upwork, via message direction, not a local "read" flag. Still marks
+ *  the room read in Outly for Rooms & Messages' own unread badge, but
+ *  that no longer has any effect on whether it stays in THIS list. */
 export default function DelayedResponsesPage() {
   const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ["upwork-api-status"], queryFn: () => api.getUpworkApiStatus() as Promise<UpworkConnectionStatus> });
@@ -61,15 +63,13 @@ export default function DelayedResponsesPage() {
 
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
 
-  // Marks read in Outly and drops the room out of this list immediately —
-  // once viewed it's no longer "delayed", mirroring Rooms & Messages' own
-  // optimistic badge-clear but removing the row entirely here instead.
+  // Marks read in Outly for Rooms & Messages' own unread badge only —
+  // does NOT remove the room from this list. This list only drops a room
+  // once the freelancer actually replies on Upwork (backend-determined by
+  // message direction), not because someone merely opened it here.
   function selectRoom(id: string) {
     setSelectedId(id);
     api.markUpworkApiRoomRead(id).then(() => {
-      queryClient.setQueryData(["upwork-api-delayed-responses"], (old: typeof data) =>
-        old ? { totalCount: Math.max(0, old.totalCount - 1), rooms: old.rooms.filter((r) => r.id !== id) } : old,
-      );
       queryClient.invalidateQueries({ queryKey: ["upwork-api-rooms"] });
     });
   }
@@ -82,7 +82,8 @@ export default function DelayedResponsesPage() {
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Delayed Responses</h1>
         <p className="mt-0.5 text-xs text-ink/50">
-          Rooms with a real unread message 15+ minutes old, from the last 7 days. Opening one here marks it read and clears it from this list.
+          Rooms with a real unread message 15+ minutes old, from the last 7 days. A room clears from this list once the freelancer actually
+          replies on Upwork — opening it here doesn&apos;t remove it.
         </p>
       </div>
 

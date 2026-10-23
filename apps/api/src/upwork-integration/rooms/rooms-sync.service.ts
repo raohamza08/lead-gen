@@ -231,8 +231,12 @@ export class UpworkRoomsSyncService {
    *  is treated as our side. This is a derived heuristic, not a real
    *  Upwork field — the real `senderName` is always stored alongside it
    *  regardless, so a wrong guess here never hides who actually said
-   *  what (see UpworkApiRoomMessage's own schema docblock). */
-  private isSenderAgencySide(senderName: string | null, roomName: string | null): boolean {
+   *  what (see UpworkApiRoomMessage's own schema docblock). Public (Part:
+   *  Delayed Responses real "unresponded" fix, 2026-10-23) — reused by
+   *  UpworkRoomsService.listDelayedResponses directly against a room's
+   *  own cached `latestMessageFrom`/`roomName`, without needing the full
+   *  per-message history synced for every room. */
+  isSenderAgencySide(senderName: string | null, roomName: string | null): boolean {
     if (!senderName) return false;
     if (!roomName) return true;
     const senderFirstName = senderName.trim().split(/\s+/)[0]?.toLowerCase();
