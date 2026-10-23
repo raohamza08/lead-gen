@@ -176,8 +176,11 @@ export default function RoomsPage() {
       )}
 
       {rooms && rooms.totalCount > 0 && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr_300px]">
-          <div className="card overflow-hidden">
+        <div
+          className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr_300px]"
+          style={{ height: "calc(100vh - 220px)", minHeight: 480 }}
+        >
+          <div className="card min-h-0 overflow-hidden">
             <RecordListPanel
               title="All rooms"
               count={filtered.length}
@@ -252,7 +255,7 @@ export default function RoomsPage() {
             </RecordListPanel>
           </div>
 
-          <div className="card p-6">
+          <div className="card min-h-0 overflow-y-auto p-6">
             {!selected ? (
               <p className="text-sm text-ink/50">Select a room to view its conversation.</p>
             ) : (
