@@ -15,25 +15,26 @@ export const metadata: Metadata = {
 // installed here). Wrapped in try/catch since localStorage can throw in some
 // privacy modes.
 //
-// Defaults to dark when there's no stored choice (Part: premium dark theme
-// pass v4 fix, 2026-10-19 — real bug, not a style change). Previously this
-// fell through to `@media (prefers-color-scheme: dark)`, which only applies
-// dark mode to visitors whose OS/browser already prefers dark. Every visible
-// change from this session's four theme passes — the coral accent, the
-// near-black canvas, the matte grain, the glass overlays — only exists in
-// the dark palette; light mode was deliberately left as the original teal
-// theme throughout (see memory). A user on a default-light system (the
-// common case) saw none of it, confirmed live: logging in with a fresh
-// browser profile (no stored preference) rendered the untouched light
-// theme. An explicit "light" or "dark" choice via the in-app toggle
+// Defaults to light when there's no stored choice (Part: full UI redesign
+// per UI.md, 2026-10-23 — reverses the previous "default to dark" fix).
+// That earlier fix existed because every visible change from the old
+// premium theme passes only existed in the dark palette, and light mode
+// had been left on the untouched original teal theme — defaulting dark
+// was the only way a fresh visitor actually saw that work. The situation
+// is now the opposite: UI.md's spec is a pixel-measured capture of
+// Outlook Web's LIGHT theme (that's the only rendering it documents) —
+// dark mode is this app's own reasonable-but-invented complement to it,
+// not something the spec itself defines. Defaulting to light is what
+// actually shows a fresh visitor "exactly as per the md file." An
+// explicit "light"/"dark"/"system" choice via the in-app toggle
 // (components/theme-toggle.tsx) always wins over this default.
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
     var t = localStorage.getItem("theme");
-    document.documentElement.setAttribute("data-theme", t === "light" ? "light" : "dark");
+    document.documentElement.setAttribute("data-theme", t === "dark" ? "dark" : "light");
   } catch (e) {
-    document.documentElement.setAttribute("data-theme", "dark");
+    document.documentElement.setAttribute("data-theme", "light");
   }
 })();
 `;

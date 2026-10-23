@@ -4,7 +4,6 @@ import { Suspense, useState } from "react";
 import { SidebarNav } from "../../components/sidebar-nav";
 import { AuthGuard } from "../../components/auth-guard";
 import { ThemeToggle } from "../../components/theme-toggle";
-import { AccentPicker } from "../../components/accent-picker";
 import { NotificationsBell } from "../../components/notifications-bell";
 import { HeaderUserMenu } from "../../components/header-user-menu";
 import { QueryProvider } from "../../components/query-provider";
@@ -27,56 +26,66 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <QueryProvider>
       <AuthGuard>
         <div className="flex h-screen flex-col bg-background">
-          <header className="shrink-0 border-b border-[var(--line)] bg-background/90 backdrop-blur">
-            <div className="flex items-center justify-between px-4 py-3 sm:px-6">
-              <div className="flex items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => setMobileNavOpen(true)}
-                  aria-label="Open navigation"
-                  className="-ml-1.5 rounded-md p-1.5 text-ink/70 transition-colors duration-fast hover:bg-ink/5 md:hidden"
-                >
-                  <svg aria-hidden width="20" height="20" viewBox="0 0 20 20" fill="none">
-                    <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  </svg>
-                </button>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/logo.png" alt="" aria-hidden className="h-7 w-7 object-contain" />
-                <div className="flex items-center gap-1">
-                  <div>
-                    <div className="text-section-title leading-tight text-ink">Outly OS</div>
-                    <div className="hidden text-metadata leading-tight text-ink/45 sm:block">Business Communication & Lead Management</div>
-                  </div>
-                  {/* Visual-only chevron (Part: EBOS-inspired shell redesign,
-                      2026-10-21, explicit user request — restyle the top bar's
-                      chrome to match EBOS's company-switcher look). No
-                      multi-org switching exists in Outly; this is decorative,
-                      matching the user's explicit "chrome only, no new
-                      functionality" decision for this part of the redesign. */}
-                  <svg aria-hidden width="14" height="14" viewBox="0 0 16 16" fill="none" className="text-ink/35">
-                    <path d="M4 6l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                </div>
-              </div>
-              {/* Real global search (Part: EBOS-inspired shell redesign
-                  round 2, 2026-10-21) -- fans out to leads/email/social/
-                  upwork via GET /search, each gated by the user's own
-                  existing module-access flags server-side. */}
-              <div className="hidden flex-1 justify-center px-6 lg:flex">
+          {/* Top bar — 48px tall, full width, brand-blue background, white
+              text/icons throughout (Part: full UI redesign per UI.md,
+              Section 6.1). Replaces the previous translucent/light header;
+              fixed `bg-accent`/white colors rather than --surface since this
+              bar's own look doesn't change between light/dark theme, same
+              as Outlook's real top bar. */}
+          <header className="h-12 shrink-0 bg-accent">
+            <div className="flex h-full items-center gap-2 px-2">
+              {/* Mobile nav toggle — spec has no mobile breakpoint of its
+                  own, so this reuses the spec's 48x48 icon-button slot,
+                  swapped for a real hamburger only below `md`. */}
+              <button
+                type="button"
+                onClick={() => setMobileNavOpen(true)}
+                aria-label="Open navigation"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded text-white transition-colors hover:bg-white/15 md:hidden"
+              >
+                <svg aria-hidden width="20" height="20" viewBox="0 0 20 20" fill="none">
+                  <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </button>
+              {/* 9-dot "app launcher" (Section 6.1) — decorative, same as
+                  the spec's own description; no multi-app launcher exists
+                  in Outly to open. */}
+              <button
+                type="button"
+                title="Apps"
+                aria-hidden
+                tabIndex={-1}
+                className="hidden h-12 w-12 shrink-0 items-center justify-center rounded text-white transition-colors hover:bg-white/15 md:flex"
+              >
+                <svg aria-hidden width="18" height="18" viewBox="0 0 18 18" fill="currentColor">
+                  {[0, 1, 2].map((row) =>
+                    [0, 1, 2].map((col) => <circle key={`${row}-${col}`} cx={2 + col * 7} cy={2 + row * 7} r="1.6" />),
+                  )}
+                </svg>
+              </button>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/logo.png" alt="" aria-hidden className="h-6 w-6 shrink-0 object-contain" />
+              <span className="shrink-0 text-[18px] font-semibold text-white">Outly OS</span>
+
+              {/* Centered white search pill (Section 6.1). */}
+              <div className="hidden flex-1 justify-center px-4 lg:flex">
                 <GlobalSearch />
               </div>
-              <div className="flex items-center gap-2">
-                {/* Real AI chat assistant (Part: EBOS-inspired shell
-                    redesign round 2, 2026-10-21) -- opens a drawer-right
-                    panel backed by Gemini, grounded in this user's own
-                    permission-filtered Outly data. */}
+              <div className="flex-1 lg:hidden" />
+
+              {/* Right side: evenly spaced 48x48 icon buttons, avatar
+                  rightmost (Section 6.1). Real AI chat assistant (backed by
+                  Gemini, grounded in this user's own permission-filtered
+                  Outly data) repurposes the spec's "more features" slot. */}
+              <div className="flex shrink-0 items-center">
                 <button
                   type="button"
                   title="AI"
+                  aria-label="AI assistant"
                   onClick={() => setAssistantOpen(true)}
-                  className="flex items-center gap-1.5 rounded-lg border border-[var(--line)] px-2.5 py-1.5 text-xs font-medium text-ink/70 transition-colors duration-fast hover:bg-ink/5"
+                  className="flex h-12 w-12 items-center justify-center rounded text-white transition-colors hover:bg-white/15"
                 >
-                  <svg aria-hidden width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <svg aria-hidden width="20" height="20" viewBox="0 0 24 24" fill="none">
                     <path
                       d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"
                       stroke="currentColor"
@@ -85,12 +94,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     />
                     <circle cx="12" cy="12" r="3.2" stroke="currentColor" strokeWidth="1.6" />
                   </svg>
-                  AI
                 </button>
                 <NotificationsBell />
-                <AccentPicker />
                 <ThemeToggle />
-                <HeaderUserMenu />
+                <div className="flex h-12 w-12 items-center justify-center">
+                  <HeaderUserMenu />
+                </div>
               </div>
             </div>
           </header>
