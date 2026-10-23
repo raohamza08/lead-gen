@@ -428,6 +428,14 @@ function fetchJobViaExtension(jobUrl: string): Promise<{ ok: boolean; job?: Extr
   });
 }
 
+/** sessionStorage key the Marketplace Jobs page writes to before
+ *  navigating here (Part: Marketplace Jobs -> Proposal Writing direct
+ *  handoff, 2026-10-23) — must match jobs/page.tsx's PROPOSAL_PREFILL_KEY
+ *  exactly; duplicated as a literal rather than shared across the two
+ *  page modules since there's no existing shared-constants file either
+ *  already imports from. */
+const MARKETPLACE_PREFILL_KEY = "outly-marketplace-job-prefill";
+
 export default function UpworkProposalWritingPage() {
   const queryClient = useQueryClient();
   const [jobUrl, setJobUrl] = useState("");
@@ -435,14 +443,35 @@ export default function UpworkProposalWritingPage() {
   const [result, setResult] = useState<GenerateResult | null>(null);
   const [viaExtension, setViaExtension] = useState(false);
   const [extensionInstalled, setExtensionInstalled] = useState(true); // optimistic until checked, avoids a flash of the install hint
+  // Set when this page was opened via Marketplace Jobs' "Generate Proposal"
+  // button — already-real data from that page's own live Upwork search, so
+  // submit() uses it directly instead of the extension/background-tab fetch
+  // below. Cleared once consumed, or if the user edits the URL away from
+  // the job it belongs to (re-typing a different link shouldn't silently
+  // keep generating from the old prefilled job).
+  const [marketplacePrefill, setMarketplacePrefill] = useState<{ url: string; job: ExtractedJobPayload } | null>(null);
 
   useEffect(() => {
     setExtensionInstalled(isExtensionInstalled());
+    const params = new URLSearchParams(window.location.search);
     // Pre-fill from the Job Feed page's "Generate" link
     // (/upwork/proposal-writing?url=...) — doesn't auto-submit, just saves
     // retyping the link.
-    const prefill = new URLSearchParams(window.location.search).get("url");
+    const prefill = params.get("url");
     if (prefill) setJobUrl(prefill);
+
+    if (params.get("fromMarketplace") === "1") {
+      const raw = sessionStorage.getItem(MARKETPLACE_PREFILL_KEY);
+      sessionStorage.removeItem(MARKETPLACE_PREFILL_KEY);
+      if (raw) {
+        try {
+          setMarketplacePrefill(JSON.parse(raw));
+        } catch {
+          // Malformed/stale sessionStorage value — fall through to the
+          // normal extension/manual flow rather than crash on it.
+        }
+      }
+    }
   }, []);
 
   const draftsQuery = useQuery({
@@ -486,6 +515,17 @@ export default function UpworkProposalWritingPage() {
     const url = jobUrl.trim();
     if (!url) return;
     setResult(null);
+
+    // Already-real data from Marketplace Jobs' own live search — skip the
+    // extension/background-tab fetch entirely (Part: Marketplace Jobs ->
+    // Proposal Writing direct handoff, 2026-10-23). Only used while the
+    // URL field still matches the job it was handed off for; if the user
+    // edited it to a different link, fall through to a real fetch for
+    // THAT link instead of silently reusing stale data.
+    if (marketplacePrefill && marketplacePrefill.url === url) {
+      generateMutation.mutate({ url, extractedJob: marketplacePrefill.job, knownClientName: knownClientName.trim() || undefined });
+      return;
+    }
 
     if (isExtensionInstalled()) {
       setViaExtension(true);
@@ -547,6 +587,10 @@ export default function UpworkProposalWritingPage() {
               {viaExtension ? "Reading job…" : generateMutation.isPending ? "Generating…" : "Generate"}
             </button>
           </div>
+
+          {marketplacePrefill && marketplacePrefill.url === jobUrl.trim() && (
+            <p className="text-xs text-good">Using this job&apos;s details straight from Marketplace Jobs — no fetch needed.</p>
+          )}
 
           {viaExtension && (
             <p className="text-xs text-ink/50">

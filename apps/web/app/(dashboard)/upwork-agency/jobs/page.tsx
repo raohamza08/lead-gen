@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile } from "../../../../components/chart-kit";
@@ -120,6 +121,48 @@ function jobUrl(job: MarketplaceJob): string {
   return `https://www.upwork.com/jobs/${job.ciphertext}`;
 }
 
+/** sessionStorage key for the one-shot handoff to Proposal Writing below —
+ *  one slot is enough since this is read-and-cleared the instant the
+ *  destination page mounts, never left sitting around for a second job. */
+const PROPOSAL_PREFILL_KEY = "outly-marketplace-job-prefill";
+
+/** Hands this job's ALREADY-FETCHED real data (from the live Upwork
+ *  GraphQL search this whole page is built on) straight to Proposal
+ *  Writing, shaped exactly like its own ExtractedJobPayload (Part:
+ *  Marketplace Jobs -> Proposal Writing direct handoff, 2026-10-23,
+ *  explicit user request — "I have the api... getting all the jobs and
+ *  their details clearly... search it in the marketplace jobs and get
+ *  the details but don't open a new tab"). No second fetch, no browser
+ *  extension, no background tab — this job's data was already real and
+ *  already in hand the moment the search results loaded. `client` only
+ *  carries the fields Marketplace Jobs' search actually returns
+ *  (confirmed via introspection — no "Member since" field exists on
+ *  this result type, unlike the extension's full-page scrape), so
+ *  anything downstream that needs it (client-tenure scoring) degrades
+ *  the same honest way a partial manual-entry job already does. */
+function buildExtractedJobPayload(job: MarketplaceJob) {
+  const facts: Record<string, string> = {};
+  if (job.budgetDisplay) facts["Budget"] = job.budgetDisplay;
+  if (job.experienceLevel) facts["Experience Level"] = job.experienceLevel;
+  if (job.durationLabel) facts["Project Length"] = job.durationLabel;
+  if (job.engagement) facts["Hours"] = job.engagement;
+
+  const client: Record<string, string> = {};
+  if (job.client.country) client["Country"] = job.client.country;
+  if (job.client.totalSpentDisplay) client["Total spent"] = job.client.totalSpentDisplay;
+  if (job.client.totalHires != null) client["Hires"] = String(job.client.totalHires);
+  if (job.client.verificationStatus) client["Payment method"] = job.client.verificationStatus === "VERIFIED" ? "Verified" : job.client.verificationStatus;
+
+  return {
+    title: job.title,
+    description: job.description,
+    postedAt: job.publishedDateTime,
+    facts,
+    client,
+    skills: job.skills.map((s) => s.prettyName),
+  };
+}
+
 /** Which of the user's own freelancer profiles (from Proposal Writing)
  *  best fits bidding on this specific job (Part: Marketplace Jobs
  *  "recommended profile", 2026-10-23, explicit user request). Same
@@ -184,6 +227,7 @@ function JobRow({ job, profiles, onOpen }: { job: MarketplaceJob; profiles: Free
 }
 
 function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: FreelancerProfile[] }) {
+  const router = useRouter();
   const [copied, setCopied] = useState(false);
   const match = matchProfile(job, profiles);
   const url = jobUrl(job);
@@ -194,9 +238,21 @@ function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: Freelance
     setTimeout(() => setCopied(false), 2000);
   }
 
+  function generateProposal() {
+    sessionStorage.setItem(PROPOSAL_PREFILL_KEY, JSON.stringify({ url, job: buildExtractedJobPayload(job) }));
+    router.push(`/upwork/proposal-writing?url=${encodeURIComponent(url)}&fromMarketplace=1`);
+  }
+
   return (
     <div className="flex flex-col gap-5 text-sm">
       <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={generateProposal}
+          className="rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-opacity hover:opacity-90"
+        >
+          Generate Proposal
+        </button>
         <button
           type="button"
           onClick={copyLink}
