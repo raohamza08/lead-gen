@@ -22,14 +22,14 @@ import { api } from "../lib/api-client";
  *    from non-primary-admins, via the early `return null`.
  */
 const SWATCHES = [
-  "#f2754a", // this app's current default dark-mode accent
+  "#0F6CBD", // this app's default accent (UI.md Outlook spec), same in both themes
   "#e0392a",
   "#eda100",
   "#1baf7a",
   "#2a78d6",
   "#8b5cf6",
   "#d6336c",
-  "#0e6e6b", // this app's current default light-mode accent
+  "#0e6e6b",
 ];
 
 function hexToRgbTriplet(hex: string): string | null {
@@ -37,16 +37,6 @@ function hexToRgbTriplet(hex: string): string | null {
   if (!m) return null;
   const n = parseInt(m[1], 16);
   return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
-}
-
-function lighten(hex: string, amount: number): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const r = Math.round(((n >> 16) & 255) + (255 - ((n >> 16) & 255)) * amount);
-  const g = Math.round(((n >> 8) & 255) + (255 - ((n >> 8) & 255)) * amount);
-  const b = Math.round((n & 255) + (255 - (n & 255)) * amount);
-  return `${r} ${g} ${b}`;
 }
 
 /** WCAG-ish relative luminance, just enough to pick black-vs-white text that
@@ -64,6 +54,13 @@ function contrastTripletFor(hex: string): string {
   return luminance > 0.45 ? "20 16 13" : "255 255 255";
 }
 
+/** --accent-2-rgb is set EQUAL to --accent-rgb, not lightened (Part: full
+ *  UI redesign per UI.md, 2026-10-23) — the spec's own --btn-primary-bg
+ *  is a flat fill (no gradient anywhere in the design), so a two-tone
+ *  override here would reintroduce the two-tone button look the redesign
+ *  removed, even though the admin only picked one color. `lighten` is
+ *  kept defined (still a real, reasonable utility) but unused by this
+ *  call now. */
 function applyAccent(hex: string | null) {
   const root = document.documentElement.style;
   if (!hex) {
@@ -75,7 +72,7 @@ function applyAccent(hex: string | null) {
   const base = hexToRgbTriplet(hex);
   if (!base) return;
   root.setProperty("--accent-rgb", base);
-  root.setProperty("--accent-2-rgb", lighten(hex, 0.3));
+  root.setProperty("--accent-2-rgb", base);
   root.setProperty("--accent-contrast-rgb", contrastTripletFor(hex));
 }
 
@@ -124,14 +121,17 @@ export function AccentPicker() {
 
   return (
     <div ref={panelRef} className="relative">
+      {/* 48x48 white icon button matching the top bar's other icon buttons
+          (Part: full UI redesign per UI.md, Section 6.1) — fixed white
+          rather than text-ink since this sits on --accent in both themes. */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Change accent color for everyone (only you can do this)"
         title="Accent color — applies org-wide, only you can change it"
-        className="flex h-[30px] w-[30px] items-center justify-center rounded-md border border-[var(--line)] transition-colors hover:bg-ink/5"
+        className="flex h-12 w-12 items-center justify-center rounded text-white transition-colors hover:bg-white/15"
       >
-        <span aria-hidden className="h-3.5 w-3.5 rounded-full" style={{ background: hex ?? "var(--accent)" }} />
+        <span aria-hidden className="h-3.5 w-3.5 rounded-full ring-1 ring-white/70" style={{ background: hex ?? "#ffffff" }} />
       </button>
       {open && (
         <div className="absolute right-0 top-[calc(100%+6px)] z-50 w-56 rounded-lg border border-[var(--line)] bg-surface p-3 shadow-lg">
@@ -151,7 +151,7 @@ export function AccentPicker() {
           <div className="mt-3 flex items-center gap-2">
             <input
               type="color"
-              value={hex ?? "#f2754a"}
+              value={hex ?? "#0F6CBD"}
               onChange={(e) => setMutation.mutate(e.target.value)}
               className="h-7 w-7 cursor-pointer rounded border border-[var(--line)] bg-transparent p-0"
             />
