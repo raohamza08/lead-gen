@@ -28,6 +28,21 @@ export const metadata: Metadata = {
 // actually shows a fresh visitor "exactly as per the md file." An
 // explicit "light"/"dark"/"system" choice via the in-app toggle
 // (components/theme-toggle.tsx) always wins over this default.
+// Same flash problem, same fix, for the org-wide accent color (Part: accent
+// FOUC fix, 2026-10-23 — reported by the primary admin: on reload, the
+// built-in blue (#0F6CBD, globals.css's --accent-rgb default) painted
+// first, then snapped to the org's actual custom color once
+// components/accent-picker.tsx's colorQuery resolved — a real network
+// round-trip, unlike the theme's localStorage-only read above. accent-picker
+// has no way to read the authoritative value synchronously (it lives in the
+// database), so this mirrors the only trick available: cache the last-known
+// hex in localStorage (accent-picker now does this on every successful
+// fetch/mutation) and apply it here, before first paint. Self-corrects once
+// the real query resolves a moment later, so a stale cache (e.g. changed
+// from a different browser) only ever shows for an instant, never wrong
+// forever. A brand-new browser with nothing cached yet still sees one flash
+// on its very first load — unavoidable without SSR, same tradeoff the
+// theme script above already accepts.
 const THEME_INIT_SCRIPT = `
 (function () {
   try {
@@ -36,6 +51,26 @@ const THEME_INIT_SCRIPT = `
   } catch (e) {
     document.documentElement.setAttribute("data-theme", "light");
   }
+  try {
+    var hex = localStorage.getItem("org-accent-color");
+    if (hex) {
+      var m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+      if (m) {
+        var n = parseInt(m[1], 16);
+        var r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+        var triplet = r + " " + g + " " + b;
+        var style = document.documentElement.style;
+        style.setProperty("--accent-rgb", triplet);
+        style.setProperty("--accent-2-rgb", triplet);
+        var lin = [r, g, b].map(function (c) {
+          var s = c / 255;
+          return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+        });
+        var luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+        style.setProperty("--accent-contrast-rgb", luminance > 0.45 ? "20 16 13" : "255 255 255");
+      }
+    }
+  } catch (e) {}
 })();
 `;
 
