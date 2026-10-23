@@ -71,10 +71,6 @@ export default function SystemLogsPage() {
           <h1 className="text-lg font-semibold tracking-tight">System Logs</h1>
           {logsQuery.isFetching && !logsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
         </div>
-        <p className="mt-0.5 text-xs text-ink/55">
-          Authentication, user management, permission checks, and lead activity across the organization —
-          visible only to the primary administrator.
-        </p>
       </div>
 
       <div className="card grid grid-cols-2 gap-3 p-3 sm:grid-cols-4">

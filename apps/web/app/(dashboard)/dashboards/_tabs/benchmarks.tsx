@@ -62,13 +62,11 @@ export function BenchmarksTab() {
     <DashboardCenterShell
       compact
       title="Benchmarks"
-      subtitle="Set a target value per metric. Comparisons render as actual vs. target vs. difference — never a bare good/bad label."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
     >
       <SectionCard
         title="Configured benchmarks"
-        subtitle="Metric key must match the key a Dashboard Center page reports (e.g. leads.conversionRate, email.openRate)"
         actions={isAdmin ? undefined : <span className="text-xs text-ink/45">Admin only</span>}
       >
         {isAdmin && (

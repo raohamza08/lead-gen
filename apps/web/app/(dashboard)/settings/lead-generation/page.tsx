@@ -348,9 +348,6 @@ export default function LeadGenerationSettingsPage() {
           ← General settings
         </Link>
         <h1 className="mt-1 text-lg font-semibold tracking-tight">Lead Generation Settings</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Targeting, outreach sending, case studies, and agent behavior for the lead-gen pipeline.
-        </p>
       </div>
 
       <AutomationSettingsSection />

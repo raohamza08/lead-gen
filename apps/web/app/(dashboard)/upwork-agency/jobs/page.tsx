@@ -510,11 +510,6 @@ export default function MarketplaceJobsPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Marketplace Jobs</h1>
-          <p className="mt-0.5 text-xs text-ink/50">
-            Live public marketplace data from Upwork&apos;s own search — not your agency&apos;s records, not synced or stored. Sorted newest
-            first on this page; jobs posted in the last {JUST_POSTED_WINDOW_MIN} minutes are pinned at the top.
-            {activeProfiles.length > 0 ? " Grouped by freelancer below." : " Add freelancer profiles in Proposal Writing to group these by freelancer."}
-          </p>
         </div>
         <a
           href={`https://www.upwork.com/nx/search/jobs/${query ? `?q=${encodeURIComponent(query)}` : ""}`}

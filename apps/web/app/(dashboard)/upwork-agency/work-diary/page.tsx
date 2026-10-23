@@ -57,10 +57,6 @@ export default function WorkDiaryPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Work Diary</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Real per-contract activity levels, memos, and screenshot flags for one day. Hourly totals/charges aren&apos;t available here — Upwork
-          blocks that specific data behind a team-level permission this connection doesn&apos;t have.
-        </p>
       </div>
 
       <SectionCard title="Pick a contract and date">

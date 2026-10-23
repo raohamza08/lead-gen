@@ -46,9 +46,6 @@ export default function UpworkAgencyOverviewPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Agency Overview</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          {overview.organizationName ? `${overview.organizationName} — ` : ""}composite summary across every verified Upwork domain. Nothing here is fabricated — every number is a direct read from its own module.
-        </p>
       </div>
 
       <SectionCard title="Key metrics" subtitle="Click a tile to open that module.">

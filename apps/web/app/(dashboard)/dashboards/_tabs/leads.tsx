@@ -100,7 +100,6 @@ export function LeadsTab() {
     <DashboardCenterShell
       compact
       title="Leads Dashboard"
-      subtitle="Lead volume, source/niche breakdown, addition audit, and per-lead activity timeline."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => {

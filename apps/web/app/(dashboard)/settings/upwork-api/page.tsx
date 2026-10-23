@@ -151,9 +151,6 @@ export default function UpworkApiSettingsPage() {
             <h1 className="text-lg font-semibold tracking-tight">Upwork API Settings</h1>
             {statusQuery.isFetching && !statusQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
-          <p className="mt-0.5 text-xs text-ink/50">
-            Connects our Upwork agency account. Once connected, the real data lives under the Upwork Agency section in the sidebar — this page only manages the connection itself.
-          </p>
         </div>
         {status?.connected ? (
           <button

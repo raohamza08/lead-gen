@@ -70,7 +70,6 @@ export function InboxTab() {
     <DashboardCenterShell
       compact
       title="Unified Inbox Dashboard"
-      subtitle="Per-mailbox volume and health, plus leads created from inbound email replies/threads."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => {
@@ -164,11 +163,7 @@ export function InboxTab() {
         />
       )}
 
-      <SectionCard
-        title="Leads created from inbound email"
-        subtitle="No separate 'website form submission' model exists in the schema — this covers any inbound thread linked to a real Lead, not just contact-form fills"
-        expandable
-      >
+      <SectionCard title="Leads created from inbound email" expandable>
         {leadsQuery.isLoading && <SkeletonCard className="h-32" />}
         {leadsQuery.error && <ErrorState message={(leadsQuery.error as Error).message} onRetry={() => leadsQuery.refetch()} />}
         {!leadsQuery.isLoading && leads.length === 0 && <EmptyState title="No leads created from inbound email in this period" />}

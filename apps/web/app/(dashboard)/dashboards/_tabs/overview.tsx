@@ -55,7 +55,6 @@ export function OverviewTab() {
     <DashboardCenterShell
       compact
       title="Overview / Executive Dashboard"
-      subtitle="Management-level KPIs and channel performance across every module, each pulled from that module's own dashboard endpoint."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => summaryQuery.refetch()}

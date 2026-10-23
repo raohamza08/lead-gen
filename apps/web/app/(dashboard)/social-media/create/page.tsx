@@ -209,9 +209,6 @@ export default function CreatePostPage() {
           <h1 className="text-lg font-semibold tracking-tight">Create Post</h1>
           {isFetchingReference && !isLoadingReference && <Spinner className="h-3.5 w-3.5" />}
         </div>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Pick accounts, write or generate content per platform, attach media, and schedule.
-        </p>
       </div>
 
       {(error || loadError) && (

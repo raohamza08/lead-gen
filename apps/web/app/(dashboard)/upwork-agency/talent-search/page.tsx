@@ -37,10 +37,6 @@ export default function TalentSearchPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Talent Search</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Real public freelancer search, direct from Upwork. Only a privacy-truncated display name and profile link are available through this
-          query — skills, rate, and location aren&apos;t exposed here.
-        </p>
       </div>
 
       <SectionCard title="Search">

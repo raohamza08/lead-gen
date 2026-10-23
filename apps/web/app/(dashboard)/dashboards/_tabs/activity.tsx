@@ -73,7 +73,6 @@ export function ActivityTab() {
     <DashboardCenterShell
       compact
       title="Activity Dashboard"
-      subtitle="Auditable actions across the organization — a partial view while Phase 10's audit-log coverage sweep is still in progress."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => activityQuery.refetch()}

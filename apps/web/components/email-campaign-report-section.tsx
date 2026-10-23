@@ -264,10 +264,7 @@ export function EmailCampaignReportSection() {
         )}
       </SectionCard>
 
-      <SectionCard
-        title="Unsubscribed & suppressed"
-        subtitle="Anyone who opted out, hard-bounced, or was manually suppressed — kept permanently even after the lead itself is removed, so these addresses are never contacted again."
-      >
+      <SectionCard title="Unsubscribed & suppressed">
         {suppressionQuery.isLoading ? (
           <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
         ) : (suppressionQuery.data?.length ?? 0) === 0 ? (

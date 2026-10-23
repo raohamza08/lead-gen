@@ -83,10 +83,6 @@ export default function DelayedResponsesPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Delayed Responses</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Rooms with a real unread message 15+ minutes old, from the last 7 days. A room clears from this list once the freelancer actually
-          replies on Upwork — opening it here doesn&apos;t remove it.
-        </p>
       </div>
 
       {delayedQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}

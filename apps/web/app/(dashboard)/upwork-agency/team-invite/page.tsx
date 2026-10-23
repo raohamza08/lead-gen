@@ -65,11 +65,6 @@ export default function TeamInvitePage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Team Invite</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Invite someone to join this Upwork agency&apos;s team directly, without going through Upwork&apos;s own UI. Submitting sends a real
-          email on Upwork&apos;s side immediately — this has not been end-to-end tested with a real invite, so double-check the details below
-          before sending.
-        </p>
       </div>
 
       <SectionCard title="Send invitation">

@@ -61,7 +61,6 @@ export function SocialTab() {
     <DashboardCenterShell
       compact
       title="Social Inbox Dashboard"
-      subtitle="Conversation volume, response times, and per-platform breakdown across connected social accounts."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => {

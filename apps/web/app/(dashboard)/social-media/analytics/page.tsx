@@ -81,9 +81,6 @@ export default function SocialAnalyticsPage() {
             <h1 className="text-lg font-semibold tracking-tight">Analytics</h1>
             {analyticsQuery.isFetching && !analyticsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
-          <p className="mt-0.5 text-xs text-ink/50">
-            Synced every 6 hours from each platform&apos;s own API — not live on every page load.
-          </p>
         </div>
         <select
           value={platform}

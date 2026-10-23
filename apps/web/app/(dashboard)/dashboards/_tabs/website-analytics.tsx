@@ -174,7 +174,6 @@ export function WebsiteAnalyticsTab() {
       <div className="flex flex-col gap-5">
         <div>
           <h1 className="text-lg font-semibold tracking-tight">Website Analytics</h1>
-          <p className="mt-0.5 text-xs text-ink/50">Real traffic data from Google Analytics (GA4), via a read-only service account.</p>
         </div>
         <EmptyState
           title="No GA4 property connected yet"
@@ -211,7 +210,6 @@ export function WebsiteAnalyticsTab() {
     <DashboardCenterShell
       compact
       title="Website Analytics"
-      subtitle="Real traffic data from Google Analytics (GA4), via a read-only service account."
       dateRange={dateRange}
       onDateRangeChange={setDateRange}
       onRefresh={() => {

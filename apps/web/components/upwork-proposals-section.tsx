@@ -338,11 +338,6 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
       <div className="mb-1 flex items-center justify-between">
         <div>
           <h2 className="text-sm font-semibold tracking-tight">{type === "BIDDING" ? "Bidding" : "Invite"} proposals</h2>
-          <p className="mt-0.5 text-xs text-ink/55">
-            {type === "BIDDING"
-              ? "Proposals submitted against a job you found and bid on — connects spent, training vs live account."
-              : "Proposals submitted in response to a client invite — no connects involved."}
-          </p>
         </div>
         <div className="flex items-center gap-2">
           {isAdmin && (

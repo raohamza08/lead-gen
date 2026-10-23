@@ -163,10 +163,6 @@ export default function RoomsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Rooms & Messages</h1>
-        <p className="mt-0.5 text-xs text-ink/50">
-          Read-only conversation listing. Recently active rooms refresh every 15 minutes; the full room list reconciles every 6 hours. No
-          send-message capability exists in this app.
-        </p>
       </div>
 
       <PendingChatReminderSettings />
@@ -306,11 +302,6 @@ export default function RoomsPage() {
                     </dd>
                   </div>
                 </dl>
-
-                <div className="rounded-lg border border-[var(--line)] bg-ink/[0.02] px-3 py-2 text-[11px] text-ink/45">
-                  Member names/online status, shared files, tasks, and activity logs aren&apos;t synced from Upwork for rooms — only the fields
-                  above are real.
-                </div>
               </div>
             )}
           </SectionCard>
