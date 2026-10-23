@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from "@nestjs/common";
+import { Controller, Get, Param, Query, UseGuards } from "@nestjs/common";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { ModuleAccessGuard } from "../../common/guards/module-access.guard";
@@ -20,5 +20,12 @@ export class UpworkMarketplaceJobsController {
   search(@CurrentUser() user: JwtClaims, @Query("q") q?: string, @Query("after") after?: string, @Query("first") first?: string) {
     const parsedFirst = first ? Math.min(Math.max(Number(first) || 50, 1), 50) : 50;
     return this.marketplaceJobs.search(user.orgId, q ?? null, after ?? null, parsedFirst);
+  }
+
+  /** Fetched lazily by the detail panel, not the list — see
+   *  UpworkMarketplaceJobsService.getClientInsights's own docblock. */
+  @Get("marketplace-jobs/:id/client-insights")
+  clientInsights(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    return this.marketplaceJobs.getClientInsights(user.orgId, id);
   }
 }

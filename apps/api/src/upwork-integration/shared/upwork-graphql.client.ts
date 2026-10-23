@@ -835,6 +835,35 @@ export class UpworkGraphQLClient {
               totalSpent: { displayValue: string } | null;
               location: { country: string | null } | null;
             };
+            // Per-job activity, nested under the search result's own `job`
+            // field (Part: Marketplace Jobs complete-details fix,
+            // 2026-10-24, explicit user request — pasted a real Upwork job
+            // page's "Activity on this job" block: Proposals/Interviewing/
+            // Invites sent/Unanswered invites). Confirmed live this comes
+            // back reliably for ordinary jobs as part of the SAME bulk
+            // search already run for the whole page (no extra per-job
+            // round trip, no 403 risk) — unlike the separate
+            // `jobPubDetails(id)` query added below for client work
+            // history, which genuinely does 403 for ~20% of jobs with
+            // "Access is restricted to registered users only."
+            job: {
+              activityStat: {
+                jobActivity: {
+                  invitesSent: number;
+                  totalInvitedToInterview: number;
+                  totalHired: number;
+                  totalUnansweredInvites: number;
+                  totalOffered: number;
+                  totalRecommended: number | null;
+                  lastClientActivity: string | null;
+                } | null;
+                applicationsBidStats: {
+                  avgRateBid: { displayValue: string } | null;
+                  minRateBid: { displayValue: string } | null;
+                  maxRateBid: { displayValue: string } | null;
+                } | null;
+              } | null;
+            } | null;
           };
         }[];
       };
@@ -865,6 +894,20 @@ export class UpworkGraphQLClient {
                 totalSpent { displayValue }
                 location { country }
               }
+              job {
+                activityStat {
+                  jobActivity {
+                    invitesSent totalInvitedToInterview totalHired
+                    totalUnansweredInvites totalOffered totalRecommended
+                    lastClientActivity
+                  }
+                  applicationsBidStats {
+                    avgRateBid { displayValue }
+                    minRateBid { displayValue }
+                    maxRateBid { displayValue }
+                  }
+                }
+              }
             }
           }
         }
@@ -872,6 +915,80 @@ export class UpworkGraphQLClient {
       { filter: { pagination_eq: { first, ...(after ? { after } : {}) }, ...(searchTerm ? { searchExpression_eq: searchTerm } : {}) } },
     );
     return data.marketplaceJobPostingsSearch;
+  }
+
+  /** Client work-history + hourly-rate aggregates for ONE job's buyer (Part:
+   *  Marketplace Jobs complete-details fix, 2026-10-24, explicit user
+   *  request — "calculate and show the number of ongoing job of the
+   *  client hourly, fixed and completed hourly and fixed and also an
+   *  average hourly budget client spend over all the hourly jobs").
+   *  Confirmed live via introspection + real calls: `jobPubDetails` is a
+   *  SEPARATE root query from the blocked `jobPosting(id)` (see this
+   *  client's own docblock on that one) — unlike `jobPosting`, this one
+   *  works for ordinary marketplace jobs the agency has no prior
+   *  relationship with. It does still 403 with
+   *  "Access is restricted to registered users only." for a real minority
+   *  of jobs (confirmed live, ~2 of 9 in one sample) — callers must treat
+   *  that as "insights unavailable for this job," not a hard failure.
+   *
+   *  `buyer.avgHourlyJobsRate` is the client's own historical average
+   *  hourly rate across ALL their hourly work (exactly the "average
+   *  hourly budget" the user asked for) — Upwork computes this
+   *  server-side, not derived here. The ongoing/completed-by-type counts
+   *  the user also asked for have no direct aggregate field anywhere in
+   *  the schema (confirmed via introspection of
+   *  MarketplaceJobPostingSearchClientInfo, BuyerAssignmentsStats, and
+   *  BuyerJobs — none split by contract type), so this returns the raw
+   *  `buyerExtra.workHistory` list (each item's real `status` and
+   *  `jobInfo.type`) for the caller to bucket itself. */
+  async getJobClientInsights(accessToken: string, organizationId: string | null, jobId: string) {
+    const data = await this.request<{
+      jobPubDetails: {
+        buyer: {
+          avgHourlyJobsRate: { amount: number; currencyCode: string } | null;
+          stats: {
+            totalAssignments: number | null;
+            activeAssignmentsCount: number | null;
+            totalJobsWithHires: number | null;
+            hiredInPast: boolean | null;
+            feedbackCount: number | null;
+            score: number | null;
+          } | null;
+          jobs: { filledCount: number | null; openCount: number | null; postedCount: number | null } | null;
+        } | null;
+        buyerExtra: {
+          workHistory: { status: string | null; jobInfo: { type: string | null } | null }[] | null;
+        } | null;
+        opening: { durationType: string | null } | null;
+        qualifications: {
+          type: string | null;
+          countries: string[] | null;
+          minHoursWeek: number | null;
+          minJobSuccessScore: number | null;
+          shouldHavePortfolio: boolean | null;
+          risingTalent: boolean | null;
+        } | null;
+      } | null;
+    }>(
+      accessToken,
+      organizationId,
+      `query($id: ID!) {
+        jobPubDetails(id: $id) {
+          buyer {
+            avgHourlyJobsRate { amount currencyCode }
+            stats { totalAssignments activeAssignmentsCount totalJobsWithHires hiredInPast feedbackCount score }
+            jobs { filledCount openCount postedCount }
+          }
+          buyerExtra {
+            workHistory { status jobInfo { type } }
+          }
+          opening { durationType }
+          qualifications { type countries minHoursWeek minJobSuccessScore shouldHavePortfolio risingTalent }
+        }
+      }`,
+      { id: jobId },
+    );
+    return data.jobPubDetails;
   }
 
   /** Real freelancer profile aggregates for ONE freelancer (spec Module

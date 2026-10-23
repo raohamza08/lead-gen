@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { UpworkGraphQLClient } from "../shared/upwork-graphql.client";
+import { UpworkGraphQLClient, UpworkGraphQLError } from "../shared/upwork-graphql.client";
 import { UpworkApiConnectionService } from "../connection/upwork-api-connection.service";
 
 /**
@@ -98,8 +98,103 @@ export class UpworkMarketplaceJobsService {
               totalSpentDisplay: e.node.client.totalSpent?.displayValue ?? null,
               country: e.node.client.location?.country ?? null,
             },
+            // "Activity on this job" (Part: complete-details fix,
+            // 2026-10-24, explicit user request — pasted a real Upwork job
+            // page's Proposals/Interviewing/Invites sent/Unanswered
+            // invites block). `totalApplicants` above already covers
+            // Proposals; the rest comes from here. Genuinely absent for
+            // some jobs (confirmed live — not every job has an
+            // activityStat), surfaced as null rather than zeros so the
+            // frontend can show "not available" instead of a fabricated 0.
+            activity: e.node.job?.activityStat?.jobActivity
+              ? {
+                  invitesSent: e.node.job.activityStat.jobActivity.invitesSent,
+                  totalInvitedToInterview: e.node.job.activityStat.jobActivity.totalInvitedToInterview,
+                  totalHired: e.node.job.activityStat.jobActivity.totalHired,
+                  totalUnansweredInvites: e.node.job.activityStat.jobActivity.totalUnansweredInvites,
+                  totalOffered: e.node.job.activityStat.jobActivity.totalOffered,
+                  lastClientActivity: e.node.job.activityStat.jobActivity.lastClientActivity,
+                  avgBidRate: e.node.job.activityStat.applicationsBidStats?.avgRateBid?.displayValue ?? null,
+                  minBidRate: e.node.job.activityStat.applicationsBidStats?.minRateBid?.displayValue ?? null,
+                  maxBidRate: e.node.job.activityStat.applicationsBidStats?.maxRateBid?.displayValue ?? null,
+                }
+              : null,
           };
         }),
+      };
+    });
+  }
+
+  /** Client work-history insights for ONE job, fetched lazily when its
+   *  detail panel opens — not part of the bulk search above (Part:
+   *  complete-details fix, 2026-10-24, explicit user request — ongoing/
+   *  completed hourly vs fixed job counts and the client's average hourly
+   *  rate). See UpworkGraphQLClient.getJobClientInsights's own docblock
+   *  for why this needs a separate per-job query and genuinely 403s for a
+   *  real minority of jobs — that's surfaced as `available: false`, not
+   *  an error, since it's an expected limitation of some job postings,
+   *  not a bug.
+   *
+   *  Ongoing/completed-by-type counts are computed here from the client's
+   *  real work-history list (confirmed via introspection: no aggregate
+   *  field anywhere in the schema already splits by both status AND
+   *  contract type). JobOpeningStatus has a third real value, FILLED,
+   *  beyond ACTIVE/CLOSED (confirmed via introspection) whose lifecycle
+   *  meaning relative to "ongoing" isn't certain from the field alone —
+   *  counted separately as `other`, not guessed into either bucket. */
+  async getClientInsights(orgId: string, jobId: string) {
+    return this.connection.withFreshTokenOnAuthFailure(orgId, async ({ accessToken, organizationId }) => {
+      let details;
+      try {
+        details = await this.graphql.getJobClientInsights(accessToken, organizationId, jobId);
+      } catch (err) {
+        if (err instanceof UpworkGraphQLError && /restricted to registered users/i.test(err.message)) {
+          return { available: false as const };
+        }
+        throw err;
+      }
+      if (!details) return { available: false as const };
+
+      const workHistory = details.buyerExtra?.workHistory ?? [];
+      const counts = { ongoingHourly: 0, ongoingFixed: 0, completedHourly: 0, completedFixed: 0, other: 0 };
+      for (const item of workHistory) {
+        const type = item.jobInfo?.type;
+        if (type !== "FIXED" && type !== "HOURLY") continue;
+        if (item.status === "ACTIVE") {
+          if (type === "HOURLY") counts.ongoingHourly++;
+          else counts.ongoingFixed++;
+        } else if (item.status === "CLOSED") {
+          if (type === "HOURLY") counts.completedHourly++;
+          else counts.completedFixed++;
+        } else {
+          counts.other++;
+        }
+      }
+
+      const durationType = details.opening?.durationType ?? null;
+      return {
+        available: true as const,
+        avgHourlyRate: details.buyer?.avgHourlyJobsRate
+          ? `${details.buyer.avgHourlyJobsRate.amount.toFixed(2)} ${details.buyer.avgHourlyJobsRate.currencyCode}/hr`
+          : null,
+        totalAssignments: details.buyer?.stats?.totalAssignments ?? null,
+        activeAssignments: details.buyer?.stats?.activeAssignmentsCount ?? null,
+        totalJobsWithHires: details.buyer?.stats?.totalJobsWithHires ?? null,
+        hiredInPast: details.buyer?.stats?.hiredInPast ?? null,
+        feedbackCount: details.buyer?.stats?.feedbackCount ?? null,
+        score: details.buyer?.stats?.score ?? null,
+        jobsFilled: details.buyer?.jobs?.filledCount ?? null,
+        jobsOpen: details.buyer?.jobs?.openCount ?? null,
+        jobsPosted: details.buyer?.jobs?.postedCount ?? null,
+        projectType: durationType === "ONE_TIME_PROJECT" ? "One-time project" : durationType === "ONGOING_NEED" ? "Ongoing project" : null,
+        talentType: details.qualifications?.type ?? null,
+        preferredCountries: details.qualifications?.countries ?? [],
+        minHoursPerWeek: details.qualifications?.minHoursWeek ?? null,
+        minJobSuccessScore: details.qualifications?.minJobSuccessScore ?? null,
+        shouldHavePortfolio: details.qualifications?.shouldHavePortfolio ?? false,
+        risingTalent: details.qualifications?.risingTalent ?? false,
+        workHistoryCounts: counts,
+        workHistorySampleSize: workHistory.length,
       };
     });
   }

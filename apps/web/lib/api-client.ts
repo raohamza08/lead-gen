@@ -952,9 +952,46 @@ export const api = {
           totalSpentDisplay: string | null;
           country: string | null;
         };
+        activity: {
+          invitesSent: number;
+          totalInvitedToInterview: number;
+          totalHired: number;
+          totalUnansweredInvites: number;
+          totalOffered: number;
+          lastClientActivity: string | null;
+          avgBidRate: string | null;
+          minBidRate: string | null;
+          maxBidRate: string | null;
+        } | null;
       }[];
     }>(`/upwork-api/marketplace-jobs${qs ? `?${qs}` : ""}`);
   },
+  getUpworkApiMarketplaceJobClientInsights: (jobId: string) =>
+    request<
+      | { available: false }
+      | {
+          available: true;
+          avgHourlyRate: string | null;
+          totalAssignments: number | null;
+          activeAssignments: number | null;
+          totalJobsWithHires: number | null;
+          hiredInPast: boolean | null;
+          feedbackCount: number | null;
+          score: number | null;
+          jobsFilled: number | null;
+          jobsOpen: number | null;
+          jobsPosted: number | null;
+          projectType: string | null;
+          talentType: string | null;
+          preferredCountries: string[];
+          minHoursPerWeek: number | null;
+          minJobSuccessScore: number | null;
+          shouldHavePortfolio: boolean;
+          risingTalent: boolean;
+          workHistoryCounts: { ongoingHourly: number; ongoingFixed: number; completedHourly: number; completedFixed: number; other: number };
+          workHistorySampleSize: number;
+        }
+    >(`/upwork-api/marketplace-jobs/${jobId}/client-insights`),
   // Ontology & Reference Data (spec Module F).
   getUpworkApiOntology: () =>
     request<{
