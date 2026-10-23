@@ -84,6 +84,30 @@ function nicheWordList(niche: string): string[] {
   return niche.toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3 && !STOPWORDS.has(w));
 }
 
+/** Group jobs by which freelancer profile they're recommended for
+ *  (Part: Marketplace Jobs grouping, replaced niche-name headings with
+ *  freelancer-name headings per explicit user request, 2026-10-23) —
+ *  same per-job matchProfile heuristic as the "Recommended profile"
+ *  banner, just bucketed by profile instead of by niche string so two
+ *  profiles sharing a niche still get their own section. */
+function categorizeByProfile(jobs: MarketplaceJob[], profiles: FreelancerProfile[]): { label: string; jobs: MarketplaceJob[] }[] {
+  if (profiles.length === 0) return [{ label: "All jobs", jobs }];
+
+  const buckets = new Map<string, MarketplaceJob[]>();
+  for (const p of profiles) buckets.set(p.id, []);
+  buckets.set("other", []);
+
+  for (const job of jobs) {
+    const match = matchProfile(job, profiles);
+    buckets.get(match ? match.profile.id : "other")!.push(job);
+  }
+
+  return [
+    ...profiles.map((p) => ({ label: `Jobs for ${p.name}`, jobs: buckets.get(p.id)! })),
+    { label: "Other", jobs: buckets.get("other")! },
+  ].filter((g) => g.jobs.length > 0);
+}
+
 /** Upwork's real public job-posting URL (Part: "copy job link" fix,
  *  2026-10-23 — the first version used `~<recordNumber>`, confirmed by
  *  the user NOT to open the real job; `ciphertext` is the correct real
@@ -92,30 +116,6 @@ function nicheWordList(niche: string): string[] {
  *  for why). */
 function jobUrl(job: MarketplaceJob): string {
   return `https://www.upwork.com/jobs/${job.ciphertext}`;
-}
-
-function categorize(jobs: MarketplaceJob[], niches: string[]): { niche: string; jobs: MarketplaceJob[] }[] {
-  if (niches.length === 0) return [{ niche: "All jobs", jobs }];
-
-  const nicheWords = niches.map((n) => ({ niche: n, words: nicheWordList(n) }));
-
-  const buckets = new Map<string, MarketplaceJob[]>();
-  for (const n of niches) buckets.set(n, []);
-  buckets.set("Other", []);
-
-  for (const job of jobs) {
-    const haystack = jobHaystack(job);
-    let best: { niche: string; score: number } | null = null;
-    for (const { niche, words } of nicheWords) {
-      const score = words.reduce((acc, w) => acc + (haystack.includes(w) ? 1 : 0), 0);
-      if (score > 0 && (!best || score > best.score)) best = { niche, score };
-    }
-    buckets.get(best?.niche ?? "Other")!.push(job);
-  }
-
-  return [...niches.map((n) => ({ niche: n, jobs: buckets.get(n)! })), { niche: "Other", jobs: buckets.get("Other")! }].filter(
-    (g) => g.jobs.length > 0,
-  );
 }
 
 /** Which of the user's own freelancer profiles (from Proposal Writing)
@@ -417,7 +417,6 @@ export default function MarketplaceJobsPage() {
     throwOnError: false,
   });
   const activeProfiles = useMemo(() => (profilesQuery.data ?? []).filter((p) => p.active && p.niche.trim()), [profilesQuery.data]);
-  const niches = useMemo(() => [...new Set(activeProfiles.map((p) => p.niche.trim()))], [activeProfiles]);
 
   const allJobs = useMemo(() => jobs?.jobs ?? [], [jobs]);
   const categories = useMemo(() => [...new Set(allJobs.map((j) => j.category).filter((c): c is string => Boolean(c)))], [allJobs]);
@@ -494,7 +493,7 @@ export default function MarketplaceJobsPage() {
 
   const justPosted = sorted.filter((j) => minutesAgo(j.publishedDateTime) <= JUST_POSTED_WINDOW_MIN);
   const rest = sorted.filter((j) => minutesAgo(j.publishedDateTime) > JUST_POSTED_WINDOW_MIN);
-  const groups = useMemo(() => categorize(rest, niches), [rest, niches]);
+  const groups = useMemo(() => categorizeByProfile(rest, activeProfiles), [rest, activeProfiles]);
   const appliedCount = allJobs.filter((j) => j.applied).length;
 
   const openJob = sorted.find((j) => j.id === openJobId) ?? null;
@@ -510,7 +509,7 @@ export default function MarketplaceJobsPage() {
           <p className="mt-0.5 text-xs text-ink/50">
             Live public marketplace data from Upwork&apos;s own search — not your agency&apos;s records, not synced or stored. Sorted newest
             first on this page; jobs posted in the last {JUST_POSTED_WINDOW_MIN} minutes are pinned at the top.
-            {niches.length > 0 ? " Grouped by your freelancer-profile niches below." : " Add freelancer profiles in Proposal Writing to group these by niche."}
+            {activeProfiles.length > 0 ? " Grouped by freelancer below." : " Add freelancer profiles in Proposal Writing to group these by freelancer."}
           </p>
         </div>
         <a
@@ -638,8 +637,8 @@ export default function MarketplaceJobsPage() {
             </SectionCard>
           )}
 
-          {groups.map(({ niche, jobs: groupJobs }) => (
-            <SectionCard key={niche} title={niche}>
+          {groups.map(({ label, jobs: groupJobs }) => (
+            <SectionCard key={label} title={label}>
               <div className="flex flex-col gap-2">
                 {groupJobs.map((job) => (
                   <JobRow key={job.id} job={job} profiles={activeProfiles} onOpen={() => setOpenJobId(job.id)} />
