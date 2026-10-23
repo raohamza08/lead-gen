@@ -5,6 +5,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../../lib/api-client";
 import { SectionCard } from "../../../../components/chart-kit";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { ConversationThread, timeAgo } from "../../../../components/upwork-room-conversation";
+import { InitialsAvatar } from "../../../../components/avatar";
+import { RecordRow, RecordListPanel, DetailPanelHeader } from "../../../../components/record-list";
 
 interface MeWithReminderSettings {
   upworkChatReminderEnabled: boolean;
@@ -76,71 +79,6 @@ function PendingChatReminderSettings() {
       )}
       {permissionState === "unsupported" && <p className="text-[11px] text-ink/40">Desktop notifications aren&apos;t supported in this browser.</p>}
       {error && <p className="text-[11px] text-bad">{error}</p>}
-    </div>
-  );
-}
-
-function initials(name: string | null): string {
-  if (!name) return "?";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-function timeAgo(iso: string | null): string {
-  if (!iso) return "—";
-  const diffMin = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (diffMin < 1) return "now";
-  if (diffMin < 60) return `${diffMin}m`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr}h`;
-  const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 7) return `${diffDay}d`;
-  return new Date(iso).toLocaleDateString();
-}
-
-/** Real conversation thread for the selected room (Part: Rooms &
- *  Messages chat history, 2026-10-23, explicit user request — real
- *  message history, left/right by sender, freelancer name shown).
- *  Fetches on selection; the backend fetches live from Upwork right
- *  away if nothing's cached yet for this room ("when a chat is opened
- *  from below and it doesn't have any of its communication, the api
- *  should fetch the recent communication right away"). Client messages
- *  (left, neutral) vs agency/freelancer messages (right, accent) are
- *  distinguished by `senderIsAgency` — a best-effort heuristic computed
- *  server-side (see UpworkRoomsSyncService.isSenderAgencySide's own
- *  docblock) since Upwork gives no explicit "which side" field; the
- *  real sender name is always shown regardless, so a wrong guess on
- *  side never hides who actually said what. */
-function ConversationThread({ roomId }: { roomId: string }) {
-  const messagesQuery = useQuery({
-    queryKey: ["upwork-api-room-messages", roomId],
-    queryFn: () => api.getUpworkApiRoomMessages(roomId),
-  });
-  const messages = messagesQuery.data?.messages ?? [];
-
-  if (messagesQuery.isLoading) return <p className="text-sm text-ink/50">Loading conversation…</p>;
-  if (messagesQuery.error) return <p className="text-sm text-bad">{(messagesQuery.error as Error).message}</p>;
-  if (messages.length === 0) return <p className="text-sm text-ink/50">No messages found for this room.</p>;
-
-  return (
-    <div className="flex flex-col gap-2.5">
-      {messages.map((m) => (
-        <div key={m.id} className={`flex flex-col gap-0.5 ${m.senderIsAgency ? "items-end" : "items-start"}`}>
-          <div
-            className={`max-w-[80%] rounded-xl px-3.5 py-2.5 text-sm ${
-              m.senderIsAgency ? "rounded-tr-sm bg-accent text-white" : "rounded-tl-sm bg-ink/[0.06] text-ink"
-            }`}
-          >
-            {m.message || <span className="italic opacity-60">(no text)</span>}
-          </div>
-          <p className="px-1 text-[11px] text-ink/40">
-            {m.senderName ?? "Unknown"}
-            {m.senderIsAgency ? " (freelancer)" : " (client)"} · {new Date(m.createdAt).toLocaleString()}
-          </p>
-        </div>
-      ))}
     </div>
   );
 }
@@ -243,112 +181,100 @@ export default function RoomsPage() {
 
       {rooms && rooms.totalCount > 0 && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[360px_1fr_300px]">
-          <SectionCard title="All rooms">
-            <div className="flex flex-col gap-3">
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search rooms…"
-                className="h-9 w-full rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
-              />
-              <div className="flex items-center gap-2">
-                {types.length > 0 && (
-                  <select
-                    value={typeFilter}
-                    onChange={(e) => setTypeFilter(e.target.value)}
-                    className="h-9 flex-1 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
-                  >
-                    <option value="all">All types</option>
-                    {types.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink/60">
-                  <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
-                  Unread only
-                </label>
-              </div>
-              {(search !== "" || typeFilter !== "all" || unreadOnly) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSearch("");
-                    setTypeFilter("all");
-                    setUnreadOnly(false);
-                  }}
-                  className="self-start text-xs text-accent hover:underline"
-                >
-                  Clear filters
-                </button>
-              )}
-
-              <div className="flex max-h-[520px] flex-col gap-1 overflow-y-auto">
-                {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink/50">No rooms match.</p>}
-                {filtered.map((r) => {
-                  const isSelected = selected?.id === r.id;
-                  return (
+          <div className="card overflow-hidden">
+            <RecordListPanel
+              title="All rooms"
+              count={filtered.length}
+              actions={
+                <div className="flex flex-col gap-2">
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search rooms…"
+                    className="h-8 w-full rounded border border-[var(--line)] bg-transparent px-2.5 text-sm"
+                  />
+                  <div className="flex items-center gap-2">
+                    {types.length > 0 && (
+                      <select
+                        value={typeFilter}
+                        onChange={(e) => setTypeFilter(e.target.value)}
+                        className="h-8 flex-1 rounded border border-[var(--line)] bg-transparent px-2.5 text-sm"
+                      >
+                        <option value="all">All types</option>
+                        {types.map((t) => (
+                          <option key={t} value={t}>
+                            {t}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <label className="flex shrink-0 items-center gap-1.5 text-xs text-ink/60">
+                      <input type="checkbox" checked={unreadOnly} onChange={(e) => setUnreadOnly(e.target.checked)} />
+                      Unread only
+                    </label>
+                  </div>
+                  {(search !== "" || typeFilter !== "all" || unreadOnly) && (
                     <button
-                      key={r.id}
                       type="button"
-                      onClick={() => selectRoom(r.id)}
-                      className={`flex items-start gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors ${
-                        isSelected ? "border border-accent/30 bg-accent/12" : "border border-transparent hover:bg-ink/[0.04]"
-                      }`}
+                      onClick={() => {
+                        setSearch("");
+                        setTypeFilter("all");
+                        setUnreadOnly(false);
+                      }}
+                      className="self-start text-xs text-accent hover:underline"
                     >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">
-                        {initials(r.roomName)}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium text-ink">{r.roomName ?? "Untitled room"}</span>
-                          <span className="shrink-0 text-[10px] text-ink/40">{timeAgo(r.latestMessageAt)}</span>
-                        </span>
-                        <span className="mt-0.5 flex items-center justify-between gap-2">
-                          <span className="truncate text-xs text-ink/50">{r.latestMessage ?? "No messages yet"}</span>
-                          {(r.numUnread ?? 0) > 0 && (
-                            <span className="shrink-0 rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">
-                              {r.numUnread}
-                            </span>
-                          )}
-                        </span>
-                      </span>
+                      Clear filters
                     </button>
-                  );
-                })}
-              </div>
-            </div>
-          </SectionCard>
+                  )}
+                </div>
+              }
+            >
+              {filtered.length === 0 && <p className="py-6 text-center text-sm text-ink/50">No rooms match.</p>}
+              {filtered.map((r) => {
+                const isSelected = selected?.id === r.id;
+                const unread = (r.numUnread ?? 0) > 0;
+                return (
+                  <RecordRow
+                    key={r.id}
+                    onClick={() => selectRoom(r.id)}
+                    selected={isSelected}
+                    unread={unread}
+                    avatar={<InitialsAvatar seed={r.id} label={r.roomName ?? "?"} sizeClass="h-9 w-9 text-xs" />}
+                    primary={r.roomName ?? "Untitled room"}
+                    timestamp={timeAgo(r.latestMessageAt)}
+                    timestampUnread={unread}
+                    secondary={r.latestMessage ?? "No messages yet"}
+                    secondaryUnread={unread}
+                    footer={
+                      unread ? (
+                        <span className="rounded-full bg-accent px-1.5 py-0.5 text-[10px] font-semibold text-white">{r.numUnread}</span>
+                      ) : undefined
+                    }
+                  />
+                );
+              })}
+            </RecordListPanel>
+          </div>
 
-          <SectionCard title={selected ? selected.roomName ?? "Untitled room" : "Conversation"}>
+          <div className="card p-6">
             {!selected ? (
               <p className="text-sm text-ink/50">Select a room to view its conversation.</p>
             ) : (
               <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-3 border-b border-[var(--line)] pb-3">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent/15 text-sm font-semibold text-accent">
-                    {initials(selected.roomName)}
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium text-ink">{selected.roomName ?? "Untitled room"}</p>
-                    <p className="text-xs text-ink/50">
-                      {selected.numUsers ?? "—"} members · {selected.roomType ?? "—"}
-                    </p>
-                  </div>
-                </div>
+                <DetailPanelHeader
+                  title={selected.roomName ?? "Untitled room"}
+                  avatar={<InitialsAvatar seed={selected.id} label={selected.roomName ?? "?"} sizeClass="h-9 w-9 text-sm" />}
+                  identity={`${selected.numUsers ?? "—"} members · ${selected.roomType ?? "—"}`}
+                />
 
-                <div className="max-h-[480px] overflow-y-auto">
-                  <ConversationThread roomId={selected.id} />
-                </div>
+                <ConversationThread roomId={selected.id} />
 
                 <p className="mt-2 rounded-lg border border-[var(--line)] bg-ink/[0.02] px-3 py-2 text-xs text-ink/45">
                   Sending messages isn&apos;t supported in this app.
                 </p>
               </div>
             )}
-          </SectionCard>
+          </div>
 
           <SectionCard title="Room details">
             {!selected ? (
@@ -356,9 +282,7 @@ export default function RoomsPage() {
             ) : (
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col items-center gap-2 border-b border-[var(--line)] pb-4 text-center">
-                  <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/15 text-base font-semibold text-accent">
-                    {initials(selected.roomName)}
-                  </span>
+                  <InitialsAvatar seed={selected.id} label={selected.roomName ?? "?"} sizeClass="h-12 w-12 text-base" />
                   <p className="text-sm font-medium text-ink">{selected.roomName ?? "Untitled room"}</p>
                 </div>
 

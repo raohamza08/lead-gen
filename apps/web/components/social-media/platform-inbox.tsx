@@ -9,6 +9,7 @@ import { Avatar } from "../ui/avatar";
 import { Tabs } from "../ui/tabs";
 import { Modal } from "../ui/modal";
 import { LoadingRow, Spinner } from "../spinner";
+import { RecordRow } from "../record-list";
 
 interface SocialAccountItem {
   id: string;
@@ -232,30 +233,27 @@ export function PlatformInbox({
           ) : (
             conversations.map((c) => {
               const contactLabel = c.contactName || c.contactUsername || "Unknown contact";
+              const unread = c.unreadCount > 0;
               return (
-                <button
+                <RecordRow
                   key={c.id}
                   onClick={() => setSelectedId(c.id)}
-                  className={`flex w-full items-center gap-3 border-b border-[var(--line)] px-3 py-2.5 text-left last:border-0 hover:bg-ink/5 ${
-                    selectedId === c.id ? "bg-accent/10" : ""
-                  }`}
-                >
-                  <Avatar name={contactLabel} imageUrl={c.contactProfileImageUrl} size={44} />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`truncate text-sm ${c.unreadCount > 0 ? "font-semibold" : ""}`}>{contactLabel}</span>
-                      <span className={`shrink-0 text-[11px] ${c.unreadCount > 0 ? "font-medium text-accent" : "text-ink/40"}`}>{timeAgo(c.lastMessageAt)}</span>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={`line-clamp-1 text-xs ${c.unreadCount > 0 ? "text-ink/80" : "text-ink/50"}`}>{c.lastMessage || "—"}</span>
-                      {c.unreadCount > 0 && (
-                        <span className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
-                          {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </button>
+                  selected={selectedId === c.id}
+                  unread={unread}
+                  avatar={<Avatar name={contactLabel} imageUrl={c.contactProfileImageUrl} size={44} />}
+                  primary={contactLabel}
+                  timestamp={timeAgo(c.lastMessageAt)}
+                  timestampUnread={unread}
+                  secondary={c.lastMessage || "—"}
+                  secondaryUnread={unread}
+                  footer={
+                    unread ? (
+                      <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+                        {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                      </span>
+                    ) : undefined
+                  }
+                />
               );
             })
           )}

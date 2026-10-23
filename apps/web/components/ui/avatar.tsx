@@ -5,21 +5,15 @@
  *  AccountAvatar (image-or-single-initial) and the color-hashing idea
  *  Email Hub's message-detail-panel.tsx also has (left untouched there —
  *  it works, nobody asked to change it, and this component is scoped to
- *  Social Media's new conversation list/detail/feed UI only). */
-
-const PALETTE = ["#6366f1", "#0891b2", "#c026d3", "#d97706", "#059669", "#dc2626", "#4f46e5", "#0d9488"];
-
-function colorFor(seed: string): string {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) >>> 0;
-  return PALETTE[hash % PALETTE.length];
-}
-
-function initialsFor(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.trim().slice(0, 2).toUpperCase() || "?";
-}
+ *  Social Media's new conversation list/detail/feed UI only).
+ *
+ *  Palette switched to the shared pastel-bg/near-black-text pairs (Part:
+ *  full UI redesign per UI.md, 2026-10-23, Section 4) instead of its own
+ *  independent vivid-bg/white-text one — same identity-color system as
+ *  components/avatar.tsx's Avatar/InitialsAvatar, just re-exported here
+ *  rather than duplicated a third time, since this component's `imageUrl`+
+ *  `size`-number API is already load-bearing across Social Media. */
+import { avatarColors, initialsFrom } from "../avatar";
 
 export function Avatar({ name, imageUrl, size = 36 }: { name: string; imageUrl?: string | null; size?: number }) {
   if (imageUrl) {
@@ -33,12 +27,13 @@ export function Avatar({ name, imageUrl, size = 36 }: { name: string; imageUrl?:
       />
     );
   }
+  const colors = avatarColors(name || "?");
   return (
     <div
-      style={{ height: size, width: size, backgroundColor: colorFor(name || "?"), fontSize: Math.max(10, size * 0.4) }}
-      className="flex shrink-0 items-center justify-center rounded-full font-semibold text-white"
+      style={{ height: size, width: size, backgroundColor: colors.bg, color: colors.text, fontSize: Math.max(10, size * 0.4) }}
+      className="flex shrink-0 items-center justify-center rounded-full font-semibold"
     >
-      {initialsFor(name || "?")}
+      {initialsFrom(name || "?")}
     </div>
   );
 }

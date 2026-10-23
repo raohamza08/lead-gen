@@ -6,6 +6,8 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile } from "../../../../components/chart-kit";
 import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { InitialsAvatar } from "../../../../components/avatar";
+import { RecordRow, RecordListPanel } from "../../../../components/record-list";
 
 interface MarketplaceJob {
   id: string;
@@ -146,36 +148,38 @@ function JobRow({ job, profiles, onOpen }: { job: MarketplaceJob; profiles: Free
   const justPosted = minutesAgo(job.publishedDateTime) <= JUST_POSTED_WINDOW_MIN;
   const match = matchProfile(job, profiles);
   return (
-    <button
-      type="button"
+    <RecordRow
       onClick={onOpen}
-      className="flex w-full flex-col gap-2 rounded-lg border border-[var(--line)] px-3.5 py-3 text-left transition-colors hover:bg-ink/[0.04]"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <span className="line-clamp-1 text-sm font-medium text-ink">{job.title}</span>
-        <span className="shrink-0 text-[11px] text-ink/40">{timeAgoLabel(job.publishedDateTime)}</span>
-      </div>
-      <p className="line-clamp-2 text-xs text-ink/50">{job.description}</p>
-      {job.skills.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {job.skills.slice(0, 4).map((s) => (
-            <span key={s.name} className="rounded-full bg-ink/8 px-2 py-0.5 text-[10px] text-ink/55">
-              {s.prettyName}
-            </span>
-          ))}
+      unread={justPosted}
+      avatar={<InitialsAvatar seed={job.id} label={job.title} sizeClass="h-9 w-9 text-xs" />}
+      primary={job.title}
+      timestamp={timeAgoLabel(job.publishedDateTime)}
+      timestampUnread={justPosted}
+      tertiary={job.description}
+      footer={
+        <div className="flex flex-col gap-1.5">
+          {job.skills.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {job.skills.slice(0, 4).map((s) => (
+                <span key={s.name} className="rounded-full bg-ink/8 px-2 py-0.5 text-[10px] text-ink/55">
+                  {s.prettyName}
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge>Upwork</Badge>
+            {justPosted && <Badge tone="accent">New</Badge>}
+            {match && <Badge tone="good">Apply as {match.profile.name}</Badge>}
+            {job.budgetDisplay && <Badge>{job.budgetDisplay}</Badge>}
+            {job.experienceLevel && <Badge>{job.experienceLevel}</Badge>}
+            {job.client.verificationStatus === "VERIFIED" && <Badge tone="good">Payment verified</Badge>}
+            {job.applied && <Badge tone="good">Applied</Badge>}
+            <span className="text-[11px] text-ink/40">{job.totalApplicants} applicants</span>
+          </div>
         </div>
-      )}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Badge>Upwork</Badge>
-        {justPosted && <Badge tone="accent">New</Badge>}
-        {match && <Badge tone="good">Apply as {match.profile.name}</Badge>}
-        {job.budgetDisplay && <Badge>{job.budgetDisplay}</Badge>}
-        {job.experienceLevel && <Badge>{job.experienceLevel}</Badge>}
-        {job.client.verificationStatus === "VERIFIED" && <Badge tone="good">Payment verified</Badge>}
-        {job.applied && <Badge tone="good">Applied</Badge>}
-        <span className="text-[11px] text-ink/40">{job.totalApplicants} applicants</span>
-      </div>
-    </button>
+      }
+    />
   );
 }
 
