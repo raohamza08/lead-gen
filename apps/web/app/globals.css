@@ -8,49 +8,56 @@
  * placeholder in tailwind.config.ts. The plain `--ink`/`--paper`/`--line`
  * aliases are for raw CSS consumers (chart props, arbitrary-value utilities).
  *
- * Chart series colors are the validated 4-slot categorical palette: they clear
- * the lightness band, chroma floor, adjacent CVD separation (worst ΔE 9.1
- * light / 8.4 dark) and normal-vision floor against THIS app's surfaces
- * (#f1f2f4 light, #14171c dark) — not against a generic default. Slots are
- * assigned in fixed order and never cycled. On the light surface three slots
- * fall below 3:1 contrast, so every chart using them ships a legend plus a
- * table view rather than leaning on hue alone.
+ * Outlook-spec palette (Part: full UI redesign per UI.md, 2026-10-23,
+ * explicit user request — "update the system UI exactly as per the md
+ * file", "fully replace" the previous premium orange/near-black theme).
+ * Token NAMES are unchanged from the previous theme (--accent-rgb, --ink-rgb,
+ * etc.) so every existing `bg-accent`/`text-ink`/`border-[var(--line)]`
+ * consumer across the app picks up the new values automatically — only the
+ * values themselves change, per the spec's measured hex values (Section 4).
+ * Chart series colors are kept as their own previously-validated 4-slot
+ * categorical palette (lightness/chroma/CVD-separation already checked
+ * against this app's real surfaces) — the spec has no opinion on chart
+ * color, so there's nothing in it to replace here.
  */
 :root {
-  --paper-rgb: 241 242 244;
-  --ink-rgb: 23 27 33;
-  --accent-rgb: 14 110 107;
+  --paper-rgb: 255 255 255;
+  --ink-rgb: 36 36 36;
+  --accent-rgb: 15 108 189;
+  /* Classic Outlook hyperlink blue (spec Section 4) — used by .link-classic
+     style consumers, not the brand accent itself. */
   --gold-rgb: 184 134 58;
-  --good-rgb: 46 125 82;
-  --bad-rgb: 176 71 59;
-  /* Semantic slots with no existing color to alias (Part: UI/UX Redesign,
-     2026-09-01) — everything else in this file aliases paper/ink/accent/
-     gold/good/bad rather than introducing a parallel palette. */
-  --secondary-rgb: 71 85 105;
-  --info-rgb: 37 99 235;
-  /* Second accent, for the primary-button gradient below only (Part: premium
-     dark theme pass v2, 2026-09-02) — not used elsewhere in light mode, kept
-     defined here for parity so no var ever resolves empty if something new
-     reaches for it. */
-  --accent-2-rgb: 91 87 214;
-  /* White text already clears ~6:1 on light mode's teal accent — defined
-     here only so components (e.g. Tabs' active trigger, below) can read one
-     token in both themes instead of branching (Part: premium dark theme
-     pass v4 fix, 2026-10-19). */
+  /* Fluent UI semantic success/danger (Part: full UI redesign) — the spec
+     itself only calls out red for "report/junk" (Section 7); these are the
+     real Fluent 2 tokens for the same roles elsewhere in the app. */
+  --good-rgb: 16 124 16;
+  --bad-rgb: 196 49 51;
+  --secondary-rgb: 97 97 97;
+  --info-rgb: 0 120 212;
+  /* No second accent/gradient anywhere in this spec — kept defined (equal to
+     the primary) so --btn-primary-bg below never needs a dark-only branch. */
+  --accent-2-rgb: 15 108 189;
+  /* White text on the brand blue clears ~4.6:1 (spec Section 6.1 — "white
+     text/icons throughout" the top bar), true in both themes since the
+     accent hue itself doesn't change between them. */
   --accent-contrast-rgb: 255 255 255;
 
   --paper: rgb(var(--paper-rgb));
   --ink: rgb(var(--ink-rgb));
   --accent: rgb(var(--accent-rgb));
-  --line: rgb(var(--ink-rgb) / 0.12);
-  /* A flat color in light mode, a real two-tone gradient in dark (see the
-     dark blocks below) — always a gradient *function* so button.tsx's
-     `background-image: var(--btn-primary-bg)` never has to branch per theme. */
+  /* Hairline border, spec's literal #E0E0E0 (Section 4) rather than an
+     ink-derived alpha — the spec measures this as its own flat gray, not a
+     tint of the text color. */
+  --line: #e0e0e0;
+  /* Flat in both themes now — the spec has no gradient anywhere (Section 5:
+     "almost entirely flat — no drop shadows"); kept as a gradient *function*
+     so button.tsx's `background-image: var(--btn-primary-bg)` still works
+     unchanged, it just resolves to one solid color. */
   --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-rgb)));
 
   --chart-grid: #e1e2e5;
   --chart-axis: #c3c5c9;
-  --ink-muted: #6b7077;
+  --ink-muted: #616161;
 
   --series-1: #2a78d6;
   --series-2: #eb6834;
@@ -98,28 +105,33 @@
    bloom / body aurora blooms from v3 — only the hue changed, not the
    mechanism. --series-1..4 untouched (validated against this app's
    surfaces for WCAG/CVD separation, see file-top comment). */
+/* Dark complement to the Outlook-spec palette (Part: full UI redesign,
+   2026-10-23) — the spec itself only documents Outlook Web's light theme
+   (that's the only rendering it captured), so there is no literal source
+   for dark mode. This keeps the exact same flat, no-gradient, no-glow
+   design LANGUAGE the spec establishes (Section 5) and the same brand
+   blue accent (its hue doesn't need to change for dark backgrounds), just
+   on Fluent 2's own real dark-theme neutrals rather than inventing new
+   ones — #0F6CBD is Microsoft's own brand blue and already ships
+   unmodified in Fluent's dark theme. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper-rgb: 11 11 11;
-    --ink-rgb: 255 255 255;
-    --accent-rgb: 242 117 74;
-    --accent-2-rgb: 255 155 115;
-    /* Text that sits ON a solid accent fill — white fails contrast against
-       this coral (computed ~3.3:1, needs 4.5:1); dark text clears ~7:1.
-       Scoped to dark mode only: light mode's accent is still the old teal,
-       which white text already clears comfortably (~6:1), so it's untouched. */
-    --accent-contrast-rgb: 20 16 13;
+    --paper-rgb: 32 31 30;
+    --ink-rgb: 243 242 241;
+    --accent-rgb: 15 108 189;
+    --accent-2-rgb: 15 108 189;
+    --accent-contrast-rgb: 255 255 255;
     --gold-rgb: 217 174 99;
-    --good-rgb: 74 191 124;
-    --bad-rgb: 224 112 101;
-    --secondary-rgb: 148 163 184;
-    --info-rgb: 96 165 250;
-    --line: rgb(255 255 255 / 0.08);
-    --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-2-rgb)));
+    --good-rgb: 108 203 95;
+    --bad-rgb: 243 138 137;
+    --secondary-rgb: 200 198 196;
+    --info-rgb: 71 163 234;
+    --line: rgb(255 255 255 / 0.12);
+    --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-rgb)));
 
-    --chart-grid: #1c1f26;
-    --chart-axis: #33373f;
-    --ink-muted: #9fa4ac;
+    --chart-grid: #3b3a39;
+    --chart-axis: #605e5c;
+    --ink-muted: #c8c6c4;
 
     --series-1: #4a97ea;
     --series-2: #e06730;
@@ -136,22 +148,22 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper-rgb: 11 11 11;
-  --ink-rgb: 255 255 255;
-  --accent-rgb: 242 117 74;
-  --accent-2-rgb: 255 155 115;
-  --accent-contrast-rgb: 20 16 13;
+  --paper-rgb: 32 31 30;
+  --ink-rgb: 243 242 241;
+  --accent-rgb: 15 108 189;
+  --accent-2-rgb: 15 108 189;
+  --accent-contrast-rgb: 255 255 255;
   --gold-rgb: 217 174 99;
-  --good-rgb: 74 191 124;
-  --bad-rgb: 224 112 101;
-  --secondary-rgb: 148 163 184;
-  --info-rgb: 96 165 250;
-  --line: rgb(255 255 255 / 0.08);
-  --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-2-rgb)));
+  --good-rgb: 108 203 95;
+  --bad-rgb: 243 138 137;
+  --secondary-rgb: 200 198 196;
+  --info-rgb: 71 163 234;
+  --line: rgb(255 255 255 / 0.12);
+  --btn-primary-bg: linear-gradient(135deg, rgb(var(--accent-rgb)), rgb(var(--accent-rgb)));
 
-  --chart-grid: #1c1f26;
-  --chart-axis: #33373f;
-  --ink-muted: #9fa4ac;
+  --chart-grid: #3b3a39;
+  --chart-axis: #605e5c;
+  --ink-muted: #c8c6c4;
 
   --series-1: #4a97ea;
   --series-2: #e06730;
@@ -159,8 +171,14 @@
   --series-4: #d69200;
 }
 
-/* Elevation. Two levels only — a card and a lifted card. More steps make a
-   dashboard read as cluttered, because every surface competes for attention. */
+/* Flat elevation (Part: full UI redesign per UI.md, 2026-10-23) — the spec
+   is explicit (Section 5): "the whole app is almost entirely flat — no drop
+   shadows on panels or cards. The only elevation cues are the hairline 1px
+   borders between panes and the 1px selection outline." Shadow tokens stay
+   defined (at "none") rather than deleted, so no consumer's
+   `box-shadow: var(--shadow-sm)` breaks — they just resolve to nothing now.
+   Radius is the spec's one literal value used almost everywhere (Section 5:
+   "almost everything uses 4px radius"). */
 :root {
   /* RGB-channel form (Part: UI/UX Redesign, 2026-09-01) so Tailwind's
      `surface`/`surface-elevated` aliases can apply an opacity modifier the
@@ -170,15 +188,10 @@
   --surface-raised-rgb: 255 255 255;
   --surface: rgb(var(--surface-rgb));
   --surface-raised: rgb(var(--surface-raised-rgb));
-  --shadow-sm: 0 1px 2px rgb(23 27 33 / 0.06), 0 1px 3px rgb(23 27 33 / 0.04);
-  --shadow-md: 0 4px 12px rgb(23 27 33 / 0.08), 0 2px 4px rgb(23 27 33 / 0.04);
-  --shadow-lg: 0 12px 32px rgb(23 27 33 / 0.14);
-  /* 16px, up from 12px (Part: premium dark theme pass v3) — the reference's
-     cards read noticeably softer/rounder; kept short of its literal 20px
-     since this app's cards run denser (KPI strips, tables) than the
-     reference's spacious panels, and plain Tailwind rounded-lg/xl utilities
-     elsewhere (buttons, inputs) are untouched. */
-  --radius: 16px;
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
+  --radius: 4px;
 
   /* Animation tokens (Part: UI/UX Redesign, 2026-09-01) — every transition
      added across the redesign draws from these three durations and three
@@ -195,164 +208,53 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    /* Dark surfaces are LIGHTER than the page, not darker: shadow barely reads
-       on a dark background, so elevation has to come from luminance instead.
-       Each shadow also carries a hairline inset highlight (Part: premium dark
-       theme pass, 2026-09-02) — a faint top edge of "caught light" is what
-       separates a glass-like elevated panel from a flat gray rectangle; this
-       is the elevation half of the deeper-paper change above, and reads as
-       muddy without it. shadow-lg additionally picks up a wide, very-low-
-       opacity accent bloom so modals/popovers float rather than just sitting
-       on a black drop shadow. */
-    /* #151515 / #1a1a1a (Part: premium dark theme pass v3) — the reference's
-       own card tones, replacing v2's cool blue-tinted greys now that paper
-       is true near-black instead of #0b0d11. */
-    --surface-rgb: 21 21 21;
-    --surface-raised-rgb: 26 26 26;
+    /* Fluent 2 dark-theme card tone — one step up from --paper's 32/31/30,
+       same "slightly lighter than canvas" relationship light mode has
+       (white card on white canvas, differentiated only by the hairline
+       border) translated to dark neutrals. No shadow, same as light mode. */
+    --surface-rgb: 41 40 39;
+    --surface-raised-rgb: 50 49 48;
     --surface: rgb(var(--surface-rgb));
     --surface-raised: rgb(var(--surface-raised-rgb));
-    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.03);
-    --shadow-md: 0 6px 16px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.04);
-    --shadow-lg: 0 24px 60px rgb(0 0 0 / 0.6), 0 12px 40px rgb(var(--accent-rgb) / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.05);
+    --shadow-sm: none;
+    --shadow-md: none;
+    --shadow-lg: none;
   }
 }
 
 :root[data-theme="dark"] {
-  --surface-rgb: 21 21 21;
-  --surface-raised-rgb: 26 26 26;
+  --surface-rgb: 41 40 39;
+  --surface-raised-rgb: 50 49 48;
   --surface: rgb(var(--surface-rgb));
   --surface-raised: rgb(var(--surface-raised-rgb));
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.03);
-  --shadow-md: 0 6px 16px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.04);
-  --shadow-lg: 0 24px 60px rgb(0 0 0 / 0.6), 0 12px 40px rgb(var(--accent-rgb) / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.05);
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: none;
 }
 
 body {
   background: var(--paper);
   color: var(--ink);
-  font-family: "General Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: "Segoe UI", "Segoe UI Web (West European)", -apple-system, BlinkMacSystemFont, Roboto, "Helvetica Neue", Inter, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* A barely-there two-tone aurora in dark mode (Part: premium dark theme pass
-   v2, 2026-09-02) — the v1 pass used one static teal bloom top-left; this
-   pairs it with a second, violet bloom (--accent-2) bottom-right and lets
-   both drift very slowly, which is what keeps a large expanse of near-black
-   from reading as flat/dead the way pure --paper does on its own. Both
-   blooms stay under 6% opacity — the point is an ambient sense of depth and
-   color, never a visible moving gradient competing with foreground content.
-   `background-attachment: fixed` keeps it anchored to the viewport rather
-   than scrolling with the page (a `body`-sized element is already as tall as
-   the content, so without this the aurora would just scroll away with a
-   long page instead of staying put like a backdrop). Respects the app-wide
-   prefers-reduced-motion override further down, which zeroes every
-   animation-duration globally. Light mode is untouched — a bloom this
-   subtle only survives against a dark surface. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body {
-    background:
-      radial-gradient(1100px 600px at 15% -10%, rgb(var(--accent-rgb) / 0.06), transparent 60%),
-      radial-gradient(900px 560px at 100% 110%, rgb(var(--accent-2-rgb) / 0.05), transparent 60%),
-      var(--paper);
-    background-attachment: fixed;
-    animation: aurora-drift 30s ease-in-out infinite alternate;
-  }
-}
-:root[data-theme="dark"] body {
-  background:
-    radial-gradient(1100px 600px at 15% -10%, rgb(var(--accent-rgb) / 0.06), transparent 60%),
-    radial-gradient(900px 560px at 100% 110%, rgb(var(--accent-2-rgb) / 0.05), transparent 60%),
-    var(--paper);
-  background-attachment: fixed;
-  animation: aurora-drift 30s ease-in-out infinite alternate;
-}
-@keyframes aurora-drift {
-  from { background-position: 0% 0%, 0% 0%, 0 0; }
-  to { background-position: 4% 3%, -4% -3%, 0 0; }
-}
-
-/* Matte grain (Part: premium dark theme pass v4, 2026-10-19, explicit user
-   request — "add a matt texture where it can be added and looks perfect";
-   blend mode fixed same day after the user reported not being able to see
-   it at all). A large flat near-black expanse reads as a flat digital
-   rectangle without it; every one of this session's reference images has
-   this same subtle grain, not a clean gradient. One fixed, full-viewport
-   SVG feTurbulence noise layer (tileable, no image request) sits above
-   everything — including modals/dropdowns, where it doubles as the texture
-   real frosted glass has. `pointer-events:none` so it never intercepts a
-   click; dark-mode only, since the reference material (and this texture)
-   is dark-specific. Static, not animated, so it needs no
-   prefers-reduced-motion handling.
-   `mix-blend-mode: overlay` → `screen`: overlay preserves the base layer's
-   own lightness and only really shows on midtones — against a near-black
-   #0b0b0b canvas it was mathematically close to invisible regardless of
-   opacity, not merely subtle. `screen` always adds light, so white noise
-   reads as visible grain against a dark base. Opacity bumped 3% → 6% to
-   compensate now that the blend mode actually contributes something. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 999;
-    pointer-events: none;
-    opacity: 0.06;
-    mix-blend-mode: screen;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  }
-}
-:root[data-theme="dark"] body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  pointer-events: none;
-  opacity: 0.06;
-  mix-blend-mode: screen;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-/* Glassmorphism (Part: premium dark theme pass v4, 2026-10-19, explicit user
-   request — "with the glassmorphism concept"). Scoped to true floating
-   overlays only (Modal/Dropdown/Popover, applied below) — NOT the main data
-   cards. This is a dense B2B analytics tool read for long sessions; blurring
-   a KPI strip or a data table to chase the reference images' aesthetic
-   would cost real legibility for no corresponding benefit, since those
-   references are consumer lifestyle/wallet apps glanced at briefly, not
-   worked in. An overlay that already floats above a backdrop (a dialog, a
-   dropdown menu) is the one place glass reads as "this is elevated" rather
-   than "this is translucent for no reason" — the same reasoning real OSes
-   use it for (macOS/Windows menus and panels). Dark-mode only: light-mode
-   glass over a white canvas has far less to blur into and reads as washed
-   out rather than premium. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .glass-surface {
-    background: rgb(var(--surface-rgb) / 0.78);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
-    backdrop-filter: blur(20px) saturate(160%);
-    border-color: rgb(255 255 255 / 0.08);
-  }
-}
-:root[data-theme="dark"] .glass-surface {
-  background: rgb(var(--surface-rgb) / 0.78);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  backdrop-filter: blur(20px) saturate(160%);
-  border-color: rgb(255 255 255 / 0.08);
-}
+/* Flat canvas, no aurora/grain/glassmorphism (Part: full UI redesign per
+   UI.md, 2026-10-23) — the previous premium dark theme's ambient bloom,
+   matte grain texture, and glassmorphic overlay blur all directly
+   contradict this spec's explicit "almost entirely flat" aesthetic
+   (Section 5) and its plain solid-fill overlay pattern (Section 6.8's
+   settings overlay uses a hard edge, not a soft blur). Removed outright
+   rather than toned down — there's no "subtle" version of a glass blur
+   that belongs in this design language. `.glass-surface` is left as a
+   plain class with no special rule, so any existing consumer just renders
+   with the ordinary flat --surface background now. */
 
 /* Minimal scrollbar (Part: premium dark theme pass, 2026-09-02) — the OS
    default scrollbar is opaque and theme-unaware, and stands out as an
    obviously-unstyled control against a custom-themed dark app. Driven by
    --ink-rgb so it's correct in both themes without a separate dark rule. */
 html {
-  /* Root type scale bump (Part: EBOS-inspired shell redesign round 2,
-     2026-10-21, explicit user request — "I want a clean readable font and
-     font size in the dashboard"). Tailwind's fontSize AND spacing utilities
-     are both rem-based, so this one change scales nearly every text-* size
-     and padding/gap/margin utility in the app proportionally (~106%) without
-     touching individual components -- EBOS reads larger/airier throughout,
-     not just in its headings. */
-  font-size: 106.25%;
   scrollbar-width: thin;
   scrollbar-color: rgb(var(--ink-rgb) / 0.2) transparent;
 }
@@ -538,63 +440,19 @@ select, option {
   color: var(--ink-muted);
 }
 
+/* No hover lift/shadow (Part: full UI redesign per UI.md, 2026-10-23) — the
+   spec's only hover affordance anywhere is a flat light-gray background
+   (Section 7); it never lifts or glows a card or button. --accent-contrast
+   is now plain white in both themes (the brand blue doesn't change hue
+   between light/dark), so the old per-theme text-contrast-fix rule that
+   used to live here is no longer needed — every `text-white` on
+   `bg-accent`/`bg-primary` is already correct via Tailwind's own class. */
 .card-interactive {
-  /* Retimed onto the shared animation tokens (Part: UI/UX Redesign,
-     2026-09-01) — was a one-off 140ms/ease value; now the same duration/
-     easing every other new transition in the app uses. */
-  transition: box-shadow var(--duration-fast) var(--ease-standard), transform var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
+  transition: background-color var(--duration-fast) var(--ease-standard), border-color var(--duration-fast) var(--ease-standard);
 }
 .card-interactive:hover {
-  box-shadow: var(--shadow-md);
+  background: var(--surface-raised);
   border-color: rgb(var(--accent-rgb) / 0.35);
-  /* A real lift, not just a shadow swap (Part: premium dark theme pass v2,
-     2026-09-02) — transform was already in the transition list above but
-     nothing ever set a hover value, so it was dead weight. -2px is enough to
-     read as "this card responded to you" without the janky floaty feel a
-     bigger offset gives. */
-  transform: translateY(-2px);
-}
-
-/* Primary-button glow (Part: premium dark theme pass v2, 2026-09-02) —
-   dark-only: a colored glow under a flat teal button reads as noise against
-   a light page, but against near-black paper it's what sells the button as
-   the one deliberately-lit thing on screen. Paired with --btn-primary-bg's
-   teal-to-violet gradient (see the palette blocks above), so the glow picks
-   up both hues rather than just the single accent color. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .btn-primary-glow:hover {
-    box-shadow: 0 6px 20px rgb(var(--accent-rgb) / 0.35), 0 2px 10px rgb(var(--accent-2-rgb) / 0.25);
-  }
-}
-:root[data-theme="dark"] .btn-primary-glow:hover {
-  box-shadow: 0 6px 20px rgb(var(--accent-rgb) / 0.35), 0 2px 10px rgb(var(--accent-2-rgb) / 0.25);
-}
-
-/* Dark-mode contrast fix for every `text-white` set on a solid accent fill
-   (Part: premium dark theme pass v3) — this combination is the shared
-   Button's primary variant plus ~40 hand-rolled `bg-accent ... text-white`
-   buttons/pills/tabs across leads, email-hub, social, settings, sequences
-   etc. Caught live: white on the new orange measures ~2.8:1, below the 4.5:1
-   floor (it was already failing under the old teal in dark mode too, ~2.1:1
-   — not a regression, but worth fixing now that it's being touched).
-   Attribute-selector match on `btn-primary-bg` covers the arbitrary-value
-   `bg-[image:var(--btn-primary-bg)]` class Button's primary variant uses,
-   since attribute matching reads the literal class string, unaffected by
-   the bracket-escaping that class *selectors* need. Specificity (2+ classes)
-   beats Tailwind's single-class `.text-white` regardless of stylesheet
-   order, so this needs no `!important`. Light mode is untouched — its accent
-   is still the old teal, which white text already clears at ~6:1. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .text-white.bg-accent,
-  :root:not([data-theme="light"]) .text-white.bg-primary,
-  :root:not([data-theme="light"]) .text-white[class*="btn-primary-bg"] {
-    color: rgb(var(--accent-contrast-rgb));
-  }
-}
-:root[data-theme="dark"] .text-white.bg-accent,
-:root[data-theme="dark"] .text-white.bg-primary,
-:root[data-theme="dark"] .text-white[class*="btn-primary-bg"] {
-  color: rgb(var(--accent-contrast-rgb));
 }
 
 /* Nav tree connectors — the real "roots" (Part: nav panel fix, 2026-10-19).
@@ -624,39 +482,32 @@ select, option {
   background: var(--line);
 }
 
-/* Active nav-item glow — also corrected against the real Hynex reference:
-   the active row isn't a hard-edged solid fill or a circular radial blob
-   (the first pass's mistake); it's a soft gradient confined to the pill's
-   own rounded shape, with a faint glowing 1px edge, dark enough that white
-   text stays legible across the whole label (unlike a bright solid fill,
-   which needed the separate dark-text contrast fix below .btn-primary-glow
-   — this pill never gets that bright, so it deliberately opts OUT of that
-   fix via the higher-specificity override at the bottom of this block).
-   Dark-mode only, same scope as the rest of this theme pass; light mode
-   keeps its original flat bg-primary pill via sidebar-nav.tsx's unconditional
-   `bg-primary` class, untouched. */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .sidebar-nav-active {
-    /* Clears sidebar-nav.tsx's bg-primary (fully opaque) first — a
-       translucent gradient painted over an already-solid fill barely
-       registers, which is why the first version of this rule rendered as a
-       flat pill indistinguishable from before (caught live on production,
-       screenshot comparison). The gradient is the only color source now. */
-    background-color: transparent;
-    background-image: linear-gradient(100deg, rgb(var(--accent-rgb) / 0.4), rgb(var(--accent-rgb) / 0.05) 85%);
-    box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.32), 0 0 16px -4px rgb(var(--accent-rgb) / 0.4);
-  }
-  :root:not([data-theme="light"]) .text-white.sidebar-nav-active {
-    color: #fff;
-  }
+/* Active/selected nav item (Part: full UI redesign per UI.md, 2026-10-23) —
+   replaces the old glowing gradient pill with the spec's own two rules
+   (Section 8): "needs attention"/active uses a flat 3px solid-blue bar on
+   the left edge, and selection is an outline with a white/surface
+   background, never a filled pill. Same rule in both themes — the spec
+   defines no separate dark treatment, and the blue accent already works
+   against both. kept scoped to one class name so sidebar-nav.tsx (and its
+   future Task #3 rebuild) only needs one toggle. */
+.sidebar-nav-active {
+  position: relative;
+  background-color: rgb(var(--accent-rgb) / 0.08) !important;
+  color: var(--ink) !important;
+  font-weight: 600;
 }
-:root[data-theme="dark"] .sidebar-nav-active {
-  background-color: transparent;
-  background-image: linear-gradient(100deg, rgb(var(--accent-rgb) / 0.4), rgb(var(--accent-rgb) / 0.05) 85%);
-  box-shadow: inset 0 0 0 1px rgb(var(--accent-rgb) / 0.32), 0 0 16px -4px rgb(var(--accent-rgb) / 0.4);
+.sidebar-nav-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
 }
-:root[data-theme="dark"] .text-white.sidebar-nav-active {
-  color: #fff;
+.text-white.sidebar-nav-active {
+  color: var(--ink) !important;
 }
 
 /* Drag affordances for the pipeline board. */
