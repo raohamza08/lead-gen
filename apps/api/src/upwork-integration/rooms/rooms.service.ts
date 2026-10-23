@@ -49,13 +49,16 @@ export class UpworkRoomsService {
   /** Rooms unanswered for 15+ minutes, trailing 7 days (Part: Delayed
    *  Responses module, 2026-10-23, explicit user request — "the chats
    *  that are unanswered for last 15 mins or more for one week should
-   *  go there"). Uses the real synced `numUnread`/`latestMessageAt`, not
-   *  the local `locallyReadAt` overlay — opening a room in Outly clears
-   *  its badge (see displayedUnread above) but doesn't mean the client
-   *  actually got a reply, which is what this list is tracking. Same
-   *  "pending" definition as UpworkRoomPendingReminderWorker's desktop
-   *  reminders — see that worker's own docblock for why numUnread>0 is
-   *  the honest proxy available here. */
+   *  go there"). Also respects the local `locallyReadAt` overlay now
+   *  (Part: badge cleanup, 2026-10-23, explicit user request — "clean
+   *  the delayed responses tab so only new delayed messages remain
+   *  there") — a room opened/acknowledged in Outly drops off this list
+   *  the same way its badge clears in Rooms & Messages, so a one-time
+   *  bulk mark-read doesn't just hide badges but also actually empties
+   *  this list, with only genuinely new incoming messages (a
+   *  `latestMessageAt` that advances past `locallyReadAt` again)
+   *  reappearing here afterward. Same "pending" definition as
+   *  UpworkRoomPendingReminderWorker's desktop reminders otherwise. */
   async listDelayedResponses(orgId: string, thresholdMinutes = 15, windowDays = 7) {
     const now = Date.now();
     const rooms = await this.prisma.upworkApiRoom.findMany({
@@ -66,12 +69,14 @@ export class UpworkRoomsService {
       },
       orderBy: { latestMessageAt: "asc" },
     });
+    const pending = rooms.filter((r) => !(r.locallyReadAt && r.latestMessageAt && r.locallyReadAt.getTime() >= r.latestMessageAt.getTime()));
     return {
-      totalCount: rooms.length,
-      rooms: rooms.map((r) => ({
+      totalCount: pending.length,
+      rooms: pending.map((r) => ({
         id: r.id,
         roomName: r.roomName,
         roomType: r.roomType,
+        numUsers: r.numUsers,
         numUnread: r.numUnread,
         latestMessage: r.latestMessage,
         latestMessageAt: r.latestMessageAt,
