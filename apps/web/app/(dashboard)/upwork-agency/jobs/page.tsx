@@ -33,6 +33,7 @@ interface MarketplaceJob {
   totalApplicants: number;
   preferredFreelancerLocation: string[];
   preferredFreelancerLocationMandatory: boolean;
+  jobType: "FIXED" | "HOURLY";
   budgetDisplay: string | null;
   fixedAmount: string | null;
   fixedAmountRaw: number | null;
@@ -255,6 +256,7 @@ function JobRow({ job, profiles, onOpen }: { job: MarketplaceJob; profiles: Free
             <Badge>Upwork</Badge>
             {justPosted && <Badge tone="accent">New</Badge>}
             {match && <Badge tone="good">Apply as {match.profile.name}</Badge>}
+            <Badge>{job.jobType === "HOURLY" ? "Hourly" : "Fixed price"}</Badge>
             {job.budgetDisplay && <Badge>{job.budgetDisplay}</Badge>}
             {job.experienceLevel && <Badge>{job.experienceLevel}</Badge>}
             {job.client.verificationStatus === "VERIFIED" ? (
@@ -341,15 +343,19 @@ function JobDetail({ job, profiles }: { job: MarketplaceJob; profiles: Freelance
 
       <dl className="grid grid-cols-2 gap-3 text-xs">
         <div>
+          <dt className="text-ink/50">Job type</dt>
+          <dd className="font-medium text-ink">{job.jobType === "HOURLY" ? "Hourly" : "Fixed price"}</dd>
+        </div>
+        <div>
           <dt className="text-ink/50">Budget</dt>
           <dd className="font-medium text-ink">
-            {job.fixedAmount
-              ? `${job.fixedAmount} (fixed)`
+            {job.jobType === "FIXED"
+              ? job.fixedAmount ?? "—"
               : job.hourlyBudgetMin || job.hourlyBudgetMax
-                ? `${job.hourlyBudgetMin ?? "?"}–${job.hourlyBudgetMax ?? "?"}/hr${job.hourlyBudgetType ? ` (${job.hourlyBudgetType})` : ""}`
+                ? `${job.hourlyBudgetMin ?? "?"}–${job.hourlyBudgetMax ?? "?"}/hr`
                 : job.weeklyBudget
                   ? `${job.weeklyBudget}/week`
-                  : "—"}
+                  : "Not provided"}
           </dd>
         </div>
         <div>
@@ -577,7 +583,7 @@ export default function MarketplaceJobsPage() {
       .filter((j) => (categoryFilter === "all" ? true : j.category === categoryFilter))
       .filter((j) => (experienceFilter === "all" ? true : j.experienceLevel === experienceFilter))
       .filter((j) => (locationFilter === "all" ? true : j.client.country === locationFilter))
-      .filter((j) => (jobTypeFilter === "all" ? true : jobTypeFilter === "fixed" ? j.fixedAmountRaw != null : j.fixedAmountRaw == null))
+      .filter((j) => (jobTypeFilter === "all" ? true : jobTypeFilter === "fixed" ? j.jobType === "FIXED" : j.jobType === "HOURLY"))
       .filter((j) => (postedWithinMin == null ? true : minutesAgo(j.publishedDateTime) <= postedWithinMin))
       .filter((j) => (maxApplicantsNum == null ? true : j.totalApplicants <= maxApplicantsNum))
       .filter((j) => (paymentVerifiedOnly ? j.client.verificationStatus === "VERIFIED" : true))

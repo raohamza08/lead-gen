@@ -931,6 +931,7 @@ export const api = {
         totalApplicants: number;
         preferredFreelancerLocation: string[];
         preferredFreelancerLocationMandatory: boolean;
+        jobType: "FIXED" | "HOURLY";
         budgetDisplay: string | null;
         fixedAmount: string | null;
         fixedAmountRaw: number | null;
