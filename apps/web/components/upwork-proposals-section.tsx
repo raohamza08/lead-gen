@@ -14,6 +14,7 @@ type UpworkProposalStatus =
   | "VIEWED"
   | "IN_DISCUSSION"
   | "TEST_TASK"
+  | "MEETING"
   | "FOLLOW_UP_1"
   | "FOLLOW_UP_2"
   | "FOLLOW_UP_3"
@@ -54,6 +55,7 @@ const STATUS_OPTIONS: { value: UpworkProposalStatus; label: string }[] = [
   { value: "VIEWED", label: "Viewed" },
   { value: "IN_DISCUSSION", label: "In discussion" },
   { value: "TEST_TASK", label: "Test task" },
+  { value: "MEETING", label: "Meeting" },
   { value: "FOLLOW_UP_1", label: "1st follow-up" },
   { value: "FOLLOW_UP_2", label: "2nd follow-up" },
   { value: "FOLLOW_UP_3", label: "3rd follow-up" },
@@ -66,6 +68,7 @@ const STATUS_TONE: Record<UpworkProposalStatus, string> = {
   VIEWED: "text-ink/60",
   IN_DISCUSSION: "text-gold",
   TEST_TASK: "text-gold",
+  MEETING: "text-gold",
   FOLLOW_UP_1: "text-gold",
   FOLLOW_UP_2: "text-gold",
   FOLLOW_UP_3: "text-gold",

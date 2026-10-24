@@ -126,3 +126,4 @@ export const PHASE_PLANNING_OPTION_ID = "eb86945d-de4d-4f16-99d0-7956c837afb6";
 
 export const CLICKUP_ONBOARDING_STATUS = "onboarding";
 export const CLICKUP_TEST_TASK_STATUS = "test tasks";
+export const CLICKUP_MEETING_STATUS = "meeting";

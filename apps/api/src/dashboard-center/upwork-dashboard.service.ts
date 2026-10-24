@@ -163,7 +163,7 @@ export class UpworkDashboardService {
     ] = await Promise.all([
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE" } }),
-      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: { in: ["IN_DISCUSSION", "TEST_TASK", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON"] } } }),
+      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: { in: ["IN_DISCUSSION", "TEST_TASK", "MEETING", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON"] } } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "LOST" } }),
       this.prisma.upworkProposal.count({ where: { ...where, status: "WON" } }),
       this.prisma.upworkProposal.count({ where: { ...where, status: "LOST" } }),
@@ -326,7 +326,7 @@ export class UpworkDashboardService {
    *  clear report"). The old "Accepted" bucket (IN_DISCUSSION through WON,
    *  invites only) is gone entirely; every status gets its own real count
    *  instead of being folded into one umbrella term. */
-  static readonly PROPOSAL_STATUSES = ["SUBMITTED", "VIEWED", "IN_DISCUSSION", "TEST_TASK", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON", "LOST"] as const;
+  static readonly PROPOSAL_STATUSES = ["SUBMITTED", "VIEWED", "IN_DISCUSSION", "TEST_TASK", "MEETING", "FOLLOW_UP_1", "FOLLOW_UP_2", "FOLLOW_UP_3", "WON", "LOST"] as const;
 
   async getSubmitterBreakdown(orgId: string, query: DashboardRangeQuery) {
     const { current } = resolveDashboardRange(query);

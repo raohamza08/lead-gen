@@ -174,12 +174,15 @@ export class UpworkService {
     // onboardedAt's own schema docblock for why this, not createdAt, is what
     // the weekly bidding/invite hour totals bucket by.
     const justWon = dto.status === UpworkProposalStatus.WON && existing.status !== UpworkProposalStatus.WON;
-    // Fires the ClickUp card automation on first entry into WON or
-    // TEST_TASK (Part: Upwork → ClickUp card automation, 2026-10-16) — not
-    // re-fired on every save while already in one of those statuses, same
-    // one-way-transition guard as justAccepted/justWon above.
+    // Fires the ClickUp card automation on first entry into WON, TEST_TASK,
+    // or MEETING (Part: Upwork → ClickUp card automation, 2026-10-16;
+    // MEETING added 2026-10-24) — not re-fired on every save while already
+    // in one of those statuses, same one-way-transition guard as
+    // justAccepted/justWon above.
     const enteringClickupStatus =
-      (dto.status === UpworkProposalStatus.WON || dto.status === UpworkProposalStatus.TEST_TASK) &&
+      (dto.status === UpworkProposalStatus.WON ||
+        dto.status === UpworkProposalStatus.TEST_TASK ||
+        dto.status === UpworkProposalStatus.MEETING) &&
       dto.status !== existing.status;
 
     const updated = await this.prisma.upworkProposal.update({
@@ -359,7 +362,7 @@ export class UpworkService {
     for (const row of byTypeRaw) byType[row.type] = row._count._all;
 
     const emptyStatusCounts = (): Record<UpworkProposalStatus, number> => ({
-      SUBMITTED: 0, VIEWED: 0, IN_DISCUSSION: 0, TEST_TASK: 0, FOLLOW_UP_1: 0, FOLLOW_UP_2: 0, FOLLOW_UP_3: 0, WON: 0, LOST: 0,
+      SUBMITTED: 0, VIEWED: 0, IN_DISCUSSION: 0, TEST_TASK: 0, MEETING: 0, FOLLOW_UP_1: 0, FOLLOW_UP_2: 0, FOLLOW_UP_3: 0, WON: 0, LOST: 0,
     });
     const byStatus = { BIDDING: emptyStatusCounts(), INVITE: emptyStatusCounts() };
     for (const row of byStatusRaw) byStatus[row.type][row.status] = row._count._all;

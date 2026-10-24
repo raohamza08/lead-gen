@@ -4,6 +4,7 @@ import { ClickupClient } from "../sync/clickup.client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import {
   ASSIGNED_MEMBERS_FIELD_ID,
+  CLICKUP_MEETING_STATUS,
   CLICKUP_ONBOARDING_STATUS,
   CLICKUP_TEST_TASK_STATUS,
   COMMUNICATION_CHANNEL_FIELD_ID,
@@ -21,9 +22,10 @@ import {
 type ClickupField = { id: string; name: string; type: string; type_config?: { options?: { id: string; name: string }[] } };
 
 /**
- * Creates a ClickUp card the moment a proposal is won or asked to do a
- * test task (Part: Upwork → ClickUp card automation, explicit user
- * request, 2026-10-16). Which list/assignee/status to use is a static
+ * Creates a ClickUp card the moment a proposal is won, asked to do a test
+ * task, or booked for a meeting (Part: Upwork → ClickUp card automation,
+ * explicit user request, 2026-10-16; MEETING added 2026-10-24). Which
+ * list/assignee/status to use is a static
  * routing table (see upwork-clickup-routing.util.ts), but the "Upwork
  * Profile" and "Assigned Members" dropdown values are matched LIVE against
  * the list's real custom-field options every time — explicit user request:
@@ -54,7 +56,9 @@ export class UpworkClickupSyncService {
         ? CLICKUP_ONBOARDING_STATUS
         : proposal.status === UpworkProposalStatus.TEST_TASK
           ? CLICKUP_TEST_TASK_STATUS
-          : null;
+          : proposal.status === UpworkProposalStatus.MEETING
+            ? CLICKUP_MEETING_STATUS
+            : null;
     if (!clickupStatus) return;
 
     try {
