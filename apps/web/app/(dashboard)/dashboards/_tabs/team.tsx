@@ -49,6 +49,7 @@ const BID_STATUS_COLUMNS = [
   { key: "VIEWED", label: "Viewed" },
   { key: "IN_DISCUSSION", label: "In Discussion" },
   { key: "TEST_TASK", label: "Test Task" },
+  { key: "MEETING", label: "Meeting" },
   { key: "FOLLOW_UP_1", label: "Follow Up 1" },
   { key: "FOLLOW_UP_2", label: "Follow Up 2" },
   { key: "FOLLOW_UP_3", label: "Follow Up 3" },

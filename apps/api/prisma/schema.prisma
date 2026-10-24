@@ -1716,6 +1716,11 @@ enum UpworkProposalStatus {
   /// project into ClickUp with "test tasks" instead of "onboarding" (Part:
   /// Upwork → ClickUp card automation).
   TEST_TASK
+  /// Client agreed to a call/meeting before committing (2026-10-24). Also
+  /// routes a card into ClickUp with the list's real "meeting" status, same
+  /// card-creation path as WON/TEST_TASK (Part: Upwork → ClickUp card
+  /// automation).
+  MEETING
   FOLLOW_UP_1
   FOLLOW_UP_2
   FOLLOW_UP_3
