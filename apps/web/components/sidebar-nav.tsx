@@ -504,6 +504,12 @@ const WORKSPACES: Workspace[] = [
           { href: "/upwork/invite", label: "Invite", moduleFlag: "upworkInviteAccess", icon: SendIcon },
           { href: "/upwork/requests", label: "Requests", moduleFlag: "upworkRequestsAccess", icon: ClipboardIcon },
           { href: "/upwork/proposal-writing", label: "Proposal Writing", moduleFlag: "upworkProposalWritingAccess", icon: FileIcon },
+          {
+            href: "/upwork/proposal-writing/invite",
+            label: "Invite Proposal Writing",
+            moduleFlag: "upworkProposalWritingAccess",
+            icon: MailIcon,
+          },
         ],
       },
       // Dedicated per-domain routes (Part: Upwork API integration --

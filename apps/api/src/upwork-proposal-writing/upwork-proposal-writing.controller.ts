@@ -10,7 +10,9 @@ import { ProposalWritingService } from "./services/proposal-writing.service";
 import { ProposalWritingSettingsService } from "./services/proposal-writing-settings.service";
 import { FreelancerProfilesService } from "./services/freelancer-profiles.service";
 import { DiscoveredJobsService } from "./services/discovered-jobs.service";
+import { InviteProposalWritingService } from "./services/invite-proposal-writing.service";
 import { GenerateCoverLetterDto } from "./dto/generate-cover-letter.dto";
+import { GenerateInviteCoverLetterDto } from "./dto/generate-invite-cover-letter.dto";
 import { UpdateProposalWritingSettingsDto } from "./dto/update-proposal-writing-settings.dto";
 import { CreateFreelancerProfileDto, UpdateFreelancerProfileDto } from "./dto/freelancer-profile.dto";
 import { IngestDiscoveredJobsDto } from "./dto/discovered-job.dto";
@@ -42,6 +44,7 @@ export class UpworkProposalWritingController {
     private readonly settings: ProposalWritingSettingsService,
     private readonly freelancerProfiles: FreelancerProfilesService,
     private readonly discoveredJobs: DiscoveredJobsService,
+    private readonly inviteProposalWriting: InviteProposalWritingService,
   ) {}
 
   @Post("generate")
@@ -53,6 +56,20 @@ export class UpworkProposalWritingController {
   @Get("drafts")
   listDrafts(@CurrentUser() user: JwtClaims) {
     return this.proposalWriting.listDrafts(user.orgId);
+  }
+
+  // Invite Proposal Writing (Part: Invite Proposal Writing, 2026-10-24) —
+  // a pasted Upwork invite message instead of a job URL. Same module flag,
+  // no separate access gate: it's a feature within Proposal Writing, not a
+  // distinct module.
+  @Post("generate-invite")
+  generateInvite(@CurrentUser() user: JwtClaims, @Body() dto: GenerateInviteCoverLetterDto) {
+    return this.inviteProposalWriting.generate(user.orgId, user.sub, dto.inviteText, dto.knownClientName);
+  }
+
+  @Get("invite-drafts")
+  listInviteDrafts(@CurrentUser() user: JwtClaims) {
+    return this.inviteProposalWriting.listDrafts(user.orgId);
   }
 
   // ADMIN-only to even view (Part: same day, explicit correction —

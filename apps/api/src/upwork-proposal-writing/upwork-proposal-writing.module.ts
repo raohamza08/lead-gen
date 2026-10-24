@@ -6,6 +6,7 @@ import { ProposalWritingSettingsService } from "./services/proposal-writing-sett
 import { ProposalWritingService } from "./services/proposal-writing.service";
 import { FreelancerProfilesService } from "./services/freelancer-profiles.service";
 import { DiscoveredJobsService } from "./services/discovered-jobs.service";
+import { InviteProposalWritingService } from "./services/invite-proposal-writing.service";
 
 @Module({
   controllers: [UpworkProposalWritingController],
@@ -16,6 +17,7 @@ import { DiscoveredJobsService } from "./services/discovered-jobs.service";
     ProposalWritingService,
     FreelancerProfilesService,
     DiscoveredJobsService,
+    InviteProposalWritingService,
   ],
   // GeminiClient exported (Part: AI chat assistant, 2026-10-21) so
   // AiAssistantModule can inject the same key-rotation-aware client instead

@@ -1195,6 +1195,14 @@ export const api = {
   ingestUpworkDiscoveredJobs: (jobs: unknown[]) =>
     request("/upwork-proposal-writing/discovered-jobs/ingest", { method: "POST", body: JSON.stringify({ jobs }) }),
 
+  // ---- Invite Proposal Writing (same upworkProposalWritingAccess flag) ----
+  generateUpworkInviteCoverLetter: (inviteText: string, knownClientName?: string) =>
+    request("/upwork-proposal-writing/generate-invite", {
+      method: "POST",
+      body: JSON.stringify({ inviteText, knownClientName: knownClientName || undefined }),
+    }),
+  getUpworkInviteProposalDrafts: () => request("/upwork-proposal-writing/invite-drafts"),
+
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
   getDashboardOverview: (params: Record<string, string> = {}) =>
     request(`/dashboard-center/overview?${new URLSearchParams(params).toString()}`),

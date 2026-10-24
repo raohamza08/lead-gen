@@ -240,6 +240,7 @@ model Organization {
   upworkProposalDrafts          UpworkProposalDraft[]
   upworkFreelancerProfiles      UpworkFreelancerProfile[]
   upworkDiscoveredJobs          UpworkDiscoveredJob[]
+  upworkInviteProposalDrafts    UpworkInviteProposalDraft[]
 
   @@map("organizations")
 }
@@ -3456,4 +3457,45 @@ enum UpworkProposalDraftFetchStatus {
   SUCCESS
   PARTIAL
   FAILED
+}
+
+/// Cover letters generated from a pasted Upwork INVITE message rather than
+/// a scraped job URL (Part: Invite Proposal Writing, 2026-10-24, explicit
+/// user request — "the person can paste the invite content there and the
+/// system can generate a cover letter"). Kept as its own table rather than
+/// reusing UpworkProposalDraft: an invite has no job URL to key on and none
+/// of the structured client/job facts a scraped job page exposes (spend
+/// tier, country, posting age, etc.), so the Bidding SOP deterministic
+/// signals on that model don't apply here — this table only carries what's
+/// actually available for an invite.
+model UpworkInviteProposalDraft {
+  id              String       @id @default(uuid())
+  orgId           String       @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
+  createdByUserId String       @map("created_by_user_id")
+  createdByName   String?      @map("created_by_name")
+
+  /// Raw pasted invite content, exactly as the client sent it.
+  inviteText String @map("invite_text") @db.Text
+
+  /// Typed in directly when the agency already knows this client (same
+  /// "explicit beats guessed" precedent as
+  /// GenerateCoverLetterDto.knownClientName) — there's no country/
+  /// member-since pair to heuristically match against here, so this is
+  /// the only way a name ever gets attached.
+  clientName String? @map("client_name")
+
+  clientNeeds String @map("client_needs") @db.Text
+  niche       String @map("niche")
+  coverLetter String @map("cover_letter") @db.Text
+
+  jobType           String?  @map("job_type")
+  suggestedProfile  String?  @map("suggested_profile")
+  profileReason     String?  @map("profile_reason") @db.Text
+  overallAssessment String?  @map("overall_assessment") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([orgId, createdAt])
+  @@map("upwork_invite_proposal_drafts")
 }

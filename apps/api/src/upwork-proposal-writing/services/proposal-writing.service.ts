@@ -55,7 +55,12 @@ Respond with ONLY a JSON object with exactly these keys, no other text:
 - "coverLetter": the cover letter BODY ONLY — no greeting, no sign-off (see the rules above, those are added separately), ready to paste as-is otherwise — no markdown formatting, no placeholder brackets like [Your Name]. Its first sentence must be the curiosity hook described above, and it must be broken into short 3-4 line paragraphs.`;
 }
 
-function buildSystemPrompt(
+/// Exported so InviteProposalWritingService can build the same voice/
+/// structural-rules/response-schema prompt for pasted invites instead of
+/// duplicating it — the only thing that differs for an invite is the brief
+/// (buildJobBrief vs. the invite's own, simpler brief builder), not the
+/// rules the model writes under.
+export function buildSystemPrompt(
   instructions: string,
   agencyBackground: string,
   technicalWordLimit: number,
