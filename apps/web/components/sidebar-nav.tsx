@@ -458,12 +458,18 @@ const WORKSPACES: Workspace[] = [
           { href: "/settings/email-hub", label: "Settings", icon: GearIcon },
         ],
       },
-      // Engagement (Social Engagement Center) nav entry intentionally
-      // removed (2026-09-30) -- no current requirement; the page/backend/
-      // sync worker are untouched, just not linked.
       {
         type: "group",
         label: "Social Media",
+        // Each link gated by its own flag, not the group as a whole (Part:
+        // access panel/nav parity fix, 2026-10-27, explicit user request —
+        // "whatever module or submodule access i gave to anyone, it should
+        // be shown to them") -- previously the whole group was gated by a
+        // single socialMediaAccess group-level flag, so someone granted
+        // only socialEngagementAccess (a real, backend-enforced flag OR'd
+        // into social-inbox.controller.ts/social-engagement.controller.ts)
+        // had API access but no nav entry point to reach it from. See
+        // NavLink's own moduleFlag docblock.
         links: [
           // The centralized Social Inbox page was removed (Part: Social
           // Inbox removal / per-module messaging, 2026-10-21) — each
@@ -472,6 +478,7 @@ const WORKSPACES: Workspace[] = [
             href: "/social-media/accounts",
             label: "Accounts",
             icon: UserIcon,
+            moduleFlag: "socialMediaAccess",
             children: [
               { href: "/social-media/linkedin", label: "LinkedIn", socialPlatform: "LINKEDIN", icon: ChatIcon },
               { href: "/social-media/instagram", label: "Instagram", socialPlatform: "INSTAGRAM", icon: ChatIcon },
@@ -480,10 +487,16 @@ const WORKSPACES: Workspace[] = [
               { href: "/social-media/whatsapp-qr", label: "WhatsApp (Team)", socialPlatform: "WHATSAPP_QR", icon: ChatIcon },
             ],
           },
-          { href: "/social-media/calendar", label: "Calendar", icon: CalendarIcon },
-          { href: "/social-media/analytics", label: "Analytics", icon: ChartIcon },
-          { href: "/social-media/automations", label: "Automations", icon: BoltIcon },
-          { href: "/settings/social-media", label: "Settings", icon: GearIcon },
+          { href: "/social-media/calendar", label: "Calendar", icon: CalendarIcon, moduleFlag: "socialMediaAccess" },
+          { href: "/social-media/analytics", label: "Analytics", icon: ChartIcon, moduleFlag: "socialMediaAccess" },
+          { href: "/social-media/automations", label: "Automations", icon: BoltIcon, moduleFlag: "socialMediaAccess" },
+          {
+            href: "/social-engagement",
+            label: "Engagement Center",
+            icon: ChatIcon,
+            moduleFlag: ["socialMediaAccess", "socialEngagementAccess"],
+          },
+          { href: "/settings/social-media", label: "Settings", icon: GearIcon, moduleFlag: "socialMediaAccess" },
         ],
       },
     ],
@@ -577,11 +590,11 @@ const MODULE_FLAG_BY_GROUP: Record<string, ModuleFlag> = {
   "Lead Room": "leadGenAccess",
   "Lead Generation": "leadGenAccess",
   "Email Hub": "emailHubAccess",
-  "Social Media": "socialMediaAccess",
-  // Upwork Proposals deliberately has no entry here (Part: Upwork Requests,
-  // 2026-10-01) -- each of its three links carries its own moduleFlag
-  // instead; the group's own visibility is derived from whether any child
-  // link survives per-link filtering, not from a single flag here.
+  // Upwork Proposals and Social Media deliberately have no entry here (the
+  // latter as of Part: access panel/nav parity fix, 2026-10-27) -- each of
+  // their links carries its own moduleFlag instead; the group's own
+  // visibility is derived from whether any child link survives per-link
+  // filtering, not from a single flag here.
   "Meta Ads": "metaAdsAccess",
 };
 

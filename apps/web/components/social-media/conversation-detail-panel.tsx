@@ -237,6 +237,8 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
         senderName: null,
         messageText: text,
         mediaUrl: null,
+        mediaMimeType: null,
+        mediaFilename: null,
         sentAt: new Date().toISOString(),
       };
       queryClient.setQueryData<ConversationDetail>(key, (old) => (old ? { ...old, messages: [...old.messages, optimisticMessage] } : old));

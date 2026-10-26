@@ -83,6 +83,11 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
     label: "Social Messaging + Engagement",
     hint: "Narrower than Social Media — only each platform's Inbox/Feed tabs and the Engagement Center's comments, not Create Post/Calendar/Analytics/Automations/Accounts. Redundant if Social Media is already checked.",
   },
+  {
+    key: "upworkApiAccess",
+    label: "Upwork API — Shared Data",
+    hint: "Backs a handful of Upwork API domain endpoints (activity, job discovery, client proposals, snapshots, reporting, timesheets, common reference data) with no dedicated sidebar page of their own — separate from the Upwork Agency pages below, which have their own per-page flags.",
+  },
   // Upwork Proposals is three independent toggles, not one (Part: Upwork
   // Requests, 2026-10-01, explicit user request — "not everyone needs
   // everything... hide bidding and invites for them") -- e.g. a Project
@@ -126,10 +131,12 @@ const DASHBOARD_LABELS: { key: keyof ModuleFlags; label: string }[] = [
 /** Per-page access into the "Upwork Agency" sidebar group (Part: Upwork
  *  API integration — per-module access, 2026-10-23, explicit user request
  *  — "I need separate access for each module in the Upwork Agency tab,
- *  not everyone need the complete module"). Replaces the single
- *  upworkApiAccess checkbox that used to gate the whole 12-page group at
- *  once — each page now has its own flag, same granularity as the
- *  Dashboard Center tabs below. */
+ *  not everyone need the complete module"). Originally replaced a single
+ *  upworkApiAccess checkbox that gated the whole 12-page group at once —
+ *  each page now has its own flag, same granularity as the Dashboard
+ *  Center tabs below. upworkApiAccess itself still exists (see
+ *  MODULE_LABELS above) but was repurposed to gate a separate, smaller set
+ *  of domain endpoints with no sidebar page of their own — not these 13. */
 const UPWORK_AGENCY_LABELS: { key: keyof ModuleFlags; label: string }[] = [
   { key: "upworkAgencyOverviewAccess", label: "Overview" },
   { key: "upworkAgencyOrganizationAccess", label: "Organization" },
