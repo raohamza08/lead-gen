@@ -207,20 +207,9 @@ export function WhatsAppQrNumbersList() {
                     </button>
                   </form>
                 ) : (
-                  <button
-                    type="button"
-                    className="group flex items-center gap-1.5 text-left"
-                    title="Rename"
-                    onClick={() => startRename(n)}
-                  >
+                  <button type="button" className="flex items-center gap-1.5 text-left" title="Rename" onClick={() => startRename(n)}>
                     <span className="text-sm font-semibold">{n.displayName || n.username}</span>
-                    <svg
-                      viewBox="0 0 16 16"
-                      className="h-3 w-3 shrink-0 text-ink/30 opacity-0 transition-opacity group-hover:opacity-100"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                    >
+                    <svg viewBox="0 0 16 16" className="h-3.5 w-3.5 shrink-0 text-ink/40" fill="none" stroke="currentColor" strokeWidth={1.5}>
                       <path d="M11 2l3 3-7.5 7.5L3 13l.5-3.5L11 2z" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
                   </button>
@@ -230,6 +219,13 @@ export function WhatsAppQrNumbersList() {
               <StatusBadge status={n.status} />
             </div>
             <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                className="rounded-full bg-ink/[0.05] px-3 py-1 text-xs font-medium text-ink/60 transition-colors hover:bg-ink/10"
+                onClick={() => startRename(n)}
+              >
+                Rename
+              </button>
               {n.status !== "CONNECTED" && (
                 <button
                   type="button"

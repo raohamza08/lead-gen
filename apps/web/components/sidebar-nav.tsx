@@ -753,8 +753,12 @@ export function SidebarNav({
   const socialStats = socialStatsQuery.data;
 
   function flagGranted(flag: ModuleFlag | ModuleFlag[] | undefined): boolean {
-    if (!flag || !moduleAccess) return true;
-    // ADMIN bypass (Part: same-day correction — the backend's
+    if (!flag) return true;
+    // ADMIN bypass checked BEFORE the loading-state check below, not after
+    // -- getCurrentUser() reads the already-decoded JWT synchronously, so
+    // an admin gets instant, un-flashed full visibility exactly like
+    // before; only non-admins are affected by the fail-closed change.
+    // (Part: same-day correction — the backend's
     // ModuleAccessGuard already bypasses Role.ADMIN unconditionally for
     // every module flag; this nav-visibility check never mirrored that, so
     // a brand-new module defaulting its flag to false hid the link from
@@ -763,6 +767,18 @@ export function SidebarNav({
     // admin's real access was never actually gated by these flags, only
     // what the sidebar showed was.
     if (getCurrentUser()?.role === "ADMIN") return true;
+    // Fails CLOSED while GET /users/me is still loading (Part: module-flash
+    // fix, 2026-10-26, explicit user request — "when a person refreshes,
+    // they see every module once and then it hides, I don't want this").
+    // Previously fell through to `true` here (the old `!moduleAccess`
+    // short-circuit above), showing every flagged link/group immediately
+    // on a fresh page load, then hiding the unauthorized ones a moment
+    // later once moduleAccess actually arrived -- a real, visible flash of
+    // modules a user doesn't have access to, even though the backend's
+    // ModuleAccessGuard was never actually at risk (this check is
+    // nav-visibility UX only). Same reasoning isPrimaryAdmin above already
+    // uses for System Logs, now applied to every module flag.
+    if (!moduleAccess) return false;
     // Array means OR: any one of the listed flags being granted is enough
     // (mirrors ModuleAccessGuard's own array handling on the backend).
     return Array.isArray(flag) ? flag.some((f) => moduleAccess[f]) : moduleAccess[flag];
@@ -870,7 +886,7 @@ export function SidebarNav({
                     Media group has a social-platform unread total today;
                     a no-op span for every other group. */}
                 {item.label === "Social Media" && (socialStats?.unread ?? 0) > 0 && (
-                  <span className="tabular rounded-full bg-primary/15 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-primary">
+                  <span className="tabular flex h-4 min-w-4 items-center justify-center rounded-full bg-primary/15 px-1 text-[10px] font-semibold normal-case text-primary">
                     {(socialStats?.unread ?? 0) > 99 ? "99+" : socialStats?.unread}
                   </span>
                 )}
@@ -941,7 +957,7 @@ export function SidebarNav({
                               </span>
                               {childCount > 0 && (
                                 <span
-                                  className={`tabular ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
+                                  className={`tabular ml-2 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-semibold ${
                                     childActive ? "bg-white/25 text-white" : "bg-primary/15 text-primary"
                                   }`}
                                 >
