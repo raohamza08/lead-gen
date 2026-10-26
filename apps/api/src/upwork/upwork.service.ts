@@ -30,8 +30,14 @@ export class UpworkService {
     private readonly clickupSync: UpworkClickupSyncService,
   ) {}
 
-  create(orgId: string, dto: CreateUpworkProposalDto) {
+  /** `submitterId` is the authenticated user placing the proposal, not a
+   *  form field — "submitted by" is now always the real account name, never
+   *  a manually-picked value, for both BIDDING and INVITE (Part:
+   *  auto-submitter, 2026-10-26). Falls back to dto.submittedBy only if the
+   *  user record is somehow gone, so a stale session can't 500 the form. */
+  async create(orgId: string, submitterId: string, dto: CreateUpworkProposalDto) {
     const isBidding = dto.type === UpworkProposalType.BIDDING;
+    const submitter = await this.prisma.user.findUnique({ where: { id: submitterId }, select: { name: true } });
     return this.prisma.upworkProposal.create({
       data: {
         orgId,
@@ -40,7 +46,7 @@ export class UpworkService {
         jobCategory: dto.jobCategory,
         jobLink: dto.jobLink,
         coverLetter: dto.coverLetter,
-        submittedBy: dto.submittedBy,
+        submittedBy: submitter?.name ?? dto.submittedBy ?? "Unknown",
         // Bidding-only fields are silently dropped for INVITE rather than
         // rejected — a copy-pasted form value from the wrong tab shouldn't
         // 400, it should just not mean anything for that type.

@@ -69,7 +69,7 @@ export class UpworkController {
 
   @Post()
   async create(@CurrentUser() user: JwtClaims, @Body() dto: CreateUpworkProposalDto) {
-    const proposal = await this.upwork.create(user.orgId, dto);
+    const proposal = await this.upwork.create(user.orgId, user.sub, dto);
     this.auditLog.write({ orgId: user.orgId, actorId: user.sub, action: "UPWORK_PROPOSAL_CREATED", entityType: "upworkProposal", entityId: proposal.id, metadata: { type: proposal.type } });
     return proposal;
   }

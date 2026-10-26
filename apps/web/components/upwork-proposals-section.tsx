@@ -125,6 +125,15 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
     queryFn: () => api.getUpworkPicklists() as Promise<UpworkPicklists>,
   });
 
+  // "Submitted by" is the logged-in account's own name, picked up
+  // automatically — not a manual dropdown choice — for both Bidding and
+  // Invite (same form). The server re-derives this from the auth token
+  // anyway (UpworkService.create), so this is purely for display.
+  const { data: me } = useQuery({ queryKey: ["me-for-upwork-submitter"], queryFn: () => api.getMe() as Promise<{ name: string }> });
+  useEffect(() => {
+    if (me?.name) setSubmittedBy(me.name);
+  }, [me]);
+
   function load() {
     api
       .getUpworkProposals({
@@ -170,7 +179,9 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
 
   function resetForm() {
     setProfileName(""); setJobCategory(""); setJobLink(""); setCoverLetter("");
-    setSubmittedBy(""); setConnects(""); setAccountType("LIVE"); setProjectHours(""); setPricingType("HOURLY"); setClientName("");
+    setConnects(""); setAccountType("LIVE"); setProjectHours(""); setPricingType("HOURLY"); setClientName("");
+    // submittedBy is left alone — it's the auto-filled account name, not a
+    // form field that should clear between submissions.
   }
 
   async function submit(e: React.FormEvent) {
@@ -412,14 +423,9 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
             <textarea value={coverLetter} onChange={(e) => setCoverLetter(e.target.value)} required rows={5} className={inputClass} />
           </label>
           <label className="block">
-            <span className={labelClass}>Submitted by</span>
-            <select value={submittedBy} onChange={(e) => setSubmittedBy(e.target.value)} required className={inputClass}>
-              <option value="" disabled>Select submitter…</option>
-              {(picklists?.submitters ?? []).map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-            {picklists && picklists.submitters.length === 0 && (
-              <span className="mt-1 block text-[11px] text-gold">No names yet — an admin needs to add some above.</span>
-            )}
+            <span className={labelClass}>{type === "INVITE" ? "Accepted by" : "Submitted by"}</span>
+            <input value={submittedBy || "Loading…"} disabled readOnly className={`${inputClass} text-ink/60`} />
+            <span className="mt-1 block text-[11px] text-ink/50">Your own account name — set automatically, not picked.</span>
           </label>
           {type === "BIDDING" && (
             <>

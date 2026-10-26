@@ -8,7 +8,13 @@ export class CreateUpworkProposalDto {
   @IsString() @MinLength(1) jobCategory!: string;
   @IsString() @MinLength(1) jobLink!: string;
   @IsString() @MinLength(1) coverLetter!: string;
-  @IsString() @MinLength(1) submittedBy!: string;
+
+  /** No longer trusted from the client (Part: auto-submitter, 2026-10-26) —
+   *  UpworkService.create always overwrites this with the authenticated
+   *  user's own name, so who submitted a proposal can't be misattributed by
+   *  picking someone else from the old free-text dropdown. Left optional
+   *  rather than removed so existing callers that still send it don't 400. */
+  @IsOptional() @IsString() submittedBy?: string;
 
   /** Bidding only (connects spent) — ignored server-side for INVITE. */
   @IsOptional() @IsInt() @Min(0) connects?: number;
