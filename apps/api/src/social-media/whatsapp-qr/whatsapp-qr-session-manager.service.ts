@@ -145,7 +145,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     );
     sock.ev.on("messages.upsert", ({ messages }) => {
       for (const message of messages) {
-        this.ingestMessage(accountId, message, { isHistoryBackfill: false }).catch((err) =>
+        this.ingestMessage(accountId, message, { isHistoryBackfill: false, contactName: message.pushName || undefined }).catch((err) =>
           this.logger.error(`Failed to ingest WhatsApp message on account ${accountId}: ${(err as Error).message}`),
         );
       }
@@ -155,9 +155,28 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     // and ingestion path as messages.upsert above, just flagged so it
     // doesn't inflate unreadCount or spam a notification per historical
     // message (Part: WhatsApp Team Inbox history backfill, 2026-10-26).
-    sock.ev.on("messaging-history.set", ({ messages }) => {
+    //
+    // message.pushName is usually empty on a replayed history message (it's
+    // populated from live delivery context, not stored history) -- this
+    // event carries its own `contacts` list instead (the real saved/self-set
+    // name per JID), which is what actually fixed "only showing the number,
+    // not the name" (Part: WhatsApp Team Inbox contact names, 2026-10-26).
+    sock.ev.on("messaging-history.set", ({ messages, contacts, chats }) => {
+      // Chat-level names cover numbers that aren't a saved contact at all --
+      // the common case for a business getting messages from customers --
+      // filled in first so the (more authoritative, "saved in your phone")
+      // contacts list below can override where both exist.
+      const nameByJid = new Map<string, string>();
+      for (const chat of chats) {
+        if (chat.id && chat.name) nameByJid.set(chat.id, chat.name);
+      }
+      for (const contact of contacts) {
+        const name = contact.name || contact.notify;
+        if (name) nameByJid.set(contact.id, name);
+      }
       for (const message of messages) {
-        this.ingestMessage(accountId, message, { isHistoryBackfill: true }).catch((err) =>
+        const contactName = (message.key.remoteJid && nameByJid.get(message.key.remoteJid)) || message.pushName || undefined;
+        this.ingestMessage(accountId, message, { isHistoryBackfill: true, contactName }).catch((err) =>
           this.logger.error(`Failed to ingest WhatsApp history message on account ${accountId}: ${(err as Error).message}`),
         );
       }
@@ -250,7 +269,11 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     }
   }
 
-  private async ingestMessage(accountId: string, message: WAMessage, opts: { isHistoryBackfill: boolean }): Promise<void> {
+  private async ingestMessage(
+    accountId: string,
+    message: WAMessage,
+    opts: { isHistoryBackfill: boolean; contactName?: string },
+  ): Promise<void> {
     const remoteJid = message.key.remoteJid;
     if (!remoteJid || remoteJid.endsWith("@g.us") || remoteJid === "status@broadcast") return; // groups/status not in scope
     if (!message.message) return; // protocol/reaction-only messages carry no content worth persisting
@@ -292,7 +315,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       externalConversationId: contactNumber,
       contactExternalId: contactNumber,
       contactUsername: contactNumber,
-      contactName: message.pushName || undefined,
+      contactName: opts.contactName,
       externalMessageId: message.key.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fromUs: Boolean(message.key.fromMe),
       messageText: text,
