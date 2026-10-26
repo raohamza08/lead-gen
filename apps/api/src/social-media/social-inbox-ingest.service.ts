@@ -115,7 +115,14 @@ export class SocialInboxIngestService {
           data: {
             ...(isNewest ? { lastMessage: input.messageText, lastMessageAt: input.sentAt } : {}),
             ...(!input.fromUs && !input.isHistoryBackfill ? { unreadCount: { increment: 1 } } : {}),
-            ...(input.contactName ? { contactName: input.contactName } : {}),
+            // Never overwrite a manually-set name (Part: WhatsApp Team
+            // Inbox contact rename, 2026-10-26, bug fix -- confirmed in
+            // production: the platform's own reported name, which for
+            // WhatsApp QR's LID contacts is frequently just a masked
+            // placeholder, kept silently clobbering a real name a teammate
+            // had just set). See SocialConversation.contactNameLocked's
+            // own docblock.
+            ...(input.contactName && !existing.contactNameLocked ? { contactName: input.contactName } : {}),
             ...(input.contactUsername ? { contactUsername: input.contactUsername } : {}),
             ...(input.contactProfileImageUrl ? { contactProfileImageUrl: input.contactProfileImageUrl } : {}),
           },

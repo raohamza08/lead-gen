@@ -2793,6 +2793,17 @@ model SocialConversation {
   externalConversationId String             @map("external_conversation_id")
   contactExternalId      String?            @map("contact_external_id")
   contactName            String?            @map("contact_name")
+  /// True once a human has manually set contactName (Part: WhatsApp Team
+  /// Inbox contact rename, 2026-10-26, bug fix -- confirmed in production:
+  /// a manually-set name kept getting silently overwritten by the next
+  /// inbound message, since SocialInboxIngestService.persistMessage
+  /// always re-applies whatever name the platform itself reports -- for
+  /// WhatsApp QR's LID contacts that's frequently WhatsApp's own masked
+  /// placeholder ("+92∙∙∙∙∙∙∙∙22"), clobbering a real name a teammate just
+  /// typed in. Once true, persistMessage stops overwriting contactName
+  /// entirely -- only SocialInboxService.updateConversation (the manual
+  /// rename path) can change it again.
+  contactNameLocked      Boolean            @default(false) @map("contact_name_locked")
   contactUsername        String?            @map("contact_username")
   contactProfileImageUrl String?            @map("contact_profile_image_url")
   lastMessage            String?            @map("last_message")

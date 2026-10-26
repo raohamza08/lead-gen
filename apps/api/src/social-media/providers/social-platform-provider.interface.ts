@@ -274,8 +274,13 @@ export interface SocialPlatformProvider {
    *  explicitly human-in-the-loop, never automatic, one direct synchronous
    *  API call). `participantId` is the recipient's platform user id
    *  (Conversation.participantExternalId) — this is what the Send API
-   *  actually addresses a reply to, not the thread id listMessages uses. */
-  sendMessage(account: SocialAccount, participantId: string, text: string): Promise<void>;
+   *  actually addresses a reply to, not the thread id listMessages uses.
+   *  `senderUser` (Part: WhatsApp Team Inbox sender attribution,
+   *  2026-10-26) is optional and only meaningful to WhatsAppQrProvider --
+   *  every other platform has no concept of "which of our team members
+   *  sent this" (the platform API call itself is the same regardless of
+   *  who clicked send), so they simply ignore the extra argument. */
+  sendMessage(account: SocialAccount, participantId: string, text: string, senderUser?: { id: string; name: string }): Promise<void>;
 
   /** One-time, called right after a successful connect (Part: Unified Social
    *  Media DM Monitoring) — tells the platform to start pushing this

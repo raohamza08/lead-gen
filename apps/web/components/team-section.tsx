@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { api, getCurrentUser } from "../lib/api-client";
-import { PersonAccessPanel } from "./person-access-panel";
 import { Avatar } from "./avatar";
 import { Modal } from "./ui/modal";
 
@@ -402,14 +402,13 @@ export function TeamSection() {
                 )}
               </div>
 
-              <div className="border-t border-[var(--line)] pt-3">
-                <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Module &amp; account access</h4>
-                {isPrimaryAdmin ? (
-                  <PersonAccessPanel userId={m.id} />
-                ) : (
-                  <p className="text-xs text-ink/50">Only the organization&apos;s primary admin can view or change module access.</p>
-                )}
-              </div>
+              {isPrimaryAdmin && (
+                <div className="border-t border-[var(--line)] pt-3">
+                  <Link href={`/settings/permissions?userId=${m.id}`} className="text-xs font-medium text-accent hover:underline">
+                    Manage full module &amp; account access →
+                  </Link>
+                </div>
+              )}
             </div>
           </Modal>
         );

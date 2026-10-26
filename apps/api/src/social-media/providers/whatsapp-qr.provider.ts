@@ -87,7 +87,7 @@ export class WhatsAppQrProvider implements SocialPlatformProvider {
     );
   }
 
-  async sendMessage(account: SocialAccount, participantId: string, text: string): Promise<void> {
-    await this.sessions.sendMessage(account.id, participantId, text);
+  async sendMessage(account: SocialAccount, participantId: string, text: string, senderUser?: { id: string; name: string }): Promise<void> {
+    await this.sessions.sendMessage(account.id, participantId, text, senderUser);
   }
 }

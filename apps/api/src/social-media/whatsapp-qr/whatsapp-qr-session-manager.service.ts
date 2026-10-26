@@ -48,13 +48,15 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
    *  machine-gunning messages the instant two agents happen to reply at
    *  once). */
   private readonly sendQueues = new Map<string, Promise<void>>();
-  /** Keyed `${accountId}:${jid}` -- fetched once per contact per process
-   *  lifetime rather than once per message (Part: WhatsApp Team Inbox
-   *  profile pictures, 2026-10-26) since sock.profilePictureUrl is a real
-   *  network round trip; avatars changing mid-session is an acceptable
-   *  miss given this is a low-volume shared inbox, not a cache this app
-   *  needs to actively invalidate. */
-  private readonly avatarCache = new Map<string, string>();
+  /** Small on-demand-lookup cache (profile picture URLs, group subjects),
+   *  keyed with an own prefix per kind of lookup -- fetched once per
+   *  contact/group per process lifetime rather than once per message
+   *  (Part: WhatsApp Team Inbox profile pictures, 2026-10-26; group
+   *  support, 2026-10-26) since both sock.profilePictureUrl and
+   *  sock.groupMetadata are real network round trips; either changing
+   *  mid-session is an acceptable miss given this is a low-volume shared
+   *  inbox, not a cache this app needs to actively invalidate. */
+  private readonly lookupCache = new Map<string, string>();
   private baileys?: BaileysModule;
 
   constructor(
@@ -219,13 +221,27 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
   }
 
   private async getProfilePictureUrl(accountId: string, jid: string): Promise<string | undefined> {
-    const cacheKey = `${accountId}:${jid}`;
-    const cached = this.avatarCache.get(cacheKey);
+    const cacheKey = `avatar:${accountId}:${jid}`;
+    const cached = this.lookupCache.get(cacheKey);
     if (cached) return cached;
     const sock = this.sockets.get(accountId);
     const url = await sock?.profilePictureUrl(jid, "preview").catch(() => undefined);
-    if (url) this.avatarCache.set(cacheKey, url);
+    if (url) this.lookupCache.set(cacheKey, url);
     return url;
+  }
+
+  /** Live messages (no chats-list nameByJid to fall back on) need an
+   *  on-demand lookup for a group's subject (Part: WhatsApp Team Inbox
+   *  group support, 2026-10-26) -- cached the same way as profile
+   *  pictures, since it's a real network round trip. */
+  private async getGroupSubject(accountId: string, jid: string): Promise<string | undefined> {
+    const cacheKey = `group-subject:${accountId}:${jid}`;
+    const cached = this.lookupCache.get(cacheKey);
+    if (cached) return cached;
+    const sock = this.sockets.get(accountId);
+    const subject = await sock?.groupMetadata(jid).then((m) => m.subject).catch(() => undefined);
+    if (subject) this.lookupCache.set(cacheKey, subject);
+    return subject;
   }
 
   private async handleConnectionUpdate(accountId: string, update: Partial<ConnectionState>) {
@@ -320,11 +336,30 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     opts: { isHistoryBackfill: boolean; contactName?: string; nameByJid?: Map<string, string> },
   ): Promise<void> {
     const remoteJid = message.key.remoteJid;
-    if (!remoteJid || remoteJid.endsWith("@g.us") || remoteJid === "status@broadcast") return; // groups/status not in scope
+    if (!remoteJid || remoteJid === "status@broadcast") return; // status updates aren't a conversation
     if (!message.message) return; // protocol/reaction-only messages carry no content worth persisting
 
+    const isGroup = remoteJid.endsWith("@g.us");
     const contactNumber = await this.resolveContactJid(accountId, remoteJid);
-    const contactName = opts.contactName || opts.nameByJid?.get(remoteJid) || undefined;
+    // For a group, the "contact" is the group itself -- its subject (Part:
+    // WhatsApp Team Inbox group support, 2026-10-26, explicit user request
+    // -- "the groups are not coming up on whatsapp"). History-sync's
+    // chats list already covers this via nameByJid (group subjects live
+    // in the same list as 1:1 contact names); a live message has no such
+    // list, so it's fetched on demand and cached, same reasoning as
+    // getProfilePictureUrl below.
+    const contactName = isGroup
+      ? opts.nameByJid?.get(remoteJid) || (await this.getGroupSubject(accountId, remoteJid))
+      : opts.contactName || opts.nameByJid?.get(remoteJid) || undefined;
+    // Who within the group actually sent this (inbound only -- message.key.
+    // participant is only ever present on a group message). Visible to
+    // everyone, unlike the outbound team-member attribution below -- see
+    // SocialInboxService.getConversation's own stripping logic, which is
+    // scoped to fromUs only for exactly this reason.
+    const groupSenderName =
+      isGroup && !message.key.fromMe
+        ? (message.key.participant && opts.nameByJid?.get(message.key.participant)) || message.pushName || undefined
+        : undefined;
     // Baileys' protobuf-generated message types are a deep tree of optional
     // fields with no shared base -- read loosely here rather than fighting
     // the exact union of IImageMessage/IVideoMessage/IAudioMessage/
@@ -368,6 +403,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       contactUsername: displayNumber,
       contactName,
       contactProfileImageUrl,
+      senderName: groupSenderName,
       externalMessageId: message.key.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fromUs: Boolean(message.key.fromMe),
       messageText: text,
@@ -416,7 +452,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
    *  for this platform, same shape startConversation's digit-strip already
    *  produces) -- turned into a JID here, not upstream, since nothing else
    *  needs the @s.whatsapp.net suffix. */
-  async sendMessage(accountId: string, participantId: string, text: string): Promise<void> {
+  async sendMessage(accountId: string, participantId: string, text: string, senderUser?: { id: string; name: string }): Promise<void> {
     const sock = this.sockets.get(accountId);
     if (!sock) {
       throw new BadRequestException("This WhatsApp number isn't connected right now -- reconnect it from the Numbers tab.");
@@ -444,6 +480,12 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         externalConversationId: participantId,
         externalMessageId: sent?.key.id || `outbound-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         fromUs: true,
+        // Who actually sent this (Part: WhatsApp Team Inbox sender
+        // attribution, 2026-10-26) -- SocialInboxService.getConversation
+        // strips this back out for anyone who isn't the primary admin
+        // before it ever reaches the frontend; stored here regardless so
+        // the primary admin can always see it.
+        senderName: senderUser?.name,
         messageText: text,
         sentAt: new Date(),
       });

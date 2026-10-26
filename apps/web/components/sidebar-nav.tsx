@@ -415,6 +415,14 @@ const WORKSPACES: Workspace[] = [
           "dashboardBenchmarksAccess",
         ],
       },
+      // Consolidated Permissions panel (Part: Consolidated Permissions
+      // panel, 2026-10-26, explicit user request — "its kinda scattered
+      // now, i want a panel where i can manage each and everything").
+      // Primary-admin-only, same as the backend endpoints it reads/writes
+      // (GET/PATCH /users/:id/access already have @RequiresPrimaryAdmin())
+      // -- requiresPrimaryAdmin here is nav-visibility only, matching the
+      // real enforcement rather than granting it.
+      { type: "link", href: "/settings/permissions", label: "Permissions", icon: GearIcon, requiresPrimaryAdmin: true },
     ],
   },
   {

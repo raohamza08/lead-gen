@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "../lib/api-client";
+import { Checkbox } from "./ui/checkbox";
 
 interface ModuleFlags {
   leadGenAccess: boolean;
@@ -145,6 +146,42 @@ const UPWORK_AGENCY_LABELS: { key: keyof ModuleFlags; label: string }[] = [
   { key: "upworkAgencyConnectionAccess", label: "Connection Settings" },
 ];
 
+const ALL_MODULE_FLAG_KEYS: (keyof ModuleFlags)[] = [...MODULE_LABELS, ...UPWORK_AGENCY_LABELS, ...DASHBOARD_LABELS].map((l) => l.key);
+
+function flagsOf(keys: (keyof ModuleFlags)[], value: boolean): Partial<ModuleFlags> {
+  return Object.fromEntries(keys.map((k) => [k, value])) as Partial<ModuleFlags>;
+}
+
+/** Quick-apply bundles (Part: Consolidated Permissions panel, 2026-10-26,
+ *  explicit user request — "apply presets or configure custom
+ *  permissions"). Only pre-fills the in-memory draft below -- nothing is
+ *  saved until the admin reviews and hits "Save access", same as any
+ *  manual checkbox edit. Deliberately not a persisted/editable preset
+ *  system (no such concept existed anywhere in this codebase before this)
+ *  -- a fixed, small set of sensible bundles is what was actually asked
+ *  for, not a presets-management feature nobody requested. */
+const PRESETS: { name: string; flags: Partial<ModuleFlags> }[] = [
+  { name: "Full Access", flags: flagsOf(ALL_MODULE_FLAG_KEYS, true) },
+  { name: "View Only", flags: flagsOf(DASHBOARD_LABELS.map((l) => l.key), true) },
+  {
+    name: "Social Media Manager",
+    flags: { socialMediaAccess: true, socialEngagementAccess: true, dashboardSocialAccess: true },
+  },
+  { name: "Email Manager", flags: { emailHubAccess: true, dashboardEmailAccess: true } },
+  {
+    name: "Upwork Specialist",
+    flags: {
+      upworkBiddingAccess: true,
+      upworkInviteAccess: true,
+      upworkRequestsAccess: true,
+      upworkProposalWritingAccess: true,
+      dashboardUpworkAccess: true,
+      ...flagsOf(UPWORK_AGENCY_LABELS.map((l) => l.key), true),
+    },
+  },
+  { name: "Clear All", flags: flagsOf(ALL_MODULE_FLAG_KEYS, false) },
+];
+
 /**
  * Everything one person can touch, in one place (Part: Person Access) —
  * module toggles plus which specific email/social accounts they're granted,
@@ -171,6 +208,11 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
   function toggleModule(key: keyof ModuleFlags) {
     if (!data || data.isAdmin) return;
     setData({ ...data, modules: { ...data.modules, [key]: !data.modules[key] } });
+  }
+
+  function applyPreset(flags: Partial<ModuleFlags>) {
+    if (!data || data.isAdmin) return;
+    setData({ ...data, modules: { ...data.modules, ...flags } });
   }
 
   function toggleEmailAccount(id: string) {
@@ -245,6 +287,24 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
       {error && <div className="rounded border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-2 py-1.5 text-xs text-bad">{error}</div>}
       {notice && <div className="rounded border border-[rgb(var(--good-rgb)/0.4)] bg-[rgb(var(--good-rgb)/0.06)] px-2 py-1.5 text-xs text-good">{notice}</div>}
 
+      {!data.isAdmin && (
+        <div>
+          <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Presets</h4>
+          <div className="flex flex-wrap gap-2">
+            {PRESETS.map((p) => (
+              <button
+                key={p.name}
+                type="button"
+                onClick={() => applyPreset(p.flags)}
+                className="rounded-full border border-[var(--line)] px-3 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-ink/55">Modules</h4>
         {data.isAdmin ? (
@@ -252,10 +312,7 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
         ) : (
           <div className="flex flex-wrap gap-3">
             {MODULE_LABELS.map(({ key, label, hint }) => (
-              <label key={key} className="flex items-center gap-1.5 text-sm" title={hint}>
-                <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
-                {label}
-              </label>
+              <Checkbox key={key} checked={data.modules[key]} onCheckedChange={() => toggleModule(key)} label={<span title={hint}>{label}</span>} />
             ))}
           </div>
         )}
@@ -268,10 +325,7 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
         ) : (
           <div className="flex flex-wrap gap-3">
             {UPWORK_AGENCY_LABELS.map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-1.5 text-sm">
-                <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
-                {label}
-              </label>
+              <Checkbox key={key} checked={data.modules[key]} onCheckedChange={() => toggleModule(key)} label={label} />
             ))}
           </div>
         )}
@@ -284,10 +338,7 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
         ) : (
           <div className="flex flex-wrap gap-3">
             {DASHBOARD_LABELS.map(({ key, label }) => (
-              <label key={key} className="flex items-center gap-1.5 text-sm">
-                <input type="checkbox" checked={data.modules[key]} onChange={() => toggleModule(key)} />
-                {label}
-              </label>
+              <Checkbox key={key} checked={data.modules[key]} onCheckedChange={() => toggleModule(key)} label={label} />
             ))}
           </div>
         )}
@@ -299,15 +350,11 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
           <div className="flex flex-col gap-1.5">
             {data.emailAccounts.map((a) => (
               <div key={a.id} className="flex flex-wrap items-center gap-3 text-sm">
-                <label className="flex items-center gap-1.5">
-                  <input type="checkbox" checked={a.granted} onChange={() => toggleEmailAccount(a.id)} />
-                  {a.mailboxLabel || a.address}
-                </label>
+                <Checkbox checked={a.granted} onCheckedChange={() => toggleEmailAccount(a.id)} label={a.mailboxLabel || a.address} />
                 {a.granted && (
-                  <label className="flex items-center gap-1.5 text-xs text-ink/60">
-                    <input type="checkbox" checked={a.canReply} onChange={(e) => setEmailCanReply(a.id, e.target.checked)} />
-                    can reply
-                  </label>
+                  <span className="text-xs text-ink/60">
+                    <Checkbox checked={a.canReply} onCheckedChange={(v) => setEmailCanReply(a.id, v)} label="can reply" />
+                  </span>
                 )}
               </div>
             ))}
@@ -321,20 +368,15 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
           <div className="flex flex-col gap-1.5">
             {data.socialAccounts.map((a) => (
               <div key={a.id} className="flex flex-wrap items-center gap-3 text-sm">
-                <label className="flex items-center gap-1.5">
-                  <input type="checkbox" checked={a.granted} onChange={() => toggleSocialAccount(a.id)} />
-                  {a.platform} — {a.displayName || a.username}
-                </label>
+                <Checkbox checked={a.granted} onCheckedChange={() => toggleSocialAccount(a.id)} label={`${a.platform} — ${a.displayName || a.username}`} />
                 {a.granted && (
                   <>
-                    <label className="flex items-center gap-1.5 text-xs text-ink/60">
-                      <input type="checkbox" checked={a.canPublish} onChange={(e) => setSocialFlag(a.id, "canPublish", e.target.checked)} />
-                      can publish
-                    </label>
-                    <label className="flex items-center gap-1.5 text-xs text-ink/60">
-                      <input type="checkbox" checked={a.canApprove} onChange={(e) => setSocialFlag(a.id, "canApprove", e.target.checked)} />
-                      can approve
-                    </label>
+                    <span className="text-xs text-ink/60">
+                      <Checkbox checked={a.canPublish} onCheckedChange={(v) => setSocialFlag(a.id, "canPublish", v)} label="can publish" />
+                    </span>
+                    <span className="text-xs text-ink/60">
+                      <Checkbox checked={a.canApprove} onCheckedChange={(v) => setSocialFlag(a.id, "canApprove", v)} label="can approve" />
+                    </span>
                   </>
                 )}
               </div>
@@ -357,10 +399,7 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
               </p>
               <div className="flex flex-wrap gap-3">
                 {data.upworkProfiles.available.map((p) => (
-                  <label key={p} className="flex items-center gap-1.5 text-sm">
-                    <input type="checkbox" checked={data.upworkProfiles.granted.includes(p)} onChange={() => toggleUpworkProfile(p)} />
-                    {p}
-                  </label>
+                  <Checkbox key={p} checked={data.upworkProfiles.granted.includes(p)} onCheckedChange={() => toggleUpworkProfile(p)} label={p} />
                 ))}
               </div>
             </>

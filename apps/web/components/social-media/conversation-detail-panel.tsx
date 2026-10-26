@@ -130,8 +130,32 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
 
   const replyMutation = useMutation({
     mutationFn: (text: string) => api.replySocialInboxConversation(conversationId, text),
-    onSuccess: () => {
+    // Optimistic send (Part: WhatsApp QR instant-feel reply, 2026-10-26,
+    // explicit user request — "the message should be sent from the chat
+    // instantly, and then if it takes a little [longer] to deliver it
+    // won't be an issue"). The WhatsApp QR send path has a real network
+    // round trip plus an intentional anti-spam jitter delay before the
+    // backend responds -- waiting for that before showing anything made
+    // every reply feel slow. The bubble now appears the instant Send is
+    // clicked; onSuccess's invalidate() swaps it for the real persisted
+    // message moments later, onError rolls it back and restores the draft
+    // text so nothing typed is lost.
+    onMutate: async (text: string) => {
+      const key = ["social-inbox-conversation", conversationId];
+      const previous = queryClient.getQueryData<ConversationDetail>(key);
+      const optimisticMessage: SocialMessageItem = {
+        id: `optimistic-${Date.now()}`,
+        fromUs: true,
+        senderName: null,
+        messageText: text,
+        mediaUrl: null,
+        sentAt: new Date().toISOString(),
+      };
+      queryClient.setQueryData<ConversationDetail>(key, (old) => (old ? { ...old, messages: [...old.messages, optimisticMessage] } : old));
       setReplyText("");
+      return { previous, text };
+    },
+    onSuccess: () => {
       invalidate();
     },
     // Facebook/Instagram's own 24-hour messaging-window policy (Part:
@@ -140,7 +164,11 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
     // a raw Graph API error (code 10 / error_subcode 2018278) that reads as
     // broken rather than a real, unavoidable platform rule — same
     // limitation WhatsApp already explains plainly in its own reply box.
-    onError: (err) => {
+    onError: (err, _text, context) => {
+      if (context) {
+        queryClient.setQueryData(["social-inbox-conversation", conversationId], context.previous);
+        setReplyText(context.text);
+      }
       const message = (err as Error).message;
       setError(
         /error_subcode["\s:]*2018278|outside the allowed window/i.test(message)

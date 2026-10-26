@@ -3,6 +3,7 @@ import { ConversationStatus, Prisma, SocialPlatform } from "@prisma/client";
 import { JwtClaims, Role } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
+import { UserAccessCacheService } from "../common/access/user-access-cache.service";
 import { SocialProviderRegistryService } from "./providers/social-provider-registry.service";
 import { SocialInboxIngestService } from "./social-inbox-ingest.service";
 import { SocialInboxSyncWorker } from "./social-inbox-sync.worker";
@@ -34,6 +35,7 @@ export class SocialInboxService {
     private readonly registry: SocialProviderRegistryService,
     private readonly ingest: SocialInboxIngestService,
     private readonly syncWorker: SocialInboxSyncWorker,
+    private readonly userAccess: UserAccessCacheService,
   ) {}
 
   /** On-demand reconciliation pass for one account (Part: Unified Social
@@ -147,7 +149,7 @@ export class SocialInboxService {
       await this.prisma.socialConversation.update({ where: { id }, data: { unreadCount: 0 } });
       this.realtime.emitToOrg(conversation.socialAccount.orgId, "socialInbox.conversationUpdated", { conversationId: id });
     }
-    return this.prisma.socialConversation.findUniqueOrThrow({
+    const result = await this.prisma.socialConversation.findUniqueOrThrow({
       where: { id },
       include: {
         socialAccount: { select: { id: true, platform: true, username: true, displayName: true, profileImageUrl: true } },
@@ -156,6 +158,24 @@ export class SocialInboxService {
         notes: { orderBy: { createdAt: "asc" }, include: { user: { select: { id: true, name: true } } } },
       },
     });
+    // WhatsApp Team Inbox sender attribution, primary-admin-only (Part:
+    // WhatsApp Team Inbox sender attribution, 2026-10-26, explicit user
+    // request -- "only the primary admin can see who sent this message").
+    // senderName is stored unconditionally (WhatsAppQrSessionManagerService.
+    // sendMessage) so it's never lost; stripped here, at the one place
+    // every viewer's read goes through, rather than at write time. Scoped
+    // to WHATSAPP_QR specifically, and only on outbound (fromUs) messages
+    // -- senderName on an INBOUND WhatsApp group message means something
+    // different and already-visible-to-everyone (which group participant
+    // actually sent it), not "which of our team members replied"; only the
+    // latter is what this restriction is about.
+    if (result.socialAccount.platform === "WHATSAPP_QR") {
+      const snapshot = await this.userAccess.get(user.sub);
+      if (!snapshot?.isPrimaryAdmin) {
+        result.messages = result.messages.map((m) => (m.fromUs && m.senderName ? { ...m, senderName: null } : m));
+      }
+    }
+    return result;
   }
 
   async updateConversation(user: JwtClaims, id: string, dto: UpdateConversationDto) {
@@ -167,18 +187,33 @@ export class SocialInboxService {
         // "" is the explicit unassign signal (see UpdateConversationDto's
         // own docblock) -- undefined means "field wasn't sent, don't touch it".
         ...(dto.assignedToUserId !== undefined ? { assignedToUserId: dto.assignedToUserId || null } : {}),
-        ...(dto.contactName !== undefined ? { contactName: dto.contactName.trim() || null } : {}),
+        // Locks the name against SocialInboxIngestService.persistMessage's
+        // own writes (Part: WhatsApp Team Inbox contact rename, 2026-10-26,
+        // bug fix) -- clearing it back to empty deliberately un-locks it,
+        // same as never having set it.
+        ...(dto.contactName !== undefined
+          ? { contactName: dto.contactName.trim() || null, contactNameLocked: Boolean(dto.contactName.trim()) }
+          : {}),
       },
     });
     this.realtime.emitToOrg(conversation.socialAccount.orgId, "socialInbox.conversationUpdated", { conversationId: id });
     return updated;
   }
 
+  /** JwtClaims carries no name (Part: WhatsApp Team Inbox sender
+   *  attribution, 2026-10-26) -- only WhatsAppQrProvider's sendMessage
+   *  actually uses this, but it's cheap and harmless for every other
+   *  provider to just ignore the extra argument. */
+  private async senderUserFor(user: JwtClaims): Promise<{ id: string; name: string }> {
+    const record = await this.prisma.user.findUniqueOrThrow({ where: { id: user.sub }, select: { name: true } });
+    return { id: user.sub, name: record.name };
+  }
+
   async reply(user: JwtClaims, id: string, dto: ReplyDto) {
     const conversation = await this.assertConversationAccess(user, id);
     const provider = this.registry.for(conversation.socialAccount.platform);
     try {
-      await provider.sendMessage(conversation.socialAccount, conversation.externalConversationId, dto.text);
+      await provider.sendMessage(conversation.socialAccount, conversation.externalConversationId, dto.text, await this.senderUserFor(user));
     } catch (err) {
       // Same reasoning as SocialMediaService.initiateConnect's catch: a
       // provider's PlatformNotConfiguredError (or a real send failure) is
@@ -238,7 +273,7 @@ export class SocialInboxService {
 
     const provider = this.registry.for(account.platform);
     try {
-      await provider.sendMessage(account, to, dto.text);
+      await provider.sendMessage(account, to, dto.text, await this.senderUserFor(user));
     } catch (err) {
       throw new BadRequestException((err as Error).message);
     }
