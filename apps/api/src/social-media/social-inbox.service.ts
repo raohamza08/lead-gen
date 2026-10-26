@@ -179,6 +179,16 @@ export class SocialInboxService {
       // message, not AllExceptionsFilter's generic 500.
       throw new BadRequestException((err as Error).message);
     }
+    // WhatsAppQrSessionManagerService.sendMessage already persisted this
+    // send itself, using the real WhatsApp message id (see its own
+    // docblock) -- WhatsApp echoes every outbound send back over the same
+    // socket, so persisting again here with a synthetic id would create a
+    // genuine duplicate row the dedup can't catch (two different ids for
+    // the same logical message). Every other platform has no such echo,
+    // so they still need this call to record their own send at all.
+    if (conversation.socialAccount.platform === "WHATSAPP_QR") {
+      return { sent: true, conversationId: conversation.id };
+    }
     const { conversationId } = await this.ingest.persistMessage(conversation.socialAccount, {
       externalConversationId: conversation.externalConversationId,
       externalMessageId: `outbound-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -224,6 +234,16 @@ export class SocialInboxService {
       await provider.sendMessage(account, to, dto.text);
     } catch (err) {
       throw new BadRequestException((err as Error).message);
+    }
+    // Same reasoning as reply() above -- WhatsAppQrSessionManagerService.
+    // sendMessage already persisted this send itself (real message id,
+    // same externalConversationId "to" used here), so look the row up
+    // instead of creating a duplicate with a synthetic id.
+    if (account.platform === "WHATSAPP_QR") {
+      const conversation = await this.prisma.socialConversation.findUnique({
+        where: { socialAccountId_externalConversationId: { socialAccountId: account.id, externalConversationId: to } },
+      });
+      return { sent: true, conversationId: conversation?.id };
     }
     const { conversationId } = await this.ingest.persistMessage(account, {
       externalConversationId: to,

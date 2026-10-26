@@ -409,7 +409,25 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       const delay = SEND_JITTER_MS[0] + Math.random() * (SEND_JITTER_MS[1] - SEND_JITTER_MS[0]);
       await new Promise((resolve) => setTimeout(resolve, delay));
       await sock.sendPresenceUpdate("composing", jid).catch(() => undefined);
-      await sock.sendMessage(jid, { text });
+      const sent = await sock.sendMessage(jid, { text });
+      // Persisted here, not by the generic SocialInboxService.reply()/
+      // startConversation() callers -- WhatsApp echoes every outbound send
+      // back to this same socket via messages.upsert (fromMe: true) a
+      // moment later, unlike Facebook/Instagram/the Cloud API, which never
+      // echo your own sent message back. Using the REAL WhatsApp message id
+      // Baileys just returned (not a synthetic one) means that later echo's
+      // own persistMessage call hits the existing P2002 dedup and is
+      // correctly treated as a no-op, instead of creating a second row for
+      // the same logical message (confirmed duplicate bug in production,
+      // 2026-10-26 -- every manual reply was showing up twice).
+      const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
+      await this.ingest.persistMessage(account, {
+        externalConversationId: participantId,
+        externalMessageId: sent?.key.id || `outbound-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        fromUs: true,
+        messageText: text,
+        sentAt: new Date(),
+      });
     });
     this.sendQueues.set(accountId, next.catch(() => undefined));
     await next;
