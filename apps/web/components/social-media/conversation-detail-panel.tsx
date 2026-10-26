@@ -111,59 +111,111 @@ function FileIcon() {
   );
 }
 
+function CloseIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M6 6l12 12M18 6 6 18" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * Full-screen in-page viewer (Part: attachment lightbox fix, 2026-10-27,
+ * explicit user request — "it should not go to the next tab, it should
+ * work in the same tab") — a message's image/video/doc opens here instead
+ * of a new browser tab. Image and video render directly; a PDF gets an
+ * iframe (the one doc type every browser can preview natively without a
+ * plugin); everything else just offers Download since there's no sane
+ * in-browser preview for e.g. .docx/.xlsx/.zip.
+ */
+function MediaLightbox({ url, downloadUrl, mimeType, filename, onClose }: { url: string; downloadUrl: string; mimeType: string | null; filename: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/85 p-4" onClick={onClose}>
+      <button type="button" onClick={onClose} className="absolute right-4 top-4 text-white/80 hover:text-white" aria-label="Close">
+        <CloseIcon />
+      </button>
+      <div onClick={(e) => e.stopPropagation()} className="flex max-h-[85vh] max-w-[90vw] flex-col items-center gap-3">
+        {mimeType?.startsWith("image/") && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={url} alt={filename} className="max-h-[80vh] max-w-[90vw] rounded-lg object-contain" />
+        )}
+        {mimeType?.startsWith("video/") && (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <video src={url} controls autoPlay className="max-h-[80vh] max-w-[90vw] rounded-lg" />
+        )}
+        {mimeType === "application/pdf" && <iframe src={url} title={filename} className="h-[80vh] w-[90vw] max-w-3xl rounded-lg bg-white" />}
+        {!mimeType?.startsWith("image/") && !mimeType?.startsWith("video/") && mimeType !== "application/pdf" && (
+          <div className="flex h-[40vh] w-[90vw] max-w-sm flex-col items-center justify-center gap-3 rounded-lg bg-surface-elevated p-6 text-center text-ink">
+            <FileIcon />
+            <div className="truncate text-sm font-medium">{filename}</div>
+            <p className="text-xs text-ink/50">No in-browser preview for this file type.</p>
+          </div>
+        )}
+        <a href={downloadUrl} download className="flex items-center justify-center gap-1 text-xs text-white/80 hover:text-white">
+          <DownloadIcon /> Download
+        </a>
+      </div>
+    </div>
+  );
+}
+
 /**
  * Renders a message's attachment — inline preview for images/video (what
  * WhatsApp itself does), a filename chip for everything else (documents,
- * audio), and an explicit Download action on every kind (Part: WhatsApp
- * attachment view/download, 2026-10-26, explicit user request — "add an
- * option to view and download any kind of document, image or video").
- * mediaUrl from the API is an opaque relative `/media/:id` path — never
- * usable as-is (it only exists on the API's own origin, not the web app's),
- * so every render here goes through resolveMediaUrl first.
+ * audio), tap-to-enlarge via MediaLightbox (same tab, no navigation), and
+ * an explicit Download action on every kind (Part: WhatsApp attachment
+ * view/download, 2026-10-26, explicit user request — "add an option to
+ * view and download any kind of document, image or video"; same-tab
+ * viewer added 2026-10-27 per follow-up request). mediaUrl from the API is
+ * an opaque relative `/media/:id` path — never usable as-is (it only
+ * exists on the API's own origin, not the web app's), so every render here
+ * goes through resolveMediaUrl first.
  */
 function MediaAttachment({ url, mimeType, filename, isOurs }: { url: string; mimeType: string | null; filename: string | null; isOurs: boolean }) {
+  const [open, setOpen] = useState(false);
   const viewUrl = resolveMediaUrl(url);
   const downloadUrl = `${viewUrl}${viewUrl.includes("?") ? "&" : "?"}download=1`;
   const label = filename || "Attachment";
   const linkTone = isOurs ? "text-white/80 hover:text-white" : "text-accent hover:text-accent/80";
-
-  if (mimeType?.startsWith("image/")) {
-    return (
-      <div className="mt-1">
-        <a href={viewUrl} target="_blank" rel="noreferrer">
-          <img src={viewUrl} alt={label} className="max-h-60 w-full rounded-lg object-cover" />
-        </a>
-        <a href={downloadUrl} download className={`mt-1 flex items-center gap-1 text-xs ${linkTone}`}>
-          <DownloadIcon /> Download
-        </a>
-      </div>
-    );
-  }
-
-  if (mimeType?.startsWith("video/")) {
-    return (
-      <div className="mt-1">
-        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video src={viewUrl} controls className="max-h-60 w-full rounded-lg" />
-        <a href={downloadUrl} download className={`mt-1 flex items-center gap-1 text-xs ${linkTone}`}>
-          <DownloadIcon /> Download
-        </a>
-      </div>
-    );
-  }
+  const isImage = mimeType?.startsWith("image/") ?? false;
+  const isVideo = mimeType?.startsWith("video/") ?? false;
 
   return (
-    <a
-      href={downloadUrl}
-      download
-      className={`mt-1 flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${
-        isOurs ? "border-white/25 hover:bg-white/10" : "border-[var(--line)] hover:bg-ink/5"
-      }`}
-    >
-      <FileIcon />
-      <span className="flex-1 truncate">{label}</span>
-      <DownloadIcon />
-    </a>
+    <>
+      {isImage && (
+        <div className="mt-1">
+          <button type="button" onClick={() => setOpen(true)} className="block w-full">
+            <img src={viewUrl} alt={label} className="max-h-60 w-full rounded-lg object-cover" />
+          </button>
+          <a href={downloadUrl} download className={`mt-1 flex items-center gap-1 text-xs ${linkTone}`}>
+            <DownloadIcon /> Download
+          </a>
+        </div>
+      )}
+      {isVideo && (
+        <div className="mt-1">
+          {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+          <video src={viewUrl} controls className="max-h-60 w-full rounded-lg" />
+          <a href={downloadUrl} download className={`mt-1 flex items-center gap-1 text-xs ${linkTone}`}>
+            <DownloadIcon /> Download
+          </a>
+        </div>
+      )}
+      {!isImage && !isVideo && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`mt-1 flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${
+            isOurs ? "border-white/25 hover:bg-white/10" : "border-[var(--line)] hover:bg-ink/5"
+          }`}
+        >
+          <FileIcon />
+          <span className="flex-1 truncate text-left">{label}</span>
+          <DownloadIcon />
+        </button>
+      )}
+      {open && <MediaLightbox url={viewUrl} downloadUrl={downloadUrl} mimeType={mimeType} filename={label} onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -574,11 +626,7 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
                 }`}
               >
                 <div className="whitespace-pre-wrap">{m.messageText}</div>
-                {m.mediaUrl && (
-                  <a href={m.mediaUrl} target="_blank" rel="noreferrer" className={`mt-1 block text-xs underline ${m.fromUs ? "text-white/80" : "text-accent"}`}>
-                    Attachment
-                  </a>
-                )}
+                {m.mediaUrl && <MediaAttachment url={m.mediaUrl} mimeType={m.mediaMimeType} filename={m.mediaFilename} isOurs={m.fromUs} />}
                 <div className={`mt-1 text-right text-[10px] ${m.fromUs ? "text-white/70" : "text-ink/40"}`}>{timeAgo(m.sentAt)}</div>
               </div>
             </div>
