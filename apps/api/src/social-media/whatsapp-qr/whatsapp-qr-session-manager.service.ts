@@ -194,7 +194,17 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       const { DisconnectReason } = await this.lib();
       const statusCode = (lastDisconnect?.error as { output?: { statusCode?: number } } | undefined)?.output?.statusCode;
 
-      if (statusCode === DisconnectReason.loggedOut) {
+      if (statusCode === DisconnectReason.restartRequired) {
+        // Expected, normal part of the pairing handshake -- WhatsApp's
+        // server always closes the stream once right after a QR scan
+        // succeeds, and expects an immediate reconnect using the SAME
+        // saved auth state to actually finish logging in (confirmed in
+        // production, 2026-10-26: logs showed "pairing configured
+        // successfully" immediately followed by this exact close code).
+        // Not a failure -- must not notify the frontend or clear
+        // connectingUsers, just reconnect right away.
+        await this.connect(accountId);
+      } else if (statusCode === DisconnectReason.loggedOut) {
         await this.prisma.whatsAppQrSession.update({
           where: { socialAccountId: accountId },
           data: { status: "LOGGED_OUT", lastDisconnectedAt: new Date(), disconnectReason: "logged_out" },
