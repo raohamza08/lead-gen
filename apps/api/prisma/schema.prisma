@@ -1,4 +1,4 @@
-﻿// Prisma schema — implements the ERD in Part B4 of lead-gen-system-architecture.md
+// Prisma schema — implements the ERD in Part B4 of lead-gen-system-architecture.md
 generator client {
   provider      = "prisma-client-js"
   // "native" covers the developer's own machine. The musl target is required
