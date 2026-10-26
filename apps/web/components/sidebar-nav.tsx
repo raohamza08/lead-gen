@@ -55,6 +55,17 @@ interface NavLink {
    *  nested inside a group (Part: Agency Tools, 2026-10-23) — overrides
    *  moduleFlag entirely when set; see filterItems' group-link filtering. */
   requiresPrimaryAdmin?: boolean;
+  /** Role.ADMIN only, no moduleFlag bypass — unlike requiresPrimaryAdmin
+   *  (the org's one single owner), this allows every ADMIN-role user, same
+   *  population the backend's own @Roles(Role.ADMIN) grants on these exact
+   *  routes (Part: connected-accounts settings admin-only fix, 2026-10-27,
+   *  explicit user request — "the option to connect and disconnect
+   *  account, see which accounts are connected in the settings should only
+   *  be shown to the admin nothing else"). The backend already rejected a
+   *  non-admin's writes here regardless; this was purely a frontend gap —
+   *  the broad module flag (e.g. socialMediaAccess) was enough to show the
+   *  nav link into a page where every single call 403'd. */
+  adminOnly?: boolean;
 }
 
 type ModuleFlag =
@@ -455,7 +466,7 @@ const WORKSPACES: Workspace[] = [
           { href: "/email-hub?view=ignored", label: "Ignored", matchSearch: "view=ignored", countKey: "ignored", icon: EyeOffIcon },
           { href: "/email-hub?view=sent", label: "Sent", matchSearch: "view=sent", icon: SendIcon },
           { href: "/email-hub?view=tracked", label: "Tracked", matchSearch: "view=tracked", icon: EyeIcon },
-          { href: "/settings/email-hub", label: "Settings", icon: GearIcon },
+          { href: "/settings/email-hub", label: "Settings", icon: GearIcon, adminOnly: true },
         ],
       },
       {
@@ -496,7 +507,7 @@ const WORKSPACES: Workspace[] = [
             icon: ChatIcon,
             moduleFlag: ["socialMediaAccess", "socialEngagementAccess"],
           },
-          { href: "/settings/social-media", label: "Settings", icon: GearIcon, moduleFlag: "socialMediaAccess" },
+          { href: "/settings/social-media", label: "Settings", icon: GearIcon, adminOnly: true },
         ],
       },
     ],
@@ -578,7 +589,7 @@ const WORKSPACES: Workspace[] = [
           { href: "/meta-ads/campaigns", label: "Campaigns", icon: MegaphoneIcon },
           { href: "/meta-ads/adsets", label: "Ad Sets", icon: TagIcon },
           { href: "/meta-ads/ads", label: "Ads", icon: ImageIcon },
-          { href: "/settings/meta-ads", label: "Settings", icon: GearIcon },
+          { href: "/settings/meta-ads", label: "Settings", icon: GearIcon, adminOnly: true },
         ],
       },
     ],
@@ -610,6 +621,25 @@ function isActive(pathname: string | null, search: string, link: NavLink): boole
  *  across the workspace's items, ignoring query strings (a path match is
  *  enough to pick the workspace; matchSearch only matters for highlighting
  *  the exact active link inside it). */
+/** The workspace rail link's actual destination — `ws.defaultHref` is each
+ *  workspace's "normal" first page (Email Hub's Unified Inbox, Leads'
+ *  Pipeline, etc.), but that page might not be one this user can reach: a
+ *  person granted only Social Media within the "Inbox" workspace was being
+ *  sent to /email-hub and hitting a "no access" wall there, which looked
+ *  exactly like a dead, unclickable rail icon (Part: sidebar
+ *  stuck-on-wrong-workspace fix, 2026-10-27, confirmed live). `ws.items` is
+ *  already access-filtered by filterItems by the time this runs — walks it
+ *  for the first real href, falling back to defaultHref only if the
+ *  workspace somehow has no links at all (shouldn't happen for anything in
+ *  visibleWorkspaces, which only contains workspaces with >0 items). */
+function firstHrefFor(ws: Workspace): string {
+  for (const item of ws.items) {
+    if (item.type === "link") return item.href;
+    if (item.type === "group" && item.links.length > 0) return item.links[0].href;
+  }
+  return ws.defaultHref;
+}
+
 function workspaceContainsPath(ws: Workspace, pathname: string | null): boolean {
   if (!pathname) return false;
   for (const item of ws.items) {
@@ -810,7 +840,13 @@ export function SidebarNav({
         // that check at all and would have shown to everyone.
         return {
           ...item,
-          links: item.links.filter((l) => (l.requiresPrimaryAdmin ? isPrimaryAdmin : flagGranted(l.moduleFlag))),
+          links: item.links.filter((l) =>
+            l.requiresPrimaryAdmin
+              ? isPrimaryAdmin
+              : l.adminOnly
+                ? getCurrentUser()?.role === "ADMIN"
+                : flagGranted(l.moduleFlag),
+          ),
         };
       })
       .filter((item) => {
@@ -849,11 +885,24 @@ export function SidebarNav({
   useEffect(() => {
     const match = visibleWorkspaces.find((ws) => workspaceContainsPath(ws, pathname));
     if (match) setActiveWorkspaceId(match.id);
-    // Only pathname should retrigger this -- visibleWorkspaces is recomputed
-    // every render from the same (rarely-changing) access flags, and
-    // including it would fight the optimistic click-set below.
+    // Only pathname + moduleAccess retrigger this -- visibleWorkspaces itself
+    // is recomputed every render and would fight the optimistic click-set
+    // below if included directly, but moduleAccess is the one thing that
+    // legitimately needs its own retrigger: the initial useState lazy
+    // initializer above runs on the very FIRST render, while moduleAccess is
+    // still null (flagGranted fails closed until GET /users/me resolves) --
+    // so landing directly on a page outside the only-role-bypassed workspace
+    // (e.g. /social-media/accounts with a fresh per-user grant and no
+    // Dashboard Center access) computed activeWorkspaceId as "home" on that
+    // first render and then never corrected itself, since pathname alone
+    // never changes once moduleAccess finishes loading a moment later (Part:
+    // sidebar stuck-on-wrong-workspace fix, 2026-10-27, confirmed live --
+    // a person granted ONLY Social Media landed on a page with real data but
+    // an empty/wrong sidebar panel, looking exactly like a dead, unclickable
+    // icon since the visible workspace never matched where they actually
+    // were).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  }, [pathname, moduleAccess]);
 
   const activeWorkspace = visibleWorkspaces.find((ws) => ws.id === activeWorkspaceId) ?? visibleWorkspaces[0];
   const activeItems = activeWorkspace?.items ?? [];
@@ -1015,7 +1064,7 @@ export function SidebarNav({
           return (
             <Link
               key={ws.id}
-              href={ws.defaultHref}
+              href={firstHrefFor(ws)}
               onClick={onNavigate}
               title={ws.label}
               className={`relative flex h-[46px] w-10 items-center justify-center rounded transition-colors duration-fast ${
