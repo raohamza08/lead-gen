@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { io, Socket } from "socket.io-client";
-import { getAccessToken } from "./api-client";
+import { getAccessToken, refreshAccessToken } from "./api-client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000/api/v1";
 
@@ -11,9 +11,22 @@ let socket: Socket | null = null;
 /**
  * One socket per browser tab, lazily created and reused across every page —
  * every dashboard screen that wants live updates calls this instead of each
- * opening its own connection. Re-authenticates on every (re)connect with
- * whatever access token is current, so a token refresh mid-session doesn't
- * leave the socket stuck on a stale one.
+ * opening its own connection.
+ *
+ * Re-authenticates with a guaranteed-fresh token whenever a (re)connect
+ * attempt fails (Part: realtime reconnect token staleness, 2026-10-26, bug
+ * fix -- confirmed in production, repeated "jwt expired" rejections after
+ * every API restart). The access token lives 15 minutes; a tab can easily
+ * sit open longer than that with no HTTP call happening to trigger the
+ * normal 401-driven refresh in api-client.ts's `request()`. Every API
+ * restart (every deploy disconnects every open socket) then has socket.io's
+ * built-in auto-reconnect retry using whatever token was last set on
+ * `socket.auth` -- if that's the same expired one, every single attempt
+ * fails and nothing else ever updates it, so the only fix was a full page
+ * reload. `connect_error` fires on both the first failed connection and
+ * every failed reconnection attempt, with socket.io's own backoff delay
+ * before the next one -- plenty of time for the async refresh below to
+ * land before it's needed.
  */
 function getSocket(): Socket | null {
   const token = getAccessToken();
@@ -24,6 +37,23 @@ function getSocket(): Socket | null {
     // REST prefix the same way a raw WebSocket URL would need to.
     const origin = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
     socket = io(origin, { auth: { token }, transports: ["websocket", "polling"] });
+    socket.on("connect_error", async () => {
+      const fresh = await refreshAccessToken();
+      if (socket && fresh) socket.auth = { token: fresh };
+    });
+    // Browsers can throttle/pause a backgrounded tab's reconnect backoff
+    // timers (Part: realtime reconnect token staleness, 2026-10-26) --
+    // forcing a reconnect check on refocus means coming back to an old tab
+    // doesn't depend on that backoff having happened to land while hidden.
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", async () => {
+        if (document.visibilityState === "visible" && socket && !socket.connected) {
+          const fresh = await refreshAccessToken();
+          socket.auth = { token: fresh ?? getAccessToken() };
+          socket.connect();
+        }
+      });
+    }
   } else {
     socket.auth = { token };
   }

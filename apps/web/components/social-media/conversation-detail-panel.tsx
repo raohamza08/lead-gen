@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
@@ -80,6 +80,18 @@ function SendIcon() {
   );
 }
 
+function PaperclipIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path
+        d="M19.5 10.5 12 18a4 4 0 0 1-5.7-5.6l8-8a2.8 2.8 0 0 1 4 4l-7.9 7.9a1.6 1.6 0 0 1-2.2-2.3L15 7.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 /**
  * The chat panel for one conversation — styled after WhatsApp Web (Part:
  * Social Inbox removal / WhatsApp-Web-style redesign, 2026-10-21, explicit
@@ -105,6 +117,7 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
   const [error, setError] = useState<string | null>(null);
   const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const detailQuery = useQuery({
     queryKey: ["social-inbox-conversation", conversationId],
@@ -176,6 +189,18 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
           : message,
       );
     },
+  });
+
+  const mediaMutation = useMutation({
+    // File attachments (Part: WhatsApp media-send, 2026-10-26, explicit user
+    // request — "there is no option add or attach anything with it... make
+    // sure i got each and every option that whatsapp offers" — scoped to
+    // file attachments only per the user's own follow-up choice, no voice-
+    // note recording). Only WHATSAPP_QR implements sendMedia today, so the
+    // attach button itself is gated on that platform below.
+    mutationFn: (file: File) => api.replySocialInboxConversationWithMedia(conversationId, file),
+    onSuccess: invalidate,
+    onError: (err) => setError((err as Error).message),
   });
 
   const createNoteMutation = useMutation({
@@ -259,6 +284,14 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
     if (!noteText.trim()) return;
     createNoteMutation.mutate(noteText.trim());
   }
+
+  function handleFileChosen(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) mediaMutation.mutate(file);
+  }
+
+  const canSendMedia = canReply && conversation.socialAccount.platform === "WHATSAPP_QR";
 
   return (
     <div className="card flex h-full flex-col overflow-hidden">
@@ -484,6 +517,25 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
       <div className="border-t border-[var(--line)] px-4 py-3">
         {canReply ? (
           <form onSubmit={submitReply} className="flex items-center gap-2">
+            {canSendMedia && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  className="hidden"
+                  onChange={handleFileChosen}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={mediaMutation.isPending}
+                  title="Attach a file"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05] disabled:opacity-40"
+                >
+                  {mediaMutation.isPending ? <Spinner className="h-4 w-4" /> : <PaperclipIcon />}
+                </button>
+              </>
+            )}
             <input
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}

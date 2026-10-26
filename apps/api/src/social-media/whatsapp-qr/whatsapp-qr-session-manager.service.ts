@@ -424,11 +424,20 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     for await (const chunk of stream) chunks.push(chunk as Buffer);
     const buffer = Buffer.concat(chunks);
 
-    const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
     const mimeType: string = mediaContent.mimetype ?? "application/octet-stream";
     const extGuess = mimeType.split("/")[1]?.split(";")[0] ?? "bin";
-    const filename = `whatsapp-${mediaType}.${extGuess}`;
+    return this.storeMediaAsset(accountId, buffer, mimeType, `whatsapp-${mediaType}.${extGuess}`, "whatsapp-inbound");
+  }
 
+  /** Shared by inbound (downloadAndStoreMedia, above) and outbound
+   *  (sendMedia, below) -- saves bytes via the existing MediaStorageService
+   *  and creates a MediaAsset row so the result is servable through the
+   *  same `/media/:id` route either direction already uses. Reuses
+   *  MediaAsset (nominally the Content Library's own model) rather than a
+   *  second storage mechanism -- its shape (storageKey/mimeType/sizeBytes)
+   *  is generic, not actually Content-Library-specific. */
+  private async storeMediaAsset(accountId: string, buffer: Buffer, mimeType: string, filename: string, tag: string): Promise<string> {
+    const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
     const saved = await this.storage.save({ buffer, orgId: account.orgId, filename });
     const asset = await this.prisma.mediaAsset.create({
       data: {
@@ -442,7 +451,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         storageKey: saved.storageKey,
         mimeType,
         sizeBytes: saved.sizeBytes,
-        tags: ["whatsapp-inbound"],
+        tags: [tag],
       },
     });
     return `/media/${asset.id}`;
@@ -487,6 +496,61 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         // the primary admin can always see it.
         senderName: senderUser?.name,
         messageText: text,
+        sentAt: new Date(),
+      });
+    });
+    this.sendQueues.set(accountId, next.catch(() => undefined));
+    await next;
+  }
+
+  /** Sending a file (Part: WhatsApp Team Inbox media send, 2026-10-26,
+   *  explicit user request -- "there is no option to add or attach
+   *  anything... make sure i got each and every option that whatsapp
+   *  offers" -- scoped down to file attachments, not voice-note
+   *  recording, per follow-up). Shares sendMessage's per-account queue
+   *  (not a second, independent one) so a text reply and a file attach
+   *  from two team members still serialize onto the one socket in
+   *  whichever order they were actually clicked, rather than racing. */
+  async sendMedia(
+    accountId: string,
+    participantId: string,
+    media: { buffer: Buffer; mimetype: string; filename: string; caption?: string },
+    senderUser?: { id: string; name: string },
+  ): Promise<void> {
+    const sock = this.sockets.get(accountId);
+    if (!sock) {
+      throw new BadRequestException("This WhatsApp number isn't connected right now -- reconnect it from the Numbers tab.");
+    }
+    const jid = participantId.includes("@") ? participantId : `${participantId}@s.whatsapp.net`;
+
+    const previous = this.sendQueues.get(accountId) ?? Promise.resolve();
+    const next = previous.then(async () => {
+      const delay = SEND_JITTER_MS[0] + Math.random() * (SEND_JITTER_MS[1] - SEND_JITTER_MS[0]);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      await sock.sendPresenceUpdate("composing", jid).catch(() => undefined);
+
+      // WAMediaUpload accepts a plain Buffer directly -- no need to go
+      // through Baileys' own upload-from-URL/stream path since the whole
+      // file already arrived in memory via the controller's multipart
+      // upload.
+      const content = media.mimetype.startsWith("image/")
+        ? { image: media.buffer, mimetype: media.mimetype, caption: media.caption }
+        : media.mimetype.startsWith("video/")
+          ? { video: media.buffer, mimetype: media.mimetype, caption: media.caption }
+          : media.mimetype.startsWith("audio/")
+            ? { audio: media.buffer, mimetype: media.mimetype } // not ptt -- this is an attached file, not a recorded voice note
+            : { document: media.buffer, mimetype: media.mimetype, fileName: media.filename, caption: media.caption };
+      const sent = await sock.sendMessage(jid, content);
+
+      const mediaUrl = await this.storeMediaAsset(accountId, media.buffer, media.mimetype, media.filename, "whatsapp-outbound");
+      const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
+      await this.ingest.persistMessage(account, {
+        externalConversationId: participantId,
+        externalMessageId: sent?.key.id || `outbound-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        fromUs: true,
+        senderName: senderUser?.name,
+        messageText: media.caption,
+        mediaUrl,
         sentAt: new Date(),
       });
     });

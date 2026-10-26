@@ -49,6 +49,19 @@ export default function SettingsPage() {
             <h2 className="text-sm font-semibold tracking-tight">Proposal Writing Settings</h2>
           </Link>
         )}
+        {/* Consolidated Permissions panel (Part: Consolidated Permissions
+            panel, 2026-10-26, explicit user request — "it should be in the
+            settings, not in the dashboard"). The page itself is the real
+            gate (primary-admin-only, matching GET/PATCH /users/:id/access's
+            own @RequiresPrimaryAdmin()) -- isAdmin here is just this card's
+            visibility, same as Proposal Writing above; a non-primary-admin
+            ADMIN who clicks through sees the page's own restricted message. */}
+        {isAdmin && (
+          <Link href="/settings/permissions" className="card card-interactive p-5">
+            <h2 className="text-sm font-semibold tracking-tight">Permissions</h2>
+            <p className="mt-1 text-xs text-ink/55">Every person&apos;s module &amp; account access, in one place.</p>
+          </Link>
+        )}
       </section>
 
       <TeamSection />

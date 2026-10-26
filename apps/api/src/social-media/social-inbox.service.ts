@@ -241,6 +241,36 @@ export class SocialInboxService {
     return { sent: true, conversationId };
   }
 
+  /** Attach-a-file reply (Part: WhatsApp Team Inbox media send, 2026-10-26,
+   *  explicit user request -- "there is no option to add or attach
+   *  anything... make sure i got each and every option that whatsapp
+   *  offers", scoped to file attachments per follow-up, not voice-note
+   *  recording). Platform-capability-gated via provider.sendMedia being
+   *  optional, same "do not create a fake implementation" rule every other
+   *  optional provider method already follows -- a platform without real
+   *  media-send support (everything except WhatsApp QR today) fails
+   *  honestly instead of silently no-op'ing. */
+  async replyWithMedia(user: JwtClaims, id: string, file: Express.Multer.File, caption?: string) {
+    const conversation = await this.assertConversationAccess(user, id);
+    const provider = this.registry.for(conversation.socialAccount.platform);
+    if (!provider.sendMedia) {
+      throw new BadRequestException(`Sending attachments isn't supported on ${conversation.socialAccount.platform}.`);
+    }
+    try {
+      await provider.sendMedia(
+        conversation.socialAccount,
+        conversation.externalConversationId,
+        { buffer: file.buffer, mimetype: file.mimetype, filename: file.originalname, caption },
+        await this.senderUserFor(user),
+      );
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+    // Same reasoning as reply() above -- the provider's own session
+    // manager already persisted this send with the real message id.
+    return { sent: true, conversationId: conversation.id };
+  }
+
   /** Starting a brand-new conversation, not replying to an existing one
    *  (Part: Social Inbox removal / per-module messaging follow-up,
    *  2026-10-21, explicit user request — "add an option for whatsapp to

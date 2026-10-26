@@ -13,10 +13,11 @@ export class UpdateConversationDto {
    *  name once they recognize who it is, for the cases where the platform
    *  never provides one at all (confirmed for WhatsApp QR's LID-routed
    *  contacts: WhatsApp withholds the real name/number from a linked
-   *  device, no amount of polling fixes that). Persisted the same as any
-   *  platform-reported name, but a future platform-provided name would
-   *  still overwrite it on a later message -- this isn't a protected
-   *  field, just a same-shape write to the same column. */
+   *  device, no amount of polling fixes that). Setting this also sets
+   *  SocialConversation.contactNameLocked, so a later platform-reported
+   *  name (even WhatsApp's own masked placeholder) can't silently
+   *  overwrite it again -- see persistMessage's own docblock for the bug
+   *  this fixed. Clearing it back to empty un-locks it. */
   @IsOptional() @IsString() contactName?: string;
 }
 

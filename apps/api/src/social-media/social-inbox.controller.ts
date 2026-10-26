@@ -1,4 +1,5 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, UploadedFile, UseGuards, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { SocialPlatform, ConversationStatus } from "@prisma/client";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { ModuleAccessGuard } from "../common/guards/module-access.guard";
@@ -7,6 +8,12 @@ import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
 import { SocialInboxService } from "./social-inbox.service";
 import { UpdateConversationDto, ReplyDto, CreateNoteDto, UpdateNoteDto, StartConversationDto } from "./dto/social-inbox.dto";
+
+// WhatsApp's own practical caps run from ~16MB (images/video via the app)
+// up to ~100MB (documents) -- 64MB is a reasonable single ceiling for a
+// low-volume team inbox rather than modeling every per-type WhatsApp limit
+// exactly (Part: WhatsApp Team Inbox media send, 2026-10-26).
+const MAX_REPLY_MEDIA_BYTES = 64 * 1024 * 1024;
 
 /**
  * Unified Social Media DM Monitoring (Part: Unified Social Media DM
@@ -74,6 +81,18 @@ export class SocialInboxController {
   @Post("conversations/:id/reply")
   reply(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: ReplyDto) {
     return this.service.reply(user, id, dto);
+  }
+
+  @Post("conversations/:id/reply-media")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: MAX_REPLY_MEDIA_BYTES } }))
+  replyWithMedia(
+    @CurrentUser() user: JwtClaims,
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Body("caption") caption?: string,
+  ) {
+    if (!file) throw new BadRequestException("No file uploaded");
+    return this.service.replyWithMedia(user, id, file, caption);
   }
 
   @Post("conversations/:id/notes")

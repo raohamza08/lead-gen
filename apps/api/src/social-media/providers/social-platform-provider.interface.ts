@@ -282,6 +282,20 @@ export interface SocialPlatformProvider {
    *  who clicked send), so they simply ignore the extra argument. */
   sendMessage(account: SocialAccount, participantId: string, text: string, senderUser?: { id: string; name: string }): Promise<void>;
 
+  /** Optional: only present where a platform's API actually supports
+   *  sending a file as a reply (Part: WhatsApp Team Inbox media send,
+   *  2026-10-26, explicit user request -- "there is no option to add or
+   *  attach anything"). WhatsApp QR today; every other provider simply
+   *  omits this rather than implementing a no-op, same convention as
+   *  likePost/subscribeWebhook above. Same `senderUser` meaning as
+   *  sendMessage. */
+  sendMedia?(
+    account: SocialAccount,
+    participantId: string,
+    media: { buffer: Buffer; mimetype: string; filename: string; caption?: string },
+    senderUser?: { id: string; name: string },
+  ): Promise<void>;
+
   /** One-time, called right after a successful connect (Part: Unified Social
    *  Media DM Monitoring) — tells the platform to start pushing this
    *  account's messages to our webhook. Optional: only Meta platforms

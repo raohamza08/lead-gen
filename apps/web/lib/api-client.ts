@@ -103,7 +103,12 @@ export function getCurrentUser(): CurrentUser | null {
  */
 let refreshInFlight: Promise<string | null> | null = null;
 
-async function refreshAccessToken(): Promise<string | null> {
+/** Exported for realtime.ts (Part: realtime reconnect token staleness,
+ *  2026-10-26) -- a socket reconnect attempt needs the exact same
+ *  guaranteed-fresh-or-null result an HTTP 401 retry already gets, not
+ *  just whatever's currently sitting in storage (which could itself be
+ *  the same expired token that caused the disconnect in the first place). */
+export async function refreshAccessToken(): Promise<string | null> {
   if (!refreshInFlight) {
     refreshInFlight = (async (): Promise<string | null> => {
       const refreshToken = getRefreshToken();
@@ -690,6 +695,22 @@ export const api = {
     request(`/social-inbox/conversations/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   replySocialInboxConversation: (id: string, text: string) =>
     request(`/social-inbox/conversations/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
+  replySocialInboxConversationWithMedia: async (id: string, file: File, caption?: string) => {
+    const token = getAccessToken();
+    const form = new FormData();
+    form.append("file", file);
+    if (caption) form.append("caption", caption);
+    const res = await fetch(`${API_BASE_URL}/social-inbox/conversations/${id}/reply-media`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message ?? `Upload failed with ${res.status}`);
+    }
+    return res.json();
+  },
   startSocialConversation: (accountId: string, to: string, text: string) =>
     request(`/social-inbox/accounts/${accountId}/start`, { method: "POST", body: JSON.stringify({ to, text }) }),
   createSocialInboxNote: (id: string, note: string) =>
