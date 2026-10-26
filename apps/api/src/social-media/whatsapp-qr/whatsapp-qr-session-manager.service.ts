@@ -79,13 +79,23 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     }
   }
 
-  async startNewSession(orgId: string, userId: string, label: string): Promise<{ accountId: string }> {
+  async startNewSession(orgId: string, userId: string, label?: string): Promise<{ accountId: string }> {
+    const trimmed = label?.trim();
+    // SocialAccount has a unique (orgId, platform, username) constraint --
+    // every platform's "username" is its real handle once connected, but
+    // pre-connection there's no handle yet, so an un-numbered default
+    // ("WhatsApp Number") would collide on every second number connected
+    // without a custom label. Numbering against the existing count keeps
+    // the pre-connect label unique and still human-readable; connect()
+    // overwrites it with the real phone number once the QR is scanned.
+    const existingCount = await this.prisma.socialAccount.count({ where: { orgId, platform: "WHATSAPP_QR" } });
+    const username = trimmed || `WhatsApp Number ${existingCount + 1}`;
     const account = await this.prisma.socialAccount.create({
       data: {
         orgId,
         platform: "WHATSAPP_QR",
-        username: label,
-        displayName: label,
+        username,
+        displayName: trimmed || username,
         status: "DISCONNECTED",
         connectedByUserId: userId,
         connectedAt: new Date(),
@@ -110,7 +120,23 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     this.sockets.set(accountId, sock);
 
     sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("connection.update", (update) => this.handleConnectionUpdate(accountId, update));
+    // Baileys' event emitter never awaits/catches a listener's returned
+    // promise -- an uncaught rejection here becomes a process-level
+    // unhandledRejection, which crashes the ENTIRE API (confirmed in
+    // production, 2026-10-26: a stale socket's connection.update fired
+    // after its SocialAccount/WhatsAppQrSession rows had been deleted
+    // through an unrelated path, the resulting P2025 went unhandled, and
+    // took down every other request in flight, not just this account).
+    // Every listener below must end in .catch(), no exceptions.
+    sock.ev.on("connection.update", (update) =>
+      this.handleConnectionUpdate(accountId, update).catch((err) => {
+        this.logger.error(`connection.update handling failed for account ${accountId}: ${(err as Error).message}`);
+        // The DB rows this socket answers to are gone (deleted through some
+        // other path) -- stop holding a live connection open for them.
+        this.sockets.delete(accountId);
+        sock.end(undefined);
+      }),
+    );
     sock.ev.on("messages.upsert", ({ messages }) => {
       for (const message of messages) {
         this.ingestMessage(accountId, message).catch((err) =>
@@ -138,6 +164,16 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     if (connection === "open") {
       const sock = this.sockets.get(accountId);
       const phoneNumber = sock?.user?.id?.split(":")[0];
+      // Settle the display username on the real number once connected --
+      // best-effort: a stale row from a prior disconnected session for the
+      // same number could already hold this username (unique per
+      // orgId+platform+username), which must never fail the actual
+      // WhatsApp connection over a cosmetic field.
+      if (phoneNumber) {
+        await this.prisma.socialAccount
+          .update({ where: { id: accountId }, data: { username: phoneNumber } })
+          .catch((err) => this.logger.warn(`Could not settle username to phone number for account ${accountId}: ${(err as Error).message}`));
+      }
       const account = await this.prisma.socialAccount.update({
         where: { id: accountId },
         data: { status: "CONNECTED", externalAccountId: phoneNumber, connectedAt: new Date() },

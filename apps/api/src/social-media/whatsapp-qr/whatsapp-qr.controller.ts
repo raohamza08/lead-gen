@@ -27,8 +27,7 @@ export class WhatsAppQrController {
 
   @Post("sessions")
   async startSession(@CurrentUser() user: JwtClaims, @Body() body: { label?: string }) {
-    const label = body.label?.trim() || "WhatsApp Number";
-    return this.sessions.startNewSession(user.orgId, user.sub, label);
+    return this.sessions.startNewSession(user.orgId, user.sub, body.label);
   }
 
   @Post("sessions/:accountId/reconnect")
