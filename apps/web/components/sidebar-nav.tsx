@@ -32,7 +32,7 @@ interface NavLink {
   children?: {
     href: string;
     label: string;
-    socialPlatform?: "FACEBOOK" | "INSTAGRAM" | "LINKEDIN" | "WHATSAPP";
+    socialPlatform?: "FACEBOOK" | "INSTAGRAM" | "LINKEDIN" | "WHATSAPP" | "WHATSAPP_QR";
     icon?: (props: { className?: string }) => JSX.Element;
   }[];
   /** Small leading icon (Part: EBOS-inspired shell redesign round 2,
@@ -477,6 +477,7 @@ const WORKSPACES: Workspace[] = [
               { href: "/social-media/instagram", label: "Instagram", socialPlatform: "INSTAGRAM", icon: ChatIcon },
               { href: "/social-media/facebook", label: "Facebook", socialPlatform: "FACEBOOK", icon: ChatIcon },
               { href: "/social-media/whatsapp", label: "WhatsApp", socialPlatform: "WHATSAPP", icon: ChatIcon },
+              { href: "/social-media/whatsapp-qr", label: "WhatsApp (Team)", socialPlatform: "WHATSAPP_QR", icon: ChatIcon },
             ],
           },
           { href: "/social-media/calendar", label: "Calendar", icon: CalendarIcon },

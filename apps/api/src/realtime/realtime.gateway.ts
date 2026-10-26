@@ -27,6 +27,10 @@ import { corsOriginValidator } from "../common/cors";
  *     the acting user's own room so a second open tab stays in sync without polling
  *   socialInbox.messageReceived    { conversationId, socialAccountId }
  *   socialInbox.conversationUpdated { conversationId } — status/assignment changed
+ *   whatsappQr.qr           { accountId, qrDataUrl } — pushed only to the user who clicked "connect" (emitToUser)
+ *   whatsappQr.connected    { accountId, phoneNumber } — same user-only targeting as above
+ *   whatsappQr.loggedOut    { accountId } — the linked device was removed/logged out, needs a fresh QR scan
+ *   whatsappQr.disconnected { accountId } — connect attempt failed for a non-logout reason, see WhatsAppQrReconnectWorker
  */
 @Injectable()
 @WebSocketGateway({

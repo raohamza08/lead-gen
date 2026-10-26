@@ -139,7 +139,9 @@ export function PlatformInbox({
   // explicit user request — "add an option for whatsapp to send a message
   // from here as well") — WhatsApp-only (Facebook/Instagram can't cold-
   // message an arbitrary person, see SocialInboxService.startConversation's
-  // own docblock), so the button only renders for platform === "WHATSAPP".
+  // own docblock), so the button only renders for WHATSAPP/WHATSAPP_QR (Part:
+  // WhatsApp Team Inbox, 2026-10-26 -- the QR-session platform is still
+  // identified by a real phone number, so cold-messaging works the same way).
   const newChatMutation = useMutation({
     mutationFn: () => api.startSocialConversation(newChatAccountId, newChatTo, newChatText) as Promise<{ conversationId: string }>,
     onSuccess: (res) => {
@@ -197,7 +199,7 @@ export function PlatformInbox({
             {/* New chat (Part: Social Inbox removal / per-module messaging
                 follow-up, 2026-10-21) -- WhatsApp-only, same reasoning as
                 startConversation's own docblock on the backend. */}
-            {platform === "WHATSAPP" && (
+            {(platform === "WHATSAPP" || platform === "WHATSAPP_QR") && (
               <button
                 type="button"
                 onClick={openNewChat}

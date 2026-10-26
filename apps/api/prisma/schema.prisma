@@ -2568,6 +2568,11 @@ enum SocialPlatform {
   TIKTOK
   YOUTUBE
   WHATSAPP
+  /// QR-scan-once, Baileys-backed shared team inbox (Part: WhatsApp Team
+  /// Inbox, 2026-10-26) — distinct from WHATSAPP (Meta's official Cloud
+  /// API, OAuth-connected) since the connect flow, transport, and
+  /// credential shape are all completely different; see WhatsAppQrSession.
+  WHATSAPP_QR
 }
 
 enum SocialAccountStatus {
@@ -2640,11 +2645,50 @@ model SocialAccount {
   conversations      SocialConversation[]
   analyticsSnapshots SocialAccountAnalyticsSnapshot[]
   comments           SocialComment[]
+  /// Only present for platform WHATSAPP_QR (Part: WhatsApp Team Inbox,
+  /// 2026-10-26) — tracks the live Baileys socket's QR/connect status. The
+  /// actual auth credentials/keys live on local disk (WHATSAPP_SESSION_DIR),
+  /// not here — see WhatsAppQrSession's own docblock.
+  whatsAppQrSession  WhatsAppQrSession?
 
   /// One row per (platform, handle) per org — reconnecting the same
   /// account edits this row rather than creating a duplicate.
   @@unique([orgId, platform, username])
   @@map("social_accounts")
+}
+
+/// Status/QR tracking for a WHATSAPP_QR SocialAccount's Baileys socket
+/// (Part: WhatsApp Team Inbox, 2026-10-26) — the unofficial, QR-scan-once
+/// alternative to the Cloud API WhatsApp provider, for a team to share one
+/// number without handing out the owner's phone. Deliberately does NOT
+/// store Baileys' actual creds/signal keys (those get rewritten on nearly
+/// every message, which is a bad fit for a DB row) — WhatsAppQrSessionManagerService
+/// persists those to local disk via Baileys' own useMultiFileAuthState,
+/// keyed by socialAccountId. This table is just enough for the UI/API to
+/// know current status; losing the disk folder just means re-scanning a
+/// QR code, not losing any message history (that's in SocialConversation/
+/// SocialMessage like every other platform).
+model WhatsAppQrSession {
+  id                 String                  @id @default(uuid())
+  socialAccountId    String                  @unique @map("social_account_id")
+  socialAccount      SocialAccount           @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  status             WhatsAppQrSessionStatus @default(CONNECTING)
+  lastQrAt           DateTime?               @map("last_qr_at")
+  lastConnectedAt    DateTime?               @map("last_connected_at")
+  lastDisconnectedAt DateTime?               @map("last_disconnected_at")
+  disconnectReason   String?                 @map("disconnect_reason")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @updatedAt @map("updated_at")
+
+  @@map("whatsapp_qr_sessions")
+}
+
+enum WhatsAppQrSessionStatus {
+  CONNECTING
+  QR_PENDING
+  CONNECTED
+  DISCONNECTED
+  LOGGED_OUT
 }
 
 /// A custom OAuth app's own client credentials (Part: per-account OAuth app

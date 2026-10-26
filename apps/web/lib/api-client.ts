@@ -699,6 +699,15 @@ export const api = {
   deleteSocialInboxNote: (id: string, noteId: string) =>
     request(`/social-inbox/conversations/${id}/notes/${noteId}`, { method: "DELETE" }),
 
+  // ---- WhatsApp Team Inbox (QR session) ----
+  startWhatsAppQrSession: (label?: string) =>
+    request("/social-media/whatsapp-qr/sessions", { method: "POST", body: JSON.stringify({ label }) }),
+  reconnectWhatsAppQrSession: (accountId: string) =>
+    request(`/social-media/whatsapp-qr/sessions/${accountId}/reconnect`, { method: "POST" }),
+  getWhatsAppQrSessionStatus: (accountId: string) => request(`/social-media/whatsapp-qr/sessions/${accountId}/status`),
+  logoutWhatsAppQrSession: (accountId: string) =>
+    request(`/social-media/whatsapp-qr/sessions/${accountId}/logout`, { method: "POST" }),
+
   // ---- Social Engagement Center (comments on our own posts) ----
   getSocialEngagementStats: () => request("/social-engagement/stats"),
   syncSocialEngagementAccountNow: (accountId: string) => request(`/social-engagement/accounts/${accountId}/sync`, { method: "POST" }),

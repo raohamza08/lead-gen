@@ -6,7 +6,12 @@ import { XProvider } from "./providers/x.provider";
 import { TikTokProvider } from "./providers/tiktok.provider";
 import { YouTubeProvider } from "./providers/youtube.provider";
 import { WhatsAppProvider } from "./providers/whatsapp.provider";
+import { WhatsAppQrProvider } from "./providers/whatsapp-qr.provider";
 import { SocialProviderRegistryService } from "./providers/social-provider-registry.service";
+import { WhatsAppQrSessionManagerService } from "./whatsapp-qr/whatsapp-qr-session-manager.service";
+import { WhatsAppQrReconnectQueue } from "./whatsapp-qr/whatsapp-qr-reconnect.queue";
+import { WhatsAppQrReconnectWorker } from "./whatsapp-qr/whatsapp-qr-reconnect.worker";
+import { WhatsAppQrController } from "./whatsapp-qr/whatsapp-qr.controller";
 import { LocalDiskMediaStorageService } from "./media/local-disk-media-storage.service";
 import { MEDIA_STORAGE_SERVICE } from "./media/media-storage.interface";
 import { MediaFileController } from "./media/media-file.controller";
@@ -35,7 +40,15 @@ import { SocialEngagementController } from "./social-engagement.controller";
 import { SocialOAuthAppService } from "./social-oauth-app.service";
 
 @Module({
-  controllers: [SocialMediaController, SocialMediaSettingsController, SocialOAuthCallbackController, MediaFileController, SocialInboxController, SocialEngagementController],
+  controllers: [
+    SocialMediaController,
+    SocialMediaSettingsController,
+    SocialOAuthCallbackController,
+    MediaFileController,
+    SocialInboxController,
+    SocialEngagementController,
+    WhatsAppQrController,
+  ],
   providers: [
     InstagramProvider,
     FacebookProvider,
@@ -44,6 +57,10 @@ import { SocialOAuthAppService } from "./social-oauth-app.service";
     TikTokProvider,
     YouTubeProvider,
     WhatsAppProvider,
+    WhatsAppQrProvider,
+    WhatsAppQrSessionManagerService,
+    WhatsAppQrReconnectQueue,
+    WhatsAppQrReconnectWorker,
     SocialProviderRegistryService,
     { provide: MEDIA_STORAGE_SERVICE, useClass: LocalDiskMediaStorageService },
     OAuthStateStore,

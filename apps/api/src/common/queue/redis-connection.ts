@@ -141,4 +141,11 @@ export const QUEUE_NAMES = {
   // Pure DB read, no Upwork API calls, so this can run frequently without
   // any rate-limit/budget concern (unlike the sync queues above).
   UPWORK_ROOM_PENDING_REMINDER: "upwork-room-pending-reminder",
+  // Retries a DISCONNECTED (not LOGGED_OUT -- that needs a human to re-scan
+  // a QR) WhatsAppQrSession's Baileys socket with a short fixed cooldown
+  // (Part: WhatsApp Team Inbox, 2026-10-26) -- same shape as
+  // EMAIL_ACCOUNT_RESUME_SWEEP's cooldown-retry, not an escalating backoff,
+  // since reconnect() is cheap and idempotent (a no-op if already live).
+  // See whatsapp-qr-reconnect.worker.ts.
+  WHATSAPP_QR_RECONNECT: "whatsapp-qr-reconnect",
 } as const;

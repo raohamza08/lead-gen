@@ -206,7 +206,7 @@ export class SocialInboxService {
   async startConversation(user: JwtClaims, accountId: string, dto: { to: string; text: string }) {
     const account = await this.prisma.socialAccount.findFirst({ where: { id: accountId, orgId: user.orgId } });
     if (!account) throw new NotFoundException("Social account not found");
-    if (account.platform !== "WHATSAPP") {
+    if (account.platform !== "WHATSAPP" && account.platform !== "WHATSAPP_QR") {
       throw new BadRequestException("Starting a new conversation from here is only supported for WhatsApp.");
     }
     if (user.role !== Role.ADMIN) {
@@ -287,7 +287,7 @@ export class SocialInboxService {
     // below). SocialConversation has no own `platform` column (it's on the
     // related socialAccount), hence the relation filter per platform rather
     // than a groupBy.
-    const PLATFORMS = ["FACEBOOK", "INSTAGRAM", "LINKEDIN", "WHATSAPP"] as const;
+    const PLATFORMS = ["FACEBOOK", "INSTAGRAM", "LINKEDIN", "WHATSAPP", "WHATSAPP_QR"] as const;
     const [total, unread, open, pending, closed, byPlatformCounts] = await Promise.all([
       this.prisma.socialConversation.count({ where }),
       this.prisma.socialConversation.count({ where: { ...where, unreadCount: { gt: 0 } } }),
