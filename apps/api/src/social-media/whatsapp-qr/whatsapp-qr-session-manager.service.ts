@@ -161,7 +161,21 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     // event carries its own `contacts` list instead (the real saved/self-set
     // name per JID), which is what actually fixed "only showing the number,
     // not the name" (Part: WhatsApp Team Inbox contact names, 2026-10-26).
-    sock.ev.on("messaging-history.set", ({ messages, contacts, chats }) => {
+    sock.ev.on("messaging-history.set", async ({ messages, contacts, chats, lidPnMappings }) => {
+      // WhatsApp's newer LID (Linked ID) privacy system routes some contacts
+      // through an opaque per-chat id (`<digits>@lid`) instead of their real
+      // phone-number JID (`<digits>@s.whatsapp.net`) -- confirmed in
+      // production, 2026-10-26: every externalConversationId for one
+      // connected number was a LID, not a phone number, which is also why
+      // name lookups kept missing (contacts/chats here are keyed by the
+      // real JID, not the LID). storeLIDPNMappings populates Baileys' own
+      // resolver (sock.signalRepository.lidMapping) so resolveContactJid
+      // below can look up the real number where WhatsApp allows it.
+      if (lidPnMappings?.length) {
+        await sock.signalRepository.lidMapping.storeLIDPNMappings(lidPnMappings).catch((err: Error) =>
+          this.logger.warn(`Failed to store LID/PN mappings for account ${accountId}: ${err.message}`),
+        );
+      }
       // Chat-level names cover numbers that aren't a saved contact at all --
       // the common case for a business getting messages from customers --
       // filled in first so the (more authoritative, "saved in your phone")
@@ -175,12 +189,26 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         if (name) nameByJid.set(contact.id, name);
       }
       for (const message of messages) {
-        const contactName = (message.key.remoteJid && nameByJid.get(message.key.remoteJid)) || message.pushName || undefined;
-        this.ingestMessage(accountId, message, { isHistoryBackfill: true, contactName }).catch((err) =>
+        this.ingestMessage(accountId, message, { isHistoryBackfill: true, nameByJid }).catch((err) =>
           this.logger.error(`Failed to ingest WhatsApp history message on account ${accountId}: ${(err as Error).message}`),
         );
       }
     });
+  }
+
+  /** Resolves a possibly-LID `remoteJid` to the real phone-number JID via
+   *  Baileys' own LID<->PN resolver where WhatsApp allows it, returning the
+   *  bare digits for a normal contact. When the real number isn't
+   *  resolvable (WhatsApp withholding it under the LID privacy system), the
+   *  full `<digits>@lid` form is kept as-is so sendMessage's existing
+   *  `includes("@")` check still addresses the right network instead of
+   *  wrongly treating the LID digits as a phone number. */
+  private async resolveContactJid(accountId: string, remoteJid: string): Promise<string> {
+    if (!remoteJid.endsWith("@lid")) return remoteJid.split("@")[0];
+    const sock = this.sockets.get(accountId);
+    const lid = remoteJid.split("@")[0];
+    const pn = await sock?.signalRepository.lidMapping.getPNForLID(lid).catch(() => null);
+    return pn ? pn.split("@")[0] : remoteJid;
   }
 
   private async handleConnectionUpdate(accountId: string, update: Partial<ConnectionState>) {
@@ -272,13 +300,14 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
   private async ingestMessage(
     accountId: string,
     message: WAMessage,
-    opts: { isHistoryBackfill: boolean; contactName?: string },
+    opts: { isHistoryBackfill: boolean; contactName?: string; nameByJid?: Map<string, string> },
   ): Promise<void> {
     const remoteJid = message.key.remoteJid;
     if (!remoteJid || remoteJid.endsWith("@g.us") || remoteJid === "status@broadcast") return; // groups/status not in scope
     if (!message.message) return; // protocol/reaction-only messages carry no content worth persisting
 
-    const contactNumber = remoteJid.split("@")[0];
+    const contactNumber = await this.resolveContactJid(accountId, remoteJid);
+    const contactName = opts.contactName || opts.nameByJid?.get(remoteJid) || undefined;
     // Baileys' protobuf-generated message types are a deep tree of optional
     // fields with no shared base -- read loosely here rather than fighting
     // the exact union of IImageMessage/IVideoMessage/IAudioMessage/
@@ -311,11 +340,15 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     if (!text && !mediaUrl) return;
 
     const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
+    // contactNumber keeps its "@lid" suffix when the real number isn't
+    // resolvable (needed so a later reply targets the right network) --
+    // strip it just for the human-facing username fallback.
+    const displayNumber = contactNumber.replace(/@lid$/, "");
     await this.ingest.persistMessage(account, {
       externalConversationId: contactNumber,
       contactExternalId: contactNumber,
-      contactUsername: contactNumber,
-      contactName: opts.contactName,
+      contactUsername: displayNumber,
+      contactName,
       externalMessageId: message.key.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fromUs: Boolean(message.key.fromMe),
       messageText: text,

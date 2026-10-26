@@ -96,6 +96,8 @@ export function WhatsAppQrNumbersList() {
   const [modalOpen, setModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
 
   const accountsQuery = useQuery({
     queryKey: ["social-media-accounts"],
@@ -116,6 +118,30 @@ export function WhatsAppQrNumbersList() {
     try {
       await api.reconnectWhatsAppQrSession(accountId);
       setModalOpen(true);
+    } catch (err) {
+      setActionError((err as Error).message);
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  function startRename(account: WhatsAppQrAccount) {
+    setRenamingId(account.id);
+    setRenameDraft(account.displayName || "");
+  }
+
+  async function confirmRename(accountId: string) {
+    const displayName = renameDraft.trim();
+    if (!displayName) {
+      setRenamingId(null);
+      return;
+    }
+    setBusyId(accountId);
+    setActionError(null);
+    try {
+      await api.updateSocialAccountSettings(accountId, { displayName });
+      refetchAccounts();
+      setRenamingId(null);
     } catch (err) {
       setActionError((err as Error).message);
     } finally {
@@ -157,8 +183,48 @@ export function WhatsAppQrNumbersList() {
         {numbers.map((n) => (
           <div key={n.id} className="card p-4">
             <div className="flex items-start justify-between gap-2">
-              <div>
-                <div className="text-sm font-semibold">{n.displayName || n.username}</div>
+              <div className="min-w-0 flex-1">
+                {renamingId === n.id ? (
+                  <form
+                    className="flex items-center gap-1.5"
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      confirmRename(n.id);
+                    }}
+                  >
+                    <input
+                      autoFocus
+                      value={renameDraft}
+                      onChange={(e) => setRenameDraft(e.target.value)}
+                      onKeyDown={(e) => e.key === "Escape" && setRenamingId(null)}
+                      className="w-full rounded-md border border-[var(--line)] bg-transparent px-2 py-1 text-sm"
+                    />
+                    <button type="submit" disabled={busyId === n.id} className="text-xs font-medium text-accent disabled:opacity-50">
+                      Save
+                    </button>
+                    <button type="button" className="text-xs text-ink/50" onClick={() => setRenamingId(null)}>
+                      Cancel
+                    </button>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    className="group flex items-center gap-1.5 text-left"
+                    title="Rename"
+                    onClick={() => startRename(n)}
+                  >
+                    <span className="text-sm font-semibold">{n.displayName || n.username}</span>
+                    <svg
+                      viewBox="0 0 16 16"
+                      className="h-3 w-3 shrink-0 text-ink/30 opacity-0 transition-opacity group-hover:opacity-100"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                    >
+                      <path d="M11 2l3 3-7.5 7.5L3 13l.5-3.5L11 2z" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                )}
                 {n.externalAccountId && <div className="text-xs text-ink/50">+{n.externalAccountId}</div>}
               </div>
               <StatusBadge status={n.status} />
