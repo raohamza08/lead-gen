@@ -116,7 +116,13 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     const { state, saveCreds } = await useMultiFileAuthState(this.sessionDir(accountId));
     const { version } = await fetchLatestBaileysVersion();
 
-    const sock = makeWASocket({ auth: state, version, syncFullHistory: false });
+    // true -- asks WhatsApp to replay existing chat history on first connect
+    // (Part: WhatsApp Team Inbox history backfill, 2026-10-26, explicit user
+    // request -- a freshly connected real number showed zero conversations
+    // otherwise, same limitation the Cloud API connection already has but
+    // Baileys can actually avoid). Arrives async via messaging-history.set,
+    // not messages.upsert.
+    const sock = makeWASocket({ auth: state, version, syncFullHistory: true });
     this.sockets.set(accountId, sock);
 
     sock.ev.on("creds.update", saveCreds);
@@ -139,8 +145,20 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     );
     sock.ev.on("messages.upsert", ({ messages }) => {
       for (const message of messages) {
-        this.ingestMessage(accountId, message).catch((err) =>
+        this.ingestMessage(accountId, message, { isHistoryBackfill: false }).catch((err) =>
           this.logger.error(`Failed to ingest WhatsApp message on account ${accountId}: ${(err as Error).message}`),
+        );
+      }
+    });
+    // Replayed chat history (can fire more than once as sync progresses --
+    // recent chats first, older ones in later chunks). Same message shape
+    // and ingestion path as messages.upsert above, just flagged so it
+    // doesn't inflate unreadCount or spam a notification per historical
+    // message (Part: WhatsApp Team Inbox history backfill, 2026-10-26).
+    sock.ev.on("messaging-history.set", ({ messages }) => {
+      for (const message of messages) {
+        this.ingestMessage(accountId, message, { isHistoryBackfill: true }).catch((err) =>
+          this.logger.error(`Failed to ingest WhatsApp history message on account ${accountId}: ${(err as Error).message}`),
         );
       }
     });
@@ -232,7 +250,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     }
   }
 
-  private async ingestMessage(accountId: string, message: WAMessage): Promise<void> {
+  private async ingestMessage(accountId: string, message: WAMessage, opts: { isHistoryBackfill: boolean }): Promise<void> {
     const remoteJid = message.key.remoteJid;
     if (!remoteJid || remoteJid.endsWith("@g.us") || remoteJid === "status@broadcast") return; // groups/status not in scope
     if (!message.message) return; // protocol/reaction-only messages carry no content worth persisting
@@ -280,6 +298,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       messageText: text,
       mediaUrl,
       sentAt: message.messageTimestamp ? new Date(Number(message.messageTimestamp) * 1000) : new Date(),
+      isHistoryBackfill: opts.isHistoryBackfill,
     });
   }
 

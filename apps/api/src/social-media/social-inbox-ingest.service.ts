@@ -16,6 +16,15 @@ export interface IncomingMessageInput {
   messageText?: string;
   mediaUrl?: string;
   sentAt: Date;
+  /** True for a message replayed from a platform's own chat-history backfill
+   *  (Part: WhatsApp Team Inbox history backfill, 2026-10-26) rather than
+   *  something that just arrived -- a freshly connected WhatsApp QR number
+   *  can replay months of real history in one burst, which must not inflate
+   *  unreadCount to a meaningless count of everything that ever happened,
+   *  nor fire a realtime/notification per historical message (hundreds at
+   *  once). Omitted/false preserves the exact existing behavior every other
+   *  caller (webhook, reconciliation poll) already relies on. */
+  isHistoryBackfill?: boolean;
 }
 
 /**
@@ -66,7 +75,7 @@ export class SocialInboxIngestService {
             contactProfileImageUrl: input.contactProfileImageUrl,
             lastMessage: input.messageText,
             lastMessageAt: input.sentAt,
-            unreadCount: input.fromUs ? 0 : 1,
+            unreadCount: input.fromUs || input.isHistoryBackfill ? 0 : 1,
           },
         }));
 
@@ -105,7 +114,7 @@ export class SocialInboxIngestService {
           where: { id: conversation.id },
           data: {
             ...(isNewest ? { lastMessage: input.messageText, lastMessageAt: input.sentAt } : {}),
-            ...(!input.fromUs ? { unreadCount: { increment: 1 } } : {}),
+            ...(!input.fromUs && !input.isHistoryBackfill ? { unreadCount: { increment: 1 } } : {}),
             ...(input.contactName ? { contactName: input.contactName } : {}),
             ...(input.contactUsername ? { contactUsername: input.contactUsername } : {}),
             ...(input.contactProfileImageUrl ? { contactProfileImageUrl: input.contactProfileImageUrl } : {}),
@@ -119,7 +128,7 @@ export class SocialInboxIngestService {
     // Never notify about our own outbound reply landing in the DB, and only
     // for a genuinely new message -- a dedup no-op must not spam a second
     // realtime/notification for something already surfaced once.
-    if (result.isNew && !input.fromUs) {
+    if (result.isNew && !input.fromUs && !input.isHistoryBackfill) {
       this.realtime.emitToOrg(socialAccount.orgId, "socialInbox.messageReceived", {
         conversationId: result.conversationId,
         socialAccountId: socialAccount.id,
