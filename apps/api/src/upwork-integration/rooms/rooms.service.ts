@@ -73,7 +73,15 @@ export class UpworkRoomsService {
       },
       orderBy: { latestMessageAt: "asc" },
     });
-    const pending = rooms.filter((r) => !this.roomsSync.isSenderAgencySide(r.latestMessageFrom, r.roomName));
+    const pending = rooms.filter((r) => {
+      if (this.roomsSync.isSenderAgencySide(r.latestMessageFrom, r.roomName)) return false;
+      // Manually dismissed ("mark as responded") and nothing newer from
+      // the client has come in since — stays hidden until it does.
+      if (r.delayedResponseDismissedAt && r.latestMessageAt && r.delayedResponseDismissedAt.getTime() >= r.latestMessageAt.getTime()) {
+        return false;
+      }
+      return true;
+    });
     return {
       totalCount: pending.length,
       rooms: pending.map((r) => ({
@@ -96,6 +104,19 @@ export class UpworkRoomsService {
    *  only — never calls any mark-read mutation on Upwork's own side. */
   async markRoomRead(orgId: string, roomId: string): Promise<void> {
     const result = await this.prisma.upworkApiRoom.updateMany({ where: { id: roomId, orgId }, data: { locallyReadAt: new Date() } });
+    if (result.count === 0) throw new NotFoundException("Room not found");
+  }
+
+  /** "Mark as responded" (Part: Delayed Responses manual dismiss,
+   *  2026-10-26) — removes a room from listDelayedResponses immediately,
+   *  without waiting for the next sync tick to see a real reply on
+   *  Upwork. See UpworkApiRoom.delayedResponseDismissedAt's own docblock
+   *  for why this self-reverts instead of being a permanent mute. */
+  async markDelayedResponseHandled(orgId: string, roomId: string): Promise<void> {
+    const result = await this.prisma.upworkApiRoom.updateMany({
+      where: { id: roomId, orgId },
+      data: { delayedResponseDismissedAt: new Date() },
+    });
     if (result.count === 0) throw new NotFoundException("Room not found");
   }
 

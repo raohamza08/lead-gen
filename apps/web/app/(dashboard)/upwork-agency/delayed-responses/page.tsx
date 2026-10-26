@@ -8,6 +8,7 @@ import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../
 import { ConversationThread, timeAgo } from "../../../../components/upwork-room-conversation";
 import { InitialsAvatar } from "../../../../components/avatar";
 import { RecordRow, RecordListPanel, DetailPanelHeader } from "../../../../components/record-list";
+import { Button } from "../../../../components/ui/button";
 
 interface DelayedRoom {
   id: string;
@@ -41,7 +42,12 @@ function pendingLabel(minutes: number | null): string {
  *  only drops a room once the freelancer has actually replied on
  *  Upwork, via message direction, not a local "read" flag. Still marks
  *  the room read in Outly for Rooms & Messages' own unread badge, but
- *  that no longer has any effect on whether it stays in THIS list. */
+ *  that no longer has any effect on whether it stays in THIS list.
+ *  "Mark as responded" added 2026-10-26, explicit user request — a
+ *  manual override (`markDelayedResponseHandled`) for when the reply
+ *  happened somewhere the sync hasn't picked up yet; see
+ *  UpworkApiRoom.delayedResponseDismissedAt's docblock for why it
+ *  self-reverts instead of permanently hiding the room. */
 export default function DelayedResponsesPage() {
   const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ["upwork-api-status"], queryFn: () => api.getUpworkApiStatus() as Promise<UpworkConnectionStatus> });
@@ -56,6 +62,7 @@ export default function DelayedResponsesPage() {
 
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const allRooms = data?.rooms ?? [];
   const filtered = useMemo(
@@ -74,6 +81,22 @@ export default function DelayedResponsesPage() {
     api.markUpworkApiRoomRead(id).then(() => {
       queryClient.invalidateQueries({ queryKey: ["upwork-api-rooms"] });
     });
+  }
+
+  // Manual override for "the freelancer actually replied, but Outly's sync
+  // hasn't caught up yet / they handled it outside Upwork" — drops the room
+  // from this list right away rather than waiting for the next sync tick.
+  // Self-reverts on the backend if the client sends a genuinely new message
+  // after this, so it's a one-time dismiss, not a permanent mute.
+  async function markResponded(id: string) {
+    setRespondingId(id);
+    try {
+      await api.markUpworkApiDelayedResponseHandled(id);
+      if (selectedId === id) setSelectedId(null);
+      await queryClient.invalidateQueries({ queryKey: ["upwork-api-delayed-responses"] });
+    } finally {
+      setRespondingId(null);
+    }
   }
 
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
@@ -143,12 +166,23 @@ export default function DelayedResponsesPage() {
               <p className="text-sm text-ink/50">Select a room to view its conversation.</p>
             ) : (
               <div className="flex flex-col gap-4">
-                <DetailPanelHeader
-                  title={selected.roomName ?? "Untitled room"}
-                  avatar={<InitialsAvatar seed={selected.id} label={selected.roomName ?? "?"} sizeClass="h-9 w-9 text-sm" />}
-                  identity={`${selected.numUsers ?? "—"} members · ${selected.roomType ?? "—"}`}
-                  meta={`pending for ${pendingLabel(selected.minutesPending)}`}
-                />
+                <div className="flex items-start justify-between gap-3">
+                  <DetailPanelHeader
+                    title={selected.roomName ?? "Untitled room"}
+                    avatar={<InitialsAvatar seed={selected.id} label={selected.roomName ?? "?"} sizeClass="h-9 w-9 text-sm" />}
+                    identity={`${selected.numUsers ?? "—"} members · ${selected.roomType ?? "—"}`}
+                    meta={`pending for ${pendingLabel(selected.minutesPending)}`}
+                  />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    disabled={respondingId === selected.id}
+                    loading={respondingId === selected.id}
+                    onClick={() => markResponded(selected.id)}
+                  >
+                    Mark as responded
+                  </Button>
+                </div>
 
                 <ConversationThread roomId={selected.id} />
 

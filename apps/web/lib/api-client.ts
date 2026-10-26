@@ -1074,6 +1074,8 @@ export const api = {
       messages: { id: string; message: string | null; senderName: string | null; senderIsAgency: boolean; createdAt: string }[];
     }>(`/upwork-api/rooms/${roomId}/messages`),
   markUpworkApiRoomRead: (roomId: string) => request<{ read: boolean }>(`/upwork-api/rooms/${roomId}/mark-read`, { method: "POST" }),
+  markUpworkApiDelayedResponseHandled: (roomId: string) =>
+    request<{ responded: boolean }>(`/upwork-api/rooms/${roomId}/mark-responded`, { method: "POST" }),
   getUpworkApiDelayedResponses: () =>
     request<{
       totalCount: number;

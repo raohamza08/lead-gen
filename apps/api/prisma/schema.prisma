@@ -2247,6 +2247,18 @@ model UpworkApiRoom {
   /// and pushes `latestMessageAt` past it again. The real synced
   /// `numUnread` is preserved untouched underneath.
   locallyReadAt     DateTime?    @map("locally_read_at")
+  /// Manual "mark as responded" override for the Delayed Responses module
+  /// (Part: Delayed Responses manual dismiss, 2026-10-26, explicit user
+  /// request — "give me an option to mark the chat as responded and
+  /// remove it from that module"). Same overlay shape as `locallyReadAt`
+  /// above but a distinct field/purpose: listDelayedResponses hides a room
+  /// while this is at or after `latestMessageAt`, i.e. nothing new has
+  /// come in from the client since it was dismissed. The moment the
+  /// client sends a genuinely new message, `latestMessageAt` moves past
+  /// this timestamp again and the room reappears as delayed on its own —
+  /// dismissing is a one-time "I already handled this", not a permanent
+  /// mute.
+  delayedResponseDismissedAt DateTime? @map("delayed_response_dismissed_at")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 

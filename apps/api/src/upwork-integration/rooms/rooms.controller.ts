@@ -44,6 +44,12 @@ export class UpworkRoomsController {
     return { read: true };
   }
 
+  @Post("rooms/:id/mark-responded")
+  async markResponded(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    await this.rooms.markDelayedResponseHandled(user.orgId, id);
+    return { responded: true };
+  }
+
   @Post("rooms/resync")
   @Roles(Role.ADMIN)
   async resync(@CurrentUser() user: JwtClaims) {
