@@ -47,7 +47,12 @@ function pendingLabel(minutes: number | null): string {
  *  manual override (`markDelayedResponseHandled`) for when the reply
  *  happened somewhere the sync hasn't picked up yet; see
  *  UpworkApiRoom.delayedResponseDismissedAt's docblock for why it
- *  self-reverts instead of permanently hiding the room. */
+ *  self-reverts instead of permanently hiding the room. The original
+ *  15-minute pending threshold was removed the same day, explicit user
+ *  request — "remove the time delay and it should work in realtime" —
+ *  see UpworkRoomsService.listDelayedResponses' own docblock for the
+ *  one real limit left on "realtime": Outly's own 15-minute sync tick
+ *  against Upwork, which this change doesn't touch. */
 export default function DelayedResponsesPage() {
   const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ["upwork-api-status"], queryFn: () => api.getUpworkApiStatus() as Promise<UpworkConnectionStatus> });
@@ -113,7 +118,7 @@ export default function DelayedResponsesPage() {
 
       {data && data.totalCount === 0 && (
         <SectionCard title="Delayed">
-          <p className="py-6 text-center text-sm text-ink/55">Nothing delayed — every room with an unread message is under 15 minutes old.</p>
+          <p className="py-6 text-center text-sm text-ink/55">Nothing delayed — every room is already answered.</p>
         </SectionCard>
       )}
 

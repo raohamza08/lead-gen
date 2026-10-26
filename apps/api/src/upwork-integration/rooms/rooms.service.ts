@@ -46,15 +46,18 @@ export class UpworkRoomsService {
     };
   }
 
-  /** Rooms where the CLIENT's latest message has gone unanswered for
-   *  15+ minutes, trailing 7 days (Part: Delayed Responses module,
-   *  2026-10-23, explicit user request — "the chats that are unanswered
-   *  for last 15 mins or more for one week should go there"; corrected
-   *  2026-10-23 same day, explicit user feedback — "it should only
-   *  disappear from this module once the freelancer has responded to
-   *  the person", NOT once someone on our side merely opens/views the
-   *  room in Outly). Deliberately does NOT use `numUnread` or
-   *  `locallyReadAt` at all anymore — both can be cleared just by
+  /** Rooms where the CLIENT's latest message is still unanswered, trailing
+   *  7 days (Part: Delayed Responses module, 2026-10-23, explicit user
+   *  request — "the chats that are unanswered for last 15 mins or more
+   *  for one week should go there"; corrected 2026-10-23 same day,
+   *  explicit user feedback — "it should only disappear from this module
+   *  once the freelancer has responded to the person", NOT once someone
+   *  on our side merely opens/views the room in Outly; the original
+   *  15-minute pending threshold was removed 2026-10-26, explicit user
+   *  request — "remove the time delay and it should work in realtime", so
+   *  a room appears the moment its latest sync shows an unanswered client
+   *  message, not 15 minutes after). Deliberately does NOT use
+   *  `numUnread` or `locallyReadAt` at all — both can be cleared just by
    *  looking at a room, which isn't a real response. The real signal is
    *  direction: a room only counts as unanswered while its own latest
    *  message is still from the CLIENT side (via UpworkRoomsSyncService.
@@ -63,8 +66,14 @@ export class UpworkRoomsService {
    *  The moment the freelancer actually replies on Upwork, the next
    *  sync tick updates `latestMessageFrom` to the freelancer's name,
    *  this check flips, and the room drops off this list on its own —
-   *  nothing in Outly needs to "mark" anything for that to happen. */
-  async listDelayedResponses(orgId: string, thresholdMinutes = 15, windowDays = 7) {
+   *  nothing in Outly needs to "mark" anything for that to happen.
+   *  "Realtime" here is still bounded by how often UpworkRoomsSyncService
+   *  pulls fresh data from Upwork (its quick tick runs every 15 minutes,
+   *  see that service's own docblock) — this threshold only controls how
+   *  long a room sits in Outly's own cache before showing up here, not
+   *  how fast Outly learns about a new unanswered message in the first
+   *  place. */
+  async listDelayedResponses(orgId: string, thresholdMinutes = 0, windowDays = 7) {
     const now = Date.now();
     const rooms = await this.prisma.upworkApiRoom.findMany({
       where: {
