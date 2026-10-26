@@ -3,8 +3,10 @@ import { SocialPlatform } from "@prisma/client";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
 import { ModuleAccessGuard } from "../common/guards/module-access.guard";
+import { PrimaryAdminGuard } from "../common/guards/primary-admin.guard";
 import { Roles } from "../common/decorators/roles.decorator";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
+import { RequiresPrimaryAdmin } from "../common/decorators/requires-primary-admin.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims, Role } from "@leadgen/types";
 import { SocialMediaService } from "./social-media.service";
@@ -27,8 +29,21 @@ export class SocialMediaSettingsController {
     return this.service.listAccounts(user);
   }
 
+  // Add/connect/disconnect/remove an account is primary-admin-only, not
+  // just any Role.ADMIN (Part: connect-accounts primary-admin-only,
+  // 2026-10-27, explicit user request — "hide the adding or connecting
+  // accounts for all the user except me") -- same PrimaryAdminGuard/
+  // RequiresPrimaryAdmin pattern as Upwork Agency Tools and System Logs,
+  // stacked on top of (not replacing) the class-level @Roles(Role.ADMIN)
+  // guards below, so this narrows an already-admin-only surface down
+  // further to the org's single primary admin. Editing an already-connected
+  // account's settings, OAuth app management, and access grants below are
+  // untouched -- still any ADMIN, only the connect/disconnect lifecycle
+  // itself is restricted.
   @Post("accounts")
   @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   createAccount(@CurrentUser() user: JwtClaims, @Body() dto: CreateSocialAccountDto) {
     return this.service.createAccountPlaceholder(user.orgId, dto);
   }
@@ -38,12 +53,16 @@ export class SocialMediaSettingsController {
   // "pending" as the :id/:platform param and these routes are never reached.
   @Get("accounts/pending/:id")
   @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   getPendingSelection(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.service.getPendingSelection(user, id);
   }
 
   @Post("accounts/pending/:id/select")
   @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   selectPendingAccount(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body("externalAccountId") externalAccountId: string) {
     return this.service.selectPendingAccount(user, id, externalAccountId);
   }
@@ -56,12 +75,16 @@ export class SocialMediaSettingsController {
 
   @Post("accounts/:id/disconnect")
   @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   disconnect(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.service.disconnectAccount(user, id);
   }
 
   @Delete("accounts/:id")
   @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   deleteAccount(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.service.deleteAccount(user, id);
   }
@@ -77,6 +100,8 @@ export class SocialMediaSettingsController {
    *  means "use the platform-wide default app," unchanged from before this existed. */
   @Post("accounts/:platform/connect")
   @Roles(Role.ADMIN)
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   connect(@CurrentUser() user: JwtClaims, @Param("platform") platform: SocialPlatform, @Body("oauthAppId") oauthAppId?: string) {
     return this.service.initiateConnect(user, platform, undefined, oauthAppId);
   }

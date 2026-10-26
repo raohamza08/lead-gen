@@ -62,6 +62,16 @@ function StatusBadge({ status }: { status: Account["status"] }) {
  */
 export default function SocialAccountsPage() {
   const queryClient = useQueryClient();
+  // Add/connect/disconnect is primary-admin-only now, matching the backend
+  // (Part: connect-accounts primary-admin-only, 2026-10-27, explicit user
+  // request — "hide the adding or connecting accounts for all the user
+  // except me") — the account list itself stays visible to anyone with
+  // Social Media access, only these specific actions are hidden.
+  const meQuery = useQuery({
+    queryKey: ["me-is-primary-admin"],
+    queryFn: () => api.getMe() as Promise<{ isPrimaryAdmin: boolean }>,
+  });
+  const canManageAccounts = meQuery.data?.isPrimaryAdmin ?? false;
   const accountsQuery = useQuery({
     queryKey: ["social-media-accounts"],
     queryFn: () => api.getSocialAccounts() as Promise<Account[]>,
@@ -191,13 +201,15 @@ export default function SocialAccountsPage() {
             {accountsQuery.isFetching && !accountsQuery.isLoading && <Spinner className="h-3.5 w-3.5" />}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowForm((v) => !v)}
-          className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
-        >
-          {showForm ? "Cancel" : "Add account"}
-        </button>
+        {canManageAccounts && (
+          <button
+            type="button"
+            onClick={() => setShowForm((v) => !v)}
+            className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5"
+          >
+            {showForm ? "Cancel" : "Add account"}
+          </button>
+        )}
       </div>
 
       {(error || accountsQuery.error) && (
@@ -211,7 +223,7 @@ export default function SocialAccountsPage() {
         </div>
       )}
 
-      {pendingId && pendingCandidates && pendingCandidates.length > 0 && (
+      {canManageAccounts && pendingId && pendingCandidates && pendingCandidates.length > 0 && (
         <SectionCard title={`Choose which ${pendingPlatform ?? ""} account${pendingCandidates.length > 1 ? "s" : ""} to connect`}>
           <p className="mb-3 text-xs text-ink/55">
             This login can manage {pendingCandidates.length} account{pendingCandidates.length > 1 ? "s" : ""}. Connect as many
@@ -243,7 +255,7 @@ export default function SocialAccountsPage() {
         </SectionCard>
       )}
 
-      {showForm && (
+      {canManageAccounts && showForm && (
         <SectionCard title="Connect an account">
           <form onSubmit={connectNewAccount} className="flex flex-col gap-3 sm:flex-row sm:items-end">
             <label className="block">
@@ -333,44 +345,46 @@ export default function SocialAccountsPage() {
               ))}
             </div>
 
-            <div className="mt-3 flex gap-2">
-              {a.connected ? (
-                <button
-                  disabled={busyId === a.id}
-                  onClick={() => disconnect(a)}
-                  className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
-                >
-                  Disconnect
-                </button>
-              ) : (
-                <>
-                  {oauthApps.some((app) => app.platform === a.platform) && (
-                    <select
-                      value={selectedAppByAccountId[a.id] ?? ""}
-                      onChange={(e) => setSelectedAppByAccountId((m) => ({ ...m, [a.id]: e.target.value }))}
-                      className="rounded border border-[var(--line)] bg-transparent px-1.5 py-1 text-[11px]"
-                      title="Which OAuth app to connect this account through"
-                    >
-                      <option value="">Platform default app</option>
-                      {oauthApps
-                        .filter((app) => app.platform === a.platform)
-                        .map((app) => (
-                          <option key={app.id} value={app.id}>
-                            {app.name}
-                          </option>
-                        ))}
-                    </select>
-                  )}
+            {canManageAccounts && (
+              <div className="mt-3 flex gap-2">
+                {a.connected ? (
                   <button
                     disabled={busyId === a.id}
-                    onClick={() => connect(a)}
-                    className="rounded-md bg-accent px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                    onClick={() => disconnect(a)}
+                    className="rounded-md border border-[var(--line)] px-2.5 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
                   >
-                    {busyId === a.id ? "Redirecting…" : "Connect"}
+                    Disconnect
                   </button>
-                </>
-              )}
-            </div>
+                ) : (
+                  <>
+                    {oauthApps.some((app) => app.platform === a.platform) && (
+                      <select
+                        value={selectedAppByAccountId[a.id] ?? ""}
+                        onChange={(e) => setSelectedAppByAccountId((m) => ({ ...m, [a.id]: e.target.value }))}
+                        className="rounded border border-[var(--line)] bg-transparent px-1.5 py-1 text-[11px]"
+                        title="Which OAuth app to connect this account through"
+                      >
+                        <option value="">Platform default app</option>
+                        {oauthApps
+                          .filter((app) => app.platform === a.platform)
+                          .map((app) => (
+                            <option key={app.id} value={app.id}>
+                              {app.name}
+                            </option>
+                          ))}
+                      </select>
+                    )}
+                    <button
+                      disabled={busyId === a.id}
+                      onClick={() => connect(a)}
+                      className="rounded-md bg-accent px-2.5 py-1 text-xs text-white disabled:opacity-50"
+                    >
+                      {busyId === a.id ? "Redirecting…" : "Connect"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ))}
         {accounts.length === 0 && (

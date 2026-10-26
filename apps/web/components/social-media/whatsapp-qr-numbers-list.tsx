@@ -93,6 +93,17 @@ function ConnectQrModal({ open, onOpenChange, onConnected }: { open: boolean; on
  *  WhatsApp Team Inbox, 2026-10-26). */
 export function WhatsAppQrNumbersList() {
   const queryClient = useQueryClient();
+  // Connect/reconnect/disconnect is primary-admin-only now, matching the
+  // backend (Part: connect-accounts primary-admin-only, 2026-10-27,
+  // explicit user request — "hide the adding or connecting accounts for
+  // all the user except me"). Rename is left available to anyone with
+  // Social Media access — it's not a connect/disconnect action and the
+  // backend doesn't restrict it either.
+  const meQuery = useQuery({
+    queryKey: ["me-is-primary-admin"],
+    queryFn: () => api.getMe() as Promise<{ isPrimaryAdmin: boolean }>,
+  });
+  const canManageAccounts = meQuery.data?.isPrimaryAdmin ?? false;
   const [modalOpen, setModalOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -167,13 +178,15 @@ export function WhatsAppQrNumbersList() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold tracking-tight">WhatsApp (Team) — Numbers</h1>
-        <button
-          type="button"
-          className="flex items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
-          onClick={() => setModalOpen(true)}
-        >
-          Connect new number
-        </button>
+        {canManageAccounts && (
+          <button
+            type="button"
+            className="flex items-center justify-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm text-white disabled:opacity-50"
+            onClick={() => setModalOpen(true)}
+          >
+            Connect new number
+          </button>
+        )}
       </div>
 
       {actionError && <p className="text-sm text-bad">{actionError}</p>}
@@ -226,7 +239,7 @@ export function WhatsAppQrNumbersList() {
               >
                 Rename
               </button>
-              {n.status !== "CONNECTED" && (
+              {canManageAccounts && n.status !== "CONNECTED" && (
                 <button
                   type="button"
                   className="rounded-full bg-ink/[0.05] px-3 py-1 text-xs font-medium text-ink/60 transition-colors hover:bg-ink/10 disabled:opacity-50"
@@ -236,20 +249,24 @@ export function WhatsAppQrNumbersList() {
                   Reconnect (scan QR)
                 </button>
               )}
-              <button
-                type="button"
-                className="rounded-full bg-bad/10 px-3 py-1 text-xs font-medium text-bad transition-colors hover:bg-bad/20 disabled:opacity-50"
-                disabled={busyId === n.id}
-                onClick={() => logout(n.id)}
-              >
-                Disconnect
-              </button>
+              {canManageAccounts && (
+                <button
+                  type="button"
+                  className="rounded-full bg-bad/10 px-3 py-1 text-xs font-medium text-bad transition-colors hover:bg-bad/20 disabled:opacity-50"
+                  disabled={busyId === n.id}
+                  onClick={() => logout(n.id)}
+                >
+                  Disconnect
+                </button>
+              )}
             </div>
           </div>
         ))}
         {!accountsQuery.isLoading && numbers.length === 0 && (
           <p className="col-span-full py-8 text-center text-sm text-ink/50">
-            No WhatsApp numbers connected yet. Click &quot;Connect new number&quot; and scan the QR code with the phone that owns the number.
+            {canManageAccounts
+              ? 'No WhatsApp numbers connected yet. Click "Connect new number" and scan the QR code with the phone that owns the number.'
+              : "No WhatsApp numbers connected yet — ask your primary admin to connect one."}
           </p>
         )}
       </div>

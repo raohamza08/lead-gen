@@ -1,8 +1,10 @@
-import { Body, Controller, ForbiddenException, Get, NotFoundException, Param, Post, UseGuards } from "@nestjs/common";
-import { JwtClaims, Role } from "@leadgen/types";
+import { Body, Controller, Get, NotFoundException, Param, Post, UseGuards } from "@nestjs/common";
+import { JwtClaims } from "@leadgen/types";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { ModuleAccessGuard } from "../../common/guards/module-access.guard";
+import { PrimaryAdminGuard } from "../../common/guards/primary-admin.guard";
 import { RequiresModule } from "../../common/decorators/requires-module.decorator";
+import { RequiresPrimaryAdmin } from "../../common/decorators/requires-primary-admin.decorator";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { WhatsAppQrSessionManagerService } from "./whatsapp-qr-session-manager.service";
@@ -25,12 +27,23 @@ export class WhatsAppQrController {
     private readonly sessions: WhatsAppQrSessionManagerService,
   ) {}
 
+  // Add/connect/disconnect a shared WhatsApp number is primary-admin-only,
+  // not just any Role.ADMIN (Part: connect-accounts primary-admin-only,
+  // 2026-10-27, explicit user request — "hide the adding or connecting
+  // accounts for all the user except me") -- startSession/reconnectSession
+  // previously had NO role check at all (anyone with Social Media access
+  // could start a brand-new QR session), and logout only checked the
+  // broader Role.ADMIN. getStatus (read-only) is untouched.
   @Post("sessions")
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   async startSession(@CurrentUser() user: JwtClaims, @Body() body: { label?: string }) {
     return this.sessions.startNewSession(user.orgId, user.sub, body.label);
   }
 
   @Post("sessions/:accountId/reconnect")
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   async reconnectSession(@CurrentUser() user: JwtClaims, @Param("accountId") accountId: string) {
     await this.assertAccount(user, accountId);
     await this.sessions.reconnectSession(accountId, user.sub);
@@ -50,10 +63,9 @@ export class WhatsAppQrController {
   }
 
   @Post("sessions/:accountId/logout")
+  @UseGuards(PrimaryAdminGuard)
+  @RequiresPrimaryAdmin()
   async logout(@CurrentUser() user: JwtClaims, @Param("accountId") accountId: string) {
-    if (user.role !== Role.ADMIN) {
-      throw new ForbiddenException("Only an admin can disconnect a shared WhatsApp number.");
-    }
     await this.assertAccount(user, accountId);
     await this.sessions.logout(accountId);
     return { loggedOut: true };
