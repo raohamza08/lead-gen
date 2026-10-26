@@ -382,14 +382,14 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       mediaContent?.caption ??
       (mediaType ? `[${mediaType}]` : undefined);
 
-    let mediaUrl: string | undefined;
+    let media: { url: string; mimeType: string; filename: string } | undefined;
     if (mediaContent && mediaType) {
-      mediaUrl = await this.downloadAndStoreMedia(accountId, mediaContent, mediaType).catch((err) => {
+      media = await this.downloadAndStoreMedia(accountId, mediaContent, mediaType).catch((err) => {
         this.logger.error(`Failed to download WhatsApp ${mediaType} for account ${accountId}: ${(err as Error).message}`);
         return undefined;
       });
     }
-    if (!text && !mediaUrl) return;
+    if (!text && !media) return;
 
     const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
     // contactNumber keeps its "@lid" suffix when the real number isn't
@@ -407,7 +407,9 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       externalMessageId: message.key.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fromUs: Boolean(message.key.fromMe),
       messageText: text,
-      mediaUrl,
+      mediaUrl: media?.url,
+      mediaMimeType: media?.mimeType,
+      mediaFilename: media?.filename,
       sentAt: message.messageTimestamp ? new Date(Number(message.messageTimestamp) * 1000) : new Date(),
       isHistoryBackfill: opts.isHistoryBackfill,
     });
@@ -417,7 +419,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     accountId: string,
     mediaContent: Record<string, any>,
     mediaType: "image" | "video" | "audio" | "document",
-  ): Promise<string> {
+  ): Promise<{ url: string; mimeType: string; filename: string }> {
     const { downloadContentFromMessage } = await this.lib();
     const stream = await downloadContentFromMessage(mediaContent, mediaType);
     const chunks: Buffer[] = [];
@@ -426,7 +428,13 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
 
     const mimeType: string = mediaContent.mimetype ?? "application/octet-stream";
     const extGuess = mimeType.split("/")[1]?.split(";")[0] ?? "bin";
-    return this.storeMediaAsset(accountId, buffer, mimeType, `whatsapp-${mediaType}.${extGuess}`, "whatsapp-inbound");
+    // Document messages carry the sender's real filename (Baileys'
+    // IDocumentMessage.fileName) -- worth keeping for the download button
+    // instead of the generic "whatsapp-document.pdf" every other media
+    // type gets (which has no equivalent real name to prefer).
+    const filename: string = mediaType === "document" && mediaContent.fileName ? mediaContent.fileName : `whatsapp-${mediaType}.${extGuess}`;
+    const url = await this.storeMediaAsset(accountId, buffer, mimeType, filename, "whatsapp-inbound");
+    return { url, mimeType, filename };
   }
 
   /** Shared by inbound (downloadAndStoreMedia, above) and outbound
@@ -551,6 +559,8 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         senderName: senderUser?.name,
         messageText: media.caption,
         mediaUrl,
+        mediaMimeType: media.mimetype,
+        mediaFilename: media.filename,
         sentAt: new Date(),
       });
     });

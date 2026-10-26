@@ -15,6 +15,8 @@ export interface IncomingMessageInput {
   senderName?: string;
   messageText?: string;
   mediaUrl?: string;
+  mediaMimeType?: string;
+  mediaFilename?: string;
   sentAt: Date;
   /** True for a message replayed from a platform's own chat-history backfill
    *  (Part: WhatsApp Team Inbox history backfill, 2026-10-26) rather than
@@ -88,6 +90,8 @@ export class SocialInboxIngestService {
             senderName: input.senderName,
             messageText: input.messageText,
             mediaUrl: input.mediaUrl,
+            mediaMimeType: input.mediaMimeType,
+            mediaFilename: input.mediaFilename,
             sentAt: input.sentAt,
           },
         });

@@ -1,4 +1,4 @@
-import { Controller, Get, Inject, NotFoundException, Param, Res } from "@nestjs/common";
+import { Controller, Get, Inject, NotFoundException, Param, Query, Res } from "@nestjs/common";
 import { Response } from "express";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { MEDIA_STORAGE_SERVICE, MediaStorageService } from "./media-storage.interface";
@@ -19,14 +19,19 @@ export class MediaFileController {
   ) {}
 
   @Get("media/:mediaAssetId")
-  async serve(@Param("mediaAssetId") mediaAssetId: string, @Res() res: Response) {
+  async serve(@Param("mediaAssetId") mediaAssetId: string, @Query("download") download: string | undefined, @Res() res: Response) {
     const asset = await this.prisma.mediaAsset.findUnique({ where: { id: mediaAssetId } });
     if (!asset) throw new NotFoundException("Media not found");
 
     const buffer = await this.storage.read(asset.storageKey);
     res.set({
       "Content-Type": asset.mimeType,
-      "Content-Disposition": `inline; filename="${encodeURIComponent(asset.filename)}"`,
+      // Inline by default (unchanged -- platform publish APIs that fetch
+      // this URL themselves need inline bytes, not a Save-As prompt);
+      // ?download=1 switches to attachment for the WhatsApp attachment
+      // viewer's explicit Download button (Part: WhatsApp attachment
+      // view/download, 2026-10-26).
+      "Content-Disposition": `${download ? "attachment" : "inline"}; filename="${encodeURIComponent(asset.filename)}"`,
       "Cache-Control": "public, max-age=31536000, immutable", // storageKey is UUID-per-upload — content at this URL never changes
     });
     res.send(buffer);

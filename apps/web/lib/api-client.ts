@@ -15,6 +15,16 @@ export interface OutboundAttachmentInput {
   contentBase64: string;
 }
 
+/** `/media/:id` is served off the bare API origin, not under /api/v1 (Part:
+ *  WhatsApp attachment view/download, 2026-10-26) — same origin-stripping
+ *  realtime.ts already does for the socket's own URL, exported here since
+ *  mediaUrl values from the API are relative paths that need this to ever
+ *  resolve to anything on the web app's own origin. */
+export function resolveMediaUrl(path: string): string {
+  const origin = API_BASE_URL.replace(/\/api\/v1\/?$/, "");
+  return `${origin}${path}`;
+}
+
 /** Exported for realtime.ts — the socket handshake authenticates with the
  *  same access token every REST call already uses. */
 export function getAccessToken(): string | null {

@@ -2843,6 +2843,12 @@ model SocialMessage {
   senderName        String?            @map("sender_name")
   messageText       String?            @map("message_text")
   mediaUrl          String?            @map("media_url")
+  /// Needed to render the right preview (image/video inline vs. a document
+  /// chip) and to give a download its real name — mediaUrl itself is an
+  /// opaque `/media/:assetId` path with neither (Part: WhatsApp attachment
+  /// view/download, 2026-10-26).
+  mediaMimeType     String?            @map("media_mime_type")
+  mediaFilename     String?            @map("media_filename")
   sentAt            DateTime           @map("sent_at")
   createdAt         DateTime           @default(now()) @map("created_at")
 

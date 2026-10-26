@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../lib/api-client";
+import { api, resolveMediaUrl } from "../../lib/api-client";
 import { Avatar } from "../ui/avatar";
 import { LoadingRow, Spinner } from "../spinner";
 
@@ -13,6 +13,8 @@ interface SocialMessageItem {
   senderName: string | null;
   messageText: string | null;
   mediaUrl: string | null;
+  mediaMimeType: string | null;
+  mediaFilename: string | null;
   sentAt: string;
 }
 
@@ -89,6 +91,79 @@ function PaperclipIcon() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2}>
+      <path d="M12 3v12m0 0-4-4m4 4 4-4M5 19h14" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function FileIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={1.6}>
+      <path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" strokeLinejoin="round" />
+      <path d="M14 3v4h4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/**
+ * Renders a message's attachment — inline preview for images/video (what
+ * WhatsApp itself does), a filename chip for everything else (documents,
+ * audio), and an explicit Download action on every kind (Part: WhatsApp
+ * attachment view/download, 2026-10-26, explicit user request — "add an
+ * option to view and download any kind of document, image or video").
+ * mediaUrl from the API is an opaque relative `/media/:id` path — never
+ * usable as-is (it only exists on the API's own origin, not the web app's),
+ * so every render here goes through resolveMediaUrl first.
+ */
+function MediaAttachment({ url, mimeType, filename, isOurs }: { url: string; mimeType: string | null; filename: string | null; isOurs: boolean }) {
+  const viewUrl = resolveMediaUrl(url);
+  const downloadUrl = `${viewUrl}${viewUrl.includes("?") ? "&" : "?"}download=1`;
+  const label = filename || "Attachment";
+  const linkTone = isOurs ? "text-white/80 hover:text-white" : "text-accent hover:text-accent/80";
+
+  if (mimeType?.startsWith("image/")) {
+    return (
+      <div className="mt-1">
+        <a href={viewUrl} target="_blank" rel="noreferrer">
+          <img src={viewUrl} alt={label} className="max-h-60 w-full rounded-lg object-cover" />
+        </a>
+        <a href={downloadUrl} download className={`mt-1 flex items-center gap-1 text-xs ${linkTone}`}>
+          <DownloadIcon /> Download
+        </a>
+      </div>
+    );
+  }
+
+  if (mimeType?.startsWith("video/")) {
+    return (
+      <div className="mt-1">
+        {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+        <video src={viewUrl} controls className="max-h-60 w-full rounded-lg" />
+        <a href={downloadUrl} download className={`mt-1 flex items-center gap-1 text-xs ${linkTone}`}>
+          <DownloadIcon /> Download
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={downloadUrl}
+      download
+      className={`mt-1 flex items-center gap-2 rounded-lg border px-2.5 py-2 text-xs ${
+        isOurs ? "border-white/25 hover:bg-white/10" : "border-[var(--line)] hover:bg-ink/5"
+      }`}
+    >
+      <FileIcon />
+      <span className="flex-1 truncate">{label}</span>
+      <DownloadIcon />
+    </a>
   );
 }
 
