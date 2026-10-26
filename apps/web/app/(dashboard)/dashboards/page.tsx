@@ -1,9 +1,10 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { api, getCurrentUser } from "../../../lib/api-client";
+import { getDefaultRoute } from "../../../lib/default-route";
 import { Tabs } from "../../../components/ui/tabs";
 import { EmptyState } from "../../../components/ui/empty-state";
 import { SkeletonCard } from "../../../components/ui/skeleton";
@@ -102,9 +103,27 @@ function DashboardCenterTabs() {
   // loading state.
   const flagsQuery = useQuery({
     queryKey: ["dc-my-dashboard-access"],
-    queryFn: () => api.getMe() as Promise<DashboardAccessFlags>,
+    queryFn: () => api.getMe() as Promise<DashboardAccessFlags & Record<string, unknown>>,
     enabled: !isAdmin,
   });
+
+  const flags = flagsQuery.data;
+  const tabDefs = isAdmin ? ALL_TAB_DEFS : ALL_TAB_DEFS.filter((t) => flags?.[FLAG_BY_TAB[t.value]]);
+
+  // Someone with zero Dashboard Center tabs granted can only ever land
+  // here via a hardcoded redirect (root "/" or just-logged-in) — the
+  // sidebar's own "Dashboard Center" link never renders without at least
+  // one of these flags, so nobody reaches this by clicking a visible nav
+  // item. Send them to whatever module they DO have instead of a dead-end
+  // permission error (Part: landing-route fix, 2026-10-27, explicit user
+  // request — "when I check one thing for a person, only that module
+  // should be shown to him without any error"). getDefaultRoute checks the
+  // same flags this filtered to zero tabs, so it can never loop back here.
+  useEffect(() => {
+    if (!isAdmin && flags && tabDefs.length === 0) {
+      router.replace(getDefaultRoute(flags, false));
+    }
+  }, [isAdmin, flags, tabDefs.length, router]);
 
   if (!isAdmin && flagsQuery.isLoading) {
     return <SkeletonCard className="h-64" />;
@@ -118,16 +137,12 @@ function DashboardCenterTabs() {
     );
   }
 
-  const flags = flagsQuery.data;
-  const tabDefs = isAdmin ? ALL_TAB_DEFS : ALL_TAB_DEFS.filter((t) => flags?.[FLAG_BY_TAB[t.value]]);
-
   if (tabDefs.length === 0) {
-    return (
-      <EmptyState
-        title="No access to the Dashboard Center"
-        description="You don't have any Dashboard Center tabs granted yet — ask an admin to grant them in Settings > Team > Access."
-      />
-    );
+    // Covers the one real dead end left: nothing granted ANYWHERE, not
+    // just no dashboard tabs — getDefaultRoute's own fallback already sent
+    // them to /profile in that case, so this only flashes briefly while
+    // that redirect is in flight.
+    return <SkeletonCard className="h-64" />;
   }
 
   const requestedTab = searchParams.get("tab") ?? DEFAULT_TAB;

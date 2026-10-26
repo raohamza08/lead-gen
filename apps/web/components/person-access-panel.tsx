@@ -261,6 +261,21 @@ export function PersonAccessPanel({ userId }: { userId: string }) {
 
   async function save() {
     if (!data) return;
+    // Confirm before saving a state with literally nothing granted (Part:
+    // access-panel safety guard, 2026-10-27, explicit user request — "when
+    // I check one thing for a person, only that module should be shown to
+    // him without any error") — this exact sequence (click "Clear All",
+    // then Save without re-checking anything) silently locked a real user
+    // out of every module, including the one they'd meant to leave on,
+    // with no warning either side of the click. Only fires for a true
+    // all-false save; unchecking modules down to a smaller non-empty set
+    // is unaffected.
+    if (!data.isAdmin && Object.values(data.modules).every((v) => v === false)) {
+      const proceed = window.confirm(
+        "This removes every module this person can see — including Dashboard Center tabs — leaving them with no access anywhere. Continue?",
+      );
+      if (!proceed) return;
+    }
     setSaving(true);
     setError(null);
     setNotice(null);

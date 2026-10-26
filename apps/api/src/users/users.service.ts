@@ -55,6 +55,52 @@ function dashboardAccessDefaultsForRole(role: Role): Record<string, boolean> {
   return {};
 }
 
+/** The 7 "core" module flags whose schema column default is `true` —
+ *  deliberately, per their own docblocks, as a one-time retrofit so no
+ *  EXISTING user lost access the moment each flag was introduced. That
+ *  reasoning doesn't carry forward to a brand-new user created today: they
+ *  were never "existing" at the moment any of these shipped, so a plain
+ *  `prisma.user.create()` with no explicit value for these just inherits
+ *  `true` from the column default by accident, handing every new
+ *  non-admin user Lead Gen + Email Hub + Social Media (all platforms) +
+ *  Upwork Bidding/Invite/Requests + Meta Ads before an admin touches
+ *  PersonAccessPanel at all. */
+const ALL_CORE_MODULE_FLAGS = [
+  "leadGenAccess",
+  "emailHubAccess",
+  "socialMediaAccess",
+  "upworkBiddingAccess",
+  "upworkInviteAccess",
+  "upworkRequestsAccess",
+  "metaAdsAccess",
+] as const;
+
+/** Seeds a brand-new user's core module flags from their role (Part:
+ *  access-defaults fix, 2026-10-27, explicit user request — "when I check
+ *  one thing for a person, only that module should be shown to him
+ *  without any error"). Same "role gives a default, per-user override on
+ *  top" rule dashboardAccessDefaultsForRole already uses, now applied
+ *  consistently to these 7 flags too instead of silently falling through
+ *  to the column default: ADMIN/MANAGER keep full access (matches their
+ *  existing ModuleAccessGuard bypass and dashboard default anyway);
+ *  BUSINESS_DEVELOPER/PROJECT_MANAGER get only the Upwork pages their own
+ *  role docblock already describes them as needing; every other role
+ *  starts at zero and needs an explicit PersonAccessPanel grant. Only read
+ *  at creation time, same as dashboardAccessDefaultsForRole — a later role
+ *  change (setRole) does NOT re-run this. */
+function coreModuleAccessDefaultsForRole(role: Role): Record<string, boolean> {
+  if (role === Role.ADMIN || role === Role.MANAGER) {
+    return Object.fromEntries(ALL_CORE_MODULE_FLAGS.map((f) => [f, true]));
+  }
+  if (role === Role.BUSINESS_DEVELOPER) {
+    return { upworkBiddingAccess: true, upworkInviteAccess: true, upworkRequestsAccess: true };
+  }
+  if (role === Role.PROJECT_MANAGER) {
+    return { upworkRequestsAccess: true };
+  }
+  return Object.fromEntries(ALL_CORE_MODULE_FLAGS.map((f) => [f, false]));
+}
+
 function avatarUrlFor(userId: string, storageKey: string | null): string | null {
   if (!storageKey) return null;
   return `${apiPublicUrl()}/users/${userId}/avatar?v=${encodeURIComponent(storageKey)}`;
@@ -125,7 +171,15 @@ export class UsersService {
     const passwordHash = await bcrypt.hash(input.password, 12);
     try {
       const user = await this.prisma.user.create({
-        data: { orgId, email: input.email, name: input.name, passwordHash, role: input.role, ...dashboardAccessDefaultsForRole(input.role) },
+        data: {
+          orgId,
+          email: input.email,
+          name: input.name,
+          passwordHash,
+          role: input.role,
+          ...coreModuleAccessDefaultsForRole(input.role),
+          ...dashboardAccessDefaultsForRole(input.role),
+        },
         select: { id: true, email: true, name: true, role: true, active: true, createdAt: true },
       });
       this.auditLog.write({

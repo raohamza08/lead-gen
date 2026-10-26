@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { api, setTokens } from "../../lib/api-client";
+import { getDefaultRoute } from "../../lib/default-route";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -21,7 +22,11 @@ export default function LoginPage() {
       // nothing left to refresh with.
       const tokens = await api.login(email, password);
       setTokens(tokens);
-      router.push("/dashboards");
+      // Land on the first module this person can actually use, not a
+      // hardcoded /dashboards that's a dead end for anyone without a
+      // Dashboard Center tab granted (Part: landing-route fix, 2026-10-27).
+      const me = (await api.getMe()) as Record<string, unknown> & { role?: string };
+      router.push(getDefaultRoute(me, me.role === "ADMIN"));
     } catch (err) {
       const message = (err as Error).message;
       // A network failure and wrong credentials are different problems with
