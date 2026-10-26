@@ -48,6 +48,13 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
    *  machine-gunning messages the instant two agents happen to reply at
    *  once). */
   private readonly sendQueues = new Map<string, Promise<void>>();
+  /** Keyed `${accountId}:${jid}` -- fetched once per contact per process
+   *  lifetime rather than once per message (Part: WhatsApp Team Inbox
+   *  profile pictures, 2026-10-26) since sock.profilePictureUrl is a real
+   *  network round trip; avatars changing mid-session is an acceptable
+   *  miss given this is a low-volume shared inbox, not a cache this app
+   *  needs to actively invalidate. */
+  private readonly avatarCache = new Map<string, string>();
   private baileys?: BaileysModule;
 
   constructor(
@@ -211,6 +218,16 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     return pn ? pn.split("@")[0] : remoteJid;
   }
 
+  private async getProfilePictureUrl(accountId: string, jid: string): Promise<string | undefined> {
+    const cacheKey = `${accountId}:${jid}`;
+    const cached = this.avatarCache.get(cacheKey);
+    if (cached) return cached;
+    const sock = this.sockets.get(accountId);
+    const url = await sock?.profilePictureUrl(jid, "preview").catch(() => undefined);
+    if (url) this.avatarCache.set(cacheKey, url);
+    return url;
+  }
+
   private async handleConnectionUpdate(accountId: string, update: Partial<ConnectionState>) {
     const { connection, qr, lastDisconnect } = update;
 
@@ -344,11 +361,13 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     // resolvable (needed so a later reply targets the right network) --
     // strip it just for the human-facing username fallback.
     const displayNumber = contactNumber.replace(/@lid$/, "");
+    const contactProfileImageUrl = await this.getProfilePictureUrl(accountId, remoteJid);
     await this.ingest.persistMessage(account, {
       externalConversationId: contactNumber,
       contactExternalId: contactNumber,
       contactUsername: displayNumber,
       contactName,
+      contactProfileImageUrl,
       externalMessageId: message.key.id || `${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fromUs: Boolean(message.key.fromMe),
       messageText: text,

@@ -118,6 +118,13 @@ export function PlatformInbox({
 
   function invalidateAll() {
     queryClient.invalidateQueries({ queryKey: ["social-inbox-conversations"] });
+    // The currently-open thread (ConversationDetailPanel) has its own query
+    // keyed ["social-inbox-conversation", id] -- omitting the id matches
+    // every conversation's query by React Query's default prefix matching,
+    // so whichever one is open picks up a just-arrived message without a
+    // manual reload (confirmed missing in production, 2026-10-26 -- the
+    // list's preview updated but an open thread never refetched).
+    queryClient.invalidateQueries({ queryKey: ["social-inbox-conversation"] });
     queryClient.invalidateQueries({ queryKey: ["social-inbox-stats"] });
     queryClient.invalidateQueries({ queryKey: ["social-media-accounts"] });
   }
