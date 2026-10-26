@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { UpworkProfileGroup } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 
 @Injectable()
@@ -23,13 +24,13 @@ export class FreelancerProfilesService {
     });
   }
 
-  async create(orgId: string, input: { name: string; niche: string }) {
+  async create(orgId: string, input: { name: string; niche: string; group?: UpworkProfileGroup }) {
     return this.prisma.upworkFreelancerProfile.create({
-      data: { orgId, name: input.name, niche: input.niche },
+      data: { orgId, name: input.name, niche: input.niche, group: input.group },
     });
   }
 
-  async update(orgId: string, id: string, input: { name?: string; niche?: string; active?: boolean }) {
+  async update(orgId: string, id: string, input: { name?: string; niche?: string; active?: boolean; group?: UpworkProfileGroup | null }) {
     const result = await this.prisma.upworkFreelancerProfile.updateMany({
       where: { id, orgId },
       data: input,

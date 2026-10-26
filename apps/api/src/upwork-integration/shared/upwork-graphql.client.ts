@@ -604,7 +604,15 @@ export class UpworkGraphQLClient {
    *  required filter (returns every room org-wide). Read-only use only —
    *  Upwork has a real send-message mutation surface
    *  (createRoomStoryV2/etc.) but this method and this app never call
-   *  it, per the spec's explicit read-only requirement for this module. */
+   *  it, per the spec's explicit read-only requirement for this module.
+   *  `roomUsers` added 2026-10-26 (Part: Delayed Responses team inboxes)
+   *  — confirmed live via `__type(name: "Room")` introspection that it's
+   *  a real field on this same `Room` type, so it rides along on the
+   *  existing paginated call rather than needing a separate per-room
+   *  query. Each entry's `role` is "owner" for whoever created the room
+   *  (confirmed live: always the client) or "admin" for everyone else
+   *  (the agency side) — see UpworkApiRoom.assignedProfileNames' own
+   *  docblock for how the "admin" names get used. */
   async getRoomListPage(accessToken: string, organizationId: string | null, after: string | null, first = 50) {
     const data = await this.request<{
       roomList: {
@@ -618,6 +626,7 @@ export class UpworkGraphQLClient {
             numUnread: number | null;
             createdAtDateTime: string | null;
             latestStory: { message: string | null; createdDateTime: string | null; user: { id: string; name: string | null } | null } | null;
+            roomUsers: { role: string | null; user: { id: string; name: string | null } | null }[] | null;
           };
         }[];
         pageInfo: { endCursor: string | null; hasNextPage: boolean | null } | null;
@@ -632,6 +641,7 @@ export class UpworkGraphQLClient {
             node {
               id roomName roomType numUsers numUnread createdAtDateTime
               latestStory { message createdDateTime user { id name } }
+              roomUsers { role user { id name } }
             }
           }
           pageInfo { endCursor hasNextPage }

@@ -10,6 +10,9 @@ import { InitialsAvatar } from "../../../../components/avatar";
 import { RecordRow, RecordListPanel, DetailPanelHeader } from "../../../../components/record-list";
 import { Button } from "../../../../components/ui/button";
 
+type ProfileGroup = "GRAPHICS" | "TECH";
+type GroupTab = "ALL" | ProfileGroup | "UNASSIGNED";
+
 interface DelayedRoom {
   id: string;
   roomName: string | null;
@@ -20,7 +23,10 @@ interface DelayedRoom {
   latestMessageAt: string | null;
   latestMessageFrom: string | null;
   minutesPending: number | null;
+  groups: ProfileGroup[];
 }
+
+const GROUP_LABEL: Record<ProfileGroup, string> = { GRAPHICS: "Graphics", TECH: "Tech" };
 
 function pendingLabel(minutes: number | null): string {
   if (minutes == null) return "—";
@@ -52,7 +58,20 @@ function pendingLabel(minutes: number | null): string {
  *  request — "remove the time delay and it should work in realtime" —
  *  see UpworkRoomsService.listDelayedResponses' own docblock for the
  *  one real limit left on "realtime": Outly's own 15-minute sync tick
- *  against Upwork, which this change doesn't touch. */
+ *  against Upwork, which this change doesn't touch.
+ *
+ *  Graphics/Tech team inboxes added 2026-10-26, explicit user request —
+ *  "creating two different inboxes within the same module... so that's
+ *  how we can see which team is working properly and which's not". Each
+ *  room's `groups` comes pre-computed from the backend (matched against
+ *  UpworkFreelancerProfile.group via UpworkRoomsService) — this page only
+ *  filters client-side on a value the server already resolved, it never
+ *  re-derives group membership itself. A room can appear in BOTH tabs if
+ *  it has assigned freelancers from both groups (explicit user decision
+ *  — "show in both inboxes... so neither team misses it"), and
+ *  Unassigned exists so a room whose assigned freelancer has no group
+ *  set (or doesn't match any known profile) never just silently vanishes
+ *  from view. */
 export default function DelayedResponsesPage() {
   const queryClient = useQueryClient();
   const statusQuery = useQuery({ queryKey: ["upwork-api-status"], queryFn: () => api.getUpworkApiStatus() as Promise<UpworkConnectionStatus> });
@@ -63,16 +82,25 @@ export default function DelayedResponsesPage() {
     queryFn: () => api.getUpworkApiDelayedResponses(),
     enabled: connected,
   });
-  const data = delayedQuery.data as { totalCount: number; rooms: DelayedRoom[] } | undefined;
+  const data = delayedQuery.data as
+    | { totalCount: number; counts: { GRAPHICS: number; TECH: number; UNASSIGNED: number }; rooms: DelayedRoom[] }
+    | undefined;
 
   const [search, setSearch] = useState("");
+  const [groupTab, setGroupTab] = useState<GroupTab>("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [respondingId, setRespondingId] = useState<string | null>(null);
 
   const allRooms = data?.rooms ?? [];
   const filtered = useMemo(
-    () => allRooms.filter((r) => (search ? (r.roomName ?? "").toLowerCase().includes(search.toLowerCase()) : true)),
-    [allRooms, search],
+    () =>
+      allRooms.filter((r) => {
+        if (search && !(r.roomName ?? "").toLowerCase().includes(search.toLowerCase())) return false;
+        if (groupTab === "ALL") return true;
+        if (groupTab === "UNASSIGNED") return r.groups.length === 0;
+        return r.groups.includes(groupTab);
+      }),
+    [allRooms, search, groupTab],
   );
 
   const selected = filtered.find((r) => r.id === selectedId) ?? filtered[0] ?? null;
@@ -107,11 +135,38 @@ export default function DelayedResponsesPage() {
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Delayed Responses" />;
 
+  const counts = data?.counts ?? { GRAPHICS: 0, TECH: 0, UNASSIGNED: 0 };
+  const tabs: { key: GroupTab; label: string; count: number }[] = [
+    { key: "ALL", label: "All", count: data?.totalCount ?? 0 },
+    { key: "GRAPHICS", label: "Graphics", count: counts.GRAPHICS },
+    { key: "TECH", label: "Tech", count: counts.TECH },
+    { key: "UNASSIGNED", label: "Unassigned", count: counts.UNASSIGNED },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-lg font-semibold tracking-tight">Delayed Responses</h1>
       </div>
+
+      {data && data.totalCount > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              type="button"
+              onClick={() => setGroupTab(t.key)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                groupTab === t.key
+                  ? "border-accent bg-accent text-white"
+                  : "border-[var(--line)] text-ink/65 hover:bg-ink/5"
+              }`}
+            >
+              {t.label} <span className={groupTab === t.key ? "opacity-80" : "text-ink/45"}>{t.count}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {delayedQuery.isLoading && <p className="text-sm text-ink/55">Loading…</p>}
       {delayedQuery.error && <p className="text-sm text-bad">{(delayedQuery.error as Error).message}</p>}
@@ -156,8 +211,19 @@ export default function DelayedResponsesPage() {
                     secondary={r.latestMessage ?? "No messages yet"}
                     secondaryUnread={Boolean(r.numUnread && r.numUnread > 0)}
                     footer={
-                      <span className="rounded-full bg-bad/15 px-1.5 py-0.5 text-[10px] font-semibold text-bad">
-                        pending {pendingLabel(r.minutesPending)}
+                      <span className="flex items-center gap-1">
+                        <span className="rounded-full bg-bad/15 px-1.5 py-0.5 text-[10px] font-semibold text-bad">
+                          pending {pendingLabel(r.minutesPending)}
+                        </span>
+                        {r.groups.length === 0 ? (
+                          <span className="rounded-full bg-ink/10 px-1.5 py-0.5 text-[10px] font-medium text-ink/50">Unassigned</span>
+                        ) : (
+                          r.groups.map((g) => (
+                            <span key={g} className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
+                              {GROUP_LABEL[g]}
+                            </span>
+                          ))
+                        )}
                       </span>
                     }
                   />

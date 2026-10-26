@@ -86,11 +86,14 @@ function draftToResult(d: DraftRow): GenerateResult {
   };
 }
 
+type UpworkProfileGroup = "GRAPHICS" | "TECH";
+
 interface FreelancerProfile {
   id: string;
   name: string;
   niche: string;
   active: boolean;
+  group: UpworkProfileGroup | null;
 }
 
 /** Lives here rather than under Settings (Part: same day, explicit
@@ -107,6 +110,7 @@ function FreelancerProfilesSection() {
   });
   const [name, setName] = useState("");
   const [niche, setNiche] = useState("");
+  const [group, setGroup] = useState<UpworkProfileGroup | "">("");
   const [error, setError] = useState<string | null>(null);
 
   function refresh() {
@@ -114,16 +118,22 @@ function FreelancerProfilesSection() {
   }
 
   const createMutation = useMutation({
-    mutationFn: () => api.createUpworkFreelancerProfile({ name, niche }),
+    mutationFn: () => api.createUpworkFreelancerProfile({ name, niche, ...(group ? { group } : {}) }),
     onSuccess: () => {
       setName("");
       setNiche("");
+      setGroup("");
       refresh();
     },
     onError: (err) => setError((err as Error).message),
   });
   const toggleMutation = useMutation({
     mutationFn: ({ id, active }: { id: string; active: boolean }) => api.updateUpworkFreelancerProfile(id, { active }),
+    onSuccess: refresh,
+  });
+  const groupMutation = useMutation({
+    mutationFn: ({ id, group: g }: { id: string; group: UpworkProfileGroup | "" }) =>
+      api.updateUpworkFreelancerProfile(id, { group: g || null }),
     onSuccess: refresh,
   });
   const deleteMutation = useMutation({
@@ -135,7 +145,8 @@ function FreelancerProfilesSection() {
     <SectionCard title="Freelancer profiles">
       <p className="mb-2 text-xs text-ink/55">
         Individual freelancer identities and their niches — the generator suggests which one best fits each job. Inactive profiles are kept but
-        never suggested.
+        never suggested. &quot;Group&quot; is separate — it&apos;s what sorts a profile&apos;s pending chats into the Graphics or Tech inbox under
+        Delayed Responses; leave it unset and that profile&apos;s chats show under Unassigned there instead.
       </p>
       {error && <div className="mb-2 text-xs text-bad">{error}</div>}
       {profilesQuery.isLoading ? (
@@ -149,6 +160,15 @@ function FreelancerProfilesSection() {
                 <div className="truncate text-xs text-ink/50">{p.niche}</div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
+                <select
+                  value={p.group ?? ""}
+                  onChange={(e) => groupMutation.mutate({ id: p.id, group: e.target.value as UpworkProfileGroup | "" })}
+                  className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1 text-xs"
+                >
+                  <option value="">No group</option>
+                  <option value="GRAPHICS">Graphics</option>
+                  <option value="TECH">Tech</option>
+                </select>
                 <label className="flex items-center gap-1.5 text-xs text-ink/60">
                   <input
                     type="checkbox"
@@ -186,6 +206,15 @@ function FreelancerProfilesSection() {
           placeholder="Niche (e.g. Shopify & e-commerce design)"
           className="min-w-0 flex-1 rounded-md border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none focus:border-accent"
         />
+        <select
+          value={group}
+          onChange={(e) => setGroup(e.target.value as UpworkProfileGroup | "")}
+          className="rounded-md border border-[var(--line)] bg-transparent px-2 py-1.5 text-sm"
+        >
+          <option value="">No group</option>
+          <option value="GRAPHICS">Graphics</option>
+          <option value="TECH">Tech</option>
+        </select>
         <button
           type="button"
           onClick={() => {

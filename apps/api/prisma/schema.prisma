@@ -1,4 +1,4 @@
-// Prisma schema — implements the ERD in Part B4 of lead-gen-system-architecture.md
+﻿// Prisma schema — implements the ERD in Part B4 of lead-gen-system-architecture.md
 generator client {
   provider      = "prisma-client-js"
   // "native" covers the developer's own machine. The musl target is required
@@ -2259,6 +2259,28 @@ model UpworkApiRoom {
   /// dismissing is a one-time "I already handled this", not a permanent
   /// mute.
   delayedResponseDismissedAt DateTime? @map("delayed_response_dismissed_at")
+  /// Real Upwork room participants other than the client (Part: Delayed
+  /// Responses team inboxes, 2026-10-26, explicit user request — split
+  /// Delayed Responses into Graphics/Tech inboxes "so that's how we can
+  /// see which team is working properly and which's not"). Confirmed live
+  /// against Upwork's own schema: `roomList`'s `Room` type exposes a
+  /// `roomUsers` field (role + user name + organization) at NO added
+  /// API-call cost — it's just more fields on the query every sync tick
+  /// already makes — so this is populated from the SAME request that
+  /// fills every other column here, never a per-room follow-up call.
+  /// Stores each roomUsers entry's real Upwork display name EXCEPT the
+  /// one with role "owner" (confirmed live: that's always the client who
+  /// created the room). Deliberately raw names, not resolved to a group
+  /// here — matching against UpworkFreelancerProfile.name happens at
+  /// read time in UpworkRoomsService, so a profile's group can be
+  /// recategorized later without needing to re-sync every room. One real
+  /// gotcha this was built around: EurosHub's own agency admin account
+  /// ("Sheikh Nabeel A.") appears in `roomUsers` on EVERY room checked,
+  /// not just ones he specifically works — read-time matching against
+  /// known *active, grouped* profiles only (not a blocklist of his name)
+  /// is what keeps him from polluting every room's group, since he has
+  /// no UpworkFreelancerProfile row to match against.
+  assignedProfileNames String[] @default([]) @map("assigned_profile_names")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
@@ -3316,6 +3338,19 @@ model UpworkProposalWritingSettings {
 /// correspond 1:1 to a person with a login here (mirrors
 /// UpworkProposal.profileName/UpworkProfileAccess's own precedent of
 /// treating Upwork profile identity as a plain string, not a User FK).
+/// Graphics vs Tech (Part: Delayed Responses team inboxes, 2026-10-26,
+/// explicit user request — "creating two different inboxes... either
+/// graphics or tech, so that's how we can see which team is working
+/// properly"). Mirrors the technical/non-technical-graphics split the
+/// Proposal Writing SOP already self-classifies jobs into (see
+/// UpworkProposalWritingSettings.technicalWordLimit's own docblock) —
+/// not a new concept for this business, just the first place it's a
+/// stored field instead of an LLM judgment call made fresh each time.
+enum UpworkProfileGroup {
+  GRAPHICS
+  TECH
+}
+
 model UpworkFreelancerProfile {
   id    String       @id @default(uuid())
   orgId String       @map("org_id")
@@ -3326,6 +3361,10 @@ model UpworkFreelancerProfile {
   /// matches job content against to suggest the best-fit profile.
   niche  String  @db.Text
   active Boolean @default(true)
+  /// Nullable, not defaulted — a profile with no group set simply doesn't
+  /// count toward either Delayed Responses inbox (shows under
+  /// "Unassigned" there instead of being silently miscategorized).
+  group  UpworkProfileGroup?
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

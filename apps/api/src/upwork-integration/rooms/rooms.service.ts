@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
+import { UpworkProfileGroup } from "@prisma/client";
 import { PrismaService } from "../../common/prisma/prisma.service";
 import { UpworkRoomsSyncService } from "./rooms-sync.service";
 
@@ -91,9 +92,26 @@ export class UpworkRoomsService {
       }
       return true;
     });
+
+    const groupByFirstName = await this.buildProfileGroupIndex(orgId);
+    const roomsWithGroups = pending.map((r) => ({
+      room: r,
+      groups: this.resolveRoomGroups(r.assignedProfileNames, groupByFirstName),
+    }));
+
+    const counts = { GRAPHICS: 0, TECH: 0, UNASSIGNED: 0 };
+    for (const { groups } of roomsWithGroups) {
+      if (groups.length === 0) counts.UNASSIGNED += 1;
+      else {
+        if (groups.includes("GRAPHICS")) counts.GRAPHICS += 1;
+        if (groups.includes("TECH")) counts.TECH += 1;
+      }
+    }
+
     return {
       totalCount: pending.length,
-      rooms: pending.map((r) => ({
+      counts,
+      rooms: roomsWithGroups.map(({ room: r, groups }) => ({
         id: r.id,
         roomName: r.roomName,
         roomType: r.roomType,
@@ -103,8 +121,47 @@ export class UpworkRoomsService {
         latestMessageAt: r.latestMessageAt,
         latestMessageFrom: r.latestMessageFrom,
         minutesPending: r.latestMessageAt ? Math.floor((now - r.latestMessageAt.getTime()) / 60000) : null,
+        groups,
       })),
     };
+  }
+
+  /** Lowercased-first-name → group lookup, built fresh per call from
+   *  active, grouped UpworkFreelancerProfile rows (Part: Delayed
+   *  Responses team inboxes, 2026-10-26). Deliberately only matches
+   *  against profiles that HAVE a group set — a profile with no group,
+   *  or a name with no matching profile at all (most notably EurosHub's
+   *  own agency admin, who has no UpworkFreelancerProfile row), simply
+   *  doesn't match anything and the room falls through to "Unassigned"
+   *  instead of being guessed at. */
+  private async buildProfileGroupIndex(orgId: string): Promise<Map<string, UpworkProfileGroup>> {
+    const profiles = await this.prisma.upworkFreelancerProfile.findMany({
+      where: { orgId, active: true, group: { not: null } },
+      select: { name: true, group: true },
+    });
+    const index = new Map<string, UpworkProfileGroup>();
+    for (const p of profiles) {
+      if (p.group) index.set(p.name.trim().toLowerCase(), p.group);
+    }
+    return index;
+  }
+
+  /** A room can show in BOTH inboxes if it has at least one assigned
+   *  profile from each group (explicit user decision, 2026-10-26 — "show
+   *  in both inboxes... so neither team misses it") — rare in practice
+   *  (most rooms' `assignedProfileNames` resolve to one group or none)
+   *  but not blocked. Matches on first name only, same convention as
+   *  UpworkRoomsSyncService.isSenderAgencySide — Upwork's own display
+   *  names here are consistently "{First} {LastInitial}.". */
+  private resolveRoomGroups(assignedProfileNames: string[], groupByFirstName: Map<string, UpworkProfileGroup>): UpworkProfileGroup[] {
+    const matched = new Set<UpworkProfileGroup>();
+    for (const fullName of assignedProfileNames) {
+      const firstName = fullName.trim().split(/\s+/)[0]?.toLowerCase();
+      if (!firstName) continue;
+      const group = groupByFirstName.get(firstName);
+      if (group) matched.add(group);
+    }
+    return [...matched];
   }
 
   /** Marks a room as read IN OUTLY (Part: Rooms & Messages read state,

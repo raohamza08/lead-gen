@@ -1079,6 +1079,7 @@ export const api = {
   getUpworkApiDelayedResponses: () =>
     request<{
       totalCount: number;
+      counts: { GRAPHICS: number; TECH: number; UNASSIGNED: number };
       rooms: {
         id: string;
         roomName: string | null;
@@ -1089,6 +1090,7 @@ export const api = {
         latestMessageAt: string | null;
         latestMessageFrom: string | null;
         minutesPending: number | null;
+        groups: ("GRAPHICS" | "TECH")[];
       }[];
     }>("/upwork-api/rooms-delayed"),
   // Connects usage (Part: Upwork API integration — Connects usage domain,
@@ -1187,9 +1189,9 @@ export const api = {
     minHiresPerYear?: number;
   }) => request("/upwork-proposal-writing/settings", { method: "PUT", body: JSON.stringify(body) }),
   getUpworkFreelancerProfiles: () => request("/upwork-proposal-writing/freelancer-profiles"),
-  createUpworkFreelancerProfile: (body: { name: string; niche: string }) =>
+  createUpworkFreelancerProfile: (body: { name: string; niche: string; group?: "GRAPHICS" | "TECH" }) =>
     request("/upwork-proposal-writing/freelancer-profiles", { method: "POST", body: JSON.stringify(body) }),
-  updateUpworkFreelancerProfile: (id: string, body: { name?: string; niche?: string; active?: boolean }) =>
+  updateUpworkFreelancerProfile: (id: string, body: { name?: string; niche?: string; active?: boolean; group?: "GRAPHICS" | "TECH" | null }) =>
     request(`/upwork-proposal-writing/freelancer-profiles/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   deleteUpworkFreelancerProfile: (id: string) =>
     request(`/upwork-proposal-writing/freelancer-profiles/${id}`, { method: "DELETE" }),

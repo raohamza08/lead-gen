@@ -126,6 +126,7 @@ export class UpworkRoomsSyncService {
               latestMessage: e.node.latestStory?.message?.slice(0, 2000) ?? null,
               latestMessageAt: toDate(e.node.latestStory?.createdDateTime),
               latestMessageFrom: e.node.latestStory?.user?.name ?? null,
+              assignedProfileNames: this.extractAssignedProfileNames(e.node.roomUsers),
             };
             return this.prisma.upworkApiRoom.upsert({
               where: { orgId_upworkRoomId: { orgId: connectionRow.orgId, upworkRoomId: e.node.id } },
@@ -236,6 +237,26 @@ export class UpworkRoomsSyncService {
    *  UpworkRoomsService.listDelayedResponses directly against a room's
    *  own cached `latestMessageFrom`/`roomName`, without needing the full
    *  per-message history synced for every room. */
+  /** Everyone in the room except whoever created it (Part: Delayed
+   *  Responses team inboxes, 2026-10-26) — confirmed live the "owner"
+   *  role is always the client, so excluding it leaves only agency-side
+   *  participants: the specific freelancer(s) actually assigned plus
+   *  EurosHub's own agency admin, who shows up on every room regardless.
+   *  Deduped (the same person can appear twice — once under their own
+   *  personal Upwork org, once under "EurosHub" — confirmed live). Which
+   *  of these names are a real, grouped freelancer (vs. the admin, vs. a
+   *  name with no group set yet) is resolved later in
+   *  UpworkRoomsService, not here — this just caches the raw candidates. */
+  private extractAssignedProfileNames(roomUsers: { role: string | null; user: { name: string | null } | null }[] | null): string[] {
+    if (!roomUsers) return [];
+    const names = new Set<string>();
+    for (const ru of roomUsers) {
+      if (ru.role === "owner") continue;
+      if (ru.user?.name) names.add(ru.user.name);
+    }
+    return [...names];
+  }
+
   isSenderAgencySide(senderName: string | null, roomName: string | null): boolean {
     if (!senderName) return false;
     if (!roomName) return true;
