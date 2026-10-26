@@ -105,6 +105,12 @@ export class SocialInboxService {
               { lastMessage: { contains: query.search, mode: "insensitive" } },
               { id: query.search },
               { socialAccount: { username: { contains: query.search, mode: "insensitive" } } },
+              // Matches a word/phrase anywhere in the conversation, not
+              // just its cached latest-message preview (Part: WhatsApp
+              // Team Inbox search, 2026-10-26, explicit user request --
+              // "should search properly" with message content, not just
+              // the last message).
+              { messages: { some: { messageText: { contains: query.search, mode: "insensitive" } } } },
             ],
           }
         : {}),
@@ -161,6 +167,7 @@ export class SocialInboxService {
         // "" is the explicit unassign signal (see UpdateConversationDto's
         // own docblock) -- undefined means "field wasn't sent, don't touch it".
         ...(dto.assignedToUserId !== undefined ? { assignedToUserId: dto.assignedToUserId || null } : {}),
+        ...(dto.contactName !== undefined ? { contactName: dto.contactName.trim() || null } : {}),
       },
     });
     this.realtime.emitToOrg(conversation.socialAccount.orgId, "socialInbox.conversationUpdated", { conversationId: id });

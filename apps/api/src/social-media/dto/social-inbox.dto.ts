@@ -8,6 +8,16 @@ export class UpdateConversationDto {
    *  unassign signal explicitly rather than overloading undefined for both
    *  "don't change this" and "clear it". */
   @IsOptional() @IsString() assignedToUserId?: string;
+  /** Manual override for a contact's display name (Part: WhatsApp Team
+   *  Inbox contact rename, 2026-10-26) -- lets a team member set a real
+   *  name once they recognize who it is, for the cases where the platform
+   *  never provides one at all (confirmed for WhatsApp QR's LID-routed
+   *  contacts: WhatsApp withholds the real name/number from a linked
+   *  device, no amount of polling fixes that). Persisted the same as any
+   *  platform-reported name, but a future platform-provided name would
+   *  still overwrite it on a later message -- this isn't a protected
+   *  field, just a same-shape write to the same column. */
+  @IsOptional() @IsString() contactName?: string;
 }
 
 export class ReplyDto {

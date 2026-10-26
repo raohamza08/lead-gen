@@ -100,6 +100,8 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
   const [noteText, setNoteText] = useState("");
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteText, setEditingNoteText] = useState("");
+  const [editingContactName, setEditingContactName] = useState(false);
+  const [contactNameDraft, setContactNameDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [createdLeadId, setCreatedLeadId] = useState<string | null>(null);
   const [infoOpen, setInfoOpen] = useState(false);
@@ -121,7 +123,7 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
   }
 
   const updateMutation = useMutation({
-    mutationFn: (body: { status?: string; assignedToUserId?: string }) => api.updateSocialInboxConversation(conversationId, body),
+    mutationFn: (body: { status?: string; assignedToUserId?: string; contactName?: string }) => api.updateSocialInboxConversation(conversationId, body),
     onSuccess: invalidate,
     onError: (err) => setError((err as Error).message),
   });
@@ -253,6 +255,51 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
 
       {infoOpen && (
         <div className="flex flex-col gap-3 border-b border-[var(--line)] bg-ink/[0.015] px-4 py-3">
+          {/* Manual contact name override (Part: WhatsApp Team Inbox
+              contact rename, 2026-10-26, explicit user request) -- the main
+              use for this is WhatsApp QR's LID-routed contacts, where the
+              platform never provides a real name/number to a linked device
+              at all; letting a team member set one once they recognize who
+              it is beats showing a raw id forever. */}
+          <div className="flex items-center gap-1.5 text-xs text-ink/55">
+            Contact name
+            {editingContactName ? (
+              <form
+                className="flex items-center gap-1.5"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  updateMutation.mutate({ contactName: contactNameDraft.trim() });
+                  setEditingContactName(false);
+                }}
+              >
+                <input
+                  autoFocus
+                  value={contactNameDraft}
+                  onChange={(e) => setContactNameDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === "Escape" && setEditingContactName(false)}
+                  placeholder="e.g. Alex (Light Force Center)"
+                  className="rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs"
+                />
+                <button type="submit" disabled={updateMutation.isPending} className="font-medium text-accent disabled:opacity-50">
+                  Save
+                </button>
+                <button type="button" className="text-ink/50" onClick={() => setEditingContactName(false)}>
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="rounded border border-dashed border-[var(--line)] px-2 py-1 text-ink/70 hover:bg-ink/5"
+                onClick={() => {
+                  setContactNameDraft(conversation.contactName ?? "");
+                  setEditingContactName(true);
+                }}
+              >
+                {conversation.contactName || "Set a name"}
+              </button>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <label className="flex items-center gap-1.5 text-xs text-ink/55">
               Status

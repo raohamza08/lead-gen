@@ -686,7 +686,7 @@ export const api = {
   getSocialInboxConversations: (params: Record<string, string> = {}) =>
     request(`/social-inbox/conversations?${new URLSearchParams(params).toString()}`),
   getSocialInboxConversation: (id: string) => request(`/social-inbox/conversations/${id}`),
-  updateSocialInboxConversation: (id: string, body: { status?: string; assignedToUserId?: string }) =>
+  updateSocialInboxConversation: (id: string, body: { status?: string; assignedToUserId?: string; contactName?: string }) =>
     request(`/social-inbox/conversations/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   replySocialInboxConversation: (id: string, text: string) =>
     request(`/social-inbox/conversations/${id}/reply`, { method: "POST", body: JSON.stringify({ text }) }),
