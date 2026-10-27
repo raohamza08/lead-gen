@@ -322,8 +322,8 @@ export default function AnalyticsPage() {
               rows={[...trends.points].reverse()}
               rowKey={(r) => r.date}
               columns={[
-                { key: "date", header: "Date", render: (r) => r.date },
-                { key: "emailsSent", header: "Emails sent", numeric: true, render: (r) => r.emailsSent },
+                { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => r.date },
+                { key: "emailsSent", header: "Emails sent", numeric: true, render: (r) => r.emailsSent, sortValue: (r) => r.emailsSent },
               ]}
             />
           }
@@ -373,19 +373,22 @@ export default function AnalyticsPage() {
                       {r.companyName}
                     </a>
                   ),
+                  sortValue: (r) => r.companyName,
                 },
-                { key: "contact", header: "Contact", render: (r) => r.contactName ?? "—" },
-                { key: "subject", header: "Subject", render: (r) => r.subject },
-                { key: "step", header: "Step", numeric: true, render: (r) => r.sequenceStep },
+                { key: "contact", header: "Contact", render: (r) => r.contactName ?? "—", sortValue: (r) => r.contactName },
+                { key: "subject", header: "Subject", render: (r) => r.subject, sortValue: (r) => r.subject },
+                { key: "step", header: "Step", numeric: true, render: (r) => r.sequenceStep, sortValue: (r) => r.sequenceStep },
                 {
                   key: "sentAt",
                   header: "Sent",
                   render: (r) => (r.sentAt ? new Date(r.sentAt).toLocaleString() : "—"),
+                  sortValue: (r) => (r.sentAt ? new Date(r.sentAt).getTime() : null),
                 },
                 {
                   key: "eventAt",
                   header: emailTab === "OPENED" ? "Opened" : "Replied",
                   render: (r) => new Date(r.eventAt).toLocaleString(),
+                  sortValue: (r) => new Date(r.eventAt).getTime(),
                 },
               ]}
             />
@@ -413,25 +416,25 @@ export default function AnalyticsPage() {
               rows={email.bySequenceStep}
               rowKey={(r) => String(r.step)}
               columns={[
-                { key: "step", header: "Step", render: (r) => STEP_LABELS[r.step] ?? `Step ${r.step}` },
-                { key: "queued", header: "Queued", numeric: true, render: (r) => r.queued },
-                { key: "sent", header: "Sent", numeric: true, render: (r) => r.sent },
-                { key: "delivered", header: "Delivered", numeric: true, render: (r) => r.delivered },
-                { key: "opened", header: "Opened", numeric: true, render: (r) => r.opened },
-                { key: "notOpened", header: "Not opened", numeric: true, render: (r) => r.notOpened },
-                { key: "clicked", header: "Clicked", numeric: true, render: (r) => r.clicked },
-                { key: "replied", header: "Replied", numeric: true, render: (r) => r.replied },
-                { key: "bounced", header: "Bounced", numeric: true, render: (r) => r.bounced },
-                { key: "spam", header: "Spam", numeric: true, render: (r) => r.spamComplaints },
-                { key: "unsub", header: "Unsub", numeric: true, render: (r) => r.unsubscribed },
-                { key: "blocked", header: "Blocked", numeric: true, render: (r) => r.blocked },
-                { key: "failed", header: "Failed", numeric: true, render: (r) => r.failed },
-                { key: "deliveryRate", header: "Delivery %", numeric: true, render: (r) => pct(r.deliveryRate) },
-                { key: "openRate", header: "Open %", numeric: true, render: (r) => pct(r.openRate) },
-                { key: "clickRate", header: "Click %", numeric: true, render: (r) => pct(r.clickRate) },
-                { key: "replyRate", header: "Reply %", numeric: true, render: (r) => pct(r.replyRate) },
-                { key: "meetingRate", header: "Meeting %", numeric: true, render: (r) => pct(r.meetingRate) },
-                { key: "conversionRate", header: "Conv %", numeric: true, render: (r) => pct(r.conversionRate) },
+                { key: "step", header: "Step", render: (r) => STEP_LABELS[r.step] ?? `Step ${r.step}`, sortValue: (r) => r.step },
+                { key: "queued", header: "Queued", numeric: true, render: (r) => r.queued, sortValue: (r) => r.queued },
+                { key: "sent", header: "Sent", numeric: true, render: (r) => r.sent, sortValue: (r) => r.sent },
+                { key: "delivered", header: "Delivered", numeric: true, render: (r) => r.delivered, sortValue: (r) => r.delivered },
+                { key: "opened", header: "Opened", numeric: true, render: (r) => r.opened, sortValue: (r) => r.opened },
+                { key: "notOpened", header: "Not opened", numeric: true, render: (r) => r.notOpened, sortValue: (r) => r.notOpened },
+                { key: "clicked", header: "Clicked", numeric: true, render: (r) => r.clicked, sortValue: (r) => r.clicked },
+                { key: "replied", header: "Replied", numeric: true, render: (r) => r.replied, sortValue: (r) => r.replied },
+                { key: "bounced", header: "Bounced", numeric: true, render: (r) => r.bounced, sortValue: (r) => r.bounced },
+                { key: "spam", header: "Spam", numeric: true, render: (r) => r.spamComplaints, sortValue: (r) => r.spamComplaints },
+                { key: "unsub", header: "Unsub", numeric: true, render: (r) => r.unsubscribed, sortValue: (r) => r.unsubscribed },
+                { key: "blocked", header: "Blocked", numeric: true, render: (r) => r.blocked, sortValue: (r) => r.blocked },
+                { key: "failed", header: "Failed", numeric: true, render: (r) => r.failed, sortValue: (r) => r.failed },
+                { key: "deliveryRate", header: "Delivery %", numeric: true, render: (r) => pct(r.deliveryRate), sortValue: (r) => r.deliveryRate },
+                { key: "openRate", header: "Open %", numeric: true, render: (r) => pct(r.openRate), sortValue: (r) => r.openRate },
+                { key: "clickRate", header: "Click %", numeric: true, render: (r) => pct(r.clickRate), sortValue: (r) => r.clickRate },
+                { key: "replyRate", header: "Reply %", numeric: true, render: (r) => pct(r.replyRate), sortValue: (r) => r.replyRate },
+                { key: "meetingRate", header: "Meeting %", numeric: true, render: (r) => pct(r.meetingRate), sortValue: (r) => r.meetingRate },
+                { key: "conversionRate", header: "Conv %", numeric: true, render: (r) => pct(r.conversionRate), sortValue: (r) => r.conversionRate },
               ]}
             />
           }
@@ -479,13 +482,13 @@ export default function AnalyticsPage() {
               rows={[...trends.points].reverse()}
               rowKey={(r) => r.date}
               columns={[
-                { key: "date", header: "Date", render: (r) => r.date },
-                { key: "leadsCreated", header: "Leads", numeric: true, render: (r) => r.leadsCreated },
-                { key: "verifiedLeads", header: "Verified", numeric: true, render: (r) => r.verifiedLeads },
-                { key: "emailsSent", header: "Emails sent", numeric: true, render: (r) => r.emailsSent },
-                { key: "replies", header: "Replies", numeric: true, render: (r) => r.replies },
-                { key: "meetingsBooked", header: "Meetings", numeric: true, render: (r) => r.meetingsBooked },
-                { key: "avgLeadScore", header: "Avg score", numeric: true, render: (r) => r.avgLeadScore },
+                { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => r.date },
+                { key: "leadsCreated", header: "Leads", numeric: true, render: (r) => r.leadsCreated, sortValue: (r) => r.leadsCreated },
+                { key: "verifiedLeads", header: "Verified", numeric: true, render: (r) => r.verifiedLeads, sortValue: (r) => r.verifiedLeads },
+                { key: "emailsSent", header: "Emails sent", numeric: true, render: (r) => r.emailsSent, sortValue: (r) => r.emailsSent },
+                { key: "replies", header: "Replies", numeric: true, render: (r) => r.replies, sortValue: (r) => r.replies },
+                { key: "meetingsBooked", header: "Meetings", numeric: true, render: (r) => r.meetingsBooked, sortValue: (r) => r.meetingsBooked },
+                { key: "avgLeadScore", header: "Avg score", numeric: true, render: (r) => r.avgLeadScore, sortValue: (r) => r.avgLeadScore },
               ]}
             />
           }
@@ -519,8 +522,8 @@ export default function AnalyticsPage() {
               rows={linkedin.statusCounts}
               rowKey={(r) => r.status}
               columns={[
-                { key: "status", header: "Status", render: (r) => stageLabel(r.status) },
-                { key: "count", header: "Leads", numeric: true, render: (r) => r.count },
+                { key: "status", header: "Status", render: (r) => stageLabel(r.status), sortValue: (r) => r.status },
+                { key: "count", header: "Leads", numeric: true, render: (r) => r.count, sortValue: (r) => r.count },
               ]}
             />
           }

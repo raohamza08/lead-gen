@@ -108,11 +108,27 @@ export default function WorkHistoryPage() {
                 rowKey={(e) => e.id}
                 onRowClick={(e) => setSelected(e)}
                 columns={[
-                  { key: "freelancer", header: "Freelancer", render: (e) => e.freelancerName ?? "—" },
-                  { key: "title", header: "Contract", render: (e) => <span className="line-clamp-1 max-w-xs">{e.title ?? "—"}</span> },
-                  { key: "status", header: "Status", render: (e) => e.status ?? "—" },
-                  { key: "charge", header: "Charged", render: (e) => e.totalCharge ?? "—", numeric: true },
-                  { key: "feedback", header: "Feedback", render: (e) => (e.feedbackToFreelancerScore != null ? `${e.feedbackToFreelancerScore}★` : "—") },
+                  { key: "freelancer", header: "Freelancer", render: (e) => e.freelancerName ?? "—", sortValue: (e) => e.freelancerName },
+                  {
+                    key: "title",
+                    header: "Contract",
+                    render: (e) => <span className="line-clamp-1 max-w-xs">{e.title ?? "—"}</span>,
+                    sortValue: (e) => e.title,
+                  },
+                  { key: "status", header: "Status", render: (e) => e.status ?? "—", sortValue: (e) => e.status },
+                  {
+                    key: "charge",
+                    header: "Charged",
+                    render: (e) => e.totalCharge ?? "—",
+                    numeric: true,
+                    sortValue: (e) => (e.totalCharge ? parseFloat(e.totalCharge.replace(/[^0-9.-]/g, "")) : null),
+                  },
+                  {
+                    key: "feedback",
+                    header: "Feedback",
+                    render: (e) => (e.feedbackToFreelancerScore != null ? `${e.feedbackToFreelancerScore}★` : "—"),
+                    sortValue: (e) => e.feedbackToFreelancerScore,
+                  },
                 ]}
                 rows={filtered}
               />

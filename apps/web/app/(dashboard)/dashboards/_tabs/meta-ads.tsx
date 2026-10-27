@@ -191,8 +191,8 @@ export function MetaAdsTab() {
                 rowKey={(r) => r.date}
                 rows={series}
                 columns={[
-                  { key: "date", header: "Date", render: (r) => r.date },
-                  { key: "spend", header: "Spend", render: (r) => money(r.spend, currency), numeric: true },
+                  { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => new Date(r.date).getTime() },
+                  { key: "spend", header: "Spend", render: (r) => money(r.spend, currency), numeric: true, sortValue: (r) => r.spend },
                 ]}
               />
             }
@@ -218,9 +218,9 @@ export function MetaAdsTab() {
                 rowKey={(r) => r.date}
                 rows={series}
                 columns={[
-                  { key: "date", header: "Date", render: (r) => r.date },
-                  { key: "impressions", header: "Impressions", render: (r) => num(r.impressions), numeric: true },
-                  { key: "reach", header: "Reach", render: (r) => num(r.reach), numeric: true },
+                  { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => new Date(r.date).getTime() },
+                  { key: "impressions", header: "Impressions", render: (r) => num(r.impressions), numeric: true, sortValue: (r) => r.impressions },
+                  { key: "reach", header: "Reach", render: (r) => num(r.reach), numeric: true, sortValue: (r) => r.reach },
                 ]}
               />
             }
@@ -245,10 +245,10 @@ export function MetaAdsTab() {
                 rowKey={(r) => r.date}
                 rows={series}
                 columns={[
-                  { key: "date", header: "Date", render: (r) => r.date },
-                  { key: "clicks", header: "Clicks", render: (r) => num(r.clicks), numeric: true },
-                  { key: "ctr", header: "CTR", render: (r) => pct(r.ctr), numeric: true },
-                  { key: "cpc", header: "CPC", render: (r) => money(r.cpc, currency), numeric: true },
+                  { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => new Date(r.date).getTime() },
+                  { key: "clicks", header: "Clicks", render: (r) => num(r.clicks), numeric: true, sortValue: (r) => r.clicks },
+                  { key: "ctr", header: "CTR", render: (r) => pct(r.ctr), numeric: true, sortValue: (r) => r.ctr },
+                  { key: "cpc", header: "CPC", render: (r) => money(r.cpc, currency), numeric: true, sortValue: (r) => r.cpc },
                 ]}
               />
             }
@@ -286,10 +286,10 @@ export function MetaAdsTab() {
                 rowKey={(r) => r.date}
                 rows={series}
                 columns={[
-                  { key: "date", header: "Date", render: (r) => r.date },
-                  { key: "conversions", header: "Conversions", render: (r) => num(r.conversions), numeric: true },
-                  { key: "roas", header: "ROAS", render: (r) => (r.roas !== undefined ? `${r.roas.toFixed(2)}x` : "—"), numeric: true },
-                  { key: "conversionValue", header: "Conversion Value", render: (r) => money(r.conversionValue, currency), numeric: true },
+                  { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => new Date(r.date).getTime() },
+                  { key: "conversions", header: "Conversions", render: (r) => num(r.conversions), numeric: true, sortValue: (r) => r.conversions },
+                  { key: "roas", header: "ROAS", render: (r) => (r.roas !== undefined ? `${r.roas.toFixed(2)}x` : "—"), numeric: true, sortValue: (r) => r.roas ?? null },
+                  { key: "conversionValue", header: "Conversion Value", render: (r) => money(r.conversionValue, currency), numeric: true, sortValue: (r) => r.conversionValue },
                 ]}
               />
             }

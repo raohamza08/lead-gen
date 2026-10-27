@@ -244,6 +244,17 @@ export interface TableColumn<T> {
   /** Renders the cell. Numbers should stay right-aligned via `numeric`. */
   render: (row: T) => ReactNode;
   numeric?: boolean;
+  /** Opt a column into click-header-to-sort (Part: table sort rollout,
+   *  2026-10-27, explicit user request — "make sure all the tables are in
+   *  tabular form with all the options to filter, sort etc in it"). Returns
+   *  the raw comparable value for this row — separate from `render` since
+   *  that returns JSX (a badge, a link, formatted text) that can't be
+   *  compared directly. A column with no `sortValue` just isn't sortable —
+   *  existing call sites that don't set this are unaffected. Sorting is
+   *  client-side over whatever `rows` this render received, same as every
+   *  other DataTable behavior; for a server-paginated table that only sorts
+   *  the current page, not the full server-side result set. */
+  sortValue?: (row: T) => string | number | null | undefined;
 }
 
 /**
@@ -265,6 +276,33 @@ export function DataTable<T>({
    *  rows only become clickable when a caller passes this. */
   onRowClick?: (row: T) => void;
 }) {
+  const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+
+  function toggleSort(col: TableColumn<T>) {
+    if (!col.sortValue) return;
+    setSort((prev) => {
+      if (prev?.key !== col.key) return { key: col.key, dir: "asc" };
+      if (prev.dir === "asc") return { key: col.key, dir: "desc" };
+      return null; // desc -> unsorted, back to original row order
+    });
+  }
+
+  const sortedRows = (() => {
+    if (!sort) return rows;
+    const col = columns.find((c) => c.key === sort.key);
+    if (!col?.sortValue) return rows;
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const av = col.sortValue!(a);
+      const bv = col.sortValue!(b);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1; // nulls last regardless of direction
+      if (bv == null) return -1;
+      if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
+      return String(av).localeCompare(String(bv)) * dir;
+    });
+  })();
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full min-w-[480px] border-collapse text-xs">
@@ -278,13 +316,28 @@ export function DataTable<T>({
                   col.numeric ? "text-right" : "text-left"
                 }`}
               >
-                {col.header}
+                {col.sortValue ? (
+                  <button
+                    type="button"
+                    onClick={() => toggleSort(col)}
+                    className={`flex items-center gap-1 transition-colors hover:text-ink ${col.numeric ? "ml-auto" : ""}`}
+                  >
+                    {col.header}
+                    {sort?.key === col.key && (
+                      <span aria-hidden className="text-[10px]">
+                        {sort.dir === "asc" ? "▲" : "▼"}
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  col.header
+                )}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
+          {sortedRows.map((row, i) => (
             <tr
               key={rowKey(row, i)}
               onClick={onRowClick ? () => onRowClick(row) : undefined}

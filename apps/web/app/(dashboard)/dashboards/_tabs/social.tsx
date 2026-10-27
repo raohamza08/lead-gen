@@ -182,13 +182,13 @@ export function SocialTab() {
               rowKey={(r) => r.accountId}
               rows={platforms}
               columns={[
-                { key: "platform", header: "Platform", render: (r) => titleCase(r.platform) },
-                { key: "username", header: "Account", render: (r) => r.username },
-                { key: "conversations", header: "Total Conv.", render: (r) => num(r.conversations), numeric: true },
-                { key: "newConversations", header: "New", render: (r) => num(r.newConversations), numeric: true },
-                { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true },
-                { key: "messagesIn", header: "In", render: (r) => num(r.messagesIn), numeric: true },
-                { key: "messagesOut", header: "Out", render: (r) => num(r.messagesOut), numeric: true },
+                { key: "platform", header: "Platform", render: (r) => titleCase(r.platform), sortValue: (r) => r.platform },
+                { key: "username", header: "Account", render: (r) => r.username, sortValue: (r) => r.username },
+                { key: "conversations", header: "Total Conv.", render: (r) => num(r.conversations), numeric: true, sortValue: (r) => r.conversations },
+                { key: "newConversations", header: "New", render: (r) => num(r.newConversations), numeric: true, sortValue: (r) => r.newConversations },
+                { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true, sortValue: (r) => r.unread },
+                { key: "messagesIn", header: "In", render: (r) => num(r.messagesIn), numeric: true, sortValue: (r) => r.messagesIn },
+                { key: "messagesOut", header: "Out", render: (r) => num(r.messagesOut), numeric: true, sortValue: (r) => r.messagesOut },
               ]}
             />
           }
@@ -204,9 +204,9 @@ export function SocialTab() {
             rowKey={(r) => r.userId}
             rows={team}
             columns={[
-              { key: "name", header: "Team member", render: (r) => r.name },
-              { key: "conversationsHandled", header: "Conversations", render: (r) => num(r.conversationsHandled), numeric: true },
-              { key: "avgResponseMinutes", header: "Avg. Response Time", render: (r) => minutes(r.avgResponseMinutes), numeric: true },
+              { key: "name", header: "Team member", render: (r) => r.name, sortValue: (r) => r.name },
+              { key: "conversationsHandled", header: "Conversations", render: (r) => num(r.conversationsHandled), numeric: true, sortValue: (r) => r.conversationsHandled },
+              { key: "avgResponseMinutes", header: "Avg. Response Time", render: (r) => minutes(r.avgResponseMinutes), numeric: true, sortValue: (r) => r.avgResponseMinutes },
             ]}
           />
         )}

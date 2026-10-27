@@ -320,10 +320,10 @@ export function WebsiteAnalyticsTab() {
                   rowKey={(r) => r.date}
                   rows={series}
                   columns={[
-                    { key: "date", header: "Date", render: (r) => r.date },
-                    { key: "totalUsers", header: "Users", render: (r) => num(r.totalUsers), numeric: true },
-                    { key: "sessions", header: "Sessions", render: (r) => num(r.sessions), numeric: true },
-                    { key: "pageViews", header: "Page Views", render: (r) => num(r.pageViews), numeric: true },
+                    { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => new Date(r.date).getTime() },
+                    { key: "totalUsers", header: "Users", render: (r) => num(r.totalUsers), numeric: true, sortValue: (r) => r.totalUsers },
+                    { key: "sessions", header: "Sessions", render: (r) => num(r.sessions), numeric: true, sortValue: (r) => r.sessions },
+                    { key: "pageViews", header: "Page Views", render: (r) => num(r.pageViews), numeric: true, sortValue: (r) => r.pageViews },
                   ]}
                 />
               }
@@ -425,8 +425,8 @@ export function WebsiteAnalyticsTab() {
             rowKey={(r) => r.path}
             rows={pages}
             columns={[
-              { key: "path", header: "Page", render: (r) => r.path },
-              { key: "views", header: "Views", render: (r) => num(r.views), numeric: true },
+              { key: "path", header: "Page", render: (r) => r.path, sortValue: (r) => r.path },
+              { key: "views", header: "Views", render: (r) => num(r.views), numeric: true, sortValue: (r) => r.views },
             ]}
           />
         </SectionCard>
@@ -440,8 +440,8 @@ export function WebsiteAnalyticsTab() {
             rowKey={(r) => r.label}
             rows={audience.countries}
             columns={[
-              { key: "label", header: "Country", render: (r) => r.label },
-              { key: "value", header: "Sessions", render: (r) => num(r.value), numeric: true },
+              { key: "label", header: "Country", render: (r) => r.label, sortValue: (r) => r.label },
+              { key: "value", header: "Sessions", render: (r) => num(r.value), numeric: true, sortValue: (r) => r.value },
             ]}
           />
         </SectionCard>

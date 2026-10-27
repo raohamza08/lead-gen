@@ -108,9 +108,9 @@ export function BenchmarksTab() {
             rowKey={(r) => r.metricKey}
             rows={benchmarks}
             columns={[
-              { key: "metricKey", header: "Metric", render: (r) => r.metricKey },
-              { key: "targetValue", header: "Target", render: (r) => r.targetValue.toLocaleString(), numeric: true },
-              { key: "updatedAt", header: "Last updated", render: (r) => dateTime(r.updatedAt) },
+              { key: "metricKey", header: "Metric", render: (r) => r.metricKey, sortValue: (r) => r.metricKey },
+              { key: "targetValue", header: "Target", render: (r) => r.targetValue.toLocaleString(), numeric: true, sortValue: (r) => r.targetValue },
+              { key: "updatedAt", header: "Last updated", render: (r) => dateTime(r.updatedAt), sortValue: (r) => new Date(r.updatedAt).getTime() },
               {
                 key: "actions",
                 header: "",

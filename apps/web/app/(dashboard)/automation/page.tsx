@@ -295,15 +295,17 @@ export default function AutomationPage() {
                     rows={sendQueue.waiting}
                     rowKey={(w) => w.leadId}
                     columns={[
-                      { key: "company", header: "Company", render: (w) => w.lead.companyName },
+                      { key: "company", header: "Company", render: (w) => w.lead.companyName, sortValue: (w) => w.lead.companyName },
                       {
                         key: "step",
                         header: "Next email",
                         render: (w) => `#${w.nextStep} — ${STEP_LABEL[w.nextStep] ?? ""}`,
+                        sortValue: (w) => w.nextStep,
                       },
                       {
                         key: "due",
                         header: "Drafts & sends",
+                        sortValue: (w) => (w.nextActionAt ? new Date(w.nextActionAt).getTime() : null),
                         render: (w) =>
                           w.nextActionAt ? (
                             <span>
@@ -413,8 +415,8 @@ export default function AutomationPage() {
               rows={health.agents}
               rowKey={(a) => a.agent}
               columns={[
-                { key: "agent", header: "Agent", render: (a) => a.agent },
-                { key: "total", header: "Runs", numeric: true, render: (a) => a.total },
+                { key: "agent", header: "Agent", render: (a) => a.agent, sortValue: (a) => a.agent },
+                { key: "total", header: "Runs", numeric: true, render: (a) => a.total, sortValue: (a) => a.total },
                 {
                   key: "failureRate",
                   header: "Failure %",
@@ -424,6 +426,7 @@ export default function AutomationPage() {
                       {a.failureRate}%
                     </span>
                   ),
+                  sortValue: (a) => a.failureRate,
                 },
                 {
                   key: "degradedRate",
@@ -432,8 +435,9 @@ export default function AutomationPage() {
                   render: (a) => (
                     <span className={a.degradedRate > 30 ? "text-gold" : ""}>{a.degradedRate}%</span>
                   ),
+                  sortValue: (a) => a.degradedRate,
                 },
-                { key: "avg", header: "Avg time", numeric: true, render: (a) => fmtMs(a.avgDurationMs) },
+                { key: "avg", header: "Avg time", numeric: true, render: (a) => fmtMs(a.avgDurationMs), sortValue: (a) => a.avgDurationMs },
               ]}
             />
           )}
@@ -451,11 +455,12 @@ export default function AutomationPage() {
                   key: "startedAt",
                   header: "When",
                   render: (r) => new Date(r.startedAt).toLocaleTimeString(),
+                  sortValue: (r) => new Date(r.startedAt).getTime(),
                 },
-                { key: "agent", header: "Agent", render: (r) => r.agent },
-                { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} /> },
-                { key: "duration", header: "Time", numeric: true, render: (r) => fmtMs(r.durationMs) },
-                { key: "attempts", header: "Tries", numeric: true, render: (r) => r.attempts },
+                { key: "agent", header: "Agent", render: (r) => r.agent, sortValue: (r) => r.agent },
+                { key: "status", header: "Status", render: (r) => <StatusBadge status={r.status} />, sortValue: (r) => r.status },
+                { key: "duration", header: "Time", numeric: true, render: (r) => fmtMs(r.durationMs), sortValue: (r) => r.durationMs },
+                { key: "attempts", header: "Tries", numeric: true, render: (r) => r.attempts, sortValue: (r) => r.attempts },
                 {
                   key: "error",
                   header: "Error",
@@ -466,6 +471,7 @@ export default function AutomationPage() {
                       {r.error ? `${r.error.slice(0, 70)}${r.error.length > 70 ? "…" : ""}` : "—"}
                     </span>
                   ),
+                  sortValue: (r) => r.error,
                 },
               ]}
             />

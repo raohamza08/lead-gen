@@ -441,9 +441,9 @@ export function UpworkTab() {
                   rowKey={(r) => r.businessDeveloperId}
                   rows={requestsQuery.data.byBusinessDeveloper}
                   columns={[
-                    { key: "name", header: "Business Developer", render: (r) => r.name },
-                    { key: "requestedHours", header: "Target Hours", numeric: true, render: (r) => num(r.requestedHours) },
-                    { key: "achievedHours", header: "Achieved", numeric: true, render: (r) => num(r.achievedHours) },
+                    { key: "name", header: "Business Developer", render: (r) => r.name, sortValue: (r) => r.name },
+                    { key: "requestedHours", header: "Target Hours", numeric: true, render: (r) => num(r.requestedHours), sortValue: (r) => r.requestedHours },
+                    { key: "achievedHours", header: "Achieved", numeric: true, render: (r) => num(r.achievedHours), sortValue: (r) => r.achievedHours },
                   ]}
                 />
               </div>
@@ -456,8 +456,8 @@ export function UpworkTab() {
                   rowKey={(r) => r.projectManagerId}
                   rows={requestsQuery.data.byProjectManager}
                   columns={[
-                    { key: "name", header: "Project Manager", render: (r) => r.name },
-                    { key: "requestedHours", header: "Approved Requested Hours", numeric: true, render: (r) => num(r.requestedHours) },
+                    { key: "name", header: "Project Manager", render: (r) => r.name, sortValue: (r) => r.name },
+                    { key: "requestedHours", header: "Approved Requested Hours", numeric: true, render: (r) => num(r.requestedHours), sortValue: (r) => r.requestedHours },
                   ]}
                 />
               </div>
@@ -469,9 +469,9 @@ export function UpworkTab() {
                   rowKey={(r) => r.profileName}
                   rows={requestsQuery.data.byProfile}
                   columns={[
-                    { key: "profileName", header: "Profile/ID", render: (r) => r.profileName },
-                    { key: "requestedHours", header: "Requested", numeric: true, render: (r) => num(r.requestedHours) },
-                    { key: "achievedHours", header: "Achieved", numeric: true, render: (r) => num(r.achievedHours) },
+                    { key: "profileName", header: "Profile/ID", render: (r) => r.profileName, sortValue: (r) => r.profileName },
+                    { key: "requestedHours", header: "Requested", numeric: true, render: (r) => num(r.requestedHours), sortValue: (r) => r.requestedHours },
+                    { key: "achievedHours", header: "Achieved", numeric: true, render: (r) => num(r.achievedHours), sortValue: (r) => r.achievedHours },
                   ]}
                 />
               </div>
@@ -597,10 +597,10 @@ export function UpworkTab() {
               rowKey={(r) => r.id}
               rows={showAllPurchases ? purchases : purchases.slice(0, PURCHASE_PAGE_SIZE)}
               columns={[
-                { key: "purchasedAt", header: "Date", render: (r) => dateTime(r.purchasedAt) },
-                { key: "connectsAmount", header: "Connects", render: (r) => num(r.connectsAmount), numeric: true },
-                { key: "totalCost", header: "Cost", render: (r) => money(r.totalCost, r.currency), numeric: true },
-                { key: "notes", header: "Notes", render: (r) => r.notes ?? "—" },
+                { key: "purchasedAt", header: "Date", render: (r) => dateTime(r.purchasedAt), sortValue: (r) => new Date(r.purchasedAt).getTime() },
+                { key: "connectsAmount", header: "Connects", render: (r) => num(r.connectsAmount), numeric: true, sortValue: (r) => r.connectsAmount },
+                { key: "totalCost", header: "Cost", render: (r) => money(r.totalCost, r.currency), numeric: true, sortValue: (r) => r.totalCost },
+                { key: "notes", header: "Notes", render: (r) => r.notes ?? "—", sortValue: (r) => r.notes },
                 {
                   key: "actions",
                   header: "",
@@ -670,13 +670,13 @@ export function UpworkTab() {
               rowKey={(r) => r.month}
               rows={monthly}
               columns={[
-                { key: "month", header: "Month", render: (r) => r.month },
-                { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
-                { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
-                { key: "connectsUsed", header: "Connects Used", render: (r) => num(r.connectsUsed), numeric: true },
-                { key: "clientsWon", header: "Clients Won", render: (r) => num(r.clientsWon), numeric: true },
-                { key: "estimatedUsageCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedUsageCost), numeric: true },
-                { key: "purchaseCost", header: "Actually Invoiced", render: (r) => money(r.purchaseCost), numeric: true },
+                { key: "month", header: "Month", render: (r) => r.month, sortValue: (r) => r.month },
+                { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true, sortValue: (r) => r.bids },
+                { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true, sortValue: (r) => r.invites },
+                { key: "connectsUsed", header: "Connects Used", render: (r) => num(r.connectsUsed), numeric: true, sortValue: (r) => r.connectsUsed },
+                { key: "clientsWon", header: "Clients Won", render: (r) => num(r.clientsWon), numeric: true, sortValue: (r) => r.clientsWon },
+                { key: "estimatedUsageCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedUsageCost), numeric: true, sortValue: (r) => r.estimatedUsageCost },
+                { key: "purchaseCost", header: "Actually Invoiced", render: (r) => money(r.purchaseCost), numeric: true, sortValue: (r) => r.purchaseCost },
               ]}
             />
           }
@@ -714,15 +714,15 @@ export function UpworkTab() {
               rowKey={(r) => `${r.name}-${r.profileName}`}
               rows={submitters}
               columns={[
-                { key: "name", header: "Submitter", render: (r) => r.name },
-                { key: "profileName", header: "Profile/ID", render: (r) => r.profileName },
-                { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
-                { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
-                { key: "won", header: "Won", render: (r) => num(r.won), numeric: true },
-                { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true },
-                { key: "onboardedHours", header: "Onboarded Hours", render: (r) => num(r.onboardedHours), numeric: true },
-                { key: "conversionRate", header: "Conv. Rate", render: (r) => pct(r.conversionRate), numeric: true },
-                { key: "estimatedCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedCost), numeric: true },
+                { key: "name", header: "Submitter", render: (r) => r.name, sortValue: (r) => r.name },
+                { key: "profileName", header: "Profile/ID", render: (r) => r.profileName, sortValue: (r) => r.profileName },
+                { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true, sortValue: (r) => r.bids },
+                { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true, sortValue: (r) => r.invites },
+                { key: "won", header: "Won", render: (r) => num(r.won), numeric: true, sortValue: (r) => r.won },
+                { key: "lost", header: "Lost", render: (r) => num(r.lost), numeric: true, sortValue: (r) => r.lost },
+                { key: "onboardedHours", header: "Onboarded Hours", render: (r) => num(r.onboardedHours), numeric: true, sortValue: (r) => r.onboardedHours },
+                { key: "conversionRate", header: "Conv. Rate", render: (r) => pct(r.conversionRate), numeric: true, sortValue: (r) => r.conversionRate },
+                { key: "estimatedCost", header: "Est. Cost ($0.15/connect)", render: (r) => money(r.estimatedCost), numeric: true, sortValue: (r) => r.estimatedCost },
               ]}
             />
           }

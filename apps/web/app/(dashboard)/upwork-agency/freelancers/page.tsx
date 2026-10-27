@@ -118,10 +118,16 @@ export default function FreelancersPage() {
                 rowKey={(p) => p.id}
                 onRowClick={(p) => setSelected(p)}
                 columns={[
-                  { key: "name", header: "Name", render: (p) => p.freelancerName ?? "—" },
-                  { key: "rated", header: "Top Rated", render: (p) => p.topRatedStatus ?? "—" },
-                  { key: "earnings", header: "Earnings", render: (p) => (p.totalEarnings != null ? `$${p.totalEarnings.toLocaleString()}` : "—"), numeric: true },
-                  { key: "jobs", header: "Jobs", render: (p) => p.totalJobs ?? "—", numeric: true },
+                  { key: "name", header: "Name", render: (p) => p.freelancerName ?? "—", sortValue: (p) => p.freelancerName },
+                  { key: "rated", header: "Top Rated", render: (p) => p.topRatedStatus ?? "—", sortValue: (p) => p.topRatedStatus },
+                  {
+                    key: "earnings",
+                    header: "Earnings",
+                    render: (p) => (p.totalEarnings != null ? `$${p.totalEarnings.toLocaleString()}` : "—"),
+                    numeric: true,
+                    sortValue: (p) => p.totalEarnings,
+                  },
+                  { key: "jobs", header: "Jobs", render: (p) => p.totalJobs ?? "—", numeric: true, sortValue: (p) => p.totalJobs },
                   { key: "skills", header: "Top skills", render: (p) => <span className="line-clamp-1 max-w-xs">{p.skills.slice(0, 4).join(", ") || "—"}</span> },
                 ]}
                 rows={filtered}

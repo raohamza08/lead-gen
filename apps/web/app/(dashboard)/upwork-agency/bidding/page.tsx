@@ -101,11 +101,22 @@ export default function BiddingPage() {
                 rowKey={(p) => p.id}
                 onRowClick={(p) => setSelected(p)}
                 columns={[
-                  { key: "job", header: "Job", render: (p) => p.jobTitle ?? "—" },
-                  { key: "freelancer", header: "Freelancer", render: (p) => p.freelancerName ?? "—" },
-                  { key: "status", header: "Status", render: (p) => p.status },
-                  { key: "rate", header: "Rate", render: (p) => p.chargeRateDisplay ?? "—", numeric: true },
-                  { key: "updated", header: "Updated", render: (p) => (p.upworkModifiedAt ? new Date(p.upworkModifiedAt).toLocaleString() : "—") },
+                  { key: "job", header: "Job", render: (p) => p.jobTitle ?? "—", sortValue: (p) => p.jobTitle },
+                  { key: "freelancer", header: "Freelancer", render: (p) => p.freelancerName ?? "—", sortValue: (p) => p.freelancerName },
+                  { key: "status", header: "Status", render: (p) => p.status, sortValue: (p) => p.status },
+                  {
+                    key: "rate",
+                    header: "Rate",
+                    render: (p) => p.chargeRateDisplay ?? "—",
+                    numeric: true,
+                    sortValue: (p) => (p.chargeRateDisplay ? parseFloat(p.chargeRateDisplay.replace(/[^0-9.-]/g, "")) : null),
+                  },
+                  {
+                    key: "updated",
+                    header: "Updated",
+                    render: (p) => (p.upworkModifiedAt ? new Date(p.upworkModifiedAt).toLocaleString() : "—"),
+                    sortValue: (p) => (p.upworkModifiedAt ? new Date(p.upworkModifiedAt).getTime() : null),
+                  },
                 ]}
                 rows={filtered}
               />

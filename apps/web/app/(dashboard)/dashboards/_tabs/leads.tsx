@@ -14,6 +14,7 @@ import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { Input } from "../../../../components/ui/input";
 import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../../components/ui/table";
+import { useClientSort } from "../../../../lib/use-client-sort";
 import { Button } from "../../../../components/ui/button";
 
 interface LeadsKpis {
@@ -94,6 +95,15 @@ export function LeadsTab() {
   const sources = sourcesQuery.data ?? [];
   const niches = nichesQuery.data ?? [];
   const audit = auditQuery.data;
+  const { sortedRows: sortedAuditRows, toggleSort, sortDirectionFor } = useClientSort(audit?.rows ?? [], {
+    added: (r) => new Date(r.createdAt).getTime(),
+    company: (r) => r.companyName,
+    source: (r) => r.source,
+    addedBy: (r) => r.addedBy,
+    niche: (r) => r.niche,
+    campaign: (r) => r.campaign,
+    stage: (r) => r.stage,
+  });
   const pageCount = Math.max(1, Math.ceil((audit?.total ?? 0) / PAGE_SIZE));
 
   return (
@@ -322,9 +332,9 @@ export function LeadsTab() {
               rowKey={(r) => r.source}
               rows={sources}
               columns={[
-                { key: "source", header: "Source", render: (r) => titleCase(r.source) },
-                { key: "count", header: "Count", render: (r) => num(r.count), numeric: true },
-                { key: "pct", header: "% of total", render: (r) => pct(r.percentage), numeric: true },
+                { key: "source", header: "Source", render: (r) => titleCase(r.source), sortValue: (r) => r.source },
+                { key: "count", header: "Count", render: (r) => num(r.count), numeric: true, sortValue: (r) => r.count },
+                { key: "pct", header: "% of total", render: (r) => pct(r.percentage), numeric: true, sortValue: (r) => r.percentage },
               ]}
             />
           }
@@ -354,11 +364,11 @@ export function LeadsTab() {
               rowKey={(r) => r.niche}
               rows={niches}
               columns={[
-                { key: "niche", header: "Niche", render: (r) => r.niche },
-                { key: "total", header: "Total", render: (r) => num(r.total), numeric: true },
-                { key: "qualified", header: "Qualified", render: (r) => num(r.qualified), numeric: true },
-                { key: "converted", header: "Converted", render: (r) => num(r.converted), numeric: true },
-                { key: "rate", header: "Conv. Rate", render: (r) => pct(r.conversionRate), numeric: true },
+                { key: "niche", header: "Niche", render: (r) => r.niche, sortValue: (r) => r.niche },
+                { key: "total", header: "Total", render: (r) => num(r.total), numeric: true, sortValue: (r) => r.total },
+                { key: "qualified", header: "Qualified", render: (r) => num(r.qualified), numeric: true, sortValue: (r) => r.qualified },
+                { key: "converted", header: "Converted", render: (r) => num(r.converted), numeric: true, sortValue: (r) => r.converted },
+                { key: "rate", header: "Conv. Rate", render: (r) => pct(r.conversionRate), numeric: true, sortValue: (r) => r.conversionRate },
               ]}
             />
           }
@@ -387,17 +397,17 @@ export function LeadsTab() {
             <Table>
               <TableHead>
                 <TableHeadRow>
-                  <Th>Added</Th>
-                  <Th>Company</Th>
-                  <Th>Source</Th>
-                  <Th>Added By</Th>
-                  <Th>Niche</Th>
-                  <Th>Campaign</Th>
-                  <Th>Stage</Th>
+                  <Th onSort={() => toggleSort("added")} sortDirection={sortDirectionFor("added")}>Added</Th>
+                  <Th onSort={() => toggleSort("company")} sortDirection={sortDirectionFor("company")}>Company</Th>
+                  <Th onSort={() => toggleSort("source")} sortDirection={sortDirectionFor("source")}>Source</Th>
+                  <Th onSort={() => toggleSort("addedBy")} sortDirection={sortDirectionFor("addedBy")}>Added By</Th>
+                  <Th onSort={() => toggleSort("niche")} sortDirection={sortDirectionFor("niche")}>Niche</Th>
+                  <Th onSort={() => toggleSort("campaign")} sortDirection={sortDirectionFor("campaign")}>Campaign</Th>
+                  <Th onSort={() => toggleSort("stage")} sortDirection={sortDirectionFor("stage")}>Stage</Th>
                 </TableHeadRow>
               </TableHead>
               <TableBody>
-                {audit.rows.map((r) => (
+                {sortedAuditRows.map((r) => (
                   <Tr key={r.id} onClick={() => window.open(`/leads/${r.id}`, "_blank")}>
                     <Td className="whitespace-nowrap text-ink/60">{dateTime(r.createdAt)}</Td>
                     <Td className="font-medium">

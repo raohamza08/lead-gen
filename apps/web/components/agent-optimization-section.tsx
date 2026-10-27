@@ -129,12 +129,17 @@ export function AgentOptimizationSection() {
           rows={cycles}
           rowKey={(r) => r.id}
           columns={[
-            { key: "runAt", header: "Date", render: (r) => new Date(r.runAt).toLocaleDateString() },
-            { key: "score", header: "Score", numeric: true, render: (r) => `${r.score}%` },
+            {
+              key: "runAt", header: "Date",
+              render: (r) => new Date(r.runAt).toLocaleDateString(),
+              sortValue: (r) => new Date(r.runAt).getTime(),
+            },
+            { key: "score", header: "Score", numeric: true, render: (r) => `${r.score}%`, sortValue: (r) => r.score },
             {
               key: "verdict",
               header: "Verdict",
               render: (r) => (r.verdict ? VERDICT_LABEL[r.verdict] ?? r.verdict : "—"),
+              sortValue: (r) => r.verdict,
             },
             {
               key: "changes",
@@ -151,6 +156,7 @@ export function AgentOptimizationSection() {
                     {r.changesApplied.length} change(s) {expandedId === r.id ? "▾" : "▸"}
                   </button>
                 ),
+              sortValue: (r) => r.changesApplied.length,
             },
             {
               key: "actions",

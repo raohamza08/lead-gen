@@ -171,11 +171,11 @@ export function UpworkRequestsSection() {
   const reviewQueue = requests.filter((r) => r.status === "SUBMITTED" || r.status === "UNDER_REVIEW");
 
   const columns: TableColumn<UpworkRequest>[] = [
-    { key: "requestDate", header: "Date", render: (r) => new Date(r.requestDate).toLocaleDateString() },
+    { key: "requestDate", header: "Date", render: (r) => new Date(r.requestDate).toLocaleDateString(), sortValue: (r) => new Date(r.requestDate).getTime() },
     // Always shown, regardless of viewer role (explicit user request — "the
     // name of the person who is making request for hours should also be
     // mentioned with the request").
-    { key: "pm", header: "Requested by", render: (r) => r.projectManager.name },
+    { key: "pm", header: "Requested by", render: (r) => r.projectManager.name, sortValue: (r) => r.projectManager.name },
     {
       key: "items",
       header: "Profiles / Hours",
@@ -187,10 +187,10 @@ export function UpworkRequestsSection() {
         </div>
       ),
     },
-    { key: "total", header: "Total Hours", numeric: true, render: (r) => r.totalRequestedHours },
-    { key: "status", header: "Status", render: (r) => <span className={`text-xs font-medium ${STATUS_TONE[r.status]}`}>{STATUS_LABEL[r.status]}</span> },
-    { key: "reviewer", header: "Reviewed by", render: (r) => r.reviewedByUser?.name ?? "—" },
-    { key: "notes", header: "Notes", render: (r) => <span className="text-xs text-ink/60">{r.reviewNotes || r.notes || "—"}</span> },
+    { key: "total", header: "Total Hours", numeric: true, render: (r) => r.totalRequestedHours, sortValue: (r) => r.totalRequestedHours },
+    { key: "status", header: "Status", render: (r) => <span className={`text-xs font-medium ${STATUS_TONE[r.status]}`}>{STATUS_LABEL[r.status]}</span>, sortValue: (r) => r.status },
+    { key: "reviewer", header: "Reviewed by", render: (r) => r.reviewedByUser?.name ?? "—", sortValue: (r) => r.reviewedByUser?.name },
+    { key: "notes", header: "Notes", render: (r) => <span className="text-xs text-ink/60">{r.reviewNotes || r.notes || "—"}</span>, sortValue: (r) => r.reviewNotes || r.notes },
     {
       key: "actions",
       header: "",

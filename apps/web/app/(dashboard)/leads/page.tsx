@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, downloadLeadsCsv, getCurrentUser } from "../../../lib/api-client";
 import { useRealtimeEvent, useRealtimeRefetch } from "../../../lib/realtime";
+import { useClientSort } from "../../../lib/use-client-sort";
 import { PipelineStage } from "@leadgen/types";
 import type { Lead, LeadScore } from "@leadgen/types";
 import { LoadingRow, Spinner } from "../../../components/spinner";
@@ -275,6 +276,17 @@ export default function LeadsPage() {
     queryFn: () => api.getLeads(leadsParams) as Promise<{ items: LeadRow[]; total: number }>,
   });
   const leads = leadsQuery.data?.items ?? EMPTY_LEADS;
+  const { sortedRows: sortedLeads, toggleSort, sortDirectionFor } = useClientSort(leads, {
+    company: (l) => l.companyName,
+    source: (l) => l.sourceLayer,
+    industry: (l) => l.industry,
+    country: (l) => l.country,
+    contact: (l) => l.contactName,
+    email: (l) => l.email,
+    score: (l) => l.score?.leadScore ?? null,
+    aiOpp: (l) => l.score?.aiOpportunityScore ?? null,
+    stage: (l) => l.pipelineState?.stage,
+  });
   const total = leadsQuery.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -789,19 +801,19 @@ export default function LeadsPage() {
                 />
               </Th>
             )}
-            <Th>Company</Th>
-            <Th>Source</Th>
-            <Th>Industry</Th>
-            <Th>Country</Th>
-            <Th>Decision maker</Th>
-            <Th>Email</Th>
-            <Th className="text-right">Score</Th>
-            <Th className="text-right">AI opp.</Th>
-            <Th>Stage</Th>
+            <Th onSort={() => toggleSort("company")} sortDirection={sortDirectionFor("company")}>Company</Th>
+            <Th onSort={() => toggleSort("source")} sortDirection={sortDirectionFor("source")}>Source</Th>
+            <Th onSort={() => toggleSort("industry")} sortDirection={sortDirectionFor("industry")}>Industry</Th>
+            <Th onSort={() => toggleSort("country")} sortDirection={sortDirectionFor("country")}>Country</Th>
+            <Th onSort={() => toggleSort("contact")} sortDirection={sortDirectionFor("contact")}>Decision maker</Th>
+            <Th onSort={() => toggleSort("email")} sortDirection={sortDirectionFor("email")}>Email</Th>
+            <Th className="text-right" onSort={() => toggleSort("score")} sortDirection={sortDirectionFor("score")}>Score</Th>
+            <Th className="text-right" onSort={() => toggleSort("aiOpp")} sortDirection={sortDirectionFor("aiOpp")}>AI opp.</Th>
+            <Th onSort={() => toggleSort("stage")} sortDirection={sortDirectionFor("stage")}>Stage</Th>
           </TableHeadRow>
         </TableHead>
         <TableBody>
-          {leads.map((lead) => (
+          {sortedLeads.map((lead) => (
             <Tr key={lead.id}>
               {isAdmin && (
                 <Td>

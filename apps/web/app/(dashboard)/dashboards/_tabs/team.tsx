@@ -130,13 +130,15 @@ export function TeamTab() {
                     {r.name}
                   </button>
                 ),
+                sortValue: (r) => r.name,
               },
-              { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
+              { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true, sortValue: (r) => r.bids },
               ...BID_STATUS_COLUMNS.map((c) => ({
                 key: c.key,
                 header: c.label,
                 render: (r: (typeof bidderSummaries)[number]) => num(r.statusCounts[c.key] ?? 0),
                 numeric: true,
+                sortValue: (r: (typeof bidderSummaries)[number]) => r.statusCounts[c.key] ?? 0,
               })),
             ]}
           />
@@ -149,13 +151,14 @@ export function TeamTab() {
             rowKey={(r) => r.profileName}
             rows={bidders.filter((r) => r.name === bidderDetail)}
             columns={[
-              { key: "profileName", header: "Profile", render: (r) => r.profileName },
-              { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true },
+              { key: "profileName", header: "Profile", render: (r) => r.profileName, sortValue: (r) => r.profileName },
+              { key: "bids", header: "Bids", render: (r) => num(r.bids), numeric: true, sortValue: (r) => r.bids },
               ...BID_STATUS_COLUMNS.map((c) => ({
                 key: c.key,
                 header: c.label,
                 render: (r: UpworkSubmitterRow) => num(r.bidStatusCounts[c.key] ?? 0),
                 numeric: true,
+                sortValue: (r: UpworkSubmitterRow) => r.bidStatusCounts[c.key] ?? 0,
               })),
             ]}
           />
@@ -176,13 +179,15 @@ export function TeamTab() {
                     {r.name}
                   </button>
                 ),
+                sortValue: (r) => r.name,
               },
-              { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
+              { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true, sortValue: (r) => r.invites },
               ...INVITE_STATUS_COLUMNS.map((c) => ({
                 key: c.key,
                 header: c.label,
                 render: (r: (typeof inviteSummaries)[number]) => num(r.statusCounts[c.key] ?? 0),
                 numeric: true,
+                sortValue: (r: (typeof inviteSummaries)[number]) => r.statusCounts[c.key] ?? 0,
               })),
             ]}
           />
@@ -195,13 +200,14 @@ export function TeamTab() {
             rowKey={(r) => r.profileName}
             rows={inviteRecipients.filter((r) => r.name === inviteDetail)}
             columns={[
-              { key: "profileName", header: "Profile", render: (r) => r.profileName },
-              { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true },
+              { key: "profileName", header: "Profile", render: (r) => r.profileName, sortValue: (r) => r.profileName },
+              { key: "invites", header: "Invites", render: (r) => num(r.invites), numeric: true, sortValue: (r) => r.invites },
               ...INVITE_STATUS_COLUMNS.map((c) => ({
                 key: c.key,
                 header: c.label,
                 render: (r: UpworkSubmitterRow) => num(r.inviteStatusCounts[c.key] ?? 0),
                 numeric: true,
+                sortValue: (r: UpworkSubmitterRow) => r.inviteStatusCounts[c.key] ?? 0,
               })),
             ]}
           />

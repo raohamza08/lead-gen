@@ -139,10 +139,26 @@ export default function TransactionsPage() {
                 rowKey={(t) => t.id}
                 onRowClick={(t) => setSelected(t)}
                 columns={[
-                  { key: "date", header: "Date", render: (t) => (t.occurredAt ? new Date(t.occurredAt).toLocaleDateString() : "—") },
-                  { key: "subtype", header: "Type", render: (t) => t.accountingSubtype ?? t.type ?? "—" },
-                  { key: "description", header: "Description", render: (t) => <span className="line-clamp-1 max-w-xs">{t.description ?? "—"}</span> },
-                  { key: "amount", header: "Amount", render: (t) => (t.amountDisplay ? `${t.amountDisplay} ${t.amountCurrency ?? ""}` : "—"), numeric: true },
+                  {
+                    key: "date",
+                    header: "Date",
+                    render: (t) => (t.occurredAt ? new Date(t.occurredAt).toLocaleDateString() : "—"),
+                    sortValue: (t) => (t.occurredAt ? new Date(t.occurredAt).getTime() : null),
+                  },
+                  { key: "subtype", header: "Type", render: (t) => t.accountingSubtype ?? t.type ?? "—", sortValue: (t) => t.accountingSubtype ?? t.type },
+                  {
+                    key: "description",
+                    header: "Description",
+                    render: (t) => <span className="line-clamp-1 max-w-xs">{t.description ?? "—"}</span>,
+                    sortValue: (t) => t.description,
+                  },
+                  {
+                    key: "amount",
+                    header: "Amount",
+                    render: (t) => (t.amountDisplay ? `${t.amountDisplay} ${t.amountCurrency ?? ""}` : "—"),
+                    numeric: true,
+                    sortValue: (t) => (t.amountDisplay ? parseFloat(t.amountDisplay.replace(/[^0-9.-]/g, "")) : null),
+                  },
                 ]}
                 rows={filtered}
               />

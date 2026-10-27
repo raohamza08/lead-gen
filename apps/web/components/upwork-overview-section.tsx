@@ -153,11 +153,11 @@ export function UpworkOverviewSection() {
             rows={stats.bySubmitter.BIDDING}
             rowKey={(r) => r.submittedBy}
             columns={[
-              { key: "submittedBy", header: "Name", render: (r) => r.submittedBy },
-              { key: "total", header: "Bids", numeric: true, render: (r) => r.total },
-              { key: "won", header: "Won", numeric: true, render: (r) => r.won },
-              { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost },
-              { key: "connects", header: "Connects", numeric: true, render: (r) => r.connectsUsed },
+              { key: "submittedBy", header: "Name", render: (r) => r.submittedBy, sortValue: (r) => r.submittedBy },
+              { key: "total", header: "Bids", numeric: true, render: (r) => r.total, sortValue: (r) => r.total },
+              { key: "won", header: "Won", numeric: true, render: (r) => r.won, sortValue: (r) => r.won },
+              { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost, sortValue: (r) => r.lost },
+              { key: "connects", header: "Connects", numeric: true, render: (r) => r.connectsUsed, sortValue: (r) => r.connectsUsed },
             ]}
           />
         )}
@@ -172,9 +172,9 @@ export function UpworkOverviewSection() {
               rows={stats.byCloser.BIDDING}
               rowKey={(r) => r.closedBy}
               columns={[
-                { key: "closedBy", header: "Name", render: (r) => r.closedBy },
-                { key: "won", header: "Won", numeric: true, render: (r) => r.won },
-                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost },
+                { key: "closedBy", header: "Name", render: (r) => r.closedBy, sortValue: (r) => r.closedBy },
+                { key: "won", header: "Won", numeric: true, render: (r) => r.won, sortValue: (r) => r.won },
+                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost, sortValue: (r) => r.lost },
               ]}
             />
           )}
@@ -188,10 +188,10 @@ export function UpworkOverviewSection() {
               rows={topBiddersByConnects.slice(0, 10)}
               rowKey={(r) => r.submittedBy}
               columns={[
-                { key: "submittedBy", header: "Name", render: (r) => r.submittedBy },
-                { key: "connects", header: "Connects", numeric: true, render: (r) => r.connectsUsed },
-                { key: "cost", header: "Est. cost", numeric: true, render: (r) => `$${(r.connectsUsed * rate).toFixed(2)}` },
-                { key: "bids", header: "Bids", numeric: true, render: (r) => r.total },
+                { key: "submittedBy", header: "Name", render: (r) => r.submittedBy, sortValue: (r) => r.submittedBy },
+                { key: "connects", header: "Connects", numeric: true, render: (r) => r.connectsUsed, sortValue: (r) => r.connectsUsed },
+                { key: "cost", header: "Est. cost", numeric: true, render: (r) => `$${(r.connectsUsed * rate).toFixed(2)}`, sortValue: (r) => r.connectsUsed * rate },
+                { key: "bids", header: "Bids", numeric: true, render: (r) => r.total, sortValue: (r) => r.total },
               ]}
             />
           )}
@@ -207,10 +207,10 @@ export function UpworkOverviewSection() {
               rows={stats.bySubmitter.INVITE}
               rowKey={(r) => r.submittedBy}
               columns={[
-                { key: "submittedBy", header: "Name", render: (r) => r.submittedBy },
-                { key: "total", header: "Invites", numeric: true, render: (r) => r.total },
-                { key: "won", header: "Won", numeric: true, render: (r) => r.won },
-                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost },
+                { key: "submittedBy", header: "Name", render: (r) => r.submittedBy, sortValue: (r) => r.submittedBy },
+                { key: "total", header: "Invites", numeric: true, render: (r) => r.total, sortValue: (r) => r.total },
+                { key: "won", header: "Won", numeric: true, render: (r) => r.won, sortValue: (r) => r.won },
+                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost, sortValue: (r) => r.lost },
               ]}
             />
           )}
@@ -224,9 +224,9 @@ export function UpworkOverviewSection() {
               rows={stats.byCloser.INVITE}
               rowKey={(r) => r.closedBy}
               columns={[
-                { key: "closedBy", header: "Name", render: (r) => r.closedBy },
-                { key: "won", header: "Won", numeric: true, render: (r) => r.won },
-                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost },
+                { key: "closedBy", header: "Name", render: (r) => r.closedBy, sortValue: (r) => r.closedBy },
+                { key: "won", header: "Won", numeric: true, render: (r) => r.won, sortValue: (r) => r.won },
+                { key: "lost", header: "Lost", numeric: true, render: (r) => r.lost, sortValue: (r) => r.lost },
               ]}
             />
           )}
@@ -241,8 +241,8 @@ export function UpworkOverviewSection() {
             rows={stats.byCategory}
             rowKey={(r) => r.category}
             columns={[
-              { key: "category", header: "Category", render: (r) => r.category },
-              { key: "count", header: "Proposals", numeric: true, render: (r) => r.count },
+              { key: "category", header: "Category", render: (r) => r.category, sortValue: (r) => r.category },
+              { key: "count", header: "Proposals", numeric: true, render: (r) => r.count, sortValue: (r) => r.count },
             ]}
           />
         )}

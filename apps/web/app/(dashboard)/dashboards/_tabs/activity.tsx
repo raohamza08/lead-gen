@@ -9,6 +9,7 @@ import { Button } from "../../../../components/ui/button";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { StatusBadge } from "../../../../components/ui/status-badge";
 import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../../components/ui/table";
+import { useClientSort } from "../../../../lib/use-client-sort";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 
 interface AuditLogEntry {
@@ -61,6 +62,14 @@ export function ActivityTab() {
   });
 
   const items = activityQuery.data?.items ?? [];
+  const { sortedRows: sortedItems, toggleSort, sortDirectionFor } = useClientSort(items, {
+    time: (e) => new Date(e.createdAt).getTime(),
+    user: (e) => e.actor?.name,
+    action: (e) => e.action,
+    entity: (e) => e.entityType,
+    result: (e) => e.result,
+    ip: (e) => e.ipAddress,
+  });
   const total = activityQuery.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -105,16 +114,16 @@ export function ActivityTab() {
         <Table>
           <TableHead>
             <TableHeadRow>
-              <Th>Time</Th>
-              <Th>User</Th>
-              <Th>Action</Th>
-              <Th>Entity</Th>
-              <Th>Result</Th>
-              <Th>IP</Th>
+              <Th onSort={() => toggleSort("time")} sortDirection={sortDirectionFor("time")}>Time</Th>
+              <Th onSort={() => toggleSort("user")} sortDirection={sortDirectionFor("user")}>User</Th>
+              <Th onSort={() => toggleSort("action")} sortDirection={sortDirectionFor("action")}>Action</Th>
+              <Th onSort={() => toggleSort("entity")} sortDirection={sortDirectionFor("entity")}>Entity</Th>
+              <Th onSort={() => toggleSort("result")} sortDirection={sortDirectionFor("result")}>Result</Th>
+              <Th onSort={() => toggleSort("ip")} sortDirection={sortDirectionFor("ip")}>IP</Th>
             </TableHeadRow>
           </TableHead>
           <TableBody>
-            {items.map((entry) => (
+            {sortedItems.map((entry) => (
               <Fragment key={entry.id}>
                 <Tr onClick={() => setExpandedId(expandedId === entry.id ? null : entry.id)}>
                   <Td className="whitespace-nowrap text-ink/60">{formatTimestamp(entry.createdAt)}</Td>

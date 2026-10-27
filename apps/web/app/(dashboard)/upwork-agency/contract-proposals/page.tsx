@@ -74,13 +74,19 @@ export default function ContractProposalsPage() {
             ) : filtered.length === 0 ? (
               <p className="py-6 text-center text-sm text-ink/50">No contract proposals match this search.</p>
             ) : (
+              // Server-paginated — column sort below only orders the current page.
               <DataTable
                 rowKey={(c) => c.id}
                 onRowClick={(c) => setSelected(c)}
                 columns={[
-                  { key: "job", header: "Job", render: (c) => c.jobTitle ?? "—" },
-                  { key: "client", header: "Client", render: (c) => c.clientName ?? "—" },
-                  { key: "date", header: "Created", render: (c) => (c.createdDate ? new Date(c.createdDate).toLocaleDateString() : "—") },
+                  { key: "job", header: "Job", render: (c) => c.jobTitle ?? "—", sortValue: (c) => c.jobTitle },
+                  { key: "client", header: "Client", render: (c) => c.clientName ?? "—", sortValue: (c) => c.clientName },
+                  {
+                    key: "date",
+                    header: "Created",
+                    render: (c) => (c.createdDate ? new Date(c.createdDate).toLocaleDateString() : "—"),
+                    sortValue: (c) => (c.createdDate ? new Date(c.createdDate).getTime() : null),
+                  },
                 ]}
                 rows={filtered}
               />

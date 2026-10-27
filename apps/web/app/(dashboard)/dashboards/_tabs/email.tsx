@@ -291,12 +291,12 @@ export function EmailTab() {
               rowKey={(r) => r.date}
               rows={series}
               columns={[
-                { key: "date", header: "Date", render: (r) => r.date },
-                { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true },
-                { key: "opened", header: "Opened", render: (r) => num(r.opened), numeric: true },
-                { key: "replied", header: "Replied", render: (r) => num(r.replied), numeric: true },
-                { key: "bounced", header: "Bounced", render: (r) => num(r.bounced), numeric: true },
-                { key: "unsubscribed", header: "Unsubscribed", render: (r) => num(r.unsubscribed), numeric: true },
+                { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => new Date(r.date).getTime() },
+                { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true, sortValue: (r) => r.sent },
+                { key: "opened", header: "Opened", render: (r) => num(r.opened), numeric: true, sortValue: (r) => r.opened },
+                { key: "replied", header: "Replied", render: (r) => num(r.replied), numeric: true, sortValue: (r) => r.replied },
+                { key: "bounced", header: "Bounced", render: (r) => num(r.bounced), numeric: true, sortValue: (r) => r.bounced },
+                { key: "unsubscribed", header: "Unsubscribed", render: (r) => num(r.unsubscribed), numeric: true, sortValue: (r) => r.unsubscribed },
               ]}
             />
           }
@@ -309,13 +309,13 @@ export function EmailTab() {
             rowKey={(r) => String(r.step)}
             rows={funnel.bySequenceStep}
             columns={[
-              { key: "step", header: "Step", render: (r) => `Email ${r.step}` },
-              { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true },
-              { key: "delivered", header: "Delivered", render: (r) => num(r.delivered), numeric: true },
-              { key: "opened", header: "Opened", render: (r) => num(r.opened), numeric: true },
-              { key: "openRate", header: "Open Rate", render: (r) => pct(r.openRate), numeric: true },
-              { key: "replied", header: "Replied", render: (r) => num(r.replied), numeric: true },
-              { key: "replyRate", header: "Reply Rate", render: (r) => pct(r.replyRate), numeric: true },
+              { key: "step", header: "Step", render: (r) => `Email ${r.step}`, sortValue: (r) => r.step },
+              { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true, sortValue: (r) => r.sent },
+              { key: "delivered", header: "Delivered", render: (r) => num(r.delivered), numeric: true, sortValue: (r) => r.delivered },
+              { key: "opened", header: "Opened", render: (r) => num(r.opened), numeric: true, sortValue: (r) => r.opened },
+              { key: "openRate", header: "Open Rate", render: (r) => pct(r.openRate), numeric: true, sortValue: (r) => r.openRate },
+              { key: "replied", header: "Replied", render: (r) => num(r.replied), numeric: true, sortValue: (r) => r.replied },
+              { key: "replyRate", header: "Reply Rate", render: (r) => pct(r.replyRate), numeric: true, sortValue: (r) => r.replyRate },
             ]}
           />
         </SectionCard>
@@ -342,8 +342,8 @@ export function EmailTab() {
                   rowKey={(r) => r.status}
                   rows={queue}
                   columns={[
-                    { key: "status", header: "Status", render: (r) => titleCase(r.status) },
-                    { key: "count", header: "Count", render: (r) => num(r.count), numeric: true },
+                    { key: "status", header: "Status", render: (r) => titleCase(r.status), sortValue: (r) => r.status },
+                    { key: "count", header: "Count", render: (r) => num(r.count), numeric: true, sortValue: (r) => r.count },
                   ]}
                 />
               </div>
@@ -359,11 +359,11 @@ export function EmailTab() {
               rowKey={(r) => r.id}
               rows={sessions}
               columns={[
-                { key: "createdAt", header: "Started", render: (r) => dateTime(r.createdAt) },
-                { key: "status", header: "Status", render: (r) => titleCase(r.status) },
-                { key: "totalLeads", header: "Leads", render: (r) => num(r.totalLeads), numeric: true },
-                { key: "successful", header: "Sent OK", render: (r) => num(r.successful), numeric: true },
-                { key: "failed", header: "Failed", render: (r) => num(r.failed), numeric: true },
+                { key: "createdAt", header: "Started", render: (r) => dateTime(r.createdAt), sortValue: (r) => new Date(r.createdAt).getTime() },
+                { key: "status", header: "Status", render: (r) => titleCase(r.status), sortValue: (r) => r.status },
+                { key: "totalLeads", header: "Leads", render: (r) => num(r.totalLeads), numeric: true, sortValue: (r) => r.totalLeads },
+                { key: "successful", header: "Sent OK", render: (r) => num(r.successful), numeric: true, sortValue: (r) => r.successful },
+                { key: "failed", header: "Failed", render: (r) => num(r.failed), numeric: true, sortValue: (r) => r.failed },
               ]}
             />
           )}

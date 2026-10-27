@@ -263,10 +263,10 @@ export default function CampaignsPage() {
             rows={rows}
             rowKey={(r) => r.id}
             columns={[
-              { key: "name", header: "Campaign", render: (r) => r.name },
-              { key: "niche", header: "Niche", render: (r) => r.niche },
-              { key: "country", header: "Country", render: (r) => r.country ?? "—" },
-              { key: "offer", header: "Offer", render: (r) => r.offer ?? "—" },
+              { key: "name", header: "Campaign", render: (r) => r.name, sortValue: (r) => r.name },
+              { key: "niche", header: "Niche", render: (r) => r.niche, sortValue: (r) => r.niche },
+              { key: "country", header: "Country", render: (r) => r.country ?? "—", sortValue: (r) => r.country },
+              { key: "offer", header: "Offer", render: (r) => r.offer ?? "—", sortValue: (r) => r.offer },
               {
                 key: "filterId",
                 header: "Linked filter",
@@ -292,20 +292,23 @@ export default function CampaignsPage() {
                 header: "Leads",
                 numeric: true,
                 render: (r) => `${r.leads} / ${r.targetLeads}`,
+                sortValue: (r) => r.leads,
               },
-              { key: "replyRate", header: "Reply %", numeric: true, render: (r) => `${r.replyRate}%` },
-              { key: "meetingRate", header: "Meeting %", numeric: true, render: (r) => `${r.meetingRate}%` },
-              { key: "won", header: "Won", numeric: true, render: (r) => r.won },
+              { key: "replyRate", header: "Reply %", numeric: true, render: (r) => `${r.replyRate}%`, sortValue: (r) => r.replyRate },
+              { key: "meetingRate", header: "Meeting %", numeric: true, render: (r) => `${r.meetingRate}%`, sortValue: (r) => r.meetingRate },
+              { key: "won", header: "Won", numeric: true, render: (r) => r.won, sortValue: (r) => r.won },
               {
                 key: "value",
                 header: "Pipeline",
                 numeric: true,
                 render: (r) => `$${formatCompact(r.pipelineValue)}`,
+                sortValue: (r) => r.pipelineValue,
               },
               {
                 key: "active",
                 header: "Active",
                 render: (r) => (r.active ? "Yes" : <span className="text-ink/50">No</span>),
+                sortValue: (r) => (r.active ? 1 : 0),
               },
             ]}
           />

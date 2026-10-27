@@ -150,13 +150,13 @@ export function InboxTab() {
               rowKey={(r) => r.id}
               rows={accounts}
               columns={[
-                { key: "address", header: "Mailbox", render: (r) => r.label ?? r.address },
-                { key: "provider", header: "Provider", render: (r) => titleCase(r.provider) },
-                { key: "status", header: "Status", render: (r) => <StatusBadge tone={statusTone(r.status)} label={titleCase(r.status)} /> },
-                { key: "received", header: "Received", render: (r) => num(r.received), numeric: true },
-                { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true },
-                { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true },
-                { key: "threads", header: "Threads", render: (r) => num(r.threads), numeric: true },
+                { key: "address", header: "Mailbox", render: (r) => r.label ?? r.address, sortValue: (r) => r.label ?? r.address },
+                { key: "provider", header: "Provider", render: (r) => titleCase(r.provider), sortValue: (r) => r.provider },
+                { key: "status", header: "Status", render: (r) => <StatusBadge tone={statusTone(r.status)} label={titleCase(r.status)} />, sortValue: (r) => r.status },
+                { key: "received", header: "Received", render: (r) => num(r.received), numeric: true, sortValue: (r) => r.received },
+                { key: "sent", header: "Sent", render: (r) => num(r.sent), numeric: true, sortValue: (r) => r.sent },
+                { key: "unread", header: "Unread", render: (r) => num(r.unread), numeric: true, sortValue: (r) => r.unread },
+                { key: "threads", header: "Threads", render: (r) => num(r.threads), numeric: true, sortValue: (r) => r.threads },
               ]}
             />
           }
@@ -172,9 +172,9 @@ export function InboxTab() {
             rowKey={(r) => r.threadId}
             rows={leads}
             columns={[
-              { key: "date", header: "Date", render: (r) => dateTime(r.date) },
-              { key: "subject", header: "Subject", render: (r) => r.subject ?? "—" },
-              { key: "account", header: "Mailbox", render: (r) => r.account },
+              { key: "date", header: "Date", render: (r) => dateTime(r.date), sortValue: (r) => new Date(r.date).getTime() },
+              { key: "subject", header: "Subject", render: (r) => r.subject ?? "—", sortValue: (r) => r.subject },
+              { key: "account", header: "Mailbox", render: (r) => r.account, sortValue: (r) => r.account },
               {
                 key: "lead",
                 header: "Lead",

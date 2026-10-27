@@ -109,9 +109,9 @@ export function PipelineTab() {
               rowKey={(r) => r.stage}
               rows={funnel.stages}
               columns={[
-                { key: "stage", header: "Stage", render: (r) => titleCase(r.stage) },
-                { key: "count", header: "Leads", render: (r) => num(r.count), numeric: true },
-                { key: "pct", header: "% of pipeline", render: (r) => pct(r.percentage), numeric: true },
+                { key: "stage", header: "Stage", render: (r) => titleCase(r.stage), sortValue: (r) => r.stage },
+                { key: "count", header: "Leads", render: (r) => num(r.count), numeric: true, sortValue: (r) => r.count },
+                { key: "pct", header: "% of pipeline", render: (r) => pct(r.percentage), numeric: true, sortValue: (r) => r.percentage },
               ]}
             />
           </div>
@@ -142,8 +142,8 @@ export function PipelineTab() {
             rowKey={(r) => r.label}
             rows={aging}
             columns={[
-              { key: "label", header: "Age bucket", render: (r) => r.label },
-              { key: "count", header: "Leads", render: (r) => num(r.count), numeric: true },
+              { key: "label", header: "Age bucket", render: (r) => r.label, sortValue: (r) => r.label },
+              { key: "count", header: "Leads", render: (r) => num(r.count), numeric: true, sortValue: (r) => r.count },
             ]}
           />
         }
@@ -199,9 +199,9 @@ export function PipelineTab() {
               rowKey={(r) => r.stage}
               rows={timing}
               columns={[
-                { key: "stage", header: "Stage", render: (r) => titleCase(r.stage) },
-                { key: "avgMinutesInStage", header: "Avg. Time in Stage", render: (r) => minutes(r.avgMinutesInStage), numeric: true },
-                { key: "sampleSize", header: "Sample Size", render: (r) => num(r.sampleSize), numeric: true },
+                { key: "stage", header: "Stage", render: (r) => titleCase(r.stage), sortValue: (r) => r.stage },
+                { key: "avgMinutesInStage", header: "Avg. Time in Stage", render: (r) => minutes(r.avgMinutesInStage), numeric: true, sortValue: (r) => r.avgMinutesInStage },
+                { key: "sampleSize", header: "Sample Size", render: (r) => num(r.sampleSize), numeric: true, sortValue: (r) => r.sampleSize },
               ]}
             />
           }

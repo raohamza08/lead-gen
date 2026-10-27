@@ -77,12 +77,13 @@ export default function OntologyPage() {
         )}
         {ontology && filteredSkills.length > 0 && (
           <div className="flex flex-col gap-2">
+            {/* Only the first 100 matches are fetched into `rows` — sort below only orders those, not the full filtered set. */}
             <DataTable
               rowKey={(s) => s.id}
               onRowClick={(s) => setSelected(s)}
               columns={[
-                { key: "label", header: "Skill", render: (s) => s.preferredLabel },
-                { key: "ontologyId", header: "Ontology ID", render: (s) => s.ontologyId },
+                { key: "label", header: "Skill", render: (s) => s.preferredLabel, sortValue: (s) => s.preferredLabel },
+                { key: "ontologyId", header: "Ontology ID", render: (s) => s.ontologyId, sortValue: (s) => s.ontologyId },
               ]}
               rows={filteredSkills.slice(0, 100)}
             />

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { useRealtimeRefetch } from "../../../lib/realtime";
+import { useClientSort } from "../../../lib/use-client-sort";
 import { ComposeModal } from "../../../components/email-hub/compose-modal";
 import { MessageDetailPanel } from "../../../components/email-hub/message-detail-panel";
 import { LoadingRow, Spinner } from "../../../components/spinner";
@@ -243,6 +244,12 @@ function EmailHubPageContent() {
   const ignoredSenders = ignoredSendersQuery.data ?? [];
   const total = messagesQuery.data?.total ?? 0;
   const messages = messagesQuery.data?.messages ?? [];
+  const { sortedRows: sortedMessages, toggleSort, sortDirectionFor } = useClientSort(messages, {
+    sender: (m) => (m.folder === "SENT" ? m.toEmails.join(", ") : m.fromName || m.fromEmail),
+    subject: (m) => m.subject,
+    account: (m) => m.account.mailboxLabel || m.account.address,
+    received: (m) => new Date(m.receivedAt).getTime(),
+  });
 
   function invalidateMessages() {
     queryClient.invalidateQueries({ queryKey: ["email-messages"] });
@@ -649,15 +656,19 @@ function EmailHubPageContent() {
               <Th className="w-8">
                 <input type="checkbox" checked={allSelected} onChange={toggleAll} />
               </Th>
-              <Th>{status === "SENT" ? "To" : "Sender"}</Th>
-              <Th>Subject</Th>
-              <Th>Account</Th>
+              <Th onSort={() => toggleSort("sender")} sortDirection={sortDirectionFor("sender")}>
+                {status === "SENT" ? "To" : "Sender"}
+              </Th>
+              <Th onSort={() => toggleSort("subject")} sortDirection={sortDirectionFor("subject")}>Subject</Th>
+              <Th onSort={() => toggleSort("account")} sortDirection={sortDirectionFor("account")}>Account</Th>
               <Th>Tags</Th>
-              <Th className="text-right">Received</Th>
+              <Th className="text-right" onSort={() => toggleSort("received")} sortDirection={sortDirectionFor("received")}>
+                Received
+              </Th>
             </TableHeadRow>
           </TableHead>
           <TableBody>
-            {messages.map((m) => (
+            {sortedMessages.map((m) => (
               <Tr key={m.id} onClick={() => openMessage(m)} className={m.isRead ? "" : "font-medium"}>
                 <Td>
                   <span onClick={(e) => e.stopPropagation()}>
@@ -810,6 +821,12 @@ function EmailHubPageContent() {
  */
 function TrackedEmailsView({ query }: { query: { data?: TrackedEmail[]; isLoading: boolean; error: unknown } }) {
   const rows = query.data ?? [];
+  const { sortedRows, toggleSort, sortDirectionFor } = useClientSort(rows, {
+    to: (r) => r.toAddress,
+    subject: (r) => r.subject,
+    sent: (r) => new Date(r.sentAt).getTime(),
+    status: (r) => (r.verifiedOpenedAt ? 2 : r.openedAt ? 1 : 0),
+  });
   return (
     <div className="flex flex-col gap-4">
       <div>
@@ -827,14 +844,14 @@ function TrackedEmailsView({ query }: { query: { data?: TrackedEmail[]; isLoadin
         <Table>
           <TableHead>
             <TableHeadRow>
-              <Th>To</Th>
-              <Th>Subject</Th>
-              <Th>Sent</Th>
-              <Th>Status</Th>
+              <Th onSort={() => toggleSort("to")} sortDirection={sortDirectionFor("to")}>To</Th>
+              <Th onSort={() => toggleSort("subject")} sortDirection={sortDirectionFor("subject")}>Subject</Th>
+              <Th onSort={() => toggleSort("sent")} sortDirection={sortDirectionFor("sent")}>Sent</Th>
+              <Th onSort={() => toggleSort("status")} sortDirection={sortDirectionFor("status")}>Status</Th>
             </TableHeadRow>
           </TableHead>
           <TableBody>
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <Tr key={r.id}>
                 <Td className="text-ink/70">{r.toAddress}</Td>
                 <Td className="font-medium">{r.subject}</Td>

@@ -67,10 +67,15 @@ export default function InvitesPage() {
             rowKey={(i) => i.id}
             onRowClick={(i) => setSelected(i)}
             columns={[
-              { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—" },
-              { key: "client", header: "Client", render: (i) => i.clientName ?? "—" },
-              { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—" },
-              { key: "received", header: "Received", render: (i) => (i.upworkCreatedAt ? new Date(i.upworkCreatedAt).toLocaleString() : "—") },
+              { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—", sortValue: (i) => i.jobTitle },
+              { key: "client", header: "Client", render: (i) => i.clientName ?? "—", sortValue: (i) => i.clientName },
+              { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—", sortValue: (i) => i.freelancerName },
+              {
+                key: "received",
+                header: "Received",
+                render: (i) => (i.upworkCreatedAt ? new Date(i.upworkCreatedAt).toLocaleString() : "—"),
+                sortValue: (i) => (i.upworkCreatedAt ? new Date(i.upworkCreatedAt).getTime() : null),
+              },
             ]}
             rows={unanswered}
           />
@@ -126,11 +131,16 @@ export default function InvitesPage() {
                 rowKey={(i) => i.id}
                 onRowClick={(i) => setSelected(i)}
                 columns={[
-                  { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—" },
-                  { key: "client", header: "Client", render: (i) => i.clientName ?? "—" },
-                  { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—" },
-                  { key: "status", header: "Status", render: (i) => i.status ?? "—" },
-                  { key: "updated", header: "Updated", render: (i) => (i.upworkModifiedAt ? new Date(i.upworkModifiedAt).toLocaleString() : "—") },
+                  { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—", sortValue: (i) => i.jobTitle },
+                  { key: "client", header: "Client", render: (i) => i.clientName ?? "—", sortValue: (i) => i.clientName },
+                  { key: "freelancer", header: "Sent to", render: (i) => i.freelancerName ?? "—", sortValue: (i) => i.freelancerName },
+                  { key: "status", header: "Status", render: (i) => i.status ?? "—", sortValue: (i) => i.status },
+                  {
+                    key: "updated",
+                    header: "Updated",
+                    render: (i) => (i.upworkModifiedAt ? new Date(i.upworkModifiedAt).toLocaleString() : "—"),
+                    sortValue: (i) => (i.upworkModifiedAt ? new Date(i.upworkModifiedAt).getTime() : null),
+                  },
                 ]}
                 rows={filtered}
               />

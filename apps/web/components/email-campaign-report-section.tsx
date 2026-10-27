@@ -150,12 +150,12 @@ export function EmailCampaignReportSection() {
               rows={funnelQuery.data.bySequenceStep}
               rowKey={(r) => String(r.step)}
               columns={[
-                { key: "step", header: "Step", render: (r) => STEP_LABEL[r.step] ?? `Step ${r.step}` },
-                { key: "sent", header: "Sent", numeric: true, render: (r) => r.sent },
-                { key: "opened", header: "Opened", numeric: true, render: (r) => r.opened },
-                { key: "openRate", header: "Open rate", numeric: true, render: (r) => `${r.openRate}%` },
-                { key: "replied", header: "Replied", numeric: true, render: (r) => r.replied },
-                { key: "replyRate", header: "Reply rate", numeric: true, render: (r) => `${r.replyRate}%` },
+                { key: "step", header: "Step", render: (r) => STEP_LABEL[r.step] ?? `Step ${r.step}`, sortValue: (r) => r.step },
+                { key: "sent", header: "Sent", numeric: true, render: (r) => r.sent, sortValue: (r) => r.sent },
+                { key: "opened", header: "Opened", numeric: true, render: (r) => r.opened, sortValue: (r) => r.opened },
+                { key: "openRate", header: "Open rate", numeric: true, render: (r) => `${r.openRate}%`, sortValue: (r) => r.openRate },
+                { key: "replied", header: "Replied", numeric: true, render: (r) => r.replied, sortValue: (r) => r.replied },
+                { key: "replyRate", header: "Reply rate", numeric: true, render: (r) => `${r.replyRate}%`, sortValue: (r) => r.replyRate },
               ]}
             />
             <div className="mt-4 grid grid-cols-3 gap-3 border-t border-[var(--line)] pt-4">
@@ -244,20 +244,30 @@ export function EmailCampaignReportSection() {
               {
                 key: "company", header: "Company",
                 render: (r) => <a href={`/leads/${r.leadId}`} className="hover:underline">{r.companyName}</a>,
+                sortValue: (r) => r.companyName,
               },
-              { key: "contact", header: "Contact", render: (r) => r.contactName ?? "—" },
-              { key: "subject", header: "Subject", render: (r) => r.subject },
-              { key: "step", header: "Step", numeric: true, render: (r) => r.sequenceStep },
-              { key: "sentAt", header: "Sent", render: (r) => (r.sentAt ? new Date(r.sentAt).toLocaleString() : "—") },
+              { key: "contact", header: "Contact", render: (r) => r.contactName ?? "—", sortValue: (r) => r.contactName },
+              { key: "subject", header: "Subject", render: (r) => r.subject, sortValue: (r) => r.subject },
+              { key: "step", header: "Step", numeric: true, render: (r) => r.sequenceStep, sortValue: (r) => r.sequenceStep },
+              {
+                key: "sentAt", header: "Sent",
+                render: (r) => (r.sentAt ? new Date(r.sentAt).toLocaleString() : "—"),
+                sortValue: (r) => (r.sentAt ? new Date(r.sentAt).getTime() : null),
+              },
               ...(tab === "SENT"
                 ? []
                 : [{
                     key: "eventAt",
                     header: tab === "OPENED" ? "Opened" : tab === "REPLIED" ? "Replied" : "Failed",
                     render: (r: EmailListItem) => new Date(r.eventAt).toLocaleString(),
+                    sortValue: (r: EmailListItem) => new Date(r.eventAt).getTime(),
                   }]),
               ...(tab === "FAILED"
-                ? [{ key: "failureReason", header: "Why", render: (r: EmailListItem) => r.failureReason ?? "Unknown" }]
+                ? [{
+                    key: "failureReason", header: "Why",
+                    render: (r: EmailListItem) => r.failureReason ?? "Unknown",
+                    sortValue: (r: EmailListItem) => r.failureReason,
+                  }]
                 : []),
             ]}
           />
@@ -274,9 +284,13 @@ export function EmailCampaignReportSection() {
             rows={suppressionQuery.data!}
             rowKey={(r) => r.id}
             columns={[
-              { key: "email", header: "Email", render: (r) => r.email },
-              { key: "reason", header: "Reason", render: (r) => REASON_LABEL[r.reason] ?? r.reason },
-              { key: "when", header: "When", render: (r) => new Date(r.createdAt).toLocaleString() },
+              { key: "email", header: "Email", render: (r) => r.email, sortValue: (r) => r.email },
+              { key: "reason", header: "Reason", render: (r) => REASON_LABEL[r.reason] ?? r.reason, sortValue: (r) => r.reason },
+              {
+                key: "when", header: "When",
+                render: (r) => new Date(r.createdAt).toLocaleString(),
+                sortValue: (r) => new Date(r.createdAt).getTime(),
+              },
             ]}
           />
         )}

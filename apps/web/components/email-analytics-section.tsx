@@ -294,12 +294,13 @@ export function EmailAnalyticsSection({
               rows={[...trends].reverse()}
               rowKey={(r) => String(r.date)}
               columns={[
-                { key: "date", header: "Date", render: (r) => String(r.date) },
+                { key: "date", header: "Date", render: (r) => String(r.date), sortValue: (r) => String(r.date) },
                 ...TREND_METRICS.map((m) => ({
                   key: m.key,
                   header: m.label,
                   numeric: true,
                   render: (r: Record<string, number | string>) => r[m.key] ?? 0,
+                  sortValue: (r: Record<string, number | string>) => (typeof r[m.key] === "number" ? (r[m.key] as number) : null),
                 })),
               ]}
             />
@@ -327,14 +328,14 @@ export function EmailAnalyticsSection({
             rows={breakdown}
             rowKey={(r) => r.userId}
             columns={[
-              { key: "user", header: "User", render: (r) => r.userName },
-              { key: "leadsUploaded", header: "Leads Uploaded", numeric: true, render: (r) => r.leadsUploaded },
-              { key: "sent", header: "Emails Sent", numeric: true, render: (r) => r.sent },
-              { key: "opened", header: "Verified Opens", numeric: true, render: (r) => r.uniqueLeadsOpened },
-              { key: "replied", header: "Replies", numeric: true, render: (r) => r.uniqueLeadsReplied },
-              { key: "openRate", header: "Open Rate", numeric: true, render: (r) => pct(r.openRate) },
-              { key: "replyRate", header: "Reply Rate", numeric: true, render: (r) => pct(r.replyRate) },
-              { key: "failed", header: "Failures", numeric: true, render: (r) => r.failed },
+              { key: "user", header: "User", render: (r) => r.userName, sortValue: (r) => r.userName },
+              { key: "leadsUploaded", header: "Leads Uploaded", numeric: true, render: (r) => r.leadsUploaded, sortValue: (r) => r.leadsUploaded },
+              { key: "sent", header: "Emails Sent", numeric: true, render: (r) => r.sent, sortValue: (r) => r.sent },
+              { key: "opened", header: "Verified Opens", numeric: true, render: (r) => r.uniqueLeadsOpened, sortValue: (r) => r.uniqueLeadsOpened },
+              { key: "replied", header: "Replies", numeric: true, render: (r) => r.uniqueLeadsReplied, sortValue: (r) => r.uniqueLeadsReplied },
+              { key: "openRate", header: "Open Rate", numeric: true, render: (r) => pct(r.openRate), sortValue: (r) => r.openRate },
+              { key: "replyRate", header: "Reply Rate", numeric: true, render: (r) => pct(r.replyRate), sortValue: (r) => r.replyRate },
+              { key: "failed", header: "Failures", numeric: true, render: (r) => r.failed, sortValue: (r) => r.failed },
             ]}
           />
         )}

@@ -244,21 +244,21 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         Open
       </button>
     ) },
-    { key: "createdAt", header: "Date", render: (r) => new Date(r.createdAt).toLocaleDateString() },
-    { key: "profileName", header: "Profile", render: (r) => r.profileName },
-    { key: "jobCategory", header: "Category", render: (r) => r.jobCategory },
+    { key: "createdAt", header: "Date", render: (r) => new Date(r.createdAt).toLocaleDateString(), sortValue: (r) => new Date(r.createdAt).getTime() },
+    { key: "profileName", header: "Profile", render: (r) => r.profileName, sortValue: (r) => r.profileName },
+    { key: "jobCategory", header: "Category", render: (r) => r.jobCategory, sortValue: (r) => r.jobCategory },
     ...(type === "BIDDING"
-      ? [{ key: "connects", header: "Connects", numeric: true, render: (r: UpworkProposal) => r.connects ?? "—" } as TableColumn<UpworkProposal>]
+      ? [{ key: "connects", header: "Connects", numeric: true, render: (r: UpworkProposal) => r.connects ?? "—", sortValue: (r: UpworkProposal) => r.connects } as TableColumn<UpworkProposal>]
       : []),
     // Every invite is accepted by a real person before anything else happens
     // to it — for this type, "Submitted by" IS "who accepted the invite",
     // not a literal submission (Part: Upwork Invites, 2026-09-30), so the
     // column header reflects that instead of reusing Bidding's wording.
-    { key: "submittedBy", header: type === "INVITE" ? "Accepted by" : "Submitted by", render: (r) => r.submittedBy },
+    { key: "submittedBy", header: type === "INVITE" ? "Accepted by" : "Submitted by", render: (r) => r.submittedBy, sortValue: (r) => r.submittedBy },
     { key: "jobLink", header: "Job", render: (r) => (
       <a href={r.jobLink} target="_blank" rel="noreferrer" className="text-accent hover:underline">Open ↗</a>
     ) },
-    { key: "projectHours", header: "Project Hours", numeric: true, render: (r) => (
+    { key: "projectHours", header: "Project Hours", numeric: true, sortValue: (r) => r.projectHours, render: (r) => (
       <div className="flex items-center justify-end gap-1">
         <select
           value={r.pricingType}
@@ -286,7 +286,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         )}
       </div>
     ) },
-    { key: "status", header: "Status", render: (r) => (
+    { key: "status", header: "Status", sortValue: (r) => r.status, render: (r) => (
       <select
         value={r.status}
         disabled={savingId === r.id}
@@ -296,7 +296,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     ) },
-    { key: "clientName", header: "Client", render: (r) => (
+    { key: "clientName", header: "Client", sortValue: (r) => r.clientName, render: (r) => (
       <input
         defaultValue={r.clientName ?? ""}
         placeholder="—"
@@ -315,6 +315,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
           {
             key: "closedBy",
             header: "Closed by",
+            sortValue: (r: UpworkProposal) => r.closedBy,
             render: (r: UpworkProposal) => (
               <input
                 defaultValue={r.closedBy ?? ""}
