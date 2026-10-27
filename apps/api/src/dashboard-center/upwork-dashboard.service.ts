@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { PrismaService } from "../common/prisma/prisma.service";
 import { DashboardRangeQuery, resolveDashboardRange, safeDivide, safeRate, percentDelta } from "./dashboard-center.util";
 import { parseCsvRows } from "../leads/lead-import-mapping";
+import { sumConnectsByCategory, connectsLedgerStartDate } from "../upwork-integration/connects-usage/connects-category.util";
 
 export interface CreateConnectPurchaseInput {
   purchasedAt: string;
@@ -158,8 +159,9 @@ export class UpworkDashboardService {
     const where = { orgId, createdAt: { gte: current.from, lte: current.to } };
 
     const [
-      totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, connectsAgg, hasAnyPurchase, previousWon, previousBids,
+      totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, hasAnyPurchase, previousWon, previousBids,
       wonBids, wonInvites, lostBids, lostInvites, bidsViewed, bidsInDiscussion, invitesInDiscussion,
+      ledgerStart,
     ] = await Promise.all([
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE" } }),
@@ -167,7 +169,6 @@ export class UpworkDashboardService {
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "LOST" } }),
       this.prisma.upworkProposal.count({ where: { ...where, status: "WON" } }),
       this.prisma.upworkProposal.count({ where: { ...where, status: "LOST" } }),
-      this.prisma.upworkProposal.aggregate({ where, _sum: { connects: true } }),
       this.prisma.upworkConnectPurchase.count({ where: { orgId } }),
       previous ? this.prisma.upworkProposal.count({ where: { orgId, status: "WON", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
       previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "BIDDING", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
@@ -187,9 +188,49 @@ export class UpworkDashboardService {
       // specific than ongoing back-and-forth.
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING", status: "IN_DISCUSSION" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "IN_DISCUSSION" } }),
+      connectsLedgerStartDate(this.prisma, orgId),
     ]);
 
-    const connectsUsed = connectsAgg._sum.connects ?? 0;
+    // Connects source, hybrid by design (Part: Connects usage monitoring,
+    // 2026-10-27, explicit user request to stop undercounting invite/boost
+    // spend) -- the real synced Upwork ledger (UpworkConnectsTransaction)
+    // only has history from whenever this org's Connects-usage sync first
+    // ran (confirmed live: no 2-year backfill actually came back from
+    // Upwork's API, just real history from that point forward), so any
+    // part of the requested period before that falls back to the manually
+    // -entered UpworkProposal.connects field exactly as before. No gap, no
+    // double-count: the manual query is bounded to end exactly where the
+    // real ledger's coverage begins.
+    const manualBiddingAgg = await this.prisma.upworkProposal.aggregate({
+      where: {
+        orgId,
+        type: "BIDDING",
+        createdAt:
+          ledgerStart && ledgerStart <= current.to ? { gte: current.from, lt: ledgerStart } : { gte: current.from, lte: current.to },
+      },
+      _sum: { connects: true },
+    });
+    const realCategoryTotals =
+      ledgerStart && ledgerStart <= current.to
+        ? await sumConnectsByCategory(this.prisma, orgId, {
+            gte: ledgerStart > current.from ? ledgerStart : current.from,
+            lte: current.to,
+          })
+        : { bidding: 0, invite: 0, profileBoost: 0, other: 0 };
+
+    const connectsUsed = (manualBiddingAgg._sum.connects ?? 0) + realCategoryTotals.bidding;
+    // Real invite/profile-boost spend has no manual-entry equivalent at all
+    // (the old assumption was "invites cost no connects"), so these are
+    // simply 0 for any part of the period the real ledger doesn't cover --
+    // not fabricated, not backfilled.
+    const connectsUsedInvites = realCategoryTotals.invite;
+    // Profile-boost ad spend is deliberately NOT folded into connectsUsed
+    // or connectCost below -- it's not tied to any specific job or invite
+    // (confirmed live: these rows never carry a jobId), so blending it in
+    // would overstate per-bid/per-invite cost. Surfaced as its own figure
+    // so it can be tracked without contaminating either expense number.
+    const connectsUsedProfileBoost = realCategoryTotals.profileBoost;
+
     // Real purchase history (if any) reflects what was actually paid; the
     // flat $0.15/connect rate is the fallback, not undefined -- see
     // DEFAULT_CONNECT_UNIT_COST_USD's own docblock for why this is now a
@@ -197,6 +238,8 @@ export class UpworkDashboardService {
     const actualCostPerConnect = hasAnyPurchase > 0 ? await this.costPerConnectAsOf(orgId, current.to) : undefined;
     const costPerConnect = actualCostPerConnect ?? DEFAULT_CONNECT_UNIT_COST_USD;
     const connectCost = connectsUsed * costPerConnect;
+    const inviteConnectCost = connectsUsedInvites * costPerConnect;
+    const profileBoostConnectCost = connectsUsedProfileBoost * costPerConnect;
 
     return {
       range: { from: current.from, to: current.to },
@@ -218,6 +261,27 @@ export class UpworkDashboardService {
       bidsInDiscussion,
       invitesInDiscussion,
       connectsUsed,
+      // Part: Connects usage monitoring, 2026-10-27 -- tells the frontend
+      // (and its tooltips) whether connectsUsed for this period is pure
+      // real-ledger data, pure legacy manual entry, or a blend of both
+      // because the period straddles the day the real sync started.
+      connectsUsedSource:
+        !ledgerStart || ledgerStart > current.to
+          ? "manual_entry"
+          : ledgerStart <= current.from
+            ? "real_ledger"
+            : "hybrid",
+      // Real invite-connects spend (PAID_INVITATION_BADGE) -- did not
+      // exist as a tracked figure before the real Connects ledger synced;
+      // 0 for any period entirely before that, by design, not an error.
+      connectsUsedInvites,
+      inviteConnectCost,
+      costPerInvite: safeDivide(inviteConnectCost, totalInvites),
+      // Profile-boost ad spend (AD_BOOSTED_PROFILE_MFS) -- deliberately
+      // excluded from connectCost/costPerBid/costPerInvite above; shown
+      // only here so it's visible without inflating bid or invite expense.
+      connectsUsedProfileBoost,
+      profileBoostConnectCost,
       previousTotalBids: previous ? previousBids : undefined,
       totalBidsDeltaPct: previous ? percentDelta(totalBids, previousBids) : null,
       // Always available now that a real per-connect rate is known -- see

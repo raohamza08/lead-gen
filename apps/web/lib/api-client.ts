@@ -1140,6 +1140,7 @@ export const api = {
     request<{
       current: { connectsBalance: number; rolloverBalance: number; connectsBalanceFree: number; connectsBalancePaid: number; capturedAt: string } | null;
       history: { capturedAt: string; connectsBalance: number }[];
+      categoryBreakdown: { trendDays: number; bidding: number; invites: number; profileBoost: number; other: number };
       recentTransactions: {
         id: string;
         occurredAt: string;

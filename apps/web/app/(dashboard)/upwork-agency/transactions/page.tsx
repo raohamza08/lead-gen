@@ -79,6 +79,23 @@ export default function TransactionsPage() {
             <StatTile label="Rollover" value={connects.current.rolloverBalance} />
           </KpiStrip>
         )}
+        {connects?.categoryBreakdown && (
+          <div className="mt-4">
+            <p className="mb-2 text-xs text-ink/55">
+              Last {connects.categoryBreakdown.trendDays} days, by what the connects were actually spent on
+            </p>
+            <KpiStrip>
+              <StatTile label="Bidding (job applications)" value={connects.categoryBreakdown.bidding} />
+              <StatTile label="Invites (paid badge)" value={connects.categoryBreakdown.invites} />
+              <StatTile
+                label="Profile Boost (ads)"
+                value={connects.categoryBreakdown.profileBoost}
+                hint="Not tied to any job or invite — excluded from bid/invite expense"
+              />
+              {connects.categoryBreakdown.other > 0 && <StatTile label="Other" value={connects.categoryBreakdown.other} />}
+            </KpiStrip>
+          </div>
+        )}
       </SectionCard>
 
       <SectionCard title="Transactions">

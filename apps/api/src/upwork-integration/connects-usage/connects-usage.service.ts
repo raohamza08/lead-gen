@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import { sumConnectsByCategory } from "./connects-category.util";
 
 const TREND_DAYS = 30;
 const RECENT_TRANSACTIONS_LIMIT = 50;
@@ -20,7 +21,7 @@ export class UpworkConnectsUsageService {
   async getConnectsUsage(orgId: string) {
     const since = new Date(Date.now() - TREND_DAYS * 24 * 60 * 60 * 1000);
 
-    const [latest, history, recentTransactions] = await Promise.all([
+    const [latest, history, recentTransactions, categoryTotals] = await Promise.all([
       this.prisma.upworkConnectsSnapshot.findFirst({ where: { orgId }, orderBy: { capturedAt: "desc" } }),
       this.prisma.upworkConnectsSnapshot.findMany({
         where: { orgId, capturedAt: { gte: since } },
@@ -31,9 +32,22 @@ export class UpworkConnectsUsageService {
         orderBy: { occurredAt: "desc" },
         take: RECENT_TRANSACTIONS_LIMIT,
       }),
+      // Category breakdown (Part: Connects usage monitoring, 2026-10-27,
+      // explicit user request to separate bidding/invite/profile-boost
+      // spend so boosted-profile connects don't get blended into invite
+      // expense) -- same TREND_DAYS window as the balance history above,
+      // for one consistent "last 30 days" picture on this widget.
+      sumConnectsByCategory(this.prisma, orgId, { gte: since }),
     ]);
 
     return {
+      categoryBreakdown: {
+        trendDays: TREND_DAYS,
+        bidding: categoryTotals.bidding,
+        invites: categoryTotals.invite,
+        profileBoost: categoryTotals.profileBoost,
+        other: categoryTotals.other,
+      },
       current: latest
         ? {
             connectsBalance: latest.connectsBalance,
