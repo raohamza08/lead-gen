@@ -86,11 +86,10 @@ export default function TransactionsPage() {
             </p>
             <KpiStrip>
               <StatTile label="Bidding (job applications)" value={connects.categoryBreakdown.bidding} />
-              <StatTile label="Invites (paid badge)" value={connects.categoryBreakdown.invites} />
               <StatTile
-                label="Profile Boost (ads)"
-                value={connects.categoryBreakdown.profileBoost}
-                hint="Not tied to any job or invite — excluded from bid/invite expense"
+                label="Invites (badge + boosted profile)"
+                value={connects.categoryBreakdown.invites}
+                hint="Invitation badges and boosted-profile billable clicks"
               />
               {connects.categoryBreakdown.other > 0 && <StatTile label="Other" value={connects.categoryBreakdown.other} />}
             </KpiStrip>

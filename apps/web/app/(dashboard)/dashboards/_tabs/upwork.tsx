@@ -43,8 +43,6 @@ interface UpworkKpis {
   costPerInvite?: number;
   avgConnectsPerInvite?: number;
   costPerClientInvites?: number;
-  connectsUsedProfileBoost: number;
-  profileBoostConnectCost: number;
   connectCostAvailable: boolean;
   connectCostBasis: "actual_purchases" | "flat_rate_estimate";
   connectUnitCost: number;
@@ -388,10 +386,10 @@ export function UpworkTab() {
               <StatTile
                 label="Connects Used"
                 value={num(kpis.connectsUsedInvites)}
-                hint="Paid invitation badge — Upwork's real Connects ledger"
+                hint="Invitation badge + boosted-profile clicks — Upwork's real Connects ledger"
                 detail={
                   <MetricDetail
-                    definition="Connects spent on paid invitation badges when responding to client invites (Upwork's PAID_INVITATION_BADGE reason) — previously untracked, since invites were assumed to never cost connects. 0 for any part of the period before the real Connects ledger started syncing."
+                    definition="Connects spent on invites: paid invitation badges (Upwork's PAID_INVITATION_BADGE reason) plus boosted-profile billable clicks (AD_BOOSTED_PROFILE_MFS — shown in Upwork's own transaction history as 'Your Boosted Profile received a billable click'), since a boosted profile is what draws client invites in. Previously untracked, since invites were assumed to never cost connects. 0 for any part of the period before the real Connects ledger started syncing."
                     rows={[{ label: "Connects used", value: num(kpis.connectsUsedInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }]}
                   />
                 }
@@ -405,13 +403,13 @@ export function UpworkTab() {
                 label="Connect Cost"
                 value={money(kpis.inviteConnectCost)}
                 hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-                detail={<MetricDetail definition="Connects used on invites (paid invitation badges) multiplied by the same per-connect rate as bidding cost." rows={[{ label: "Connects used", value: num(kpis.connectsUsedInvites) }, { label: "Rate per connect", value: money(kpis.connectUnitCost) }, { label: "Total cost", value: money(kpis.inviteConnectCost) }]} />}
+                detail={<MetricDetail definition="Connects used on invites (invitation badges + boosted-profile clicks) multiplied by the same per-connect rate as bidding cost." rows={[{ label: "Connects used", value: num(kpis.connectsUsedInvites) }, { label: "Rate per connect", value: money(kpis.connectUnitCost) }, { label: "Total cost", value: money(kpis.inviteConnectCost) }]} />}
               />
               <StatTile
                 label="Cost / Invite"
                 value={money(kpis.costPerInvite)}
                 hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-                detail={<MetricDetail definition="Invite connect cost divided by total invites — profile-boost ad spend is excluded since it isn't tied to any specific invite." rows={[{ label: "Invite connect cost", value: money(kpis.inviteConnectCost) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
+                detail={<MetricDetail definition="Invite connect cost divided by total invites." rows={[{ label: "Invite connect cost", value: money(kpis.inviteConnectCost) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
               />
               <StatTile
                 label="Cost / Client"
@@ -422,24 +420,6 @@ export function UpworkTab() {
             </KpiStrip>
           </SectionCard>
         </div>
-      )}
-
-      {kpis && kpis.connectsUsedProfileBoost > 0 && (
-        <SectionCard title="Profile Boost (Ads)" subtitle="Not tied to any job or invite — excluded from bid/invite cost">
-          <KpiStrip>
-            <StatTile
-              label="Connects Used"
-              value={num(kpis.connectsUsedProfileBoost)}
-              detail={<MetricDetail definition="Connects spent boosting a profile (Upwork's AD_BOOSTED_PROFILE_MFS reason) — flat ad spend never tied to a specific job or invite, so it's deliberately kept out of Connect Cost / Cost per Bid / Cost per Invite above rather than inflating them." rows={[{ label: "Connects used", value: num(kpis.connectsUsedProfileBoost) }]} />}
-            />
-            <StatTile
-              label="Estimated Cost"
-              value={money(kpis.profileBoostConnectCost)}
-              hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-              detail={<MetricDetail definition="Profile-boost connects multiplied by the same per-connect rate as bidding/invite cost." rows={[{ label: "Connects used", value: num(kpis.connectsUsedProfileBoost) }, { label: "Rate per connect", value: money(kpis.connectUnitCost) }, { label: "Total cost", value: money(kpis.profileBoostConnectCost) }]} />}
-            />
-          </KpiStrip>
-        </SectionCard>
       )}
 
       {/* Real-chart pass, round 2 (Part: Dashboard Center, 2026-10-20,

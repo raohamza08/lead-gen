@@ -224,20 +224,19 @@ export class UpworkDashboardService {
             gte: ledgerStart > current.from ? ledgerStart : current.from,
             lte: current.to,
           })
-        : { bidding: 0, invite: 0, profileBoost: 0, other: 0 };
+        : { bidding: 0, invite: 0, other: 0 };
 
     const connectsUsed = (manualBiddingAgg._sum.connects ?? 0) + realCategoryTotals.bidding;
-    // Real invite/profile-boost spend has no manual-entry equivalent at all
-    // (the old assumption was "invites cost no connects"), so these are
-    // simply 0 for any part of the period the real ledger doesn't cover --
-    // not fabricated, not backfilled.
+    // Real invite spend has no manual-entry equivalent at all (the old
+    // assumption was "invites cost no connects"), so this is simply 0 for
+    // any part of the period the real ledger doesn't cover -- not
+    // fabricated, not backfilled. Includes AD_BOOSTED_PROFILE_MFS ("Your
+    // Boosted Profile received a billable click") alongside
+    // PAID_INVITATION_BADGE -- explicit user correction, 2026-10-28: a
+    // boosted profile is what draws in client invites, so its connects
+    // spend is real invite-acquisition cost, not unrelated ad spend. See
+    // connects-category.util.ts's own docblock.
     const connectsUsedInvites = realCategoryTotals.invite;
-    // Profile-boost ad spend is deliberately NOT folded into connectsUsed
-    // or connectCost below -- it's not tied to any specific job or invite
-    // (confirmed live: these rows never carry a jobId), so blending it in
-    // would overstate per-bid/per-invite cost. Surfaced as its own figure
-    // so it can be tracked without contaminating either expense number.
-    const connectsUsedProfileBoost = realCategoryTotals.profileBoost;
 
     // Real purchase history (if any) reflects what was actually paid; the
     // flat $0.15/connect rate is the fallback, not undefined -- see
@@ -247,7 +246,6 @@ export class UpworkDashboardService {
     const costPerConnect = actualCostPerConnect ?? DEFAULT_CONNECT_UNIT_COST_USD;
     const connectCost = connectsUsed * costPerConnect;
     const inviteConnectCost = connectsUsedInvites * costPerConnect;
-    const profileBoostConnectCost = connectsUsedProfileBoost * costPerConnect;
 
     return {
       range: { from: current.from, to: current.to },
@@ -280,7 +278,8 @@ export class UpworkDashboardService {
           : ledgerStart <= current.from
             ? "real_ledger"
             : "hybrid",
-      // Real invite-connects spend (PAID_INVITATION_BADGE) -- did not
+      // Real invite-connects spend (PAID_INVITATION_BADGE + the boosted-
+      // profile billable-click spend that draws invites in) -- did not
       // exist as a tracked figure before the real Connects ledger synced;
       // 0 for any period entirely before that, by design, not an error.
       connectsUsedInvites,
@@ -291,11 +290,6 @@ export class UpworkDashboardService {
       // parity, 2026-10-28, explicit user request) -- invite connect cost
       // divided by invite-won clients specifically.
       costPerClientInvites: safeDivide(inviteConnectCost, wonInvites),
-      // Profile-boost ad spend (AD_BOOSTED_PROFILE_MFS) -- deliberately
-      // excluded from connectCost/costPerBid/costPerInvite above; shown
-      // only here so it's visible without inflating bid or invite expense.
-      connectsUsedProfileBoost,
-      profileBoostConnectCost,
       previousTotalBids: previous ? previousBids : undefined,
       totalBidsDeltaPct: previous ? percentDelta(totalBids, previousBids) : null,
       // Always available now that a real per-connect rate is known -- see

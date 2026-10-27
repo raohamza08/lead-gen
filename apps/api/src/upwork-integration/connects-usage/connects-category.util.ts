@@ -12,22 +12,25 @@ import { PrismaService } from "../../common/prisma/prisma.service";
  * - PAID_INVITATION_BADGE: connects spent responding to an invite with a
  *   paid "badge" -- real invite-related spend, previously assumed to not
  *   exist ("invites cost no connects").
- * - AD_BOOSTED_PROFILE_MFS: flat profile-boost ad spend, never tied to a
- *   job or invite (no jobId on these rows, ever) -- marketing spend, not
- *   bid/invite cost. Must be excluded from bidding/invite expense totals,
- *   not blended in.
+ * - AD_BOOSTED_PROFILE_MFS: Upwork's own transaction history labels this
+ *   "Your Boosted Profile received a billable click" -- explicit user
+ *   correction, 2026-10-28, after an initial build wrongly treated this as
+ *   unrelated ad spend and excluded it from both bidding and invites. A
+ *   boosted profile is what draws in client invites in the first place, so
+ *   this is real invite-acquisition cost and belongs in INVITE, same as
+ *   PAID_INVITATION_BADGE.
  * Anything else (DIRECT_PURCHASE, INTERVIEW_WON, BEHAVIORAL_BASED_SUBSIDY,
  * and any future code Upwork adds) falls into OTHER rather than being
  * silently misclassified.
  */
-export type ConnectsSpendCategory = "BIDDING" | "INVITE" | "PROFILE_BOOST" | "OTHER";
+export type ConnectsSpendCategory = "BIDDING" | "INVITE" | "OTHER";
 
 const REASON_CATEGORY: Record<string, ConnectsSpendCategory> = {
   JOB_APPLICATION: "BIDDING",
   REFUND_JOB_CANCELLATION: "BIDDING",
   REFUND_INTERVIEW_WON: "BIDDING",
   PAID_INVITATION_BADGE: "INVITE",
-  AD_BOOSTED_PROFILE_MFS: "PROFILE_BOOST",
+  AD_BOOSTED_PROFILE_MFS: "INVITE",
 };
 
 export function categoryForReason(reason: string | null): ConnectsSpendCategory {
@@ -38,7 +41,6 @@ export function categoryForReason(reason: string | null): ConnectsSpendCategory 
 export interface ConnectsCategoryTotals {
   bidding: number;
   invite: number;
-  profileBoost: number;
   other: number;
 }
 
@@ -64,18 +66,16 @@ export async function sumConnectsByCategory(
     select: { reason: true, amountRaw: true },
   });
 
-  const totals: ConnectsCategoryTotals = { bidding: 0, invite: 0, profileBoost: 0, other: 0 };
+  const totals: ConnectsCategoryTotals = { bidding: 0, invite: 0, other: 0 };
   for (const row of rows) {
     const net = -Number(row.amountRaw);
     const category = categoryForReason(row.reason);
     if (category === "BIDDING") totals.bidding += net;
     else if (category === "INVITE") totals.invite += net;
-    else if (category === "PROFILE_BOOST") totals.profileBoost += net;
     else totals.other += net;
   }
   totals.bidding = Math.max(0, totals.bidding);
   totals.invite = Math.max(0, totals.invite);
-  totals.profileBoost = Math.max(0, totals.profileBoost);
   totals.other = Math.max(0, totals.other);
   return totals;
 }
