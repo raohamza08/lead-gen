@@ -129,6 +129,47 @@ export const DashboardIcons = {
       <path d="m2 12 10 6 10-6" />
     </svg>
   ),
+  Gavel: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="m14 13-7.5 7.5a1 1 0 0 1-3-3L11 10" />
+      <path d="m16 16 6-6" />
+      <path d="m8 8 6-6" />
+      <path d="m9 7 8 8" />
+      <path d="m21 11-8-8" />
+    </svg>
+  ),
+  Link: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </svg>
+  ),
+  Coins: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M18.09 10.37A6 6 0 1 1 10.37 18.09" />
+      <path d="M7 6h1v4" />
+      <path d="m16.71 13.88.7.71-2.82 2.82" />
+    </svg>
+  ),
+  Wallet: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M21 12V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5" />
+      <path d="M21 12h-4a2 2 0 0 0 0 4h4" />
+    </svg>
+  ),
+  Tag: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M12.59 21.41a2 2 0 0 1-2.83 0L2 13.66V3h10.66l7.75 7.76a2 2 0 0 1 0 2.83z" />
+      <circle cx="7.5" cy="7.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
+  ),
+  User: () => (
+    <svg aria-hidden {...ICON_PROPS}>
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  ),
 } as const;
 
 /** Recessive chrome: solid hairlines one step off the surface, never dashed. */

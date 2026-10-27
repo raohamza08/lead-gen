@@ -1,14 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, AreaChart, Bar, BarChart, CartesianGrid, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api, getCurrentUser } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, money, dateTime } from "../../../../components/dashboard-center/format";
-import { MetricDetail, ComparisonHint } from "../../../../components/dashboard-center/metric-detail";
-import { AXIS_PROPS, ChartWithTable, DataTable, DonutBreakdown, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE, formatCompact } from "../../../../components/chart-kit";
+import { MetricDetail } from "../../../../components/dashboard-center/metric-detail";
+import { AXIS_PROPS, ChartWithTable, DashboardIcons, DataTable, DonutBreakdown, formatCompact, GRID_PROPS, KpiStrip, Legend, SectionCard, SERIES, StatTile, TOOLTIP_STYLE } from "../../../../components/chart-kit";
 import { ErrorState } from "../../../../components/ui/error-state";
 import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
@@ -16,10 +16,12 @@ import { Input } from "../../../../components/ui/input";
 import { Button } from "../../../../components/ui/button";
 
 interface UpworkKpis {
+  range: { from: string; to: string };
   totalBids: number;
   previousTotalBids?: number;
   totalBidsDeltaPct: number | null;
   totalInvites: number;
+  totalInvitesDeltaPct: number | null;
   invitesAccepted: number;
   invitesRejected: number;
   clientsWon: number;
@@ -30,6 +32,12 @@ interface UpworkKpis {
   wonInvites: number;
   lostBids: number;
   lostInvites: number;
+  wonBidsDeltaPct: number | null;
+  lostBidsDeltaPct: number | null;
+  wonInvitesDeltaPct: number | null;
+  lostInvitesDeltaPct: number | null;
+  bidsInDiscussionDeltaPct: number | null;
+  invitesInDiscussionDeltaPct: number | null;
   conversionRateBidding?: number;
   conversionRateInvites?: number;
   bidsViewed: number;
@@ -109,6 +117,148 @@ interface ConnectPurchase {
 }
 
 const EMPTY_PURCHASE = { purchasedAt: "", connectsAmount: "", totalCost: "", currency: "USD", notes: "" };
+
+/** Bidding/Invites card redesign (Part: Connects usage monitoring, 2026-10-28,
+ *  explicit user request against a supplied reference mockup — "Dark SaaS
+ *  Bidding and Invites Dashboard": a header with an icon badge + date-range
+ *  pill, a progress ring + trend chart, three circular "milestone" stats
+ *  (Won/Lost/Viewed), a row of four square mini-stats, and a closing cost
+ *  row. The pieces below are purpose-built for this one layout rather than
+ *  routed through chart-kit's existing generic primitives (StatTile,
+ *  RadialProgress) because the mockup's center-of-ring content (label + big
+ *  number + delta, stacked) and the icon-badge shapes don't fit those
+ *  components' existing contracts without changing them for every other
+ *  caller. */
+
+function deltaPill(deltaPct: number | null | undefined) {
+  if (deltaPct === null || deltaPct === undefined) return null;
+  const good = deltaPct >= 0;
+  return (
+    <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[11px] font-medium ${good ? "bg-good/15 text-good" : "bg-bad/15 text-bad"}`}>
+      {good ? "↑" : "↓"} {Math.abs(deltaPct).toFixed(0)}%
+    </span>
+  );
+}
+
+function formatDateShort(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
+
+/** One icon-badge stat used for both the 3-wide "milestone" row (Won/Lost/
+ *  Viewed — `shape="circle"`) and the 4-wide mini-stat row plus the closing
+ *  cost row (`shape="square"`). `deltaPct` and `caption` are mutually
+ *  exclusive in the reference mockup (a tile shows one or neither, never
+ *  both) but nothing here enforces that — callers just pass what they have. */
+function IconStat({
+  icon,
+  iconColor,
+  shape = "square",
+  label,
+  value,
+  deltaPct,
+  caption,
+}: {
+  icon: ReactNode;
+  iconColor: string;
+  shape?: "circle" | "square";
+  label: string;
+  value: string;
+  deltaPct?: number | null;
+  caption?: string;
+}) {
+  return (
+    <div className="card flex items-center gap-3 p-4">
+      <span
+        aria-hidden
+        className={`flex h-11 w-11 shrink-0 items-center justify-center ${shape === "circle" ? "rounded-full" : "rounded-xl"}`}
+        style={{ background: `color-mix(in srgb, ${iconColor} 16%, transparent)`, color: iconColor }}
+      >
+        {icon}
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-xs text-ink/55">{label}</div>
+        <div className="flex items-center gap-2">
+          <span className="text-xl font-semibold tracking-tight text-ink">{value}</span>
+          {deltaPill(deltaPct)}
+        </div>
+        {caption && <div className="mt-0.5 truncate text-[11px] text-ink/45">{caption}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** The ring + trend-chart row at the top of each card. The ring's fill
+ *  percentage is the real conversion rate (won ÷ total) for that type —
+ *  not a decorative/arbitrary fill — with the raw count, label, and
+ *  period-over-period delta stacked in the center. The chart to its right
+ *  plots the same real monthly bids/invites counts the "Monthly trend"
+ *  table further down this page is built from, so the two can never
+ *  disagree. */
+function PerformanceRing({
+  color,
+  totalLabel,
+  totalValue,
+  deltaPct,
+  ringPercent,
+  chartData,
+  chartDataKey,
+  legendLabel,
+}: {
+  color: string;
+  totalLabel: string;
+  totalValue: number;
+  deltaPct: number | null;
+  ringPercent: number;
+  chartData: { month: string; bids: number; invites: number }[];
+  chartDataKey: "bids" | "invites";
+  legendLabel: string;
+}) {
+  const clamped = Math.max(0, Math.min(100, ringPercent));
+  return (
+    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+      <div className="relative mx-auto h-[180px] w-[180px] shrink-0 sm:mx-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <RadialBarChart data={[{ value: clamped }]} innerRadius="78%" outerRadius="100%" startAngle={90} endAngle={-270} barSize={12}>
+            <RadialBar dataKey="value" cornerRadius={8} fill={color} background={{ fill: "var(--chart-grid)" }} isAnimationActive={false} />
+          </RadialBarChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-1">
+          <span className="text-xs text-ink/55">{totalLabel}</span>
+          <span className="text-3xl font-bold tracking-tight text-ink">{num(totalValue)}</span>
+          {deltaPill(deltaPct)}
+        </div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="mb-1 flex items-center gap-1.5 text-xs text-ink/55">
+          <span aria-hidden className="h-2 w-2 rounded-full" style={{ background: color }} />
+          {legendLabel}
+        </div>
+        {chartData.length > 1 ? (
+          <ResponsiveContainer width="100%" height={160}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id={`perf-ring-${chartDataKey}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                  <stop offset="100%" stopColor={color} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid {...GRID_PROPS} />
+              <XAxis dataKey="month" {...AXIS_PROPS} />
+              <Tooltip {...TOOLTIP_STYLE} />
+              <Area type="monotone" dataKey={chartDataKey} stroke={color} strokeWidth={2} fill={`url(#perf-ring-${chartDataKey})`} dot={false} isAnimationActive={false} />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-[160px] items-center justify-center text-xs text-ink/40">Not enough history yet for a trend line</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const { Gavel: GavelIcon, Mail: MailIcon, Check: CheckIcon, X: XIcon, Eye: EyeIcon, Users: UsersIcon, Link: LinkIcon, Coins: CoinsIcon, Wallet: WalletIcon, Tag: TagIcon, User: UserIcon } = DashboardIcons;
 
 export function UpworkTab() {
   const [dateRange, setDateRange] = useDashboardDateRange();
@@ -246,179 +396,186 @@ export function UpworkTab() {
       {kpisQuery.isLoading && <SkeletonCard className="h-32" />}
       {kpisQuery.error && <ErrorState message={(kpisQuery.error as Error).message} onRetry={() => kpisQuery.refetch()} />}
 
-      {/* Two dedicated stat sections (Part: Connects usage monitoring,
-          2026-10-27, explicit user request — split the old single mixed KPI
-          strip into "Bidding Stats" and "Invites Stats" so every bidding-
-          only or invite-only figure has an unambiguous home; reverted back
-          to StatTile/KpiStrip from a table layout per follow-up user
-          feedback — "it should be stats like it was before that looks more
-          professional", tiles kept, just grouped). Profile-boost spend
-          belongs to neither (never tied to a job or invite) and gets its
-          own small one-tile card instead. */}
+      {/* Bidding/Invites cards, redesigned to match a supplied reference
+          mockup (Part: Connects usage monitoring, 2026-10-28, explicit user
+          request: "i have downloaded an image for the invites and bidding
+          tab ui... get the ui done as it" — "Dark SaaS Bidding and Invites
+          Dashboard.png"). Structure per card: header (icon badge, title,
+          subtitle, real resolved date range) → progress ring (conversion
+          rate) + trend chart → three circular milestone stats (Won/Lost/
+          Viewed) → four square mini-stats (In Interview/Connects Used/
+          Average Connects/Connect Cost) → closing cost-per-unit row. Blue
+          for Bidding, green for Invites throughout, matching the mockup;
+          every number is real data, not decorative — see PerformanceRing's
+          and IconStat's own docblocks above for what each piece actually
+          plots. */}
       {kpis && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <SectionCard title="Bidding Stats" subtitle={`${num(kpis.totalBids)} bids this period`}>
-            <KpiStrip>
-              <StatTile
-                label="Total Bids"
-                value={num(kpis.totalBids)}
-                hint={<ComparisonHint deltaPct={kpis.totalBidsDeltaPct} previousValue={kpis.previousTotalBids !== undefined ? num(kpis.previousTotalBids) : undefined} />}
-                detail={<MetricDetail definition="Proposals of type BIDDING submitted in the selected period." rows={[{ label: "Bids", value: num(kpis.totalBids) }]} />}
-              />
-              <StatTile
+          <div className="card flex flex-col gap-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span
+                  aria-hidden
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
+                  style={{ background: "var(--series-1)" }}
+                >
+                  <GavelIcon />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold tracking-tight text-ink">Bidding Stats</h2>
+                  <p className="text-xs text-ink/55">Performance overview of your bids this period</p>
+                </div>
+              </div>
+              <span className="rounded-full border border-[var(--line)] px-3 py-1.5 text-xs text-ink/60">
+                {formatDateShort(kpis.range.from)} – {formatDateShort(kpis.range.to)}
+              </span>
+            </div>
+
+            <PerformanceRing
+              color="var(--series-1)"
+              totalLabel="Total Bids"
+              totalValue={kpis.totalBids}
+              deltaPct={kpis.totalBidsDeltaPct}
+              ringPercent={kpis.conversionRateBidding ?? 0}
+              chartData={monthly}
+              chartDataKey="bids"
+              legendLabel="Bids"
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <IconStat
+                shape="circle"
+                icon={<CheckIcon />}
+                iconColor="rgb(var(--good-rgb))"
                 label="Won"
                 value={num(kpis.wonBids)}
-                tone="good"
-                detail={<MetricDetail definition="BIDDING proposals with status WON in the selected period." rows={[{ label: "Won", value: num(kpis.wonBids) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
+                deltaPct={kpis.wonBidsDeltaPct}
+                caption={`Success rate: ${pct(kpis.conversionRateBidding)}`}
               />
-              <StatTile
+              <IconStat
+                shape="circle"
+                icon={<XIcon />}
+                iconColor="rgb(var(--bad-rgb))"
                 label="Lost"
                 value={num(kpis.lostBids)}
-                tone="bad"
-                detail={<MetricDetail definition="BIDDING proposals with status LOST in the selected period." rows={[{ label: "Lost", value: num(kpis.lostBids) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
+                deltaPct={kpis.lostBidsDeltaPct}
               />
-              <StatTile
-                label="Viewed"
-                value={num(kpis.bidsViewed)}
-                detail={<MetricDetail definition="BIDDING proposals with status Viewed (client opened the proposal, no further action yet)." rows={[{ label: "Viewed", value: num(kpis.bidsViewed) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
-              />
-              <StatTile
+              <IconStat shape="circle" icon={<EyeIcon />} iconColor="#8b5cf6" label="Viewed" value={num(kpis.bidsViewed)} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <IconStat
+                icon={<UsersIcon />}
+                iconColor="var(--series-1)"
                 label="In Interview"
                 value={num(kpis.bidsInDiscussion)}
-                detail={<MetricDetail definition="BIDDING proposals with status In Discussion — the closest existing status to an interview stage." rows={[{ label: "In discussion", value: num(kpis.bidsInDiscussion) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
+                deltaPct={kpis.bidsInDiscussionDeltaPct}
               />
-              <StatTile
-                label="Conversion Rate"
-                value={pct(kpis.conversionRateBidding)}
-                detail={<MetricDetail definition="Bids won divided by total bids." rows={[{ label: "Won", value: num(kpis.wonBids) }, { label: "Total bids", value: num(kpis.totalBids) }, { label: "Rate", value: pct(kpis.conversionRateBidding) }]} />}
-              />
-              <StatTile
+              <IconStat
+                icon={<LinkIcon />}
+                iconColor="#ec4899"
                 label="Connects Used"
                 value={num(kpis.connectsUsed)}
-                hint={
-                  kpis.connectsUsedSource === "manual_entry"
-                    ? "From manually logged bids"
-                    : kpis.connectsUsedSource === "real_ledger"
-                      ? "From Upwork's real Connects ledger"
-                      : "Blended — manual before, real ledger from sync start"
-                }
-                detail={
-                  <MetricDetail
-                    definition="Connects spent bidding on jobs (Upwork's JOB_APPLICATION reason, net of job-cancellation/interview-won refunds) for whatever part of the period the real synced Connects ledger covers, plus manually logged UpworkProposal.connects for any earlier part of the period the ledger doesn't reach yet."
-                    rows={[{ label: "Connects used", value: num(kpis.connectsUsed) }, { label: "Source", value: kpis.connectsUsedSource }]}
-                  />
-                }
+                caption={kpis.connectsUsedSource === "manual_entry" ? "From manual log" : kpis.connectsUsedSource === "real_ledger" ? "From sync start" : "Manual + synced"}
               />
-              <StatTile
-                label="Average Connects / Bid"
-                value={num(kpis.avgConnectsPerBid)}
-                detail={<MetricDetail definition="Connects used divided by total bids." rows={[{ label: "Connects used", value: num(kpis.connectsUsed) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
-              />
-              <StatTile
-                label="Connect Cost"
+              <IconStat icon={<CoinsIcon />} iconColor="var(--series-4)" label="Avg. Connects / Bid" value={num(kpis.avgConnectsPerBid)} />
+              <IconStat
+                icon={<WalletIcon />}
+                iconColor="#6366f1"
+                label="Connects Cost"
                 value={money(kpis.connectCost)}
-                hint={
-                  kpis.connectCostBasis === "actual_purchases"
-                    ? `$${kpis.connectUnitCost.toFixed(4)}/connect — recorded purchases`
-                    : `Estimated at $${kpis.connectUnitCost.toFixed(2)}/connect`
-                }
-                detail={
-                  <MetricDetail
-                    definition={
-                      kpis.connectCostBasis === "actual_purchases"
-                        ? "Connects used multiplied by the weighted-average cost per connect from your recorded purchase ledger."
-                        : "Connects used multiplied by the flat $0.15/connect rate — no purchases are on record yet, so this is an estimate rather than an actual invoiced figure."
-                    }
-                    rows={[{ label: "Connects used", value: num(kpis.connectsUsed) }, { label: "Rate per connect", value: money(kpis.connectUnitCost) }, { label: "Total cost", value: money(kpis.connectCost) }]}
-                    footnote={kpis.connectCostBasis === "flat_rate_estimate" ? "Add a real purchase below to replace this estimate with your actual invoiced rate." : undefined}
-                  />
-                }
+                caption={`${money(kpis.connectUnitCost)} per connect`}
               />
-              <StatTile
-                label="Cost / Bid"
-                value={money(kpis.costPerBid)}
-                hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-                detail={<MetricDetail definition="Connect cost divided by total bids." rows={[{ label: "Connect cost", value: money(kpis.connectCost) }, { label: "Total bids", value: num(kpis.totalBids) }]} />}
-              />
-              <StatTile
-                label="Cost / Client"
-                value={money(kpis.costPerClientBids)}
-                hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-                detail={<MetricDetail definition="Connect cost divided by clients won through bidding specifically." rows={[{ label: "Connect cost", value: money(kpis.connectCost) }, { label: "Clients won", value: num(kpis.wonBids) }]} />}
-              />
-            </KpiStrip>
-          </SectionCard>
+            </div>
 
-          <SectionCard title="Invites Stats" subtitle={`${num(kpis.totalInvites)} invites this period`}>
-            <KpiStrip>
-              <StatTile
-                label="Total Invites"
-                value={num(kpis.totalInvites)}
-                detail={<MetricDetail definition="Proposals of type INVITE received in the selected period." rows={[{ label: "Invites", value: num(kpis.totalInvites) }, { label: "Accepted", value: num(kpis.invitesAccepted) }, { label: "Rejected", value: num(kpis.invitesRejected) }]} />}
-              />
-              <StatTile
+            <div className="grid grid-cols-2 gap-3">
+              <IconStat icon={<TagIcon />} iconColor="var(--ink-muted)" label="Cost / Bid" value={money(kpis.costPerBid)} />
+              <IconStat icon={<UserIcon />} iconColor="var(--ink-muted)" label="Cost / Client" value={money(kpis.costPerClientBids)} />
+            </div>
+          </div>
+
+          <div className="card flex flex-col gap-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex items-start gap-3">
+                <span
+                  aria-hidden
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
+                  style={{ background: "var(--series-3)" }}
+                >
+                  <MailIcon />
+                </span>
+                <div>
+                  <h2 className="text-base font-semibold tracking-tight text-ink">Invites Stats</h2>
+                  <p className="text-xs text-ink/55">Performance overview of your invites this period</p>
+                </div>
+              </div>
+              <span className="rounded-full border border-[var(--line)] px-3 py-1.5 text-xs text-ink/60">
+                {formatDateShort(kpis.range.from)} – {formatDateShort(kpis.range.to)}
+              </span>
+            </div>
+
+            <PerformanceRing
+              color="var(--series-3)"
+              totalLabel="Total Invites"
+              totalValue={kpis.totalInvites}
+              deltaPct={kpis.totalInvitesDeltaPct}
+              ringPercent={kpis.conversionRateInvites ?? 0}
+              chartData={monthly}
+              chartDataKey="invites"
+              legendLabel="Invites"
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <IconStat
+                shape="circle"
+                icon={<CheckIcon />}
+                iconColor="rgb(var(--good-rgb))"
                 label="Won"
                 value={num(kpis.wonInvites)}
-                tone="good"
-                detail={<MetricDetail definition="INVITE proposals with status WON in the selected period." rows={[{ label: "Won", value: num(kpis.wonInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
+                deltaPct={kpis.wonInvitesDeltaPct}
+                caption={`Win rate: ${pct(kpis.conversionRateInvites)}`}
               />
-              <StatTile
+              <IconStat
+                shape="circle"
+                icon={<XIcon />}
+                iconColor="rgb(var(--bad-rgb))"
                 label="Lost"
                 value={num(kpis.lostInvites)}
-                tone="bad"
-                detail={<MetricDetail definition="INVITE proposals with status LOST in the selected period." rows={[{ label: "Lost", value: num(kpis.lostInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
+                deltaPct={kpis.lostInvitesDeltaPct}
               />
-              <StatTile
-                label="Viewed"
-                value={num(kpis.invitesViewed)}
-                detail={<MetricDetail definition="INVITE proposals with status Viewed — Upwork doesn't surface a client-viewed signal for invites the way it does for bids, so this is usually 0." rows={[{ label: "Viewed", value: num(kpis.invitesViewed) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
-              />
-              <StatTile
+              <IconStat shape="circle" icon={<EyeIcon />} iconColor="#8b5cf6" label="Viewed" value={num(kpis.invitesViewed)} />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <IconStat
+                icon={<UsersIcon />}
+                iconColor="var(--series-3)"
                 label="In Interview"
                 value={num(kpis.invitesInDiscussion)}
-                detail={<MetricDetail definition="INVITE proposals with status In Discussion — the closest existing status to an interview stage." rows={[{ label: "In discussion", value: num(kpis.invitesInDiscussion) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
+                deltaPct={kpis.invitesInDiscussionDeltaPct}
               />
-              <StatTile
-                label="Conversion Rate"
-                value={pct(kpis.conversionRateInvites)}
-                detail={<MetricDetail definition="Invites won divided by total invites." rows={[{ label: "Won", value: num(kpis.wonInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }, { label: "Rate", value: pct(kpis.conversionRateInvites) }]} />}
-              />
-              <StatTile
+              <IconStat
+                icon={<LinkIcon />}
+                iconColor="#ec4899"
                 label="Connects Used"
                 value={num(kpis.connectsUsedInvites)}
-                hint="Invitation badge + boosted-profile clicks — Upwork's real Connects ledger"
-                detail={
-                  <MetricDetail
-                    definition="Connects spent on invites: paid invitation badges (Upwork's PAID_INVITATION_BADGE reason) plus boosted-profile billable clicks (AD_BOOSTED_PROFILE_MFS — shown in Upwork's own transaction history as 'Your Boosted Profile received a billable click'), since a boosted profile is what draws client invites in. Previously untracked, since invites were assumed to never cost connects. 0 for any part of the period before the real Connects ledger started syncing."
-                    rows={[{ label: "Connects used", value: num(kpis.connectsUsedInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }]}
-                  />
-                }
+                caption="From paid invitation badge + boosted profile"
               />
-              <StatTile
-                label="Average Connects / Invite"
-                value={num(kpis.avgConnectsPerInvite)}
-                detail={<MetricDetail definition="Connects used divided by total invites." rows={[{ label: "Connects used", value: num(kpis.connectsUsedInvites) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
-              />
-              <StatTile
+              <IconStat icon={<CoinsIcon />} iconColor="var(--series-4)" label="Avg. Connects / Invite" value={num(kpis.avgConnectsPerInvite)} />
+              <IconStat
+                icon={<WalletIcon />}
+                iconColor="#6366f1"
                 label="Connect Cost"
                 value={money(kpis.inviteConnectCost)}
-                hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-                detail={<MetricDetail definition="Connects used on invites (invitation badges + boosted-profile clicks) multiplied by the same per-connect rate as bidding cost." rows={[{ label: "Connects used", value: num(kpis.connectsUsedInvites) }, { label: "Rate per connect", value: money(kpis.connectUnitCost) }, { label: "Total cost", value: money(kpis.inviteConnectCost) }]} />}
+                caption={`${money(kpis.connectUnitCost)} per connect`}
               />
-              <StatTile
-                label="Cost / Invite"
-                value={money(kpis.costPerInvite)}
-                hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-                detail={<MetricDetail definition="Invite connect cost divided by total invites." rows={[{ label: "Invite connect cost", value: money(kpis.inviteConnectCost) }, { label: "Total invites", value: num(kpis.totalInvites) }]} />}
-              />
-              <StatTile
-                label="Cost / Client"
-                value={money(kpis.costPerClientInvites)}
-                hint={kpis.connectCostBasis === "flat_rate_estimate" ? "Estimated" : undefined}
-                detail={<MetricDetail definition="Invite connect cost divided by clients won through invites specifically." rows={[{ label: "Invite connect cost", value: money(kpis.inviteConnectCost) }, { label: "Clients won", value: num(kpis.wonInvites) }]} />}
-              />
-            </KpiStrip>
-          </SectionCard>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <IconStat icon={<TagIcon />} iconColor="var(--ink-muted)" label="Cost / Invite" value={money(kpis.costPerInvite)} />
+              <IconStat icon={<UserIcon />} iconColor="var(--ink-muted)" label="Cost / Client" value={money(kpis.costPerClientInvites)} />
+            </div>
+          </div>
         </div>
       )}
 

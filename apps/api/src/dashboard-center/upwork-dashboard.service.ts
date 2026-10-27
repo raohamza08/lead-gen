@@ -162,6 +162,8 @@ export class UpworkDashboardService {
       totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, hasAnyPurchase, previousWon, previousBids,
       wonBids, wonInvites, lostBids, lostInvites, bidsViewed, bidsInDiscussion, invitesInDiscussion,
       ledgerStart, invitesViewed,
+      previousTotalInvites, previousWonBids, previousLostBids, previousWonInvites, previousLostInvites,
+      previousBidsInDiscussion, previousInvitesInDiscussion,
     ] = await Promise.all([
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE" } }),
@@ -197,6 +199,20 @@ export class UpworkDashboardService {
       // bids (see UpworkProposalStatus's own schema comment), so this is
       // expected to read 0 in practice rather than a fabricated figure.
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "VIEWED" } }),
+      // Previous-period comparisons for the per-type stat cards (Part:
+      // Bidding/Invites card redesign, 2026-10-28, explicit user request to
+      // match a reference mockup showing a delta badge on every count --
+      // Total Invites, Won/Lost/In-Interview for both bidding and invites).
+      // Mirrors the existing previousWon/previousBids pattern exactly, just
+      // scoped per type/status instead of the combined figures those two
+      // already cover.
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "INVITE", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "BIDDING", status: "WON", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "BIDDING", status: "LOST", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "INVITE", status: "WON", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "INVITE", status: "LOST", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "BIDDING", status: "IN_DISCUSSION", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
+      previous ? this.prisma.upworkProposal.count({ where: { orgId, type: "INVITE", status: "IN_DISCUSSION", createdAt: { gte: previous.from, lte: previous.to } } }) : Promise.resolve(undefined),
     ]);
 
     // Connects source, hybrid by design (Part: Connects usage monitoring,
@@ -267,6 +283,17 @@ export class UpworkDashboardService {
       invitesViewed,
       bidsInDiscussion,
       invitesInDiscussion,
+      // Per-type delta badges (Part: Bidding/Invites card redesign,
+      // 2026-10-28) -- same percentDelta/previous-guard pattern as
+      // totalBidsDeltaPct below, just one pair per stat card row instead of
+      // only the combined totals.
+      totalInvitesDeltaPct: previous ? percentDelta(totalInvites, previousTotalInvites) : null,
+      wonBidsDeltaPct: previous ? percentDelta(wonBids, previousWonBids) : null,
+      lostBidsDeltaPct: previous ? percentDelta(lostBids, previousLostBids) : null,
+      wonInvitesDeltaPct: previous ? percentDelta(wonInvites, previousWonInvites) : null,
+      lostInvitesDeltaPct: previous ? percentDelta(lostInvites, previousLostInvites) : null,
+      bidsInDiscussionDeltaPct: previous ? percentDelta(bidsInDiscussion, previousBidsInDiscussion) : null,
+      invitesInDiscussionDeltaPct: previous ? percentDelta(invitesInDiscussion, previousInvitesInDiscussion) : null,
       connectsUsed,
       // Part: Connects usage monitoring, 2026-10-27 -- tells the frontend
       // (and its tooltips) whether connectsUsed for this period is pure
