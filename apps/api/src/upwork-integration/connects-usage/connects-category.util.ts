@@ -22,6 +22,29 @@ import { PrismaService } from "../../common/prisma/prisma.service";
  * Anything else (DIRECT_PURCHASE, INTERVIEW_WON, BEHAVIORAL_BASED_SUBSIDY,
  * and any future code Upwork adds) falls into OTHER rather than being
  * silently misclassified.
+ *
+ * The keys below also include literal human-readable labels, not just the
+ * GraphQL `reason` enum codes above -- a one-off historical backfill
+ * (2026-10-28, explicit user request: "I have downloaded a file from
+ * Upwork that has the 90 days history of connects... take the previous
+ * record for the connects so that we have a better history for invites
+ * spend") imported ~2,000 rows scraped from Upwork's own Connects usage
+ * history WEB PAGE (apps/api/scripts/backfill-connects-history.ts, now
+ * deleted per the one-off-script convention), covering 2026-07-29 through
+ * 2026-10-21 -- the real gap before this org's GraphQL sync started
+ * (2026-10-22). That page shows human text ("Applied to job", "Your
+ * Boosted Profile received a billable click"), not the API's enum codes,
+ * and there is no confirmed 1:1 mapping between the two surfaces -- rather
+ * than guess an equivalence, the scraped text itself is stored verbatim in
+ * `reason` and classified here directly, alongside the enum codes.
+ * "Open for work" (a real, substantial, previously entirely untracked
+ * daily recurring spend -- ~28-36 connects/day to keep a profile's
+ * availability badge on) is deliberately left in OTHER, not INVITE: the
+ * user's explicit instruction was specifically about "Your Boosted
+ * Profile received a billable click," and conflating a flat subscription
+ * -like visibility fee with per-click invite-acquisition spend would be a
+ * real editorializing choice this code shouldn't make unasked. Flagged to
+ * the user; revisit only on their explicit say-so.
  */
 export type ConnectsSpendCategory = "BIDDING" | "INVITE" | "OTHER";
 
@@ -31,6 +54,18 @@ const REASON_CATEGORY: Record<string, ConnectsSpendCategory> = {
   REFUND_INTERVIEW_WON: "BIDDING",
   PAID_INVITATION_BADGE: "INVITE",
   AD_BOOSTED_PROFILE_MFS: "INVITE",
+  // Scraped-history literal labels (see docblock above).
+  "Applied to job": "BIDDING",
+  "Job cancelled": "BIDDING",
+  "Refunded Connects for Connects Award": "BIDDING",
+  "We accepted your bid to boost a proposal. This is the final bid charge.": "BIDDING",
+  "You've been outbid to boost your proposal": "BIDDING",
+  "Connects bid for boosted proposal.": "BIDDING",
+  "Your Boosted Profile received a billable click": "INVITE",
+  "Open for work": "OTHER",
+  "Added extra Connects": "OTHER",
+  "Awarded Connects": "OTHER",
+  "Earned Connects from client action": "OTHER",
 };
 
 export function categoryForReason(reason: string | null): ConnectsSpendCategory {
@@ -44,11 +79,23 @@ export interface ConnectsCategoryTotals {
   other: number;
 }
 
-/** Net connects consumed per category within [from, to] -- debit rows are
- *  stored with a negative `amountRaw` and credits (refunds) positive (
- *  confirmed against real rows), so summing raw values and negating nets
- *  a refund against its original debit automatically. Clamped at 0 per
- *  category: a category that refunded more than it spent in this window
+/** Net connects consumed per category within [from, to] -- DEBIT rows are
+ *  stored with a negative `amountRaw` and REFUND_CREDIT rows (a refund
+ *  against one specific prior debit -- job cancelled, interview won, an
+ *  outbid proposal-boost auction) positive, so summing those two types'
+ *  raw values and negating nets a refund against its original debit
+ *  automatically. Plain `CREDIT` rows are deliberately excluded from this
+ *  sum entirely, not netted in -- they're fresh connects being added (a
+ *  purchase, an Upwork-granted bonus/award), not a refund of anything, so
+ *  they don't belong in a "how much was spent" figure. Bug fixed
+ *  2026-10-28: before this, a single org's one-off historical backfill
+ *  (see this file's category-map docblock) added ~35k connects of real
+ *  CREDIT rows ("Added extra Connects" = direct purchases) mapped into
+ *  OTHER alongside a genuine ~2.3k-connect OTHER debit ("Open for work"),
+ *  and netting them together swamped the real debit down to a clamped 0 --
+ *  silently hiding real spend. Confirmed via a live query against the
+ *  actual post-backfill data, not assumed. Clamped at 0 per category as a
+ *  final floor: a category with more refunds than debits in this window
  *  (edge case) reports as "nothing used," not a negative spend. */
 export async function sumConnectsByCategory(
   prisma: PrismaService,
@@ -63,11 +110,12 @@ export async function sumConnectsByCategory(
   // either way.
   const rows = await prisma.upworkConnectsTransaction.findMany({
     where: { orgId, ...(range ? { occurredAt: { gte: range.gte, lte: range.lte } } : {}) },
-    select: { reason: true, amountRaw: true },
+    select: { reason: true, amountRaw: true, transactionType: true },
   });
 
   const totals: ConnectsCategoryTotals = { bidding: 0, invite: 0, other: 0 };
   for (const row of rows) {
+    if (row.transactionType === "CREDIT") continue;
     const net = -Number(row.amountRaw);
     const category = categoryForReason(row.reason);
     if (category === "BIDDING") totals.bidding += net;
@@ -86,7 +134,11 @@ export async function sumConnectsByCategory(
  *  actually covers -- confirmed live (2026-10-27) that Upwork's API only
  *  returns history from roughly when the org's API connection went live,
  *  not a full 2-year backfill as hoped, so any period before this needs a
- *  fallback source. */
+ *  fallback source. As of the 2026-10-28 historical backfill (see the
+ *  category map's own docblock), this now resolves to 2026-07-29 for orgs
+ *  that received it -- real scraped history, not a gap -- so the manual-
+ *  entry fallback in UpworkDashboardService now only kicks in before that
+ *  date, not 2026-10-22. */
 export async function connectsLedgerStartDate(prisma: PrismaService, orgId: string): Promise<Date | null> {
   const earliest = await prisma.upworkConnectsTransaction.findFirst({
     where: { orgId },

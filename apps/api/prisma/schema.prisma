@@ -2039,6 +2039,16 @@ model UpworkConnectsSnapshot {
 /// date window (the sync worker always re-fetches a small trailing overlap
 /// to catch late-arriving rows) is idempotent via @@unique rather than
 /// risking duplicate rows.
+///
+/// `reason` is not exclusively a GraphQL enum code: a one-off historical
+/// backfill (2026-10-28, see connects-category.util.ts's own docblock)
+/// imported ~2,000 rows scraped from Upwork's own Connects usage history
+/// web page, covering the real gap before this org's GraphQL sync started
+/// (2026-07-29 through 2026-10-21). Those rows store the page's literal
+/// human-readable text (e.g. "Applied to job", "Your Boosted Profile
+/// received a billable click") rather than an enum code, since no
+/// confirmed 1:1 mapping between the two surfaces exists — don't assume
+/// every `reason` value matches the enum list above.
 model UpworkConnectsTransaction {
   id              String       @id @default(uuid())
   orgId           String       @map("org_id")
