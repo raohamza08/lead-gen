@@ -338,8 +338,8 @@ export function UpworkTab() {
         <div className="flex items-center justify-between rounded-lg border border-[var(--line)] px-4 py-2.5 text-xs text-ink/60">
           <span>
             <strong className="text-ink/80">{num(kpis.connectsUsedProfileBoost)}</strong> connects spent on Profile Boost (ads) this
-            period — {money(kpis.profileBoostConnectCost)} estimated. Not tied to any job or invite, so it's kept out of both tables
-            above rather than inflating bid/invite cost.
+            period — {money(kpis.profileBoostConnectCost)} estimated. Not tied to any job or invite, so it&rsquo;s kept out of both
+            tables above rather than inflating bid/invite cost.
           </span>
         </div>
       )}
