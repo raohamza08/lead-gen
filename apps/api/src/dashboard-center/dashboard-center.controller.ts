@@ -18,6 +18,7 @@ import { TeamDashboardService } from "./team-dashboard.service";
 import { BenchmarkService } from "./benchmark.service";
 import { OverviewDashboardService } from "./overview-dashboard.service";
 import { WebsiteAnalyticsDashboardService } from "./website-analytics-dashboard.service";
+import { ConnectsDashboardService } from "./connects-dashboard.service";
 import { CreateConnectPurchaseDto, DashboardRangeQueryDto, ImportConnectPurchasesDto, LeadsAuditQueryDto, SetBenchmarkDto, SetGaPropertyIdDto } from "./dto/dashboard-center.dto";
 
 /** Cross-module BI layer (Part: Dashboard Center, 2026-09-30) — every route
@@ -49,6 +50,7 @@ export class DashboardCenterController {
     private readonly auditLogs: AuditLogService,
     private readonly overview: OverviewDashboardService,
     private readonly websiteAnalytics: WebsiteAnalyticsDashboardService,
+    private readonly connects: ConnectsDashboardService,
   ) {}
 
   // ---- Executive Overview ----
@@ -183,6 +185,25 @@ export class DashboardCenterController {
   @Roles(Role.ADMIN)
   deleteConnectPurchase(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
     return this.upwork.deleteConnectPurchase(user.orgId, id);
+  }
+
+  // ---- Connects Dashboard (Part: Connects Dashboard, 2026-10-28) -- gated
+  // under the existing DASHBOARD_UPWORK flag, not a new one: a different
+  // lens on the same Upwork data, not a module granted independently. ----
+  @Get("connects/overview")
+  @RequiresModule("DASHBOARD_UPWORK")
+  connectsOverview(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.connects.getOverview(user.orgId, query);
+  }
+  @Get("connects/daily-trend")
+  @RequiresModule("DASHBOARD_UPWORK")
+  connectsDailyTrend(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.connects.getDailyTrend(user.orgId, query);
+  }
+  @Get("connects/transactions")
+  @RequiresModule("DASHBOARD_UPWORK")
+  connectsTransactions(@CurrentUser() user: JwtClaims, @Query() query: DashboardRangeQueryDto) {
+    return this.connects.getTransactions(user.orgId, query);
   }
 
   // ---- Pipeline ----

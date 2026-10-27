@@ -1297,6 +1297,12 @@ export const api = {
   getDashboardUpworkSubmitters: (params: Record<string, string> = {}) =>
     request(`/dashboard-center/upwork/submitters?${new URLSearchParams(params).toString()}`),
   getDashboardUpworkConnectPurchases: () => request("/dashboard-center/upwork/connect-purchases"),
+  getDashboardConnectsOverview: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/connects/overview?${new URLSearchParams(params).toString()}`),
+  getDashboardConnectsDailyTrend: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/connects/daily-trend?${new URLSearchParams(params).toString()}`),
+  getDashboardConnectsTransactions: (params: Record<string, string> = {}) =>
+    request(`/dashboard-center/connects/transactions?${new URLSearchParams(params).toString()}`),
   createDashboardUpworkConnectPurchase: (body: { purchasedAt: string; connectsAmount: number; totalCost: number; currency?: string; notes?: string }) =>
     request("/dashboard-center/upwork/connect-purchases", { method: "POST", body: JSON.stringify(body) }),
   deleteDashboardUpworkConnectPurchase: (id: string) =>

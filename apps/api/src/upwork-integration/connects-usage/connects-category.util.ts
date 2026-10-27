@@ -150,3 +150,173 @@ export async function connectsLedgerStartDate(prisma: PrismaService, orgId: stri
   });
   return earliest?.occurredAt ?? null;
 }
+
+/**
+ * Finer-grained than ConnectsSpendCategory above (Part: Connects Dashboard,
+ * 2026-10-28, explicit user request to "show each and every connect usage"
+ * -- bidding, invites, open for work, and "etc" each need their own visible
+ * line, not folded into one OTHER bucket). A separate type/map from
+ * ConnectsSpendCategory on purpose: the simpler 3-bucket classification
+ * already powers the Bidding/Invites Stats cards and the Transactions
+ * widget, both verified correct -- this one is additive, for the new
+ * dashboard only, and never replaces the simpler one elsewhere.
+ * - OPEN_FOR_WORK split out from OTHER here: a real, substantial recurring
+ *   cost (confirmed ~28-36 connects/day) the user explicitly asked to see
+ *   broken out, not folded away.
+ * - PROPOSAL_BOOST split out from BIDDING: a distinct real mechanism (an
+ *   auction to boost one specific proposal's visibility, tied to a jobId)
+ *   seen live in the scraped history -- tiny volume so far, but a genuine
+ *   "etc" line worth surfacing on its own rather than quietly blending into
+ *   the main bidding number.
+ * - PURCHASE / AWARD: pure CREDIT reasons (connects coming IN, not being
+ *   spent) -- direct purchases and Upwork-granted bonuses respectively.
+ *   Reported as "connects added," never netted against any spend category.
+ * - PAID_INVITATION_BADGE stays OTHER here too, consistent with its
+ *   explicit removal from INVITE above.
+ */
+export type DetailedConnectsCategory = "BIDDING" | "INVITE" | "OPEN_FOR_WORK" | "PROPOSAL_BOOST" | "PURCHASE" | "AWARD" | "OTHER";
+
+const DETAILED_REASON_CATEGORY: Record<string, DetailedConnectsCategory> = {
+  JOB_APPLICATION: "BIDDING",
+  REFUND_JOB_CANCELLATION: "BIDDING",
+  REFUND_INTERVIEW_WON: "BIDDING",
+  "Applied to job": "BIDDING",
+  "Job cancelled": "BIDDING",
+  "Refunded Connects for Connects Award": "BIDDING",
+  AD_BOOSTED_PROFILE_MFS: "INVITE",
+  "Your Boosted Profile received a billable click": "INVITE",
+  "Open for work": "OPEN_FOR_WORK",
+  "We accepted your bid to boost a proposal. This is the final bid charge.": "PROPOSAL_BOOST",
+  "You've been outbid to boost your proposal": "PROPOSAL_BOOST",
+  "Connects bid for boosted proposal.": "PROPOSAL_BOOST",
+  DIRECT_PURCHASE: "PURCHASE",
+  "Added extra Connects": "PURCHASE",
+  BEHAVIORAL_BASED_SUBSIDY: "AWARD",
+  INTERVIEW_WON: "AWARD",
+  "Awarded Connects": "AWARD",
+  "Earned Connects from client action": "AWARD",
+  PAID_INVITATION_BADGE: "OTHER",
+};
+
+export const DETAILED_CATEGORY_LABELS: Record<DetailedConnectsCategory, string> = {
+  BIDDING: "Bidding (job applications)",
+  INVITE: "Invites (boosted profile)",
+  OPEN_FOR_WORK: "Open for Work",
+  PROPOSAL_BOOST: "Proposal Boost",
+  PURCHASE: "Purchases",
+  AWARD: "Awards / Bonuses",
+  OTHER: "Other",
+};
+
+/** Which categories represent real spend (vs. connects coming in) -- drives
+ *  whether a category's figure is "net connects used" (debit minus any
+ *  REFUND_CREDIT reversing it) or "connects added" (plain CREDIT, never
+ *  netted against anything). */
+export const SPEND_CATEGORIES: readonly DetailedConnectsCategory[] = ["BIDDING", "INVITE", "OPEN_FOR_WORK", "PROPOSAL_BOOST", "OTHER"];
+
+export function detailedCategoryForReason(reason: string | null): DetailedConnectsCategory {
+  if (!reason) return "OTHER";
+  return DETAILED_REASON_CATEGORY[reason] ?? "OTHER";
+}
+
+export interface DetailedCategoryRow {
+  category: DetailedConnectsCategory;
+  label: string;
+  kind: "SPEND" | "CREDIT";
+  connects: number; // always a positive magnitude
+  transactionCount: number;
+  estimatedCost: number; // connects * unit cost -- 0 for CREDIT rows, not meaningful there
+}
+
+/** Full per-category breakdown (not just bidding/invite/other) for the
+ *  Connects Dashboard. Same DEBIT/REFUND_CREDIT-netting and CREDIT-
+ *  exclusion rules as sumConnectsByCategory above, just reported per
+ *  detailed category instead of 3 buckets, and with plain-CREDIT categories
+ *  (PURCHASE/AWARD) surfaced explicitly as "connects added" rather than
+ *  silently dropped. */
+export async function getDetailedCategoryBreakdown(
+  prisma: PrismaService,
+  orgId: string,
+  range: { gte: Date; lte: Date },
+  costPerConnect: number,
+): Promise<DetailedCategoryRow[]> {
+  const rows = await prisma.upworkConnectsTransaction.findMany({
+    where: { orgId, occurredAt: { gte: range.gte, lte: range.lte } },
+    select: { reason: true, amountRaw: true, transactionType: true },
+  });
+
+  const buckets: Record<DetailedConnectsCategory, { debit: number; refund: number; credit: number; count: number }> = {
+    BIDDING: { debit: 0, refund: 0, credit: 0, count: 0 },
+    INVITE: { debit: 0, refund: 0, credit: 0, count: 0 },
+    OPEN_FOR_WORK: { debit: 0, refund: 0, credit: 0, count: 0 },
+    PROPOSAL_BOOST: { debit: 0, refund: 0, credit: 0, count: 0 },
+    PURCHASE: { debit: 0, refund: 0, credit: 0, count: 0 },
+    AWARD: { debit: 0, refund: 0, credit: 0, count: 0 },
+    OTHER: { debit: 0, refund: 0, credit: 0, count: 0 },
+  };
+
+  for (const row of rows) {
+    const cat = detailedCategoryForReason(row.reason);
+    const amt = Number(row.amountRaw);
+    buckets[cat].count += 1;
+    if (row.transactionType === "CREDIT") buckets[cat].credit += amt;
+    else if (row.transactionType === "REFUND_CREDIT") buckets[cat].refund += amt;
+    else buckets[cat].debit += -amt;
+  }
+
+  return (Object.keys(buckets) as DetailedConnectsCategory[])
+    .map((category): DetailedCategoryRow => {
+      const b = buckets[category];
+      const isSpend = SPEND_CATEGORIES.includes(category);
+      const connects = isSpend ? Math.max(0, b.debit - b.refund) : b.credit;
+      return {
+        category,
+        label: DETAILED_CATEGORY_LABELS[category],
+        kind: isSpend ? "SPEND" : "CREDIT",
+        connects,
+        transactionCount: b.count,
+        estimatedCost: isSpend ? connects * costPerConnect : 0,
+      };
+    })
+    .filter((r) => r.transactionCount > 0);
+}
+
+export interface DailyConnectsTrendPoint {
+  day: string; // YYYY-MM-DD
+  bidding: number;
+  invite: number;
+  openForWork: number;
+  other: number; // PROPOSAL_BOOST + OTHER's spend side, lumped for a readable 4-series chart
+}
+
+/** Real per-day spend trend (Part: Connects Dashboard, 2026-10-28) -- only
+ *  possible now that the ledger has genuine per-transaction timestamps
+ *  (the old "Monthly trend" chart elsewhere is month-granularity manual
+ *  entries; this is real daily data). Spend categories only -- PURCHASE/
+ *  AWARD (connects coming in) don't belong on a "usage" trend. */
+export async function getDailyConnectsTrend(
+  prisma: PrismaService,
+  orgId: string,
+  range: { gte: Date; lte: Date },
+): Promise<DailyConnectsTrendPoint[]> {
+  const rows = await prisma.upworkConnectsTransaction.findMany({
+    where: { orgId, occurredAt: { gte: range.gte, lte: range.lte } },
+    select: { occurredAt: true, reason: true, amountRaw: true, transactionType: true },
+  });
+
+  const byDay = new Map<string, DailyConnectsTrendPoint>();
+  for (const row of rows) {
+    if (row.transactionType === "CREDIT") continue;
+    const day = row.occurredAt.toISOString().slice(0, 10);
+    const point = byDay.get(day) ?? { day, bidding: 0, invite: 0, openForWork: 0, other: 0 };
+    const net = -Number(row.amountRaw);
+    const cat = detailedCategoryForReason(row.reason);
+    if (cat === "BIDDING") point.bidding += net;
+    else if (cat === "INVITE") point.invite += net;
+    else if (cat === "OPEN_FOR_WORK") point.openForWork += net;
+    else point.other += net; // PROPOSAL_BOOST + OTHER
+    byDay.set(day, point);
+  }
+
+  return [...byDay.values()].sort((a, b) => (a.day < b.day ? -1 : 1));
+}

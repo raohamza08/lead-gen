@@ -14,6 +14,7 @@ import { EmailTab } from "./_tabs/email";
 import { InboxTab } from "./_tabs/inbox";
 import { SocialTab } from "./_tabs/social";
 import { UpworkTab } from "./_tabs/upwork";
+import { ConnectsTab } from "./_tabs/connects";
 import { MetaAdsTab } from "./_tabs/meta-ads";
 import { PipelineTab } from "./_tabs/pipeline";
 import { TeamTab } from "./_tabs/team";
@@ -30,6 +31,10 @@ const ALL_TAB_DEFS: { value: string; label: string }[] = [
   { value: "inbox", label: "Unified Inbox" },
   { value: "social", label: "Social Inbox" },
   { value: "upwork", label: "Upwork" },
+  // Reuses dashboardUpworkAccess (see FLAG_BY_TAB below) -- a detail
+  // drill-down on the same Upwork data, not a separately-grantable module
+  // (Part: Connects Dashboard, 2026-10-28, explicit user request).
+  { value: "connects", label: "Connects" },
   // Embedded inline, same as every other tab (Part: Dashboard Center tab
   // consolidation, 2026-09-30 — "remove the meta ads overview and just keep
   // its dashboard in the dashboard center"). Campaigns/Ad Sets/Ads
@@ -67,6 +72,7 @@ const FLAG_BY_TAB: Record<string, keyof DashboardAccessFlags> = {
   inbox: "dashboardInboxAccess",
   social: "dashboardSocialAccess",
   upwork: "dashboardUpworkAccess",
+  connects: "dashboardUpworkAccess",
   "meta-ads": "dashboardMetaAdsAccess",
   "website-analytics": "dashboardWebsiteAnalyticsAccess",
   pipeline: "dashboardPipelineAccess",
@@ -174,6 +180,7 @@ function DashboardCenterTabs() {
       {tab === "inbox" && <InboxTab />}
       {tab === "social" && <SocialTab />}
       {tab === "upwork" && <UpworkTab />}
+      {tab === "connects" && <ConnectsTab />}
       {tab === "meta-ads" && <MetaAdsTab />}
       {tab === "website-analytics" && <WebsiteAnalyticsTab />}
       {tab === "pipeline" && <PipelineTab />}

@@ -12,6 +12,7 @@ import { TeamDashboardService } from "./team-dashboard.service";
 import { BenchmarkService } from "./benchmark.service";
 import { OverviewDashboardService } from "./overview-dashboard.service";
 import { WebsiteAnalyticsDashboardService } from "./website-analytics-dashboard.service";
+import { ConnectsDashboardService } from "./connects-dashboard.service";
 
 @Module({
   imports: [AnalyticsModule, MetaAdsModule],
@@ -27,6 +28,7 @@ import { WebsiteAnalyticsDashboardService } from "./website-analytics-dashboard.
     BenchmarkService,
     OverviewDashboardService,
     WebsiteAnalyticsDashboardService,
+    ConnectsDashboardService,
   ],
 })
 export class DashboardCenterModule {}
