@@ -68,6 +68,10 @@ export class ConnectsDashboardService {
     // still shows as its own separate tile further down the page, just
     // never rolled into this one "what did I actually pay for" figure.
     const totalAdded = categories.find((c) => c.category === "PURCHASE")?.connects ?? 0;
+    // Automatic dollar figure for totalAdded above -- connects * rate,
+    // straight off the live ledger, no manual purchase-logging step
+    // required (see getDetailedCategoryBreakdown's own comment on PURCHASE).
+    const totalAddedCost = categories.find((c) => c.category === "PURCHASE")?.estimatedCost ?? 0;
 
     return {
       range: { from: current.from, to: current.to },
@@ -84,6 +88,7 @@ export class ConnectsDashboardService {
       totalSpend,
       totalSpendCost,
       totalAdded,
+      totalAddedCost,
       categories,
     };
   }

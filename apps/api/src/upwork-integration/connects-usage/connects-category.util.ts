@@ -269,13 +269,22 @@ export async function getDetailedCategoryBreakdown(
       const b = buckets[category];
       const isSpend = SPEND_CATEGORIES.includes(category);
       const connects = isSpend ? Math.max(0, b.debit - b.refund) : b.credit;
+      // PURCHASE gets a real dollar estimate too (connects * rate), computed
+      // straight off the live-synced ledger -- not 0 -- so a newly-bought
+      // batch of connects shows its cost immediately, without needing a
+      // separate manually-logged UpworkConnectPurchase row (Part: Connects
+      // Dashboard, 2026-10-28, user correction -- "if one connect costs
+      // 0.15, 1000 will cost 150" is just multiplication, it shouldn't need
+      // manual data entry to appear). AWARD stays 0: bonus connects were
+      // never paid for.
+      const estimatedCost = isSpend || category === "PURCHASE" ? connects * costPerConnect : 0;
       return {
         category,
         label: DETAILED_CATEGORY_LABELS[category],
         kind: isSpend ? "SPEND" : "CREDIT",
         connects,
         transactionCount: b.count,
-        estimatedCost: isSpend ? connects * costPerConnect : 0,
+        estimatedCost,
       };
     })
     .filter((r) => r.transactionCount > 0);
