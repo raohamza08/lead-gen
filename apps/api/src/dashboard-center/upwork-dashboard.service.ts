@@ -161,7 +161,7 @@ export class UpworkDashboardService {
     const [
       totalBids, totalInvites, invitesAccepted, invitesRejected, won, lost, hasAnyPurchase, previousWon, previousBids,
       wonBids, wonInvites, lostBids, lostInvites, bidsViewed, bidsInDiscussion, invitesInDiscussion,
-      ledgerStart,
+      ledgerStart, invitesViewed,
     ] = await Promise.all([
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE" } }),
@@ -189,6 +189,14 @@ export class UpworkDashboardService {
       this.prisma.upworkProposal.count({ where: { ...where, type: "BIDDING", status: "IN_DISCUSSION" } }),
       this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "IN_DISCUSSION" } }),
       connectsLedgerStartDate(this.prisma, orgId),
+      // Symmetric with bidsViewed above (Part: Bidding/Invites stats parity,
+      // 2026-10-28, explicit user request — "same attributes for both
+      // invites and bidding portions"). VIEWED is a real status any
+      // UpworkProposal can carry regardless of type -- Upwork just doesn't
+      // surface a "client viewed" signal for invites the way it does for
+      // bids (see UpworkProposalStatus's own schema comment), so this is
+      // expected to read 0 in practice rather than a fabricated figure.
+      this.prisma.upworkProposal.count({ where: { ...where, type: "INVITE", status: "VIEWED" } }),
     ]);
 
     // Connects source, hybrid by design (Part: Connects usage monitoring,
@@ -258,6 +266,7 @@ export class UpworkDashboardService {
       conversionRateBidding: safeRate(wonBids, totalBids),
       conversionRateInvites: safeRate(wonInvites, totalInvites),
       bidsViewed,
+      invitesViewed,
       bidsInDiscussion,
       invitesInDiscussion,
       connectsUsed,
@@ -277,6 +286,11 @@ export class UpworkDashboardService {
       connectsUsedInvites,
       inviteConnectCost,
       costPerInvite: safeDivide(inviteConnectCost, totalInvites),
+      avgConnectsPerInvite: safeDivide(connectsUsedInvites, totalInvites),
+      // Symmetric with costPerClientBids (Part: Bidding/Invites stats
+      // parity, 2026-10-28, explicit user request) -- invite connect cost
+      // divided by invite-won clients specifically.
+      costPerClientInvites: safeDivide(inviteConnectCost, wonInvites),
       // Profile-boost ad spend (AD_BOOSTED_PROFILE_MFS) -- deliberately
       // excluded from connectCost/costPerBid/costPerInvite above; shown
       // only here so it's visible without inflating bid or invite expense.
