@@ -222,13 +222,19 @@ export default function AutomationPage() {
   const sendQueueError = sendQueueQuery.error ? (sendQueueQuery.error as Error).message : null;
   const refreshing = healthQuery.isFetching;
 
-  if (healthQuery.error) return <p className="text-bad">{(healthQuery.error as Error).message}</p>;
-  if (!healthQuery.data) return <p className="text-ink/60">Loading…</p>;
-  const { health, runs } = healthQuery.data;
   // "Recent activity" fetches a fixed most-recent-50, independent of the
   // Window selector above (that only scopes health.agents/totals) — the
   // one table on this page with no existing date/time scoping at all.
-  const runsDateFilter = useDateFilter(runs, (r) => new Date(r.startedAt).getTime());
+  // Called unconditionally with a safe empty-array fallback — React
+  // Hooks must run in the same order every render, so this can't move
+  // below the early returns just below (Part: build fix, 2026-10-27, a
+  // Next.js build caught this as a rules-of-hooks violation that
+  // `tsc --noEmit` alone had not).
+  const runsDateFilter = useDateFilter(healthQuery.data?.runs ?? [], (r) => new Date(r.startedAt).getTime());
+
+  if (healthQuery.error) return <p className="text-bad">{(healthQuery.error as Error).message}</p>;
+  if (!healthQuery.data) return <p className="text-ink/60">Loading…</p>;
+  const { health } = healthQuery.data;
 
   const failureRate = health.totalRuns
     ? Math.round((health.totalFailures / health.totalRuns) * 1000) / 10
@@ -455,7 +461,7 @@ export default function AutomationPage() {
           title="Recent activity"
           subtitle="Newest first."
           actions={
-            runs.length > 0 ? (
+            healthQuery.data.runs.length > 0 ? (
               <DateRangeFilter
                 from={runsDateFilter.from}
                 to={runsDateFilter.to}
@@ -466,7 +472,7 @@ export default function AutomationPage() {
             ) : undefined
           }
         >
-          {runs.length === 0 ? (
+          {healthQuery.data.runs.length === 0 ? (
             <p className="py-8 text-center text-sm text-ink/50">Nothing recorded yet.</p>
           ) : (
             <DataTable<AgentRun>
