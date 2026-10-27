@@ -16,6 +16,7 @@ const FIELD_BY_MODULE: Record<
   | "metaAdsAccess"
   | "upworkApiAccess"
   | "upworkProposalWritingAccess"
+  | "linkedinOutreachAccess"
   | "upworkAgencyOverviewAccess"
   | "upworkAgencyOrganizationAccess"
   | "upworkAgencyTransactionsAccess"
@@ -64,6 +65,7 @@ const FIELD_BY_MODULE: Record<
   // Proposal Writing) — a separate module from UPWORK/UPWORK_REQUESTS
   // above, same "not everyone needs everything" per-flag reasoning.
   UPWORK_PROPOSAL_WRITING: "upworkProposalWritingAccess",
+  LINKEDIN_OUTREACH: "linkedinOutreachAccess",
   UPWORK_AGENCY_OVERVIEW: "upworkAgencyOverviewAccess",
   UPWORK_AGENCY_ORGANIZATION: "upworkAgencyOrganizationAccess",
   UPWORK_AGENCY_TRANSACTIONS: "upworkAgencyTransactionsAccess",

@@ -61,6 +61,17 @@ function getSocket(): Socket | null {
 }
 
 /**
+ * The one client->server counterpart to useRealtimeEvent below — so far only
+ * needed by LinkedIn Outreach's forwarded mouse/key events (live control
+ * needs socket latency, not a REST round trip per event). A no-op if the
+ * socket isn't connected yet; callers that care about delivery should check
+ * their own holder/claim state before calling this, not rely on it throwing.
+ */
+export function emitRealtimeEvent(event: string, payload: unknown): void {
+  getSocket()?.emit(event, payload);
+}
+
+/**
  * Subscribes to one realtime event for the lifetime of the calling
  * component. This is the ONLY way dashboard screens should learn that
  * something changed server-side — no page in this app should ever need a

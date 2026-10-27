@@ -13,6 +13,7 @@ export class UpdateUserModulesDto {
   @IsOptional() @IsBoolean() metaAdsAccess?: boolean;
   @IsOptional() @IsBoolean() upworkApiAccess?: boolean;
   @IsOptional() @IsBoolean() upworkProposalWritingAccess?: boolean;
+  @IsOptional() @IsBoolean() linkedinOutreachAccess?: boolean;
   @IsOptional() @IsBoolean() upworkAgencyOverviewAccess?: boolean;
   @IsOptional() @IsBoolean() upworkAgencyOrganizationAccess?: boolean;
   @IsOptional() @IsBoolean() upworkAgencyTransactionsAccess?: boolean;

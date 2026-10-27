@@ -17,6 +17,7 @@ export interface UserAccessSnapshot {
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
   upworkProposalWritingAccess: boolean;
+  linkedinOutreachAccess: boolean;
   upworkAgencyOverviewAccess: boolean;
   upworkAgencyOrganizationAccess: boolean;
   upworkAgencyTransactionsAccess: boolean;
@@ -96,6 +97,7 @@ export class UserAccessCacheService {
           metaAdsAccess: true,
           upworkApiAccess: true,
           upworkProposalWritingAccess: true,
+          linkedinOutreachAccess: true,
           upworkAgencyOverviewAccess: true,
           upworkAgencyOrganizationAccess: true,
           upworkAgencyTransactionsAccess: true,

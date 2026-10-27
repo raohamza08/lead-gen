@@ -40,6 +40,7 @@ import { DashboardCenterModule } from "./dashboard-center/dashboard-center.modul
 import { UpworkProposalWritingModule } from "./upwork-proposal-writing/upwork-proposal-writing.module";
 import { SearchModule } from "./search/search.module";
 import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
+import { LinkedinOutreachModule } from "./linkedin-outreach/linkedin-outreach.module";
 
 @Module({
   imports: [
@@ -83,6 +84,7 @@ import { AiAssistantModule } from "./ai-assistant/ai-assistant.module";
     UpworkProposalWritingModule,
     SearchModule,
     AiAssistantModule,
+    LinkedinOutreachModule,
   ],
   providers: [
     { provide: APP_PIPE, useValue: new ValidationPipe({ whitelist: true, transform: true }) },

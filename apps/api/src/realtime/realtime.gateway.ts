@@ -31,6 +31,10 @@ import { corsOriginValidator } from "../common/cors";
  *   whatsappQr.connected    { accountId, phoneNumber } — same user-only targeting as above
  *   whatsappQr.loggedOut    { accountId } — the linked device was removed/logged out, needs a fresh QR scan
  *   whatsappQr.disconnected { accountId } — connect attempt failed for a non-logout reason, see WhatsAppQrReconnectWorker
+ *   linkedinSession.frame  { data } — a JPEG screencast frame (base64) of the shared LinkedIn browser, org-wide
+ *   linkedinSession.status { status } — LOGGED_OUT | AWAITING_LOGIN | ACTIVE
+ *   linkedinSession.lock   { holder } — who currently holds the claim (or null)
+ *   linkedinSession.kicked { by } — pushed only to whoever just got taken over (emitToUser)
  */
 @Injectable()
 @WebSocketGateway({
@@ -41,6 +45,20 @@ export class RealtimeGateway implements OnGatewayConnection {
 
   @WebSocketServer()
   private server!: Server;
+
+  /** Extension point for a feature whose live control needs a client->server
+   *  channel (so far only LinkedIn Outreach's forwarded mouse/key events) —
+   *  without this file importing feature-specific modules and risking a
+   *  module-graph cycle back through this @Global gateway. A registering
+   *  module injects RealtimeGateway (already global, no import needed) and
+   *  calls registerHandler once from its own OnModuleInit; every socket
+   *  already carries its verified claims by the time a message can arrive,
+   *  since this only ever attaches handlers after handleConnection succeeds. */
+  private readonly messageHandlers = new Map<string, (client: Socket, claims: JwtClaims, payload: unknown) => void>();
+
+  registerHandler(event: string, handler: (client: Socket, claims: JwtClaims, payload: unknown) => void): void {
+    this.messageHandlers.set(event, handler);
+  }
 
   constructor(
     private readonly jwt: JwtService,
@@ -71,6 +89,11 @@ export class RealtimeGateway implements OnGatewayConnection {
       // module access / admin tier) instead of every socket in the org
       // receiving everything and the frontend filtering it out.
       client.join(`user:${claims.sub}`);
+      // Attach every registered extension-point handler (see registerHandler
+      // above) now that this socket's claims are verified.
+      for (const [event, handler] of this.messageHandlers) {
+        client.on(event, (payload: unknown) => handler(client, claims, payload));
+      }
     } catch (err) {
       this.logger.debug(`Rejected socket connection: ${(err as Error).message}`);
       client.disconnect(true);

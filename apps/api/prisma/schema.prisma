@@ -237,6 +237,7 @@ model Organization {
   upworkApiSubmittedProposals   UpworkApiSubmittedProposal[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
+  linkedinOutreachSession       LinkedinOutreachSession?
   upworkProposalDrafts          UpworkProposalDraft[]
   upworkFreelancerProfiles      UpworkFreelancerProfile[]
   upworkDiscoveredJobs          UpworkDiscoveredJob[]
@@ -338,6 +339,13 @@ model User {
   /// upworkApiAccess above (genuinely new, not a retrofit onto something
   /// everyone already used) — granted per-person from Settings > Team.
   upworkProposalWritingAccess Boolean      @default(false) @map("upwork_proposal_writing_access")
+  /// LinkedIn Outreach (Part: LinkedIn Outreach, shared-session shift
+  /// handoff) — a persistent, server-side logged-in LinkedIn browser that
+  /// whichever shift worker is on duty remotely views/drives through Outly,
+  /// so the company LinkedIn profile is logged in once instead of every
+  /// shift re-authenticating. Defaults false like upworkProposalWritingAccess
+  /// above — granted per-person from Settings > Team.
+  linkedinOutreachAccess      Boolean      @default(false) @map("linkedin_outreach_access")
   /// Per-tab visibility into the Dashboard Center (Part: Dashboard Center
   /// per-user access, 2026-10-21, explicit user request — "I want that i
   /// got option to show different dashboard to different persons"). Before
@@ -2689,6 +2697,39 @@ enum WhatsAppQrSessionStatus {
   CONNECTED
   DISCONNECTED
   LOGGED_OUT
+}
+
+/// One persistent, server-side LinkedIn browser session per org (Part:
+/// LinkedIn Outreach) — the company's shared LinkedIn profile stays logged
+/// in via an on-disk Playwright browser profile (LinkedinOutreachSessionService,
+/// never stored here) that survives restarts/idle-closes, so shift workers
+/// never re-enter LinkedIn credentials. This row only tracks status for the
+/// UI, same split as WhatsAppQrSession above: the live browser process/CDP
+/// session is in-memory, this is just "what should the page show right now."
+model LinkedinOutreachSession {
+  id    String       @id @default(uuid())
+  orgId String       @unique @map("org_id")
+  org   Organization @relation(fields: [orgId], references: [id])
+  status           LinkedinOutreachStatus @default(LOGGED_OUT)
+  /// Plain id, no FK — a status snapshot of who last touched the session,
+  /// not a relation anything needs to cascade/include through (same
+  /// reasoning as other "who did this" pointer columns in this schema that
+  /// skip a declared relation, e.g. MediaAsset.uploadedByUserId's "system"
+  /// fallback). The live claim/lock itself lives in-memory in
+  /// LinkedinOutreachSessionService, not in this column.
+  lastHolderUserId String?                @map("last_holder_user_id")
+  lastHolderName   String?                @map("last_holder_name")
+  lastActiveAt     DateTime?              @map("last_active_at")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+
+  @@map("linkedin_outreach_sessions")
+}
+
+enum LinkedinOutreachStatus {
+  LOGGED_OUT
+  AWAITING_LOGIN
+  ACTIVE
 }
 
 /// A custom OAuth app's own client credentials (Part: per-account OAuth app

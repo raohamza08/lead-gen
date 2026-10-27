@@ -27,6 +27,7 @@ export function getDefaultRoute(flags: Record<string, unknown>, isAdmin: boolean
   if (has("upworkInviteAccess")) return "/upwork/invite";
   if (has("upworkRequestsAccess")) return "/upwork/requests";
   if (has("upworkProposalWritingAccess")) return "/upwork/proposal-writing";
+  if (has("linkedinOutreachAccess")) return "/social-media/linkedin-outreach";
   if (has("metaAdsAccess")) return "/meta-ads/campaigns";
   if (hasAny("upworkAgency")) return "/upwork-agency";
   if (hasAny("dashboard")) return "/dashboards";

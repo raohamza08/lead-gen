@@ -80,6 +80,7 @@ type ModuleFlag =
   | "metaAdsAccess"
   | "upworkApiAccess"
   | "upworkProposalWritingAccess"
+  | "linkedinOutreachAccess"
   // Per-page granularity inside the "Upwork Agency" sidebar group (Part:
   // Upwork API integration — per-module access, 2026-10-23, explicit user
   // request — "I need separate access for each module in the Upwork
@@ -498,6 +499,12 @@ const WORKSPACES: Workspace[] = [
               { href: "/social-media/whatsapp-qr", label: "WhatsApp (Team)", socialPlatform: "WHATSAPP_QR", icon: ChatIcon },
             ],
           },
+          {
+            href: "/social-media/linkedin-outreach",
+            label: "LinkedIn Outreach",
+            icon: ChatIcon,
+            moduleFlag: "linkedinOutreachAccess",
+          },
           { href: "/social-media/calendar", label: "Calendar", icon: CalendarIcon, moduleFlag: "socialMediaAccess" },
           { href: "/social-media/analytics", label: "Analytics", icon: ChartIcon, moduleFlag: "socialMediaAccess" },
           { href: "/social-media/automations", label: "Automations", icon: BoltIcon, moduleFlag: "socialMediaAccess" },
@@ -694,6 +701,7 @@ export function SidebarNav({
           metaAdsAccess: boolean;
           upworkApiAccess: boolean;
           upworkProposalWritingAccess: boolean;
+          linkedinOutreachAccess: boolean;
           upworkAgencyOverviewAccess: boolean;
           upworkAgencyOrganizationAccess: boolean;
           upworkAgencyTransactionsAccess: boolean;
@@ -733,6 +741,7 @@ export function SidebarNav({
           metaAdsAccess: m.metaAdsAccess,
           upworkApiAccess: m.upworkApiAccess,
           upworkProposalWritingAccess: m.upworkProposalWritingAccess,
+          linkedinOutreachAccess: m.linkedinOutreachAccess,
           upworkAgencyOverviewAccess: m.upworkAgencyOverviewAccess,
           upworkAgencyOrganizationAccess: m.upworkAgencyOrganizationAccess,
           upworkAgencyTransactionsAccess: m.upworkAgencyTransactionsAccess,

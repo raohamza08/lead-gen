@@ -12,6 +12,9 @@ export type AccessModule =
   | "META_ADS"
   | "UPWORK_API"
   | "UPWORK_PROPOSAL_WRITING"
+  // Persistent shared LinkedIn browser session (Part: LinkedIn Outreach) —
+  // gates /linkedin-outreach's claim/release/input endpoints.
+  | "LINKEDIN_OUTREACH"
   // Per-page granularity inside the "Upwork Agency" sidebar group (Part:
   // Upwork API integration — per-module access, 2026-10-23) — independent
   // of UPWORK_API above, which now only backs the handful of domain

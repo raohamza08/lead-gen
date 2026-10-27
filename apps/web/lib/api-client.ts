@@ -1247,6 +1247,15 @@ export const api = {
     }),
   getUpworkInviteProposalDrafts: () => request("/upwork-proposal-writing/invite-drafts"),
 
+  // ---- LinkedIn Outreach (Part: LinkedIn Outreach, shared-session shift handoff) ----
+  // Live mouse/keyboard control itself goes over the socket
+  // (`linkedinSession.input`, see lib/realtime.ts), not through here.
+  getLinkedinOutreachStatus: () => request("/linkedin-outreach/status"),
+  claimLinkedinOutreachSession: () => request("/linkedin-outreach/claim", { method: "POST" }),
+  takeoverLinkedinOutreachSession: () => request("/linkedin-outreach/takeover", { method: "POST" }),
+  releaseLinkedinOutreachSession: () => request("/linkedin-outreach/release", { method: "POST" }),
+  logoutLinkedinOutreachSession: () => request("/linkedin-outreach/logout", { method: "POST" }),
+
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
   getDashboardOverview: (params: Record<string, string> = {}) =>
     request(`/dashboard-center/overview?${new URLSearchParams(params).toString()}`),

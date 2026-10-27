@@ -16,6 +16,7 @@ interface ModuleFlags {
   metaAdsAccess: boolean;
   upworkApiAccess: boolean;
   upworkProposalWritingAccess: boolean;
+  linkedinOutreachAccess: boolean;
   upworkAgencyOverviewAccess: boolean;
   upworkAgencyOrganizationAccess: boolean;
   upworkAgencyTransactionsAccess: boolean;
@@ -100,6 +101,11 @@ const MODULE_LABELS: { key: keyof ModuleFlags; label: string; hint?: string }[] 
     key: "upworkProposalWritingAccess",
     label: "Upwork — Proposal Writing",
     hint: "Paste a job link and get an AI-generated cover letter. Separate from Bidding/Invite/Requests above.",
+  },
+  {
+    key: "linkedinOutreachAccess",
+    label: "LinkedIn Outreach",
+    hint: "Remote-controls the one persistent, shared company LinkedIn browser session — for shift-based outreach without re-logging in. Logout/reset of the session itself is primary-admin-only, separate from this flag.",
   },
 ];
 
