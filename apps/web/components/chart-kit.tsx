@@ -320,7 +320,7 @@ export function DataTable<T>({
                   <button
                     type="button"
                     onClick={() => toggleSort(col)}
-                    className={`flex items-center gap-1 transition-colors hover:text-ink ${col.numeric ? "ml-auto" : ""}`}
+                    className={`flex items-center gap-1 text-inherit ${col.numeric ? "ml-auto" : ""}`}
                   >
                     {col.header}
                     {sort?.key === col.key && (

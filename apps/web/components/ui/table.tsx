@@ -39,7 +39,7 @@ export function Th({ children, sortDirection, onSort, className = "", ...props }
   }
   return (
     <th className={`px-3 py-2 font-medium ${className}`} {...props}>
-      <button type="button" onClick={onSort} className="flex items-center gap-1 transition-colors duration-fast hover:text-ink">
+      <button type="button" onClick={onSort} className="flex items-center gap-1 text-inherit">
         {children}
         {sortDirection && (
           <span aria-hidden className="text-[10px]">
