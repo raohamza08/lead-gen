@@ -61,7 +61,13 @@ export class ConnectsDashboardService {
 
     const totalSpend = categories.filter((c) => c.kind === "SPEND").reduce((sum, c) => sum + c.connects, 0);
     const totalSpendCost = categories.filter((c) => c.kind === "SPEND").reduce((sum, c) => sum + c.estimatedCost, 0);
-    const totalAdded = categories.filter((c) => c.kind === "CREDIT").reduce((sum, c) => sum + c.connects, 0);
+    // Purchases only, not Awards/bonuses (Part: Connects Dashboard,
+    // 2026-10-28, explicit user correction -- "i dont want rewarded
+    // connects to be added in it, just show what i purchased"). Was
+    // sum of every CREDIT category (Purchases + Awards combined); Awards
+    // still shows as its own separate tile further down the page, just
+    // never rolled into this one "what did I actually pay for" figure.
+    const totalAdded = categories.find((c) => c.category === "PURCHASE")?.connects ?? 0;
 
     return {
       range: { from: current.from, to: current.to },

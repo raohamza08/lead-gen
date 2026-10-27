@@ -169,7 +169,7 @@ export function ConnectsTab() {
           )}
           <StatTile label="Total Spent (period)" value={num(overview.totalSpend)} tone="bad" />
           <StatTile label="Estimated Cost" value={money(overview.totalSpendCost)} />
-          <StatTile label="Connects Added (period)" value={num(overview.totalAdded)} tone="good" />
+          <StatTile label="Connects Purchased (period)" value={num(overview.totalAdded)} tone="good" />
           <StatTile label="Rate / Connect" value={money(overview.connectUnitCost)} />
         </KpiStrip>
       )}
