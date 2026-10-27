@@ -376,12 +376,6 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
             ? "document"
             : undefined;
 
-    const text =
-      content.conversation ??
-      content.extendedTextMessage?.text ??
-      mediaContent?.caption ??
-      (mediaType ? `[${mediaType}]` : undefined);
-
     let media: { url: string; mimeType: string; filename: string } | undefined;
     if (mediaContent && mediaType) {
       media = await this.downloadAndStoreMedia(accountId, mediaContent, mediaType).catch((err) => {
@@ -389,6 +383,18 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         return undefined;
       });
     }
+    // Real caption if there is one; if media downloaded fine with no
+    // caption, no text at all (Part: WhatsApp media-caption parity,
+    // 2026-10-27, explicit user request -- "it should work exactly like
+    // whatsapp" -- real WhatsApp shows no caption bubble for an uncaptioned
+    // photo). The "[image]"/"[video]"/etc. placeholder now only appears as
+    // a fallback when the download actually failed, so something is still
+    // visible rather than a silently empty message.
+    const text =
+      content.conversation ??
+      content.extendedTextMessage?.text ??
+      mediaContent?.caption ??
+      (mediaType && !media ? `[${mediaType}]` : undefined);
     if (!text && !media) return;
 
     const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });

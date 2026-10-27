@@ -1,8 +1,9 @@
-import { Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialAccount } from "@prisma/client";
 import { EncryptionService } from "../../common/crypto/encryption.service";
 import { PrismaService } from "../../common/prisma/prisma.service";
+import { MEDIA_STORAGE_SERVICE, MediaStorageService } from "../media/media-storage.interface";
 import {
   ConnectedAccountProfile,
   Conversation,
@@ -65,6 +66,7 @@ export class WhatsAppProvider implements SocialPlatformProvider {
     private readonly config: ConfigService,
     private readonly encryption: EncryptionService,
     private readonly prisma: PrismaService,
+    @Inject(MEDIA_STORAGE_SERVICE) private readonly storage: MediaStorageService,
   ) {}
 
   private graphVersion(): string {
@@ -321,6 +323,62 @@ export class WhatsAppProvider implements SocialPlatformProvider {
       // with no approved template -- surfaced verbatim, not swallowed,
       // since there's no fallback template flow built to retry with.
       throw new Error(`WhatsApp send message failed: ${res.status} ${await res.text()}`);
+    }
+  }
+
+  /**
+   * Downloads an inbound Cloud API media message's bytes and stores them
+   * the same way WhatsApp QR's own inbound media already does (Part:
+   * WhatsApp Cloud API inbound media, 2026-10-27, explicit user request —
+   * "the images or videos that a person sends me should be clearly visible
+   * in the chat, currently it just says image, video document etc"). The
+   * webhook payload only ever carries a media *id*, never bytes or a
+   * directly-usable URL — two Graph API calls are required: GET
+   * /{media-id} resolves it to a short-lived CDN url + the real mime type,
+   * then a second GET against *that* url (still needing the same Bearer
+   * token — it is not a public URL) fetches the actual bytes. Returns
+   * undefined on any failure rather than throwing, so the caller can still
+   * persist the message with just its caption/placeholder text.
+   */
+  async downloadInboundMedia(
+    account: SocialAccount,
+    mediaId: string,
+    fallbackFilename: string,
+  ): Promise<{ url: string; mimeType: string; filename: string } | undefined> {
+    if (!account.accessTokenEnc) return undefined;
+    try {
+      const accessToken = this.encryption.decrypt(account.accessTokenEnc);
+      const metaRes = await fetch(`https://graph.facebook.com/${this.graphVersion()}/${mediaId}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!metaRes.ok) {
+        this.logger.error(`WhatsApp media metadata lookup failed for ${mediaId}: ${metaRes.status} ${await metaRes.text()}`);
+        return undefined;
+      }
+      const meta = (await metaRes.json()) as { url: string; mime_type: string };
+      const fileRes = await fetch(meta.url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      if (!fileRes.ok) {
+        this.logger.error(`WhatsApp media download failed for ${mediaId}: ${fileRes.status}`);
+        return undefined;
+      }
+      const buffer = Buffer.from(await fileRes.arrayBuffer());
+      const mimeType = meta.mime_type || "application/octet-stream";
+      const saved = await this.storage.save({ buffer, orgId: account.orgId, filename: fallbackFilename });
+      const asset = await this.prisma.mediaAsset.create({
+        data: {
+          orgId: account.orgId,
+          uploadedByUserId: account.connectedByUserId ?? "system",
+          filename: fallbackFilename,
+          storageKey: saved.storageKey,
+          mimeType,
+          sizeBytes: saved.sizeBytes,
+          tags: ["whatsapp-inbound"],
+        },
+      });
+      return { url: `/media/${asset.id}`, mimeType, filename: fallbackFilename };
+    } catch (err) {
+      this.logger.error(`Failed to download WhatsApp inbound media ${mediaId}: ${(err as Error).message}`);
+      return undefined;
     }
   }
 

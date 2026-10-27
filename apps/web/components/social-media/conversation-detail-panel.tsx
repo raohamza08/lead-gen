@@ -7,6 +7,7 @@ import EmojiPicker, { EmojiClickData, Theme as EmojiTheme } from "emoji-picker-r
 import { api, resolveMediaUrl } from "../../lib/api-client";
 import { Avatar } from "../ui/avatar";
 import { LoadingRow, Spinner } from "../spinner";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 interface SocialMessageItem {
   id: string;
@@ -161,38 +162,34 @@ const ATTACH_KINDS: { kind: AttachKind; label: string; icon: () => React.JSX.Ele
 function AttachMenuButton({ onPick, pending }: { onPick: (kind: AttachKind) => void; pending: boolean }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        disabled={pending}
-        title="Attach"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05] disabled:opacity-40"
-      >
-        {pending ? <Spinner className="h-4 w-4" /> : <PaperclipIcon />}
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-12 left-0 z-20 w-44 overflow-hidden rounded-lg border border-[var(--line)] bg-surface-elevated py-1 shadow-lg">
-            {ATTACH_KINDS.map(({ kind, label, icon: Icon }) => (
-              <button
-                key={kind}
-                type="button"
-                onClick={() => {
-                  onPick(kind);
-                  setOpen(false);
-                }}
-                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink hover:bg-ink/5"
-              >
-                <Icon />
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={pending}
+          title="Attach"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05] disabled:opacity-40"
+        >
+          {pending ? <Spinner className="h-4 w-4" /> : <PaperclipIcon />}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" side="top" sideOffset={10} className="w-44 overflow-hidden py-1">
+        {ATTACH_KINDS.map(({ kind, label, icon: Icon }) => (
+          <button
+            key={kind}
+            type="button"
+            onClick={() => {
+              onPick(kind);
+              setOpen(false);
+            }}
+            className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink hover:bg-ink/5"
+          >
+            <Icon />
+            {label}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -259,34 +256,30 @@ function EmojiPickerButton({ onPick }: { onPick: (emoji: string) => void }) {
   const [open, setOpen] = useState(false);
   const dark = useIsDarkMode();
   return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        title="Emoji"
-        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05]"
-      >
-        <EmojiIcon />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-12 left-0 z-20">
-            <EmojiPicker
-              onEmojiClick={(data: EmojiClickData) => {
-                onPick(data.emoji);
-                setOpen(false);
-              }}
-              theme={dark ? EmojiTheme.DARK : EmojiTheme.LIGHT}
-              searchDisabled={false}
-              width={320}
-              height={380}
-              previewConfig={{ showPreview: false }}
-            />
-          </div>
-        </>
-      )}
-    </div>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Emoji"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05]"
+        >
+          <EmojiIcon />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" side="top" sideOffset={10} className="!border-0 !bg-transparent !p-0 !shadow-none">
+        <EmojiPicker
+          onEmojiClick={(data: EmojiClickData) => {
+            onPick(data.emoji);
+            setOpen(false);
+          }}
+          theme={dark ? EmojiTheme.DARK : EmojiTheme.LIGHT}
+          searchDisabled={false}
+          width={320}
+          height={380}
+          previewConfig={{ showPreview: false }}
+        />
+      </PopoverContent>
+    </Popover>
   );
 }
 

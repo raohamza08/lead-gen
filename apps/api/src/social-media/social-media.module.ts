@@ -94,6 +94,12 @@ import { SocialOAuthAppService } from "./social-oauth-app.service";
   // SocialInboxService added (Part: global search, 2026-10-21) so
   // SearchModule/AiAssistantModule can reuse its existing listConversations
   // search query instead of duplicating it.
-  exports: [SocialMediaService, SocialInboxIngestService, SocialProviderRegistryService, SocialInboxService],
+  // WhatsAppProvider added (Part: WhatsApp Cloud API inbound media,
+  // 2026-10-27) so WebhooksModule's SocialWebhookController can call its
+  // downloadInboundMedia directly for inbound image/video/document/audio
+  // messages -- the webhook payload only carries a Graph API media id, and
+  // WhatsAppProvider already owns the Graph API version/credentials logic
+  // every other Cloud API call here goes through.
+  exports: [SocialMediaService, SocialInboxIngestService, SocialProviderRegistryService, SocialInboxService, WhatsAppProvider],
 })
 export class SocialMediaModule {}

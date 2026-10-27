@@ -5,6 +5,7 @@ import type { Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "crypto";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { SocialInboxIngestService } from "../social-media/social-inbox-ingest.service";
+import { WhatsAppProvider } from "../social-media/providers/whatsapp.provider";
 
 /** Meta's messaging webhook payload shape -- one callback URL covers
  *  Facebook Page, Instagram, and WhatsApp messaging; `object` disambiguates
@@ -34,6 +35,14 @@ interface MetaWebhookPayload {
           timestamp: string;
           type: string;
           text?: { body: string };
+          // Media messages (Part: WhatsApp Cloud API inbound media,
+          // 2026-10-27) -- the payload only ever carries a Graph API media
+          // *id*, never bytes or a directly-usable URL; handleWhatsAppMessage
+          // resolves it via WhatsAppProvider.downloadInboundMedia.
+          image?: { id: string; mime_type: string; caption?: string };
+          video?: { id: string; mime_type: string; caption?: string };
+          document?: { id: string; mime_type: string; caption?: string; filename?: string };
+          audio?: { id: string; mime_type: string };
         }[];
       };
     }[];
@@ -56,6 +65,7 @@ export class SocialWebhookController {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly ingest: SocialInboxIngestService,
+    private readonly whatsApp: WhatsAppProvider,
   ) {}
 
   /** Meta's one-time subscription verification handshake. */
@@ -175,6 +185,27 @@ export class SocialWebhookController {
       return;
     }
 
+    // Media messages (Part: WhatsApp Cloud API inbound media, 2026-10-27,
+    // explicit user request — "the images or videos that a person sends me
+    // should be clearly visible in the chat, currently it just says image,
+    // video document etc, it should work exactly like whatsapp"). This
+    // used to just stash a literal "[image message]" placeholder string as
+    // the whole message, with no attempt to fetch the actual media -- the
+    // frontend's MediaAttachment component already renders inline image/
+    // video previews whenever mediaUrl+mediaMimeType are present, exactly
+    // like WhatsApp QR's incoming media already does; the gap was entirely
+    // here; nothing downloaded media for the Cloud API at all.
+    const mediaField = message.image ?? message.video ?? message.document ?? message.audio;
+    const mediaType = message.image ? "image" : message.video ? "video" : message.document ? "document" : message.audio ? "audio" : undefined;
+    let media: { url: string; mimeType: string; filename: string } | undefined;
+    if (mediaField && mediaType) {
+      const extGuess = mediaField.mime_type?.split("/")[1]?.split(";")[0] ?? "bin";
+      const fallbackFilename =
+        mediaType === "document" && message.document?.filename ? message.document.filename : `whatsapp-${mediaType}.${extGuess}`;
+      media = await this.whatsApp.downloadInboundMedia(socialAccount, mediaField.id, fallbackFilename);
+    }
+
+    const caption = message.image?.caption ?? message.video?.caption ?? message.document?.caption;
     const contact = value.contacts?.find((c) => c.wa_id === message.from);
     await this.ingest.persistMessage(socialAccount, {
       externalConversationId: message.from,
@@ -182,7 +213,16 @@ export class SocialWebhookController {
       contactName: contact?.profile?.name,
       externalMessageId: message.id,
       fromUs: false,
-      messageText: message.type === "text" ? message.text?.body : `[${message.type} message]`,
+      // Real caption if there is one; if media downloaded fine with no
+      // caption, no text at all (the media preview speaks for itself, same
+      // as real WhatsApp shows no caption bubble for an uncaptioned
+      // photo); the old "[type message]" placeholder only remains as a
+      // fallback for a failed download or an unrecognized message type, so
+      // something is still visible rather than a silently empty message.
+      messageText: message.type === "text" ? message.text?.body : caption || (media ? undefined : `[${message.type} message]`),
+      mediaUrl: media?.url,
+      mediaMimeType: media?.mimeType,
+      mediaFilename: media?.filename,
       sentAt: new Date(Number(message.timestamp) * 1000),
     });
   }

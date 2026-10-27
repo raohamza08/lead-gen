@@ -23,12 +23,21 @@ export const PopoverAnchor = PopoverPrimitive.Anchor;
 export function PopoverContent({
   children,
   align = "end",
+  side = "bottom",
   sideOffset = 8,
   className = "",
   onOpenAutoFocus,
 }: {
   children: ReactNode;
   align?: "start" | "center" | "end";
+  /** Which side of the trigger to open toward (Part: WhatsApp composer
+   *  popover placement fix, 2026-10-27) — Radix still auto-flips away from
+   *  this when there isn't room (`avoidCollisions` is on by default), but a
+   *  trigger known to sit near the bottom of the viewport (e.g. a chat
+   *  composer button) should start from "top" rather than Radix's own
+   *  "bottom" default, which otherwise opens the content off-screen for one
+   *  frame before the flip. */
+  side?: "top" | "right" | "bottom" | "left";
   sideOffset?: number;
   className?: string;
   /** Passed straight through to Radix (Part: global search, 2026-10-21) —
@@ -41,6 +50,7 @@ export function PopoverContent({
     <PopoverPrimitive.Portal>
       <PopoverPrimitive.Content
         align={align}
+        side={side}
         sideOffset={sideOffset}
         onOpenAutoFocus={onOpenAutoFocus}
         // glass-surface (Part: premium dark theme pass v4, 2026-10-19) — see
