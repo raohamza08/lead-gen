@@ -323,11 +323,14 @@ export function DataTable<T>({
                     className={`flex items-center gap-1 text-inherit ${col.numeric ? "ml-auto" : ""}`}
                   >
                     {col.header}
-                    {sort?.key === col.key && (
-                      <span aria-hidden className="text-[10px]">
-                        {sort.dir === "asc" ? "▲" : "▼"}
-                      </span>
-                    )}
+                    {/* Always visible, not just after a click (Part: sort
+                        discoverability fix, 2026-10-27) — otherwise a
+                        sortable header looks pixel-identical to a plain one.
+                        Low-opacity ⇅ at rest, full-opacity ▲/▼ once sorted —
+                        currentColor throughout, never changes header color. */}
+                    <span aria-hidden className={`text-[10px] ${sort?.key === col.key ? "" : "opacity-40"}`}>
+                      {sort?.key === col.key ? (sort.dir === "asc" ? "▲" : "▼") : "⇅"}
+                    </span>
                   </button>
                 ) : (
                   col.header

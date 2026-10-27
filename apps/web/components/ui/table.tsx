@@ -41,11 +41,15 @@ export function Th({ children, sortDirection, onSort, className = "", ...props }
     <th className={`px-3 py-2 font-medium ${className}`} {...props}>
       <button type="button" onClick={onSort} className="flex items-center gap-1 text-inherit">
         {children}
-        {sortDirection && (
-          <span aria-hidden className="text-[10px]">
-            {sortDirection === "asc" ? "▲" : "▼"}
-          </span>
-        )}
+        {/* Always visible, not just on hover/after a click (Part: sort
+            discoverability fix, 2026-10-27) — a sortable header otherwise
+            looks pixel-identical to a plain one until someone happens to
+            click it. Low-opacity ⇅ at rest, full-opacity ▲/▼ once sorted —
+            both use currentColor, so this never changes the header's own
+            text color, only adds a small same-color glyph next to it. */}
+        <span aria-hidden className={`text-[10px] ${sortDirection ? "" : "opacity-40"}`}>
+          {sortDirection === "asc" ? "▲" : sortDirection === "desc" ? "▼" : "⇅"}
+        </span>
       </button>
     </th>
   );
