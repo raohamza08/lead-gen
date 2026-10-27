@@ -211,7 +211,7 @@ export function PlatformInbox({
                 type="button"
                 onClick={openNewChat}
                 title="New chat"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-ink/[0.05] text-ink/60 transition-colors hover:bg-ink/10"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white transition-colors hover:brightness-110"
               >
                 <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
                   <path d="M12 5v14M5 12h14" strokeLinecap="round" />

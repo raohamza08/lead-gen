@@ -685,3 +685,26 @@ select, option {
     transform: scale(0.96) translateY(-4px);
   }
 }
+
+/* WhatsApp module accent override (explicit user request, 2026-10-27 — reskin
+   the WhatsApp Team Inbox/WhatsApp pages after a reference screenshot of a
+   dark WhatsApp-branded team inbox). Scoped to `.whatsapp-scope` only, not a
+   global theme change — every `bg-accent`/`text-accent`/`border-accent`/
+   `ring-accent` consumer across the app already resolves through
+   `var(--accent-rgb)` at paint time (Tailwind's `rgb(var(--accent-rgb) /
+   <alpha-value>)` binding in tailwind.config.ts), so wrapping just the
+   WhatsApp pages' root element in this class recolors every accent-driven
+   element already in platform-inbox.tsx/conversation-detail-panel.tsx/
+   record-list.tsx (selected-row outline, filter chips, send button, outgoing
+   bubbles, account-switcher pills) to WhatsApp's own brand teal-green without
+   touching the shared Outlook-blue theme those same components render with
+   everywhere else in the app. #008069 is WhatsApp's own current brand teal
+   (their 2023 rebrand color) — picked over a brighter/neon green because it
+   clears 4.5:1 contrast with white text (~4.9:1), matching the accessibility
+   bar the rest of this file already holds every other accent use to. */
+.whatsapp-scope {
+  --accent-rgb: 0 128 105;
+  --accent-2-rgb: 0 128 105;
+  --accent-contrast-rgb: 255 255 255;
+  --btn-primary-bg: linear-gradient(135deg, rgb(0 128 105), rgb(0 128 105));
+}
