@@ -1,8 +1,9 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import EmojiPicker, { EmojiClickData, Theme as EmojiTheme } from "emoji-picker-react";
 import { api, resolveMediaUrl } from "../../lib/api-client";
 import { Avatar } from "../ui/avatar";
 import { LoadingRow, Spinner } from "../spinner";
@@ -102,6 +103,99 @@ function DownloadIcon() {
   );
 }
 
+function ImageAttachIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <rect x="3" y="4" width="18" height="16" rx="2" />
+      <circle cx="8.5" cy="9.5" r="1.5" />
+      <path d="m4 17 5-5 3.5 3.5L17 11l3 3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function VideoAttachIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <rect x="3" y="5" width="13" height="14" rx="2" />
+      <path d="M16 10.5 21 7v10l-5-3.5Z" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function DocumentAttachIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1Z" strokeLinejoin="round" />
+      <path d="M14 3v4h4M9 13h6M9 16h6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+type AttachKind = "image" | "video" | "document";
+
+const ATTACH_ACCEPT: Record<AttachKind, string> = {
+  image: "image/*",
+  video: "video/*",
+  document:
+    ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,text/plain,text/csv,application/zip",
+};
+
+const ATTACH_KINDS: { kind: AttachKind; label: string; icon: () => React.JSX.Element }[] = [
+  { kind: "image", label: "Photo", icon: ImageAttachIcon },
+  { kind: "video", label: "Video", icon: VideoAttachIcon },
+  { kind: "document", label: "Document", icon: DocumentAttachIcon },
+];
+
+/**
+ * Attach menu (Part: WhatsApp attachment-type picker, 2026-10-27, explicit
+ * user request — "it should ask either i should be attaching an image, or
+ * document or video so that when selected it shows only the related
+ * materials to select"). Previously the paperclip opened the OS file
+ * picker directly with no `accept` filter at all, so it showed every file
+ * type. This inserts a small menu first; each choice sets the hidden
+ * input's `accept` attribute immediately before triggering its click, so
+ * the OS picker itself only lists the matching file types — there's no
+ * separate upload path per kind, `handleFileChosen`/`mediaMutation`
+ * downstream are unchanged, this only narrows what the native dialog shows.
+ */
+function AttachMenuButton({ onPick, pending }: { onPick: (kind: AttachKind) => void; pending: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        disabled={pending}
+        title="Attach"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05] disabled:opacity-40"
+      >
+        {pending ? <Spinner className="h-4 w-4" /> : <PaperclipIcon />}
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-12 left-0 z-20 w-44 overflow-hidden rounded-lg border border-[var(--line)] bg-surface-elevated py-1 shadow-lg">
+            {ATTACH_KINDS.map(({ kind, label, icon: Icon }) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => {
+                  onPick(kind);
+                  setOpen(false);
+                }}
+                className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-ink hover:bg-ink/5"
+              >
+                <Icon />
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function FileIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth={1.6}>
@@ -129,22 +223,41 @@ function EmojiIcon() {
   );
 }
 
-const QUICK_EMOJIS = [
-  "😀", "😂", "😍", "🙏", "👍", "👏", "🔥", "🎉",
-  "❤️", "😢", "😅", "🤔", "😎", "💯", "✅", "👋",
-  "🙌", "😭", "🥳", "😡", "🤝", "⚡", "💡", "😁",
-];
+/**
+ * Resolves light/dark the same way ThemeToggle (components/theme-toggle.tsx)
+ * decides it, re-read here rather than shared since there's no app-wide
+ * theme context/hook to import — just the `theme` localStorage key and
+ * `data-theme` attribute that component itself owns. Needed so the emoji
+ * picker library (which takes an explicit colorScheme, it doesn't read the
+ * app's own CSS variables) doesn't render a jarring opposite-theme popover
+ * when the user has explicitly chosen light or dark rather than "system".
+ */
+function useIsDarkMode(): boolean {
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const resolve = () => {
+      const stored = window.localStorage.getItem("theme");
+      setDark(stored === "dark" || (stored !== "light" && media.matches));
+    };
+    resolve();
+    media.addEventListener("change", resolve);
+    return () => media.removeEventListener("change", resolve);
+  }, []);
+  return dark;
+}
 
 /**
- * Minimal emoji inserter for the composer (Part: WhatsApp module UI
- * redesign, 2026-10-27, explicit user request following a reference
- * screenshot showing an emoji icon next to the composer's send button). A
- * small fixed grid rather than a full picker library — no search/categories/
- * skin-tone variants — kept deliberately small since the ask was visual
- * parity with the reference, not a complete emoji-picker feature.
+ * Full emoji picker (Part: WhatsApp composer emoji picker, 2026-10-27,
+ * explicit user request — "the emojis are very less, i want to add all the
+ * emojis that are in the internet, find some library and fix it"). Replaces
+ * the earlier fixed 24-emoji grid with `emoji-picker-react`, the full
+ * Unicode emoji set with search, categories, and skin-tone variants — native
+ * emoji glyphs, not image assets, so it doesn't add image-fetch weight.
  */
 function EmojiPickerButton({ onPick }: { onPick: (emoji: string) => void }) {
   const [open, setOpen] = useState(false);
+  const dark = useIsDarkMode();
   return (
     <div className="relative">
       <button
@@ -158,20 +271,18 @@ function EmojiPickerButton({ onPick }: { onPick: (emoji: string) => void }) {
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute bottom-12 left-0 z-20 grid w-56 grid-cols-6 gap-1 rounded-lg border border-[var(--line)] bg-surface-elevated p-2 shadow-lg">
-            {QUICK_EMOJIS.map((emoji) => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => {
-                  onPick(emoji);
-                  setOpen(false);
-                }}
-                className="rounded p-1 text-lg hover:bg-ink/10"
-              >
-                {emoji}
-              </button>
-            ))}
+          <div className="absolute bottom-12 left-0 z-20">
+            <EmojiPicker
+              onEmojiClick={(data: EmojiClickData) => {
+                onPick(data.emoji);
+                setOpen(false);
+              }}
+              theme={dark ? EmojiTheme.DARK : EmojiTheme.LIGHT}
+              searchDisabled={false}
+              width={320}
+              height={380}
+              previewConfig={{ showPreview: false }}
+            />
           </div>
         </>
       )}
@@ -689,9 +800,21 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
           return (
             <div key={m.id} className={`flex ${m.fromUs ? "justify-end" : "justify-start"} ${grouped ? "mt-0.5" : "mt-2.5"}`}>
               <div
-                className={`max-w-[65%] rounded-2xl px-3.5 py-2 text-sm shadow-sm ${
-                  m.fromUs ? "bg-accent text-white" : "bg-surface-elevated border border-[var(--line)]"
-                }`}
+                // Smooth WhatsApp-style bubble shape (Part: WhatsApp bubble
+                // shape fix, 2026-10-27, explicit user request — "the shape
+                // of the bubble should be something more smooth like
+                // whatsapp bubbles") — `rounded-2xl` resolved to just 4px
+                // here because this app's Tailwind config caps the whole
+                // named radius scale at 4px app-wide (Outlook-spec "almost
+                // entirely 4px radius" rule), so corners looked sharp
+                // instead of soft. An explicit arbitrary value bypasses that
+                // scale for just this one element rather than touching the
+                // shared config. The un-grouped (first-in-a-row) bubble also
+                // flattens the corner nearest the avatar slightly, the same
+                // subtle asymmetry real WhatsApp's own tailed bubble uses.
+                className={`max-w-[65%] rounded-[18px] px-3.5 py-2 text-sm shadow-sm ${
+                  !grouped ? (m.fromUs ? "rounded-tr-[4px]" : "rounded-tl-[4px]") : ""
+                } ${m.fromUs ? "bg-accent text-white" : "bg-surface-elevated border border-[var(--line)]"}`}
               >
                 <div className="whitespace-pre-wrap">{m.messageText}</div>
                 {m.mediaUrl && <MediaAttachment url={m.mediaUrl} mimeType={m.mediaMimeType} filename={m.mediaFilename} isOurs={m.fromUs} />}
@@ -721,15 +844,15 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
                   className="hidden"
                   onChange={handleFileChosen}
                 />
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={mediaMutation.isPending}
-                  title="Attach a file"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05] disabled:opacity-40"
-                >
-                  {mediaMutation.isPending ? <Spinner className="h-4 w-4" /> : <PaperclipIcon />}
-                </button>
+                <AttachMenuButton
+                  pending={mediaMutation.isPending}
+                  onPick={(kind) => {
+                    const input = fileInputRef.current;
+                    if (!input) return;
+                    input.setAttribute("accept", ATTACH_ACCEPT[kind]);
+                    input.click();
+                  }}
+                />
               </>
             )}
             <input
