@@ -185,8 +185,17 @@ export function ConnectsTab() {
           </SectionCard>
 
           <SectionCard title="Full category breakdown">
+            {/* No showSummary here (Part: Connects Dashboard, 2026-10-28,
+                user-reported confusing "Total Connects" figure) -- this
+                table deliberately mixes SPEND rows (Bidding, Invites, Open
+                for Work...) and CREDIT rows (Purchases, Awards) in one
+                list for display, but DataTable's auto-summary just sums
+                the "connects" column blindly across every row regardless
+                of kind, producing a number that's spend-plus-credit added
+                together -- not a real total of anything. totalSpend and
+                totalAdded above the table already report each side
+                correctly on their own. */}
             <DataTable
-              showSummary
               rowKey={(r) => r.category}
               rows={overview.categories}
               columns={[
