@@ -422,6 +422,7 @@ export function WebsiteAnalyticsTab() {
       {pages.length > 0 && (
         <SectionCard title="Top Pages" subtitle="Most-viewed pages this period" expandable>
           <DataTable
+            showSummary
             rowKey={(r) => r.path}
             rows={pages}
             columns={[
@@ -437,6 +438,7 @@ export function WebsiteAnalyticsTab() {
       {audience && audience.countries.length > 0 && (
         <SectionCard title="Top Countries" subtitle="Sessions by country, this period" expandable>
           <DataTable
+            showSummary
             rowKey={(r) => r.label}
             rows={audience.countries}
             columns={[

@@ -147,6 +147,7 @@ export function InboxTab() {
           }
           table={
             <DataTable
+              showSummary
               rowKey={(r) => r.id}
               rows={accounts}
               columns={[
@@ -169,6 +170,7 @@ export function InboxTab() {
         {!leadsQuery.isLoading && leads.length === 0 && <EmptyState title="No leads created from inbound email in this period" />}
         {leads.length > 0 && (
           <DataTable
+            showSummary
             rowKey={(r) => r.threadId}
             rows={leads}
             columns={[

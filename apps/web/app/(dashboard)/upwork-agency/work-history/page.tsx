@@ -6,6 +6,8 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile, DataTable } from "../../../../components/chart-kit";
 import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { useDateFilter } from "../../../../lib/use-date-filter";
+import { DateRangeFilter } from "../../../../components/ui/date-range-filter";
 
 interface WorkHistoryEntry {
   id: string;
@@ -37,14 +39,19 @@ export default function WorkHistoryPage() {
   const all = workHistory?.recent ?? [];
   const statuses = useMemo(() => [...new Set(all.map((e) => e.status).filter((s): s is string => Boolean(s)))], [all]);
 
+  // Client-side over the full set — this page already fetches every
+  // recent contract, no server pagination. Filters by contract start date.
+  const { filteredRows: dateFiltered, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDate, active: dateActive } =
+    useDateFilter(all, (e) => e.startDate);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return all
+    return dateFiltered
       .filter((e) => (contractStatus === "all" ? true : e.status === contractStatus))
       .filter((e) => (q ? (e.freelancerName ?? "").toLowerCase().includes(q) || (e.title ?? "").toLowerCase().includes(q) : true));
-  }, [all, search, contractStatus]);
+  }, [dateFiltered, search, contractStatus]);
 
-  const hasFilters = search !== "" || contractStatus !== "all";
+  const hasFilters = search !== "" || contractStatus !== "all" || dateActive;
 
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Work History" />;
@@ -84,12 +91,14 @@ export default function WorkHistoryPage() {
                   ))}
                 </select>
               )}
+              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDate} />
               {hasFilters && (
                 <button
                   type="button"
                   onClick={() => {
                     setSearch("");
                     setContractStatus("all");
+                    clearDate();
                   }}
                   className="h-9 rounded-md px-3 text-xs text-accent hover:underline"
                 >
@@ -107,6 +116,7 @@ export default function WorkHistoryPage() {
               <DataTable
                 rowKey={(e) => e.id}
                 onRowClick={(e) => setSelected(e)}
+                showSummary
                 columns={[
                   { key: "freelancer", header: "Freelancer", render: (e) => e.freelancerName ?? "—", sortValue: (e) => e.freelancerName },
                   {

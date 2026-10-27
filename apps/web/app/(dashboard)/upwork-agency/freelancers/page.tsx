@@ -6,6 +6,8 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile, DataTable } from "../../../../components/chart-kit";
 import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { useDateFilter } from "../../../../lib/use-date-filter";
+import { DateRangeFilter } from "../../../../components/ui/date-range-filter";
 
 interface FreelancerProfile {
   id: string;
@@ -39,16 +41,21 @@ export default function FreelancersPage() {
   const all = (profiles?.profiles ?? []) as FreelancerProfile[];
   const ratedStatuses = useMemo(() => [...new Set(all.map((p) => p.topRatedStatus).filter((s): s is string => Boolean(s)))], [all]);
 
+  // Client-side over the full set — this page already fetches every
+  // tracked freelancer, no server pagination.
+  const { filteredRows: dateFiltered, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDate, active: dateActive } =
+    useDateFilter(all, (p) => p.lastWorkedOn);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    const list = all
+    const list = dateFiltered
       .filter((p) => (ratedFilter === "all" ? true : p.topRatedStatus === ratedFilter))
       .filter((p) => (q ? (p.freelancerName ?? "").toLowerCase().includes(q) || p.skills.some((s) => s.toLowerCase().includes(q)) : true));
     if (sortByEarnings) list.sort((a, b) => (b.totalEarnings ?? 0) - (a.totalEarnings ?? 0));
     return list;
-  }, [all, search, ratedFilter, sortByEarnings]);
+  }, [dateFiltered, search, ratedFilter, sortByEarnings]);
 
-  const hasFilters = search !== "" || ratedFilter !== "all";
+  const hasFilters = search !== "" || ratedFilter !== "all" || dateActive;
 
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Freelancers" />;
@@ -87,6 +94,7 @@ export default function FreelancersPage() {
                   ))}
                 </select>
               )}
+              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDate} />
               <button
                 type="button"
                 onClick={() => setSortByEarnings((v) => !v)}
@@ -100,6 +108,7 @@ export default function FreelancersPage() {
                   onClick={() => {
                     setSearch("");
                     setRatedFilter("all");
+                    clearDate();
                   }}
                   className="h-9 rounded-md px-3 text-xs text-accent hover:underline"
                 >
@@ -117,6 +126,7 @@ export default function FreelancersPage() {
               <DataTable
                 rowKey={(p) => p.id}
                 onRowClick={(p) => setSelected(p)}
+                showSummary
                 columns={[
                   { key: "name", header: "Name", render: (p) => p.freelancerName ?? "—", sortValue: (p) => p.freelancerName },
                   { key: "rated", header: "Top Rated", render: (p) => p.topRatedStatus ?? "—", sortValue: (p) => p.topRatedStatus },

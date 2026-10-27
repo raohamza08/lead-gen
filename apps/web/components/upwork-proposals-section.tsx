@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, getCurrentUser, downloadUpworkProposalsCsv } from "../lib/api-client";
 import { DataTable, type TableColumn } from "./chart-kit";
+import { useDateFilter } from "../lib/use-date-filter";
+import { DateRangeFilter } from "./ui/date-range-filter";
 import { UpworkPicklistManager } from "./upwork-picklist-manager";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
@@ -96,6 +98,14 @@ const PAGE_SIZE = 100;
 export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [items, setItems] = useState<UpworkProposal[] | null>(null);
+  // Client-side, current page only (Part: table filter/KPI rollout,
+  // 2026-10-27) — this list is server-paginated, so a true full-dataset
+  // date filter would need a backend dateFrom/dateTo param; left as a
+  // known limitation, same as the earlier sort rollout's own.
+  const { filteredRows: dateFilteredItems, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDateFilter } = useDateFilter(
+    items ?? [],
+    (r) => r.createdAt,
+  );
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<UpworkProposalStatus | "">("");
@@ -497,6 +507,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDateFilter} />
         <span className="ml-auto text-xs text-ink/50">{total} total</span>
       </div>
 
@@ -508,7 +519,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         </p>
       ) : (
         <div className="mt-4">
-          <DataTable columns={columns} rows={items} rowKey={(r) => r.id} />
+          <DataTable columns={columns} rows={dateFilteredItems} rowKey={(r) => r.id} showSummary />
           <div className="mt-3 flex items-center justify-between text-xs text-ink/55">
             <span>
               Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}

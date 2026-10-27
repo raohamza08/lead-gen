@@ -293,6 +293,7 @@ export function EmailAnalyticsSection({
             <DataTable<Record<string, number | string>>
               rows={[...trends].reverse()}
               rowKey={(r) => String(r.date)}
+              showSummary
               columns={[
                 { key: "date", header: "Date", render: (r) => String(r.date), sortValue: (r) => String(r.date) },
                 ...TREND_METRICS.map((m) => ({
@@ -327,6 +328,7 @@ export function EmailAnalyticsSection({
           <DataTable<UserBreakdownRow>
             rows={breakdown}
             rowKey={(r) => r.userId}
+            showSummary
             columns={[
               { key: "user", header: "User", render: (r) => r.userName, sortValue: (r) => r.userName },
               { key: "leadsUploaded", header: "Leads Uploaded", numeric: true, render: (r) => r.leadsUploaded, sortValue: (r) => r.leadsUploaded },

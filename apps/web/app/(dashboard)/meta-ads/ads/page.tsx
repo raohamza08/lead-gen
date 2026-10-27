@@ -114,6 +114,7 @@ export default function MetaAdsAdsPage() {
               <DataTable
                 rowKey={(r) => r.id}
                 rows={rows}
+                showSummary
                 columns={[
                   {
                     key: "name",

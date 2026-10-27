@@ -6,6 +6,8 @@ import { api } from "../lib/api-client";
 import { useRealtimeEvent } from "../lib/realtime";
 import { DataTable, KpiStrip, SectionCard, StatTile } from "./chart-kit";
 import { EmailAnalyticsSection } from "./email-analytics-section";
+import { DateRangeFilter } from "./ui/date-range-filter";
+import { useDateFilter } from "../lib/use-date-filter";
 import type { EmailListItem } from "@leadgen/types";
 
 type EmailListEvent = "SENT" | "OPENED" | "REPLIED" | "FAILED";
@@ -126,6 +128,8 @@ export function EmailCampaignReportSection() {
   useRealtimeEvent("sendingSession.updated", invalidateQueue);
 
   const items = listQuery.data ?? [];
+  const itemsDateFilter = useDateFilter(items, (r) => (r.sentAt ? new Date(r.sentAt).getTime() : new Date(r.eventAt).getTime()));
+  const suppressionDateFilter = useDateFilter(suppressionQuery.data ?? [], (r) => new Date(r.createdAt).getTime());
   const sending = queueQuery.data?.sending ?? {};
   const waitingForBatch = sending.WAITING_FOR_SCHEDULE ?? 0;
   const readyToSend = sending.READY_TO_SEND ?? 0;
@@ -215,20 +219,29 @@ export function EmailCampaignReportSection() {
         title="Message activity"
         subtitle="Every individual email, who it went to, and exactly what happened — the detail behind the rates above."
         actions={
-          <div className="flex rounded-lg border border-[var(--line)] p-0.5">
-            {(Object.keys(TAB_LABEL) as EmailListEvent[]).map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => setTab(t)}
-                aria-pressed={tab === t}
-                className={`rounded-md px-3 py-1 text-xs transition-colors ${
-                  tab === t ? "bg-ink/10 font-medium text-ink" : "text-ink/60 hover:bg-ink/5"
-                }`}
-              >
-                {TAB_LABEL[t]}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg border border-[var(--line)] p-0.5">
+              {(Object.keys(TAB_LABEL) as EmailListEvent[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  aria-pressed={tab === t}
+                  className={`rounded-md px-3 py-1 text-xs transition-colors ${
+                    tab === t ? "bg-ink/10 font-medium text-ink" : "text-ink/60 hover:bg-ink/5"
+                  }`}
+                >
+                  {TAB_LABEL[t]}
+                </button>
+              ))}
+            </div>
+            <DateRangeFilter
+              from={itemsDateFilter.from}
+              to={itemsDateFilter.to}
+              onFromChange={itemsDateFilter.setFrom}
+              onToChange={itemsDateFilter.setTo}
+              onClear={itemsDateFilter.clear}
+            />
           </div>
         }
       >
@@ -238,8 +251,9 @@ export function EmailCampaignReportSection() {
           <p className="py-8 text-center text-sm text-ink/50">No emails {TAB_LABEL[tab].toLowerCase()} yet.</p>
         ) : (
           <DataTable<EmailListItem>
-            rows={items}
+            rows={itemsDateFilter.filteredRows}
             rowKey={(r) => r.id}
+            showSummary
             columns={[
               {
                 key: "company", header: "Company",
@@ -274,15 +288,29 @@ export function EmailCampaignReportSection() {
         )}
       </SectionCard>
 
-      <SectionCard title="Unsubscribed & suppressed">
+      <SectionCard
+        title="Unsubscribed & suppressed"
+        actions={
+          (suppressionQuery.data?.length ?? 0) > 0 ? (
+            <DateRangeFilter
+              from={suppressionDateFilter.from}
+              to={suppressionDateFilter.to}
+              onFromChange={suppressionDateFilter.setFrom}
+              onToChange={suppressionDateFilter.setTo}
+              onClear={suppressionDateFilter.clear}
+            />
+          ) : undefined
+        }
+      >
         {suppressionQuery.isLoading ? (
           <p className="py-8 text-center text-sm text-ink/50">Loading…</p>
         ) : (suppressionQuery.data?.length ?? 0) === 0 ? (
           <p className="py-8 text-center text-sm text-ink/50">Nobody has unsubscribed or been suppressed yet.</p>
         ) : (
           <DataTable<SuppressionEntry>
-            rows={suppressionQuery.data!}
+            rows={suppressionDateFilter.filteredRows}
             rowKey={(r) => r.id}
+            showSummary
             columns={[
               { key: "email", header: "Email", render: (r) => r.email, sortValue: (r) => r.email },
               { key: "reason", header: "Reason", render: (r) => REASON_LABEL[r.reason] ?? r.reason, sortValue: (r) => r.reason },

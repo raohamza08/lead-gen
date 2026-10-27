@@ -113,6 +113,7 @@ export default function MetaAdsCampaignsPage() {
               <DataTable
                 rowKey={(r) => r.id}
                 rows={rows}
+                showSummary
                 columns={[
                   { key: "name", header: "Campaign", render: (r) => <span title={r.id}>{r.name}</span> },
                   { key: "status", header: "Status", render: (r) => r.status },

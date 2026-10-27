@@ -6,6 +6,8 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile, DataTable } from "../../../../components/chart-kit";
 import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { useDateFilter } from "../../../../lib/use-date-filter";
+import { DateRangeFilter } from "../../../../components/ui/date-range-filter";
 
 interface Proposal {
   id: string;
@@ -37,13 +39,17 @@ export default function BiddingPage() {
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
 
   const all = proposals?.recent ?? [];
+  // Client-side over the full set — this page already fetches every
+  // recent proposal, no server pagination.
+  const { filteredRows: dateFiltered, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDate, active: dateActive } =
+    useDateFilter(all, (p) => p.upworkCreatedAt);
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return all
+    return dateFiltered
       .filter((p) => (statusFilter ? p.status === statusFilter : true))
       .filter((p) => (q ? (p.jobTitle ?? "").toLowerCase().includes(q) || (p.freelancerName ?? "").toLowerCase().includes(q) : true));
-  }, [all, search, statusFilter]);
-  const hasFilters = search !== "" || statusFilter !== null;
+  }, [dateFiltered, search, statusFilter]);
+  const hasFilters = search !== "" || statusFilter !== null || dateActive;
 
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Bidding & Proposals" />;
@@ -77,12 +83,14 @@ export default function BiddingPage() {
                 placeholder="Search job or freelancer…"
                 className="h-9 w-64 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
               />
+              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDate} />
               {hasFilters && (
                 <button
                   type="button"
                   onClick={() => {
                     setSearch("");
                     setStatusFilter(null);
+                    clearDate();
                   }}
                   className="h-9 rounded-md px-3 text-xs text-accent hover:underline"
                 >
@@ -100,6 +108,7 @@ export default function BiddingPage() {
               <DataTable
                 rowKey={(p) => p.id}
                 onRowClick={(p) => setSelected(p)}
+                showSummary
                 columns={[
                   { key: "job", header: "Job", render: (p) => p.jobTitle ?? "—", sortValue: (p) => p.jobTitle },
                   { key: "freelancer", header: "Freelancer", render: (p) => p.freelancerName ?? "—", sortValue: (p) => p.freelancerName },

@@ -179,6 +179,7 @@ export function SocialTab() {
           }
           table={
             <DataTable
+              showSummary
               rowKey={(r) => r.accountId}
               rows={platforms}
               columns={[
@@ -201,6 +202,7 @@ export function SocialTab() {
         {!teamQuery.isLoading && team.length === 0 && <EmptyState title="No assigned conversations in this period" />}
         {team.length > 0 && (
           <DataTable
+            showSummary
             rowKey={(r) => r.userId}
             rows={team}
             columns={[

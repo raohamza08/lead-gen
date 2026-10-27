@@ -262,6 +262,7 @@ export default function CampaignsPage() {
           <DataTable<CampaignPerformance>
             rows={rows}
             rowKey={(r) => r.id}
+            showSummary
             columns={[
               { key: "name", header: "Campaign", render: (r) => r.name, sortValue: (r) => r.name },
               { key: "niche", header: "Niche", render: (r) => r.niche, sortValue: (r) => r.niche },

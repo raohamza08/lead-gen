@@ -81,6 +81,7 @@ export default function OntologyPage() {
             <DataTable
               rowKey={(s) => s.id}
               onRowClick={(s) => setSelected(s)}
+              showSummary
               columns={[
                 { key: "label", header: "Skill", render: (s) => s.preferredLabel, sortValue: (s) => s.preferredLabel },
                 { key: "ontologyId", header: "Ontology ID", render: (s) => s.ontologyId, sortValue: (s) => s.ontologyId },

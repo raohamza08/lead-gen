@@ -6,6 +6,8 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile, DataTable } from "../../../../components/chart-kit";
 import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { useDateFilter } from "../../../../lib/use-date-filter";
+import { DateRangeFilter } from "../../../../components/ui/date-range-filter";
 
 interface Invite {
   id: string;
@@ -40,9 +42,14 @@ export default function InvitesPage() {
 
   const all = invites?.recent ?? [];
   const unanswered = useMemo(() => all.filter((i) => i.status === "Pending"), [all]);
+  // Client-side over the full set — this page already fetches every
+  // recent invite, no server pagination. Applies only to the main
+  // "Invites" table below, not the pinned "Unanswered invites" one.
+  const { filteredRows: dateFiltered, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDate, active: dateActive } =
+    useDateFilter(all, (i) => i.upworkCreatedAt);
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
-    return all
+    return dateFiltered
       .filter((i) => (statusFilter ? i.status === statusFilter : true))
       .filter((i) =>
         q
@@ -51,8 +58,8 @@ export default function InvitesPage() {
             (i.freelancerName ?? "").toLowerCase().includes(q)
           : true,
       );
-  }, [all, search, statusFilter]);
-  const hasFilters = search !== "" || statusFilter !== null;
+  }, [dateFiltered, search, statusFilter]);
+  const hasFilters = search !== "" || statusFilter !== null || dateActive;
 
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Invites" />;
@@ -107,12 +114,14 @@ export default function InvitesPage() {
                 placeholder="Search job, client, or freelancer…"
                 className="h-9 w-64 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
               />
+              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDate} />
               {hasFilters && (
                 <button
                   type="button"
                   onClick={() => {
                     setSearch("");
                     setStatusFilter(null);
+                    clearDate();
                   }}
                   className="h-9 rounded-md px-3 text-xs text-accent hover:underline"
                 >
@@ -130,6 +139,7 @@ export default function InvitesPage() {
               <DataTable
                 rowKey={(i) => i.id}
                 onRowClick={(i) => setSelected(i)}
+                showSummary
                 columns={[
                   { key: "job", header: "Job", render: (i) => i.jobTitle ?? "—", sortValue: (i) => i.jobTitle },
                   { key: "client", header: "Client", render: (i) => i.clientName ?? "—", sortValue: (i) => i.clientName },

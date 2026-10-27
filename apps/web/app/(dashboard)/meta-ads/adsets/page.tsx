@@ -112,6 +112,7 @@ export default function MetaAdsAdSetsPage() {
               <DataTable
                 rowKey={(r) => r.id}
                 rows={rows}
+                showSummary
                 columns={[
                   { key: "name", header: "Ad Set", render: (r) => r.name },
                   { key: "campaignName", header: "Campaign", render: (r) => r.campaignName },

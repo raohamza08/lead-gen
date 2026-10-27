@@ -594,6 +594,7 @@ export function UpworkTab() {
         {purchases.length > 0 && (
           <>
             <DataTable
+              showSummary
               rowKey={(r) => r.id}
               rows={showAllPurchases ? purchases : purchases.slice(0, PURCHASE_PAGE_SIZE)}
               columns={[
@@ -711,6 +712,7 @@ export function UpworkTab() {
           }
           table={
             <DataTable
+              showSummary
               rowKey={(r) => `${r.name}-${r.profileName}`}
               rows={submitters}
               columns={[

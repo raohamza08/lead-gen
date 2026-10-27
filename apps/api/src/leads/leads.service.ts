@@ -315,6 +315,17 @@ export class LeadsService {
       sourceLayer: query.sourceLayer,
       ...(searchOr ? { OR: searchOr } : {}),
       pipelineState: query.stage ? { stage: query.stage } : undefined,
+      // Part: table filter/KPI rollout, 2026-10-27 — dateTo inclusive
+      // through the end of that calendar day, same convention the
+      // frontend's DateRangeFilter/useDateFilter already use.
+      ...(query.dateFrom || query.dateTo
+        ? {
+            createdAt: {
+              ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
+              ...(query.dateTo ? { lte: new Date(new Date(query.dateTo).getTime() + 24 * 60 * 60 * 1000 - 1) } : {}),
+            },
+          }
+        : {}),
     };
 
     const [items, total] = await Promise.all([

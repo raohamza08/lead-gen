@@ -264,11 +264,16 @@ export class EmailHubService {
       ...(query.tagIds?.length ? { tags: { some: { tagId: { in: query.tagIds } } } } : {}),
       ...(query.sender ? { fromEmail: { contains: query.sender, mode: "insensitive" } } : {}),
       ...(query.hasAttachments !== undefined ? { hasAttachments: query.hasAttachments } : {}),
+      // dateTo inclusive through the end of that calendar day (Part: table
+      // filter/KPI rollout, 2026-10-27) — previously `lte: new
+      // Date(dateTo)` meant midnight of that day, excluding the whole day
+      // itself; same inclusive convention the frontend's useDateFilter and
+      // the leads endpoint's own dateTo now both use.
       ...(query.dateFrom || query.dateTo
         ? {
             receivedAt: {
               ...(query.dateFrom ? { gte: new Date(query.dateFrom) } : {}),
-              ...(query.dateTo ? { lte: new Date(query.dateTo) } : {}),
+              ...(query.dateTo ? { lte: new Date(new Date(query.dateTo).getTime() + 24 * 60 * 60 * 1000 - 1) } : {}),
             },
           }
         : {}),

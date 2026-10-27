@@ -10,6 +10,7 @@
 import { ReactNode, useId, useState } from "react";
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart, Pie, PieChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import { Modal } from "./ui/modal";
+import { getCurrentUser } from "../lib/api-client";
 
 /**
  * The categorical palette, in fixed slot order. Assign by index and never
@@ -266,6 +267,7 @@ export function DataTable<T>({
   rows,
   rowKey,
   onRowClick,
+  showSummary,
 }: {
   columns: TableColumn<T>[];
   rows: T[];
@@ -275,8 +277,22 @@ export function DataTable<T>({
    *  details in it") — every other DataTable call site is unaffected,
    *  rows only become clickable when a caller passes this. */
   onRowClick?: (row: T) => void;
+  /** Admin-only auto-generated KPI strip above the table (Part: table
+   *  filter/KPI rollout, 2026-10-27, explicit user request — "add a
+   *  summary kpis of each table on the top of it, but make sure that the
+   *  kpis are only shown to the admins, not anyone else"). Auto-generated,
+   *  not hand-designed per table: total row count, plus a sum for up to 4
+   *  numeric columns that also have a `sortValue` (the raw number, not the
+   *  rendered/formatted string). Reflects whatever `rows` this render got
+   *  — if a caller already filters `rows` (search, status, the new date
+   *  filter, etc.) before passing them in, the KPIs update with it
+   *  automatically, no separate wiring needed. Renders nothing at all for
+   *  a non-admin, regardless of this prop — the gate is role-based here,
+   *  not a prop the caller can be tricked into mis-setting. */
+  showSummary?: boolean;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
 
   function toggleSort(col: TableColumn<T>) {
     if (!col.sortValue) return;
@@ -303,8 +319,23 @@ export function DataTable<T>({
     });
   })();
 
+  const summaryCols = showSummary && isAdmin ? columns.filter((c) => c.numeric && c.sortValue).slice(0, 4) : [];
+
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {showSummary && isAdmin && (
+        <KpiStrip>
+          <StatTile label="Total rows" value={formatCompact(rows.length)} />
+          {summaryCols.map((col) => {
+            const sum = rows.reduce((acc, row) => {
+              const v = col.sortValue!(row);
+              return acc + (typeof v === "number" ? v : 0);
+            }, 0);
+            return <StatTile key={col.key} label={`Total ${col.header}`} value={formatCompact(sum)} />;
+          })}
+        </KpiStrip>
+      )}
+      <div className="overflow-x-auto">
       <table className="w-full min-w-[480px] border-collapse text-xs">
         <thead>
           <tr className="border-b border-[var(--line)]">
@@ -360,6 +391,7 @@ export function DataTable<T>({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

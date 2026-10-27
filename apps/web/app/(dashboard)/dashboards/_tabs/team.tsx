@@ -119,6 +119,7 @@ export function TeamTab() {
       {bidderSummaries.length > 0 && (
         <SectionCard title="Bidding Performance by Person" subtitle="Click a person for their per-profile breakdown" expandable>
           <DataTable
+            showSummary
             rowKey={(r) => r.name}
             rows={bidderSummaries}
             columns={[
@@ -168,6 +169,7 @@ export function TeamTab() {
       {inviteSummaries.length > 0 && (
         <SectionCard title="Invite Performance by Person" subtitle="Click a person for their per-profile breakdown" expandable>
           <DataTable
+            showSummary
             rowKey={(r) => r.name}
             rows={inviteSummaries}
             columns={[

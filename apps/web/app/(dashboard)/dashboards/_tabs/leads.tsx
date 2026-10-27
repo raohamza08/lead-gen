@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { api } from "../../../../lib/api-client";
+import { api, getCurrentUser } from "../../../../lib/api-client";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { dashboardRangeToQuery } from "../../../../components/dashboard-center/date-range-bar";
 import { num, pct, dateTime, titleCase } from "../../../../components/dashboard-center/format";
@@ -63,6 +63,7 @@ interface AuditRow {
 const PAGE_SIZE = 25;
 
 export function LeadsTab() {
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [dateRange, setDateRange] = useDashboardDateRange();
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -376,6 +377,13 @@ export function LeadsTab() {
       </div>
 
       <div className="flex flex-col gap-3">
+        {isAdmin && audit && (
+          <KpiStrip>
+            <StatTile label="Total leads (filtered)" value={formatCompact(audit.total)} />
+            <StatTile label="Unassigned (this page)" value={formatCompact(sortedAuditRows.filter((r) => !r.addedBy).length)} />
+            <StatTile label="Distinct niches (this page)" value={formatCompact(new Set(sortedAuditRows.map((r) => r.niche ?? "—")).size)} />
+          </KpiStrip>
+        )}
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-semibold tracking-tight">Lead addition audit</h2>
           <Input

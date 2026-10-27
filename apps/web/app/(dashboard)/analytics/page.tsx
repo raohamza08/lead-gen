@@ -37,6 +37,8 @@ import type {
   LinkedinFunnelReport,
 } from "@leadgen/types";
 import { Button } from "../../../components/ui/button";
+import { DateRangeFilter } from "../../../components/ui/date-range-filter";
+import { useDateFilter } from "../../../lib/use-date-filter";
 
 const TREND_WINDOWS = [7, 30, 90] as const;
 
@@ -140,6 +142,13 @@ export default function AnalyticsPage() {
   const aiError = runInsightsMutation.error ? (runInsightsMutation.error as Error).message : null;
 
   const emailList = emailListQuery.data ?? null;
+  // The only table on this page with no existing date/time scoping at all —
+  // "Trend window" above only covers the two trends tables, and the funnel/
+  // LinkedIn tables are explicitly all-time by design (see their subtitles).
+  const emailListDateFilter = useDateFilter(
+    emailList ?? [],
+    (r) => (r.sentAt ? new Date(r.sentAt).getTime() : new Date(r.eventAt).getTime()),
+  );
   const emailListLoading = emailListQuery.isLoading;
   const emailListError = emailListQuery.error ? (emailListQuery.error as Error).message : null;
 
@@ -321,6 +330,7 @@ export default function AnalyticsPage() {
             <DataTable<CohortTrendPoint>
               rows={[...trends.points].reverse()}
               rowKey={(r) => r.date}
+              showSummary
               columns={[
                 { key: "date", header: "Date", render: (r) => r.date, sortValue: (r) => r.date },
                 { key: "emailsSent", header: "Emails sent", numeric: true, render: (r) => r.emailsSent, sortValue: (r) => r.emailsSent },
@@ -330,27 +340,38 @@ export default function AnalyticsPage() {
         />
 
         <section className="rounded-xl border border-[var(--line)] p-5">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-semibold tracking-tight">Opened / Replied emails</h2>
               <p className="mt-0.5 text-xs text-ink/50">
                 Every individual message that was opened or replied to, newest first.
               </p>
             </div>
-            <div className="flex rounded-lg border border-[var(--line)] p-0.5">
-              {(["OPENED", "REPLIED"] as const).map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => setEmailTab(t)}
-                  aria-pressed={emailTab === t}
-                  className={`rounded-md px-3 py-1 text-xs transition-colors ${
-                    emailTab === t ? "bg-ink/10 font-medium text-ink" : "text-ink/60 hover:bg-ink/5"
-                  }`}
-                >
-                  {t === "OPENED" ? "Opened" : "Replied"}
-                </button>
-              ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-lg border border-[var(--line)] p-0.5">
+                {(["OPENED", "REPLIED"] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setEmailTab(t)}
+                    aria-pressed={emailTab === t}
+                    className={`rounded-md px-3 py-1 text-xs transition-colors ${
+                      emailTab === t ? "bg-ink/10 font-medium text-ink" : "text-ink/60 hover:bg-ink/5"
+                    }`}
+                  >
+                    {t === "OPENED" ? "Opened" : "Replied"}
+                  </button>
+                ))}
+              </div>
+              {emailList && emailList.length > 0 && (
+                <DateRangeFilter
+                  from={emailListDateFilter.from}
+                  to={emailListDateFilter.to}
+                  onFromChange={emailListDateFilter.setFrom}
+                  onToChange={emailListDateFilter.setTo}
+                  onClear={emailListDateFilter.clear}
+                />
+              )}
             </div>
           </div>
           {emailListError && <p className="text-sm text-error">{emailListError}</p>}
@@ -362,8 +383,9 @@ export default function AnalyticsPage() {
             </p>
           ) : (
             <DataTable<EmailListItem>
-              rows={emailList}
+              rows={emailListDateFilter.filteredRows}
               rowKey={(r) => r.id}
+              showSummary
               columns={[
                 {
                   key: "company",

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, getCurrentUser } from "../lib/api-client";
 import { DataTable, KpiStrip, SectionCard, StatTile, type TableColumn } from "./chart-kit";
+import { useDateFilter } from "../lib/use-date-filter";
+import { DateRangeFilter } from "./ui/date-range-filter";
 import { Modal } from "./ui/modal";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -167,8 +169,18 @@ export function UpworkRequestsSection() {
   });
 
   const requests = requestsQuery.data?.items ?? [];
-  const myRequests = isReviewer ? requests : requests.filter((r) => r.projectManager.id === user?.sub);
-  const reviewQueue = requests.filter((r) => r.status === "SUBMITTED" || r.status === "UNDER_REVIEW");
+  // Independent of the "This week/Last week/Custom range" selector above —
+  // that one only scopes the weekly-target KPI section, requestsQuery
+  // itself fetches every request unscoped. This is a genuinely new filter,
+  // not a duplicate (Part: table filter/KPI rollout, 2026-10-27). Shared
+  // across both tables below (My/All Requests and the Review Queue), since
+  // both come from the same underlying `requests` fetch.
+  const { filteredRows: dateFilteredRequests, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDateFilter } = useDateFilter(
+    requests,
+    (r) => r.requestDate,
+  );
+  const myRequests = isReviewer ? dateFilteredRequests : dateFilteredRequests.filter((r) => r.projectManager.id === user?.sub);
+  const reviewQueue = dateFilteredRequests.filter((r) => r.status === "SUBMITTED" || r.status === "UNDER_REVIEW");
 
   const columns: TableColumn<UpworkRequest>[] = [
     { key: "requestDate", header: "Date", render: (r) => new Date(r.requestDate).toLocaleDateString(), sortValue: (r) => new Date(r.requestDate).getTime() },
@@ -273,9 +285,12 @@ export function UpworkRequestsSection() {
               <h2 className="text-sm font-semibold tracking-tight">Requests</h2>
               <p className="mt-0.5 text-xs text-ink/55">Request a number of hours against one or more profiles/IDs for new work.</p>
             </div>
-            <button onClick={() => setShowForm((v) => !v)} className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-ink/5">
-              {showForm ? "Cancel" : "New request"}
-            </button>
+            <div className="flex items-center gap-2">
+              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDateFilter} />
+              <button onClick={() => setShowForm((v) => !v)} className="rounded-md border border-[var(--line)] px-3 py-1.5 text-xs hover:bg-ink/5">
+                {showForm ? "Cancel" : "New request"}
+              </button>
+            </div>
           </div>
 
           {showForm && (
@@ -293,7 +308,7 @@ export function UpworkRequestsSection() {
             <p className="mt-4 text-xs text-ink/50">No requests yet.</p>
           ) : (
             <div className="mt-4">
-              <DataTable columns={columns} rows={isReviewer ? myRequests : myRequests} rowKey={(r) => r.id} />
+              <DataTable columns={columns} rows={myRequests} rowKey={(r) => r.id} showSummary />
             </div>
           )}
         </section>
@@ -304,7 +319,7 @@ export function UpworkRequestsSection() {
           {reviewQueue.length === 0 ? (
             <p className="text-xs text-ink/50">Nothing pending review.</p>
           ) : (
-            <DataTable columns={columns} rows={reviewQueue} rowKey={(r) => r.id} />
+            <DataTable columns={columns} rows={reviewQueue} rowKey={(r) => r.id} showSummary />
           )}
         </SectionCard>
       )}

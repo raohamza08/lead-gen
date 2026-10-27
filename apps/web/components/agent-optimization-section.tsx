@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api-client";
 import { DataTable, KpiStrip, SectionCard, StatTile } from "./chart-kit";
+import { DateRangeFilter } from "./ui/date-range-filter";
+import { useDateFilter } from "../lib/use-date-filter";
 
 interface AppliedChange {
   agent: string;
@@ -83,6 +85,7 @@ export function AgentOptimizationSection() {
   }
 
   const latest = cycles?.[0];
+  const cyclesDateFilter = useDateFilter(cycles ?? [], (r) => new Date(r.runAt).getTime());
 
   return (
     <SectionCard
@@ -125,9 +128,20 @@ export function AgentOptimizationSection() {
           &quot;Run now&quot;.
         </p>
       ) : (
-        <DataTable
-          rows={cycles}
+        <>
+          <div className="mb-3 flex justify-end">
+            <DateRangeFilter
+              from={cyclesDateFilter.from}
+              to={cyclesDateFilter.to}
+              onFromChange={cyclesDateFilter.setFrom}
+              onToChange={cyclesDateFilter.setTo}
+              onClear={cyclesDateFilter.clear}
+            />
+          </div>
+          <DataTable
+          rows={cyclesDateFilter.filteredRows}
           rowKey={(r) => r.id}
+          showSummary
           columns={[
             {
               key: "runAt", header: "Date",
@@ -175,7 +189,8 @@ export function AgentOptimizationSection() {
                 ),
             },
           ]}
-        />
+          />
+        </>
       )}
 
       {expandedId &&

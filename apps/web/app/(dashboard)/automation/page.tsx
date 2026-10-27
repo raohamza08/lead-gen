@@ -6,6 +6,8 @@ import { api } from "../../../lib/api-client";
 import { useRealtimeEvent } from "../../../lib/realtime";
 import { DataTable, KpiStrip, SectionCard, StatTile } from "../../../components/chart-kit";
 import { AgentOptimizationSection } from "../../../components/agent-optimization-section";
+import { DateRangeFilter } from "../../../components/ui/date-range-filter";
+import { useDateFilter } from "../../../lib/use-date-filter";
 
 /**
  * Automation / AI Performance dashboard.
@@ -223,6 +225,10 @@ export default function AutomationPage() {
   if (healthQuery.error) return <p className="text-bad">{(healthQuery.error as Error).message}</p>;
   if (!healthQuery.data) return <p className="text-ink/60">Loading…</p>;
   const { health, runs } = healthQuery.data;
+  // "Recent activity" fetches a fixed most-recent-50, independent of the
+  // Window selector above (that only scopes health.agents/totals) — the
+  // one table on this page with no existing date/time scoping at all.
+  const runsDateFilter = useDateFilter(runs, (r) => new Date(r.startedAt).getTime());
 
   const failureRate = health.totalRuns
     ? Math.round((health.totalFailures / health.totalRuns) * 1000) / 10
@@ -294,6 +300,7 @@ export default function AutomationPage() {
                   <DataTable<WaitingLead>
                     rows={sendQueue.waiting}
                     rowKey={(w) => w.leadId}
+                    showSummary
                     columns={[
                       { key: "company", header: "Company", render: (w) => w.lead.companyName, sortValue: (w) => w.lead.companyName },
                       {
@@ -414,6 +421,7 @@ export default function AutomationPage() {
             <DataTable<AgentHealth>
               rows={health.agents}
               rowKey={(a) => a.agent}
+              showSummary
               columns={[
                 { key: "agent", header: "Agent", render: (a) => a.agent, sortValue: (a) => a.agent },
                 { key: "total", header: "Runs", numeric: true, render: (a) => a.total, sortValue: (a) => a.total },
@@ -443,13 +451,28 @@ export default function AutomationPage() {
           )}
         </SectionCard>
 
-        <SectionCard title="Recent activity" subtitle="Newest first.">
+        <SectionCard
+          title="Recent activity"
+          subtitle="Newest first."
+          actions={
+            runs.length > 0 ? (
+              <DateRangeFilter
+                from={runsDateFilter.from}
+                to={runsDateFilter.to}
+                onFromChange={runsDateFilter.setFrom}
+                onToChange={runsDateFilter.setTo}
+                onClear={runsDateFilter.clear}
+              />
+            ) : undefined
+          }
+        >
           {runs.length === 0 ? (
             <p className="py-8 text-center text-sm text-ink/50">Nothing recorded yet.</p>
           ) : (
             <DataTable<AgentRun>
-              rows={runs}
+              rows={runsDateFilter.filteredRows}
               rowKey={(r) => r.id}
+              showSummary
               columns={[
                 {
                   key: "startedAt",

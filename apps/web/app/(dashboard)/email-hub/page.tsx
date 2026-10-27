@@ -3,7 +3,7 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { api } from "../../../lib/api-client";
+import { api, getCurrentUser } from "../../../lib/api-client";
 import { useRealtimeRefetch } from "../../../lib/realtime";
 import { useClientSort } from "../../../lib/use-client-sort";
 import { ComposeModal } from "../../../components/email-hub/compose-modal";
@@ -15,6 +15,8 @@ import { Tabs } from "../../../components/ui/tabs";
 import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../components/ui/table";
 import { InitialsAvatar } from "../../../components/avatar";
 import { EmailSidebar } from "../../../components/email-hub/email-sidebar";
+import { DateRangeFilter } from "../../../components/ui/date-range-filter";
+import { KpiStrip, StatTile, formatCompact } from "../../../components/chart-kit";
 
 interface Account {
   id: string;
@@ -148,6 +150,7 @@ function EmailHubPageContent() {
   const searchParams = useSearchParams();
   const view = searchParams?.get("view") ?? null;
   const queryClient = useQueryClient();
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
 
   // Sidebar view switcher (Part: full UI redesign per UI.md) — pushes the
   // same `?view=` URL sidebar-nav.tsx's own Email Hub links already use,
@@ -164,6 +167,12 @@ function EmailHubPageContent() {
   // every ignored message, unfiltered (Part: Ignore/Noise Management,
   // per-sender grouping).
   const [senderFilter, setSenderFilter] = useState<string>("");
+  // Server-side — the backend already accepted dateFrom/dateTo on this
+  // endpoint, the page just never sent them (Part: table filter/KPI
+  // rollout, 2026-10-27, explicit user request — "add option to filter
+  // anything by date in each table").
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -200,13 +209,15 @@ function EmailHubPageContent() {
   // (staleTime in query-provider.tsx) while quietly refetching in the
   // background — isFetching (not isLoading) reflects that background pass.
   const messagesQuery = useQuery({
-    queryKey: ["email-messages", status, accountId, search, tagFilter, senderFilter, page, pageSize],
+    queryKey: ["email-messages", status, accountId, search, tagFilter, senderFilter, dateFrom, dateTo, page, pageSize],
     queryFn: () => {
       const params: Record<string, string> = { status, page: String(page), pageSize: String(pageSize) };
       if (accountId) params.accountId = accountId;
       if (search.trim()) params.search = search.trim();
       if (tagFilter) params.tagIds = tagFilter;
       if (senderFilter) params.sender = senderFilter;
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
       return api.getEmailMessages(params) as Promise<{ messages: Message[]; total: number }>;
     },
   });
@@ -642,7 +653,22 @@ function EmailHubPageContent() {
             </option>
           ))}
         </select>
+        <DateRangeFilter
+          from={dateFrom}
+          to={dateTo}
+          onFromChange={resetPage(setDateFrom)}
+          onToChange={resetPage(setDateTo)}
+          onClear={() => { setDateFrom(""); setDateTo(""); setPage(1); }}
+        />
       </div>
+
+      {isAdmin && !messagesQuery.isLoading && !isTrackedView && (
+        <KpiStrip>
+          <StatTile label="Total messages (filtered)" value={formatCompact(messagesQuery.data?.total ?? 0)} />
+          <StatTile label="Unread (this page)" value={formatCompact(messages.filter((m) => !m.isRead).length)} />
+          <StatTile label="With attachments (this page)" value={formatCompact(messages.filter((m) => m.hasAttachments).length)} />
+        </KpiStrip>
+      )}
 
       {/* Message list */}
       {messagesQuery.isLoading ? (

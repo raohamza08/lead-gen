@@ -6,6 +6,8 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard, DataTable, StatTile, KpiStrip } from "../../../../components/chart-kit";
 import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { useDateFilter } from "../../../../lib/use-date-filter";
+import { DateRangeFilter } from "../../../../components/ui/date-range-filter";
 
 interface ContractProposal {
   id: string;
@@ -37,12 +39,17 @@ export default function ContractProposalsPage() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<ContractProposal | null>(null);
 
+  // Server-paginated — this only filters the current page, not the full
+  // server-side result set (same known limitation as the column sort
+  // below).
+  const { filteredRows: dateFiltered, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDate } =
+    useDateFilter(data?.contracts ?? [], (c) => c.createdDate);
+
   const filtered = useMemo(() => {
-    if (!data) return [];
-    if (!search) return data.contracts;
+    if (!search) return dateFiltered;
     const q = search.toLowerCase();
-    return data.contracts.filter((c) => (c.jobTitle ?? "").toLowerCase().includes(q) || (c.clientName ?? "").toLowerCase().includes(q));
-  }, [data, search]);
+    return dateFiltered.filter((c) => (c.jobTitle ?? "").toLowerCase().includes(q) || (c.clientName ?? "").toLowerCase().includes(q));
+  }, [dateFiltered, search]);
 
   const totalPages = data ? Math.max(1, Math.ceil(data.totalCount / PAGE_SIZE)) : 1;
 
@@ -62,12 +69,15 @@ export default function ContractProposalsPage() {
               <StatTile label="Total" value={data.totalCount} />
             </KpiStrip>
 
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search job or client…"
-              className="h-9 w-64 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search job or client…"
+                className="h-9 w-64 rounded-md border border-[var(--line)] bg-transparent px-2.5 text-sm"
+              />
+              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDate} />
+            </div>
 
             {data.contracts.length === 0 ? (
               <p className="text-sm text-ink/55">No contract proposals currently.</p>
@@ -78,6 +88,7 @@ export default function ContractProposalsPage() {
               <DataTable
                 rowKey={(c) => c.id}
                 onRowClick={(c) => setSelected(c)}
+                showSummary
                 columns={[
                   { key: "job", header: "Job", render: (c) => c.jobTitle ?? "—", sortValue: (c) => c.jobTitle },
                   { key: "client", header: "Client", render: (c) => c.clientName ?? "—", sortValue: (c) => c.clientName },

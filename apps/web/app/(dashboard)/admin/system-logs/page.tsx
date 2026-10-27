@@ -11,6 +11,7 @@ import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } 
 import { useClientSort } from "../../../../lib/use-client-sort";
 import { Input } from "../../../../components/ui/input";
 import { Select } from "../../../../components/ui/select";
+import { KpiStrip, StatTile, formatCompact } from "../../../../components/chart-kit";
 
 interface AuditLogEntry {
   id: string;
@@ -119,6 +120,18 @@ export default function SystemLogsPage() {
           className="text-xs"
         />
       </div>
+
+      {/* No extra admin check needed here — this whole page is already
+          restricted to the org's primary admin (a narrower population than
+          "admin"), unlike every other table's KPI strip which needs its
+          own role gate. */}
+      {!logsQuery.isLoading && (
+        <KpiStrip>
+          <StatTile label="Total entries (filtered)" value={formatCompact(total)} />
+          <StatTile label="Failures (this page)" value={formatCompact(sortedItems.filter((e) => e.result === "FAILURE").length)} />
+          <StatTile label="Unique actors (this page)" value={formatCompact(new Set(sortedItems.map((e) => e.actor?.id ?? "system")).size)} />
+        </KpiStrip>
+      )}
 
       {logsQuery.isLoading ? (
         <LoadingRow label="Loading system logs…" />

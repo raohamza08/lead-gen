@@ -12,6 +12,8 @@ import { LoadingRow, Spinner } from "../../../components/spinner";
 import { Button } from "../../../components/ui/button";
 import { StatusBadge } from "../../../components/ui/status-badge";
 import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } from "../../../components/ui/table";
+import { DateRangeFilter } from "../../../components/ui/date-range-filter";
+import { KpiStrip, StatTile, formatCompact } from "../../../components/chart-kit";
 
 interface LeadRow extends Lead {
   score: LeadScore | null;
@@ -163,11 +165,18 @@ export default function LeadsPage() {
   const [country, setCountry] = useState("");
   const [stage, setStage] = useState("");
   const [source, setSource] = useState("");
+  // Server-side, same reasoning as every other filter here (Part: table
+  // filter/KPI rollout, 2026-10-27, explicit user request — "add option to
+  // filter anything by date in each table") — client-side date filtering
+  // on a server-paginated list would only filter whatever page happened to
+  // be loaded, silently disagreeing with the real total/page count.
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [page, setPage] = useState(1);
   // Any filter change invalidates whatever page you were on — landing on
   // page 5 of a now-much-smaller filtered result set would either show
   // nothing or read past the end silently.
-  useEffect(() => setPage(1), [debouncedSearch, industry, country, stage, source]);
+  useEffect(() => setPage(1), [debouncedSearch, industry, country, stage, source, dateFrom, dateTo]);
 
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(EMPTY_LEAD);
@@ -270,6 +279,8 @@ export default function LeadsPage() {
     ...(country ? { country } : {}),
     ...(stage ? { stage } : {}),
     ...(source ? { sourceLayer: source } : {}),
+    ...(dateFrom ? { dateFrom } : {}),
+    ...(dateTo ? { dateTo } : {}),
   };
   const leadsQuery = useQuery({
     queryKey: ["leads", leadsParams],
@@ -770,17 +781,39 @@ export default function LeadsPage() {
             ))}
           </select>
         </label>
-        {(search || industry || country || stage || source) && (
+        <label>
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Added</span>
+          <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={() => { setDateFrom(""); setDateTo(""); }} />
+        </label>
+        {(search || industry || country || stage || source || dateFrom || dateTo) && (
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); setSource(""); }}
+            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); setSource(""); setDateFrom(""); setDateTo(""); }}
           >
             Clear
           </Button>
         )}
       </div>
+
+      {isAdmin && !leadsQuery.isLoading && (
+        <KpiStrip>
+          <StatTile label="Total leads (filtered)" value={formatCompact(total)} />
+          <StatTile
+            label="Avg score (this page)"
+            value={
+              leads.some((l) => l.score?.leadScore != null)
+                ? Math.round(
+                    leads.reduce((acc, l) => acc + (l.score?.leadScore ?? 0), 0) /
+                      leads.filter((l) => l.score?.leadScore != null).length,
+                  )
+                : "—"
+            }
+          />
+          <StatTile label="Unassigned" value={formatCompact(leads.filter((l) => !l.assignedUserId).length)} />
+        </KpiStrip>
+      )}
 
       {leadsQuery.isLoading ? (
         <div className="card">

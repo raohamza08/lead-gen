@@ -6,6 +6,8 @@ import { api } from "../../../../lib/api-client";
 import { SectionCard, KpiStrip, StatTile, DataTable } from "../../../../components/chart-kit";
 import { Modal } from "../../../../components/ui/modal";
 import { UpworkAgencyConnectionGate, UpworkConnectionStatus } from "../../../../components/upwork-agency-connection-gate";
+import { useDateFilter } from "../../../../lib/use-date-filter";
+import { DateRangeFilter } from "../../../../components/ui/date-range-filter";
 
 interface Transaction {
   id: string;
@@ -43,17 +45,22 @@ export default function TransactionsPage() {
     [all],
   );
 
+  // Client-side, over whatever `all` has (this page already fetches every
+  // recent transaction, no server pagination, so this covers the full set).
+  const { filteredRows: dateFiltered, from: dateFrom, to: dateTo, setFrom: setDateFrom, setTo: setDateTo, clear: clearDate, active: dateActive } =
+    useDateFilter(all, (t) => t.occurredAt);
+
   const filtered = useMemo(() => {
-    return all
+    return dateFiltered
       .filter((t) => (subtypeFilter === "all" ? true : (t.accountingSubtype ?? t.type) === subtypeFilter))
       .filter((t) => (search ? (t.description ?? "").toLowerCase().includes(search.toLowerCase()) : true))
       .sort((a, b) => {
         const diff = new Date(a.occurredAt ?? 0).getTime() - new Date(b.occurredAt ?? 0).getTime();
         return oldestFirst ? diff : -diff;
       });
-  }, [all, subtypeFilter, search, oldestFirst]);
+  }, [dateFiltered, subtypeFilter, search, oldestFirst]);
 
-  const hasFilters = search !== "" || subtypeFilter !== "all";
+  const hasFilters = search !== "" || subtypeFilter !== "all" || dateActive;
 
   if (statusQuery.isLoading) return <p className="text-sm text-ink/55">Loading…</p>;
   if (!connected) return <UpworkAgencyConnectionGate title="Transactions & Financial History" />;
@@ -108,6 +115,7 @@ export default function TransactionsPage() {
                   ))}
                 </select>
               )}
+              <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={clearDate} />
               <button
                 type="button"
                 onClick={() => setOldestFirst((v) => !v)}
@@ -121,6 +129,7 @@ export default function TransactionsPage() {
                   onClick={() => {
                     setSearch("");
                     setSubtypeFilter("all");
+                    clearDate();
                   }}
                   className="h-9 rounded-md px-3 text-xs text-accent hover:underline"
                 >
@@ -138,6 +147,7 @@ export default function TransactionsPage() {
               <DataTable
                 rowKey={(t) => t.id}
                 onRowClick={(t) => setSelected(t)}
+                showSummary
                 columns={[
                   {
                     key: "date",

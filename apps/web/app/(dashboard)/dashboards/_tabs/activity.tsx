@@ -2,7 +2,8 @@
 
 import { Fragment, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../../../../lib/api-client";
+import { api, getCurrentUser } from "../../../../lib/api-client";
+import { KpiStrip, StatTile, formatCompact } from "../../../../components/chart-kit";
 import { DashboardCenterShell, useDashboardDateRange } from "../../../../components/dashboard-center/dashboard-shell";
 import { Input } from "../../../../components/ui/input";
 import { Button } from "../../../../components/ui/button";
@@ -47,6 +48,7 @@ export function ActivityTab() {
   // own raw from/to strings (mirroring the existing System Logs filter
   // panel), not the {range, from, to, compare} shape the other endpoints
   // share -- the filter panel below owns the real date filtering here.
+  const isAdmin = getCurrentUser()?.role === "ADMIN";
   const [dateRange, setDateRange] = useDashboardDateRange();
   const [filters, setFilters] = useState({ actorId: "", entityType: "", action: "", search: "", from: "", to: "" });
   const [page, setPage] = useState(1);
@@ -105,6 +107,14 @@ export function ActivityTab() {
           <Input type="date" value={filters.to} onChange={(e) => setFilter("to", e.target.value)} className="text-xs" />
         </label>
       </div>
+
+      {isAdmin && !activityQuery.isLoading && (
+        <KpiStrip>
+          <StatTile label="Total entries (filtered)" value={formatCompact(total)} />
+          <StatTile label="Failures (this page)" value={formatCompact(sortedItems.filter((e) => e.result === "FAILURE").length)} />
+          <StatTile label="Unique actors (this page)" value={formatCompact(new Set(sortedItems.map((e) => e.actor?.id ?? "system")).size)} />
+        </KpiStrip>
+      )}
 
       {activityQuery.isLoading ? (
         <SkeletonCard className="h-64" />

@@ -356,6 +356,7 @@ export function EmailTab() {
             <EmptyState title="No sending sessions yet" />
           ) : (
             <DataTable
+              showSummary
               rowKey={(r) => r.id}
               rows={sessions}
               columns={[
