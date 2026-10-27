@@ -10,8 +10,11 @@ import { PrismaService } from "../../common/prisma/prisma.service";
  *   interview) -- net these against JOB_APPLICATION, don't count as
  *   separate spend.
  * - PAID_INVITATION_BADGE: connects spent responding to an invite with a
- *   paid "badge" -- real invite-related spend, previously assumed to not
- *   exist ("invites cost no connects").
+ *   paid "badge." Classified INVITE briefly (2026-10-28), then explicitly
+ *   moved to OTHER same day per direct user correction ("you included 122
+ *   connects in the invites connects, remove them from the invites
+ *   connects") -- don't re-add this to INVITE without the user asking
+ *   again.
  * - AD_BOOSTED_PROFILE_MFS: Upwork's own transaction history labels this
  *   "Your Boosted Profile received a billable click" -- explicit user
  *   correction, 2026-10-28, after an initial build wrongly treated this as
@@ -52,7 +55,7 @@ const REASON_CATEGORY: Record<string, ConnectsSpendCategory> = {
   JOB_APPLICATION: "BIDDING",
   REFUND_JOB_CANCELLATION: "BIDDING",
   REFUND_INTERVIEW_WON: "BIDDING",
-  PAID_INVITATION_BADGE: "INVITE",
+  PAID_INVITATION_BADGE: "OTHER",
   AD_BOOSTED_PROFILE_MFS: "INVITE",
   // Scraped-history literal labels (see docblock above).
   "Applied to job": "BIDDING",

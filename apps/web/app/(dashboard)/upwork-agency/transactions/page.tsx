@@ -87,9 +87,9 @@ export default function TransactionsPage() {
             <KpiStrip>
               <StatTile label="Bidding (job applications)" value={connects.categoryBreakdown.bidding} />
               <StatTile
-                label="Invites (badge + boosted profile)"
+                label="Invites (boosted profile)"
                 value={connects.categoryBreakdown.invites}
-                hint="Invitation badges and boosted-profile billable clicks"
+                hint="Boosted-profile billable clicks only — paid invitation badges are tracked under Other, not Invites"
               />
               {connects.categoryBreakdown.other > 0 && <StatTile label="Other" value={connects.categoryBreakdown.other} />}
             </KpiStrip>

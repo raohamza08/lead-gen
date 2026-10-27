@@ -35,13 +35,11 @@ export class UpworkConnectsUsageService {
       // Category breakdown (Part: Connects usage monitoring, 2026-10-27,
       // explicit user request to separate bidding vs invite spend) -- same
       // TREND_DAYS window as the balance history above, for one consistent
-      // "last 30 days" picture on this widget. "invites" includes both
-      // PAID_INVITATION_BADGE and AD_BOOSTED_PROFILE_MFS ("Your Boosted
-      // Profile received a billable click" in Upwork's own transaction
-      // history) -- see connects-category.util.ts's own docblock for why
-      // boosted-profile spend counts as invite-acquisition cost, not a
-      // separate excluded category (corrected 2026-10-28 after an initial
-      // build wrongly split it out).
+      // "last 30 days" picture on this widget. "invites" is AD_BOOSTED_PROFILE_MFS
+      // ("Your Boosted Profile received a billable click" in Upwork's own
+      // transaction history) only -- PAID_INVITATION_BADGE was briefly
+      // included too, then explicitly excluded same day per direct user
+      // correction. See connects-category.util.ts's own docblock.
       sumConnectsByCategory(this.prisma, orgId, { gte: since }),
     ]);
 

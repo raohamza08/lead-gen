@@ -246,11 +246,11 @@ export class UpworkDashboardService {
     // Real invite spend has no manual-entry equivalent at all (the old
     // assumption was "invites cost no connects"), so this is simply 0 for
     // any part of the period the real ledger doesn't cover -- not
-    // fabricated, not backfilled. Includes AD_BOOSTED_PROFILE_MFS ("Your
-    // Boosted Profile received a billable click") alongside
-    // PAID_INVITATION_BADGE -- explicit user correction, 2026-10-28: a
-    // boosted profile is what draws in client invites, so its connects
-    // spend is real invite-acquisition cost, not unrelated ad spend. See
+    // fabricated, not backfilled. This is boosted-profile billable clicks
+    // only (AD_BOOSTED_PROFILE_MFS / "Your Boosted Profile received a
+    // billable click") -- PAID_INVITATION_BADGE was briefly included here
+    // too, then explicitly removed same day per direct user correction
+    // ("remove them from the invites connects"). See
     // connects-category.util.ts's own docblock.
     const connectsUsedInvites = realCategoryTotals.invite;
 
@@ -305,10 +305,11 @@ export class UpworkDashboardService {
           : ledgerStart <= current.from
             ? "real_ledger"
             : "hybrid",
-      // Real invite-connects spend (PAID_INVITATION_BADGE + the boosted-
-      // profile billable-click spend that draws invites in) -- did not
-      // exist as a tracked figure before the real Connects ledger synced;
-      // 0 for any period entirely before that, by design, not an error.
+      // Real invite-connects spend (boosted-profile billable clicks only --
+      // PAID_INVITATION_BADGE is deliberately excluded, explicit user
+      // correction) -- did not exist as a tracked figure before the real
+      // Connects ledger synced; 0 for any period entirely before that, by
+      // design, not an error.
       connectsUsedInvites,
       inviteConnectCost,
       costPerInvite: safeDivide(inviteConnectCost, totalInvites),

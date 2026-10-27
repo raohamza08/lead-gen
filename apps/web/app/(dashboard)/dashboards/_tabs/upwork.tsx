@@ -559,7 +559,7 @@ export function UpworkTab() {
                 iconColor="#ec4899"
                 label="Connects Used"
                 value={num(kpis.connectsUsedInvites)}
-                caption="From paid invitation badge + boosted profile"
+                caption="From boosted-profile billable clicks"
               />
               <IconStat icon={<CoinsIcon />} iconColor="var(--series-4)" label="Avg. Connects / Invite" value={num(kpis.avgConnectsPerInvite)} />
               <IconStat
