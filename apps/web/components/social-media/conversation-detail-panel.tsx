@@ -111,6 +111,74 @@ function FileIcon() {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 16 16" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth={1.8}>
+      <path d="m3 8.5 3 3 7-7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function EmojiIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8.5 10.5h.01M15.5 10.5h.01" strokeLinecap="round" />
+      <path d="M8 14.5s1.3 2 4 2 4-2 4-2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+const QUICK_EMOJIS = [
+  "😀", "😂", "😍", "🙏", "👍", "👏", "🔥", "🎉",
+  "❤️", "😢", "😅", "🤔", "😎", "💯", "✅", "👋",
+  "🙌", "😭", "🥳", "😡", "🤝", "⚡", "💡", "😁",
+];
+
+/**
+ * Minimal emoji inserter for the composer (Part: WhatsApp module UI
+ * redesign, 2026-10-27, explicit user request following a reference
+ * screenshot showing an emoji icon next to the composer's send button). A
+ * small fixed grid rather than a full picker library — no search/categories/
+ * skin-tone variants — kept deliberately small since the ask was visual
+ * parity with the reference, not a complete emoji-picker feature.
+ */
+function EmojiPickerButton({ onPick }: { onPick: (emoji: string) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        title="Emoji"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-ink/55 hover:bg-ink/[0.05]"
+      >
+        <EmojiIcon />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute bottom-12 left-0 z-20 grid w-56 grid-cols-6 gap-1 rounded-lg border border-[var(--line)] bg-surface-elevated p-2 shadow-lg">
+            {QUICK_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => {
+                  onPick(emoji);
+                  setOpen(false);
+                }}
+                className="rounded p-1 text-lg hover:bg-ink/10"
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CloseIcon() {
   return (
     <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}>
@@ -627,7 +695,10 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
               >
                 <div className="whitespace-pre-wrap">{m.messageText}</div>
                 {m.mediaUrl && <MediaAttachment url={m.mediaUrl} mimeType={m.mediaMimeType} filename={m.mediaFilename} isOurs={m.fromUs} />}
-                <div className={`mt-1 text-right text-[10px] ${m.fromUs ? "text-white/70" : "text-ink/40"}`}>{timeAgo(m.sentAt)}</div>
+                <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.fromUs ? "text-white/70" : "text-ink/40"}`}>
+                  <span>{timeAgo(m.sentAt)}</span>
+                  {m.fromUs && <CheckIcon />}
+                </div>
               </div>
             </div>
           );
@@ -667,6 +738,7 @@ export function ConversationDetailPanel({ conversationId, capabilitiesByPlatform
               placeholder="Type a message"
               className="flex-1 rounded-full border-0 bg-ink/[0.05] px-4 py-2.5 text-sm outline-none focus:ring-1 focus:ring-accent"
             />
+            <EmojiPickerButton onPick={(emoji) => setReplyText((t) => t + emoji)} />
             <button
               type="submit"
               disabled={replyMutation.isPending || !replyText.trim()}

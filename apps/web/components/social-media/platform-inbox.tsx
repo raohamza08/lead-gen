@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { ReactNode, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
 import { useRealtimeRefetch } from "../../lib/realtime";
@@ -9,7 +9,6 @@ import { Avatar } from "../ui/avatar";
 import { Tabs } from "../ui/tabs";
 import { Modal } from "../ui/modal";
 import { LoadingRow, Spinner } from "../spinner";
-import { RecordRow } from "../record-list";
 
 interface SocialAccountItem {
   id: string;
@@ -46,6 +45,67 @@ const CHIPS = [
   { value: "PENDING", label: "Pending" },
   { value: "CLOSED", label: "Closed" },
 ] as const;
+
+/**
+ * One chat-list row (Part: WhatsApp module UI redesign, 2026-10-27, explicit
+ * user request following a reference screenshot). Replaces the generic
+ * cross-app RecordRow this list used before — that component's thin 1px
+ * selected-outline and full-width hairline-divided rows don't match the
+ * screenshot's floating-card list (each row its own rounded box with a
+ * visible gap from its neighbors, selected row getting a solid colored
+ * border + tinted background rather than a hairline outline). Kept local to
+ * this file rather than added to record-list.tsx since RecordRow is shared
+ * by every other module's list/detail pattern (Leads, Email Hub, etc.) and
+ * this look is specific to WhatsApp's own brand styling, not a general
+ * pattern change.
+ */
+function ChatRow({
+  avatar,
+  primary,
+  secondary,
+  timestamp,
+  unread,
+  unreadCount,
+  selected,
+  onClick,
+}: {
+  avatar: ReactNode;
+  primary: string;
+  secondary: string;
+  timestamp: string;
+  unread: boolean;
+  unreadCount: number;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      role="option"
+      aria-selected={selected}
+      className={`mx-2 my-1 flex w-[calc(100%-1rem)] items-start gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors ${
+        selected ? "border-accent bg-accent/10" : "border-transparent hover:bg-ink/[0.04]"
+      }`}
+    >
+      {avatar}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center justify-between gap-2">
+          <span className="truncate text-sm font-semibold text-ink">{primary}</span>
+          <span className={`shrink-0 text-[11px] ${unread ? "font-semibold text-accent" : "text-ink/40"}`}>{timestamp}</span>
+        </span>
+        <span className="mt-0.5 flex items-center justify-between gap-2">
+          <span className={`truncate text-xs ${unread ? "font-medium text-ink/80" : "text-ink/50"}`}>{secondary}</span>
+          {unread && (
+            <span className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+              {unreadCount > 99 ? "99+" : unreadCount}
+            </span>
+          )}
+        </span>
+      </span>
+    </button>
+  );
+}
 
 function timeAgo(iso: string): string {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -244,24 +304,16 @@ export function PlatformInbox({
               const contactLabel = c.contactName || c.contactUsername || "Unknown contact";
               const unread = c.unreadCount > 0;
               return (
-                <RecordRow
+                <ChatRow
                   key={c.id}
                   onClick={() => setSelectedId(c.id)}
                   selected={selectedId === c.id}
                   unread={unread}
+                  unreadCount={c.unreadCount}
                   avatar={<Avatar name={contactLabel} imageUrl={c.contactProfileImageUrl} size={44} />}
                   primary={contactLabel}
                   timestamp={timeAgo(c.lastMessageAt)}
-                  timestampUnread={unread}
                   secondary={c.lastMessage || "—"}
-                  secondaryUnread={unread}
-                  footer={
-                    unread ? (
-                      <span className="flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
-                        {c.unreadCount > 99 ? "99+" : c.unreadCount}
-                      </span>
-                    ) : undefined
-                  }
                 />
               );
             })

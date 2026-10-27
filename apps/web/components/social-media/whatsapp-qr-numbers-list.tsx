@@ -177,7 +177,7 @@ export function WhatsAppQrNumbersList() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold tracking-tight">WhatsApp (Team) — Numbers</h1>
+        <h1 className="text-lg font-semibold tracking-tight">Numbers</h1>
         {canManageAccounts && (
           <button
             type="button"
