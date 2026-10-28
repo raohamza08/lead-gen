@@ -438,6 +438,8 @@ export const api = {
   getUpworkProposals: (params: Record<string, string> = {}) =>
     request(`/upwork/proposals?${new URLSearchParams(params).toString()}`),
   getUpworkStats: () => request("/upwork/proposals/stats"),
+  getUpworkEarningsSummary: (params: Record<string, string> = {}) =>
+    request(`/upwork/proposals/earnings-summary?${new URLSearchParams(params).toString()}`),
   getUpworkPicklists: () => request("/upwork/proposals/picklists"),
   updateUpworkPicklists: (body: Record<string, string[]>) =>
     request("/upwork/proposals/picklists", { method: "PATCH", body: JSON.stringify(body) }),

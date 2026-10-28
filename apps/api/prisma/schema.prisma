@@ -1704,6 +1704,16 @@ enum UpworkProjectPricingType {
   FIXED
 }
 
+/// Part: Upwork earnings tracking, 2026-10-28 — how `serviceFeeValue` on a
+/// won proposal should be read: a percentage of `clientEarnings` or an
+/// already-resolved dollar amount. Kept explicit rather than inferring from
+/// magnitude (e.g. "under 100 means percent") since a tiny fixed-price
+/// contract's fee could legitimately be under 100 in dollars too.
+enum UpworkServiceFeeType {
+  PERCENT
+  FIXED
+}
+
 /// Outcome tracking (the sheet's manually-updated "Status" column) — starts
 /// at SUBMITTED and is moved forward by whoever is following up, ending at
 /// WON or LOST. Pruned to exactly this set per explicit user request
@@ -1810,6 +1820,34 @@ model UpworkProposal {
   /// hours and the Request vs Achievement report: a project is "onboarded"
   /// when it's won, not when the proposal/invite was originally submitted.
   onboardedAt DateTime? @map("onboarded_at")
+
+  /// Earnings tracking (Part: Upwork earnings tracking, 2026-10-28,
+  /// explicit user request — gross contract value, service fee, and net
+  /// earnings, entered once a proposal is WON). Decimal, same convention as
+  /// Lead/LeadScore's own `expectedValue`, not Float — avoids binary
+  /// floating-point drift on money. All four stay null until someone
+  /// actually enters earnings; a null `netEarnings` is the one signal
+  /// `getEarningsSummary` uses to flag a won record as "still needs
+  /// earnings info" — never defaulted to 0, per explicit business rule
+  /// ("a missing fee must not silently be treated as zero").
+  clientEarnings   Decimal?              @map("client_earnings")
+  /// How `serviceFeeValue` below should be interpreted — null until
+  /// someone picks one, so a half-entered fee never gets silently
+  /// resolved as either reading.
+  serviceFeeType   UpworkServiceFeeType? @map("service_fee_type")
+  /// The raw number as typed (a percent like 10, or a dollar amount like
+  /// 100) — kept separately from `serviceFeeAmount` so re-opening the
+  /// earnings form round-trips exactly what was entered, not a derived
+  /// value back-solved from the resolved amount.
+  serviceFeeValue  Decimal?              @map("service_fee_value")
+  /// Always server-computed from clientEarnings/serviceFeeType/
+  /// serviceFeeValue (UpworkService.resolveEarnings) — never accepted
+  /// directly from a client request, so this can't drift from the inputs
+  /// it's derived from.
+  serviceFeeAmount Decimal?              @map("service_fee_amount")
+  /// = clientEarnings - serviceFeeAmount, same server-only guarantee as
+  /// serviceFeeAmount above.
+  netEarnings      Decimal?              @map("net_earnings")
 
   @@index([orgId, type])
   @@index([orgId, status])

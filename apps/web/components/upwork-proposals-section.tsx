@@ -24,6 +24,7 @@ type UpworkProposalStatus =
   | "LOST";
 type UpworkAccountType = "TRAINING" | "LIVE";
 type UpworkProjectPricingType = "HOURLY" | "FIXED";
+type UpworkServiceFeeType = "PERCENT" | "FIXED";
 
 interface UpworkProposal {
   id: string;
@@ -43,7 +44,20 @@ interface UpworkProposal {
   closedBy: string | null;
   createdAt: string;
   acceptedAt: string | null;
+  // Stamped the moment status first becomes WON — "winning date" in the
+  // earnings panel below (Part: Upwork earnings tracking, 2026-10-28).
+  onboardedAt: string | null;
   notifyUserIds: string[];
+  // Earnings tracking — Prisma Decimal columns come back from the API as
+  // numeric strings (same convention as Lead.score.expectedValue), hence
+  // `string | null` rather than `number | null`; always run through
+  // Number(...) before doing math, same as every other money field in
+  // this app already does.
+  clientEarnings: string | null;
+  serviceFeeType: UpworkServiceFeeType | null;
+  serviceFeeValue: string | null;
+  serviceFeeAmount: string | null;
+  netEarnings: string | null;
 }
 
 interface OrgUser {
@@ -87,6 +101,16 @@ interface UpworkPicklists {
 const inputClass = "w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm";
 const labelClass = "mb-1 block text-xs text-ink/60";
 
+/** `v` is a Prisma Decimal column as it comes back over JSON — a numeric
+ *  string, or null when never entered (Part: Upwork earnings tracking,
+ *  2026-10-28). Never defaults to $0 — a null stays "—", matching the
+ *  backend's own "missing fee isn't zero" rule. */
+function formatMoney(v: string | number | null): string {
+  if (v === null) return "—";
+  const n = Number(v);
+  return `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 /**
  * Replaces the team's daily Upwork Proposals Google Form + Sheet (Part:
  * Upwork Proposals, 2026-09-29) — one form/list per proposal type (Bidding /
@@ -96,7 +120,13 @@ const labelClass = "mb-1 block text-xs text-ink/60";
 const PAGE_SIZE = 100;
 
 export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
-  const isAdmin = getCurrentUser()?.role === "ADMIN";
+  const role = getCurrentUser()?.role;
+  const isAdmin = role === "ADMIN";
+  // Earnings is financial data — same ADMIN/MANAGER bar the backend
+  // enforces in UpworkService.update (Part: Upwork earnings tracking,
+  // 2026-10-28). Everyone can still see the entered figures; only these
+  // two roles get the "add/edit earnings" entry points.
+  const canEditEarnings = role === "ADMIN" || role === "MANAGER";
   const [items, setItems] = useState<UpworkProposal[] | null>(null);
   // Client-side, current page only (Part: table filter/KPI rollout,
   // 2026-10-27) — this list is server-paginated, so a true full-dataset
@@ -118,6 +148,7 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
   const [savingId, setSavingId] = useState<string | null>(null);
   const [followUpTarget, setFollowUpTarget] = useState<UpworkProposal | null>(null);
   const [detailTarget, setDetailTarget] = useState<UpworkProposal | null>(null);
+  const [earningsTarget, setEarningsTarget] = useState<UpworkProposal | null>(null);
 
   const [profileName, setProfileName] = useState("");
   const [jobCategory, setJobCategory] = useState("");
@@ -231,6 +262,15 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
     try {
       const updated = (await api.updateUpworkProposal(id, body)) as UpworkProposal;
       setItems((prev) => prev?.map((p) => (p.id === id ? updated : p)) ?? null);
+      // Prompt for earnings the moment a proposal is first marked Won, if
+      // nobody's entered them yet (Part: Upwork earnings tracking,
+      // 2026-10-28, explicit spec request — "when a team member marks a
+      // bid or invite as Client Won, they should be able to enter the
+      // relevant earnings information"). Only fires on the inline status
+      // dropdown's own transition, not every re-save of an already-Won row.
+      if (body.status === "WON" && updated.clientEarnings === null && canEditEarnings) {
+        setEarningsTarget(updated);
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -314,6 +354,32 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         className="w-28 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
       />
     ) },
+    // Earnings tracking (Part: Upwork earnings tracking, 2026-10-28) — only
+    // ever meaningful once a row is actually WON, so every cell below reads
+    // "—" otherwise rather than showing a stale/pre-win figure. "Client
+    // Earnings" doubles as the edit trigger (click → EarningsModal) for
+    // ADMIN/MANAGER on a Won row; the fee/net columns are pure derived
+    // display, never directly editable.
+    { key: "onboardedAt", header: "Winning Date", sortValue: (r) => (r.onboardedAt ? new Date(r.onboardedAt).getTime() : null), render: (r) => (
+      r.onboardedAt ? new Date(r.onboardedAt).toLocaleDateString() : "—"
+    ) },
+    { key: "clientEarnings", header: "Client Earnings", numeric: true, sortValue: (r) => (r.clientEarnings !== null ? Number(r.clientEarnings) : null), render: (r) => (
+      r.status !== "WON" ? (
+        <span className="text-ink/40">—</span>
+      ) : canEditEarnings ? (
+        <button onClick={() => setEarningsTarget(r)} className="text-xs text-accent hover:underline">
+          {r.clientEarnings !== null ? formatMoney(r.clientEarnings) : "+ Add"}
+        </button>
+      ) : (
+        <span>{formatMoney(r.clientEarnings)}</span>
+      )
+    ) },
+    { key: "serviceFeeAmount", header: "Upwork Service Fee", numeric: true, sortValue: (r) => (r.serviceFeeAmount !== null ? Number(r.serviceFeeAmount) : null), render: (r) => (
+      <span className={r.status === "WON" ? "" : "text-ink/40"}>{r.status === "WON" ? formatMoney(r.serviceFeeAmount) : "—"}</span>
+    ) },
+    { key: "netEarnings", header: "Net Earnings", numeric: true, sortValue: (r) => (r.netEarnings !== null ? Number(r.netEarnings) : null), render: (r) => (
+      <span className={r.status === "WON" ? "font-medium" : "text-ink/40"}>{r.status === "WON" ? formatMoney(r.netEarnings) : "—"}</span>
+    ) },
     // Closed By is dropped for invites (Part: Upwork Invites, 2026-09-30) —
     // Won/Lost is set from the Status dropdown above, which is the only
     // place that should change it; a separate free-text "closed by" field
@@ -385,6 +451,8 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
       </div>
 
       <UpworkPicklistManager />
+
+      <EarningsSummaryPanel type={type} />
 
       {error && (
         <div className="mb-3 mt-3 rounded-lg border border-[rgb(var(--bad-rgb)/0.4)] bg-[rgb(var(--bad-rgb)/0.06)] px-3 py-2 text-sm text-bad">
@@ -560,11 +628,25 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
           proposal={detailTarget}
           type={type}
           picklists={picklists}
+          canEditEarnings={canEditEarnings}
+          onEditEarnings={(p) => { setDetailTarget(null); setEarningsTarget(p); }}
           onClose={() => setDetailTarget(null)}
           onSaved={(updated) => {
             setItems((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? null);
             setDetailTarget(null);
             setNotice("Proposal updated.");
+          }}
+        />
+      )}
+
+      {earningsTarget && (
+        <EarningsModal
+          proposal={earningsTarget}
+          onClose={() => setEarningsTarget(null)}
+          onSaved={(updated) => {
+            setItems((prev) => prev?.map((p) => (p.id === updated.id ? updated : p)) ?? null);
+            setEarningsTarget(null);
+            setNotice("Earnings saved.");
           }}
         />
       )}
@@ -585,12 +667,16 @@ function ProposalDetailModal({
   proposal,
   type,
   picklists,
+  canEditEarnings,
+  onEditEarnings,
   onClose,
   onSaved,
 }: {
   proposal: UpworkProposal;
   type: UpworkProposalType;
   picklists?: UpworkPicklists;
+  canEditEarnings: boolean;
+  onEditEarnings: (proposal: UpworkProposal) => void;
   onClose: () => void;
   onSaved: (updated: UpworkProposal) => void;
 }) {
@@ -726,6 +812,23 @@ function ProposalDetailModal({
             <input value={closedBy} onChange={(e) => setClosedBy(e.target.value)} className={inputClass} />
           </label>
         )}
+        {proposal.status === "WON" && (
+          <div className="rounded-lg border border-[var(--line)] p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className={labelClass + " mb-0"}>Earnings</span>
+              {canEditEarnings && (
+                <button onClick={() => onEditEarnings(proposal)} className="text-xs text-accent hover:underline">
+                  {proposal.clientEarnings !== null ? "Edit earnings" : "+ Add earnings"}
+                </button>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div><span className="text-ink/50">Client earnings</span><br />{formatMoney(proposal.clientEarnings)}</div>
+              <div><span className="text-ink/50">Service fee</span><br />{formatMoney(proposal.serviceFeeAmount)}</div>
+              <div><span className="text-ink/50">Net earnings</span><br />{formatMoney(proposal.netEarnings)}</div>
+            </div>
+          </div>
+        )}
         {error && <span className="text-xs text-bad">{error}</span>}
         <div className="flex items-center justify-end gap-2 pt-1">
           <Button size="sm" variant="secondary" disabled={saving} onClick={onClose}>Cancel</Button>
@@ -805,5 +908,194 @@ function FollowUpRecipientsModal({
         </div>
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Enter/edit a won proposal's earnings (Part: Upwork earnings tracking,
+ * 2026-10-28). Opens three ways: auto-prompted the moment a row is first
+ * marked Won (see UpworkProposalsSection.updateField), the "Client
+ * Earnings" table cell for an already-Won row, or ProposalDetailModal's own
+ * "Edit earnings" button — all three just pass a proposal in here.
+ *
+ * serviceFeeAmount/netEarnings are never sent — the backend
+ * (UpworkService.resolveEarnings) always derives them from the three
+ * fields below, so this form can't drift from that math. The live preview
+ * here mirrors that same formula purely for immediate feedback; the saved
+ * figures always come back from the server's own computation, not this
+ * preview.
+ */
+function EarningsModal({
+  proposal,
+  onClose,
+  onSaved,
+}: {
+  proposal: UpworkProposal;
+  onClose: () => void;
+  onSaved: (updated: UpworkProposal) => void;
+}) {
+  const [clientEarnings, setClientEarnings] = useState(proposal.clientEarnings ?? "");
+  const [serviceFeeType, setServiceFeeType] = useState<UpworkServiceFeeType>(proposal.serviceFeeType ?? "PERCENT");
+  const [serviceFeeValue, setServiceFeeValue] = useState(proposal.serviceFeeValue ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const gross = clientEarnings === "" ? null : Number(clientEarnings);
+  const feeValue = serviceFeeValue === "" ? null : Number(serviceFeeValue);
+  // Preview-only mirror of UpworkService.resolveEarnings — the fee is
+  // "unknown" (not zero) until a value is actually entered, same as the
+  // backend's own rule.
+  const feeAmount = gross !== null && feeValue !== null ? (serviceFeeType === "PERCENT" ? Math.round(gross * (feeValue / 100) * 100) / 100 : feeValue) : null;
+  const net = gross !== null && feeAmount !== null ? Math.round((gross - feeAmount) * 100) / 100 : null;
+
+  async function save() {
+    if (gross === null || gross < 0) {
+      setError("Enter the client's earnings amount.");
+      return;
+    }
+    if (serviceFeeType === "PERCENT" && feeValue !== null && feeValue > 100) {
+      setError("A percentage service fee can't be over 100%.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = (await api.updateUpworkProposal(proposal.id, {
+        clientEarnings: gross,
+        ...(feeValue !== null ? { serviceFeeType, serviceFeeValue: feeValue } : {}),
+      })) as UpworkProposal;
+      onSaved(updated);
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal open onOpenChange={(open) => !open && onClose()} title="Enter earnings" contentClassName="w-full max-w-sm">
+      <div className="flex flex-col gap-3 text-sm">
+        <p className="text-xs text-ink/55">
+          {proposal.clientName ?? "This client"}{"'"}s contract value and Upwork{"'"}s service fee — net earnings is
+          calculated for you.
+        </p>
+        <label className="block">
+          <span className={labelClass}>Client earnings ($)</span>
+          <input
+            value={clientEarnings}
+            onChange={(e) => setClientEarnings(e.target.value)}
+            type="number"
+            min={0}
+            step="0.01"
+            autoFocus
+            className={inputClass}
+          />
+        </label>
+        <div className="grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className={labelClass}>Upwork service fee</span>
+            <select value={serviceFeeType} onChange={(e) => setServiceFeeType(e.target.value as UpworkServiceFeeType)} className={inputClass}>
+              <option value="PERCENT">Percent (%)</option>
+              <option value="FIXED">Fixed amount ($)</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className={labelClass}>{serviceFeeType === "PERCENT" ? "Fee %" : "Fee $"}</span>
+            <input
+              value={serviceFeeValue}
+              onChange={(e) => setServiceFeeValue(e.target.value)}
+              type="number"
+              min={0}
+              max={serviceFeeType === "PERCENT" ? 100 : undefined}
+              step="0.01"
+              placeholder={serviceFeeType === "PERCENT" ? "e.g. 10" : "e.g. 100"}
+              className={inputClass}
+            />
+          </label>
+        </div>
+        <div className="rounded-lg border border-[var(--line)] p-3 text-xs">
+          <div className="flex justify-between py-0.5"><span className="text-ink/55">Service fee amount</span><span>{feeAmount !== null ? formatMoney(feeAmount) : "— (enter a fee to calculate)"}</span></div>
+          <div className="flex justify-between py-0.5 font-medium"><span className="text-ink/70">Net earnings</span><span>{net !== null ? formatMoney(net) : "—"}</span></div>
+        </div>
+        {error && <span className="text-xs text-bad">{error}</span>}
+        <div className="flex items-center justify-end gap-2 pt-1">
+          <Button size="sm" variant="secondary" disabled={saving} onClick={onClose}>Cancel</Button>
+          <Button size="sm" disabled={saving || gross === null} loading={saving} onClick={save}>Save earnings</Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Monthly earnings summary for this page's own type (Part: Upwork earnings
+ * tracking, 2026-10-28, spec section 3/4/5) — month+year picker over
+ * UpworkService.getEarningsSummary, which already scopes to WON rows
+ * bucketed by `onboardedAt` and excludes incomplete earnings from the
+ * totals server-side; this component just renders whichever of
+ * `bidding`/`invite` matches its own `type` prop, so Bidding's and
+ * Invite's panels never bleed into each other even though one API call
+ * returns both (plus `combined`, unused here — there's no single overall
+ * Upwork dashboard page yet to put it on).
+ */
+function EarningsSummaryPanel({ type }: { type: UpworkProposalType }) {
+  const now = new Date();
+  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(now.getFullYear());
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["upwork-earnings-summary", month, year],
+    queryFn: () =>
+      api.getUpworkEarningsSummary({ month: String(month), year: String(year) }) as Promise<{
+        bidding: { clientsWon: number; totalClientEarnings: number; totalServiceFees: number; totalNetEarnings: number; missingEarningsCount: number };
+        invite: { clientsWon: number; totalClientEarnings: number; totalServiceFees: number; totalNetEarnings: number; missingEarningsCount: number };
+      }>,
+  });
+
+  const summary = data?.[type === "BIDDING" ? "bidding" : "invite"];
+  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const years = Array.from({ length: 4 }, (_, i) => now.getFullYear() - i);
+
+  return (
+    <div className="mt-4 rounded-lg border border-[var(--line)] p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-ink/55">Monthly earnings</h3>
+        <div className="flex items-center gap-2">
+          <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs">
+            {monthNames.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+          </select>
+          <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="rounded border border-[var(--line)] bg-transparent px-2 py-1 text-xs">
+            {years.map((y) => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+
+      {isLoading || !summary ? (
+        <p className="text-xs text-ink/50">Loading…</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <SummaryTile label="Clients Won" value={String(summary.clientsWon)} />
+            <SummaryTile label="Total Client Earnings" value={formatMoney(summary.totalClientEarnings)} />
+            <SummaryTile label="Total Upwork Service Fees" value={formatMoney(summary.totalServiceFees)} />
+            <SummaryTile label="Total Net Earnings" value={formatMoney(summary.totalNetEarnings)} tone="good" />
+          </div>
+          {summary.missingEarningsCount > 0 && (
+            <p className="mt-2 text-[11px] text-gold">
+              {summary.missingEarningsCount} won {summary.missingEarningsCount === 1 ? "record" : "records"} this month still need{summary.missingEarningsCount === 1 ? "s" : ""} earnings entered — excluded from the totals above.
+            </p>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function SummaryTile({ label, value, tone }: { label: string; value: string; tone?: "good" }) {
+  return (
+    <div className="rounded-md bg-ink/[0.03] p-2.5">
+      <div className="text-[11px] text-ink/50">{label}</div>
+      <div className={`mt-0.5 text-base font-semibold ${tone === "good" ? "text-good" : ""}`}>{value}</div>
+    </div>
   );
 }

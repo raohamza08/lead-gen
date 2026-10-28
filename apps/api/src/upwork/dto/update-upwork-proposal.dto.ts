@@ -1,4 +1,4 @@
-import { UpworkAccountType, UpworkProjectPricingType, UpworkProposalStatus } from "@prisma/client";
+import { UpworkAccountType, UpworkProjectPricingType, UpworkProposalStatus, UpworkServiceFeeType } from "@prisma/client";
 import { IsEnum, IsInt, IsNumber, IsOptional, IsString, Min, MinLength } from "class-validator";
 
 /** Everything an operator would ever edit after the initial submission.
@@ -25,4 +25,16 @@ export class UpdateUpworkProposalDto {
   @IsOptional() @IsString() @MinLength(1) submittedBy?: string;
   @IsOptional() @IsInt() @Min(0) connects?: number;
   @IsOptional() @IsEnum(UpworkAccountType) accountType?: UpworkAccountType;
+
+  /** Earnings tracking (Part: Upwork earnings tracking, 2026-10-28).
+   *  `serviceFeeAmount`/`netEarnings` are deliberately NOT settable here —
+   *  UpworkService.resolveEarnings always derives them from these three
+   *  inputs server-side, so a client can never desync net earnings from
+   *  what gross/fee actually say. ADMIN/MANAGER only, enforced in the
+   *  service (not a route-level @Roles guard — PATCH :id also carries
+   *  every other, non-restricted field, so the check has to be
+   *  per-field, not per-route). */
+  @IsOptional() @IsNumber() @Min(0) clientEarnings?: number;
+  @IsOptional() @IsEnum(UpworkServiceFeeType) serviceFeeType?: UpworkServiceFeeType;
+  @IsOptional() @IsNumber() @Min(0) serviceFeeValue?: number;
 }

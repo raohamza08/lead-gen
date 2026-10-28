@@ -1,9 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { NotificationCategory, Prisma, UpworkAccountType, UpworkProposalStatus, UpworkProposalType } from "@prisma/client";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { NotificationCategory, Prisma, Role, UpworkAccountType, UpworkProposalStatus, UpworkProposalType, UpworkServiceFeeType } from "@prisma/client";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { CreateUpworkProposalDto } from "./dto/create-upwork-proposal.dto";
 import { UpdateUpworkProposalDto } from "./dto/update-upwork-proposal.dto";
 import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
+import { QueryEarningsSummaryDto } from "./dto/query-earnings-summary.dto";
 import { UpdateUpworkPicklistsDto } from "./dto/update-upwork-picklists.dto";
 import { SetNotifyRecipientsDto } from "./dto/set-notify-recipients.dto";
 import { NotificationsService } from "../notifications/notifications.service";
@@ -29,6 +30,49 @@ export class UpworkService {
     private readonly notifications: NotificationsService,
     private readonly clickupSync: UpworkClickupSyncService,
   ) {}
+
+  /** Derives serviceFeeAmount/netEarnings from clientEarnings/serviceFeeType/
+   *  serviceFeeValue (Part: Upwork earnings tracking, 2026-10-28) — the one
+   *  place this math happens, so create/update can never store a net
+   *  earnings figure that doesn't actually equal gross minus fee.
+   *
+   *  `existing` carries whatever's already stored, since an edit might only
+   *  touch one of the three inputs (e.g. just raising clientEarnings once
+   *  the final contract value is known) — merging against it, not against
+   *  bare `dto`, means resolving with the full set every time rather than
+   *  silently nulling out a fee that wasn't part of this particular save.
+   *
+   *  Returns null for serviceFeeAmount/netEarnings whenever clientEarnings
+   *  or the fee isn't fully known yet — never 0, per the explicit business
+   *  rule that a missing fee must not be treated as zero. Rounded to cents
+   *  (plain float math on already-decimal-shaped inputs is fine here; the
+   *  stored column is still DECIMAL, this is just display-grade rounding so
+   *  a 12.5% fee on $133.33 doesn't store a 10-digit tail).
+   */
+  private resolveEarnings(
+    existing: { clientEarnings: Prisma.Decimal | null; serviceFeeType: UpworkServiceFeeType | null; serviceFeeValue: Prisma.Decimal | null },
+    dto: { clientEarnings?: number; serviceFeeType?: UpworkServiceFeeType; serviceFeeValue?: number },
+  ): { clientEarnings: number | null; serviceFeeType: UpworkServiceFeeType | null; serviceFeeValue: number | null; serviceFeeAmount: number | null; netEarnings: number | null } {
+    const clientEarnings = dto.clientEarnings !== undefined ? dto.clientEarnings : existing.clientEarnings !== null ? Number(existing.clientEarnings) : null;
+    const serviceFeeType = dto.serviceFeeType !== undefined ? dto.serviceFeeType : existing.serviceFeeType;
+    const serviceFeeValue = dto.serviceFeeValue !== undefined ? dto.serviceFeeValue : existing.serviceFeeValue !== null ? Number(existing.serviceFeeValue) : null;
+
+    if (serviceFeeType === UpworkServiceFeeType.PERCENT && serviceFeeValue !== null && serviceFeeValue > 100) {
+      throw new BadRequestException("A percentage service fee can't be over 100%.");
+    }
+
+    let serviceFeeAmount: number | null = null;
+    if (clientEarnings !== null && serviceFeeType !== null && serviceFeeValue !== null) {
+      serviceFeeAmount =
+        serviceFeeType === UpworkServiceFeeType.PERCENT
+          ? Math.round(clientEarnings * (serviceFeeValue / 100) * 100) / 100
+          : serviceFeeValue;
+    }
+
+    const netEarnings = clientEarnings !== null && serviceFeeAmount !== null ? Math.round((clientEarnings - serviceFeeAmount) * 100) / 100 : null;
+
+    return { clientEarnings, serviceFeeType, serviceFeeValue, serviceFeeAmount, netEarnings };
+  }
 
   /** `submitterId` is the authenticated user placing the proposal, not a
    *  form field — "submitted by" is now always the real account name, never
@@ -122,6 +166,10 @@ export class UpworkService {
       "Type", "Date", "Profile", "Job Category", "Job Link", "Connects", "Account Type",
       "Client Name", "Submitted By", "Status", "Closed By", "Project Hours", "Pricing Type", "Cover Letter",
       "ClickUp Task ID", "Accepted At", "Onboarded At",
+      // Earnings tracking (Part: Upwork earnings tracking, 2026-10-28) —
+      // blank on any row that isn't WON yet or hasn't had earnings entered,
+      // same "blank rather than 0" convention as the panel itself.
+      "Client Earnings", "Upwork Service Fee", "Net Earnings",
     ];
 
     // Same RFC 4180 convention as LeadsService.exportCsv — always quote,
@@ -148,6 +196,9 @@ export class UpworkService {
         p.clickupTaskId,
         p.acceptedAt?.toISOString() ?? "",
         p.onboardedAt?.toISOString() ?? "",
+        p.clientEarnings ?? "",
+        p.serviceFeeAmount ?? "",
+        p.netEarnings ?? "",
       ]
         .map(escape)
         .join(","),
@@ -162,9 +213,26 @@ export class UpworkService {
     return proposal;
   }
 
-  async update(orgId: string, id: string, dto: UpdateUpworkProposalDto) {
+  async update(orgId: string, id: string, dto: UpdateUpworkProposalDto, actorRole: Role) {
     const existing = await this.prisma.upworkProposal.findFirst({ where: { id, orgId } });
     if (!existing) throw new NotFoundException("Proposal not found");
+
+    // Earnings is financial data, not a regular form field — same ADMIN/
+    // MANAGER bar as remove() below, but checked per-field here rather than
+    // with a route-level @Roles guard, since PATCH :id also carries every
+    // other, unrestricted field (Part: Upwork earnings tracking, 2026-10-28,
+    // "allow AUTHORIZED team members to edit earnings").
+    const touchesEarnings = dto.clientEarnings !== undefined || dto.serviceFeeType !== undefined || dto.serviceFeeValue !== undefined;
+    if (touchesEarnings && actorRole !== Role.ADMIN && actorRole !== Role.MANAGER) {
+      throw new ForbiddenException("Only an admin or manager can enter or edit earnings.");
+    }
+    const earnings = touchesEarnings
+      ? this.resolveEarnings(
+          { clientEarnings: existing.clientEarnings, serviceFeeType: existing.serviceFeeType, serviceFeeValue: existing.serviceFeeValue },
+          dto,
+        )
+      : null;
+
     // Stamps the follow-up timer's start line the moment status first
     // becomes IN_DISCUSSION (Part: Upwork follow-up reminders, 2026-09-30;
     // retargeted from the since-removed ACCEPTED status, 2026-10-16) — only
@@ -191,12 +259,22 @@ export class UpworkService {
         dto.status === UpworkProposalStatus.MEETING) &&
       dto.status !== existing.status;
 
+    // clientEarnings/serviceFeeType/serviceFeeValue are overwritten below
+    // from `earnings` (or left out entirely when this save doesn't touch
+    // earnings at all) — never taken as-is from `...dto`, so
+    // serviceFeeAmount/netEarnings can't end up derived from stale stored
+    // values while the raw dto fields move on ahead of them.
+    const rest: Partial<UpdateUpworkProposalDto> = { ...dto };
+    delete rest.clientEarnings;
+    delete rest.serviceFeeType;
+    delete rest.serviceFeeValue;
     const updated = await this.prisma.upworkProposal.update({
       where: { id },
       data: {
-        ...dto,
+        ...rest,
         ...(justAccepted ? { acceptedAt: new Date(), lastFollowUpNotifiedAt: null } : {}),
         ...(justWon ? { onboardedAt: new Date() } : {}),
+        ...(earnings ? earnings : {}),
       },
     });
 
@@ -443,5 +521,77 @@ export class UpworkService {
       },
       trend: Array.from(trendByDay.values()).sort((a, b) => a.date.localeCompare(b.date)),
     };
+  }
+
+  /**
+   * Monthly earnings summary for a given calendar month (Part: Upwork
+   * earnings tracking, 2026-10-28) — one call backs both the Bidding and
+   * Invite pages' own summary panel (each reads its own `bidding`/`invite`
+   * sub-object) plus a `combined` total for a future overall dashboard,
+   * without ever double-counting: BIDDING and INVITE are mutually exclusive
+   * values of the same `type` column, so summing their two already-disjoint
+   * buckets for `combined` can't double-count a row.
+   *
+   * Bucketed by `onboardedAt` (stamped the moment status first becomes
+   * WON — see that column's own schema docblock), not `createdAt`, per the
+   * spec's "use the date the client was marked as won". Only WON rows are
+   * ever considered — LOST/pending rows never reach this query at all, so
+   * they can't contribute to a total by construction.
+   *
+   * A won row with no `netEarnings` yet (earnings never entered, or only
+   * partially — see resolveEarnings) is excluded from every financial sum
+   * here but still counted in `missingEarningsCount`, so the panel can show
+   * "X won deals still need earnings info" instead of silently treating an
+   * unknown amount as $0.
+   */
+  async getEarningsSummary(orgId: string, query: QueryEarningsSummaryDto) {
+    const now = new Date();
+    const month = query.month ?? now.getMonth() + 1; // getMonth() is 0-based, the query param isn't
+    const year = query.year ?? now.getFullYear();
+    const from = new Date(year, month - 1, 1);
+    const to = new Date(year, month, 1); // exclusive — first of the next month
+
+    const rows = await this.prisma.upworkProposal.findMany({
+      where: { orgId, status: UpworkProposalStatus.WON, onboardedAt: { gte: from, lt: to } },
+      select: { type: true, clientEarnings: true, serviceFeeAmount: true, netEarnings: true },
+    });
+
+    const summarize = (filtered: typeof rows) => {
+      let totalClientEarnings = 0;
+      let totalServiceFees = 0;
+      let totalNetEarnings = 0;
+      let missingEarningsCount = 0;
+      for (const r of filtered) {
+        // netEarnings is the single "is this row's earnings info complete"
+        // signal — it's only ever non-null once resolveEarnings had every
+        // input it needed (see that method's own docblock).
+        if (r.netEarnings === null) {
+          missingEarningsCount++;
+          continue;
+        }
+        totalClientEarnings += Number(r.clientEarnings ?? 0);
+        totalServiceFees += Number(r.serviceFeeAmount ?? 0);
+        totalNetEarnings += Number(r.netEarnings);
+      }
+      return {
+        clientsWon: filtered.length,
+        totalClientEarnings: Math.round(totalClientEarnings * 100) / 100,
+        totalServiceFees: Math.round(totalServiceFees * 100) / 100,
+        totalNetEarnings: Math.round(totalNetEarnings * 100) / 100,
+        missingEarningsCount,
+      };
+    };
+
+    const bidding = summarize(rows.filter((r) => r.type === UpworkProposalType.BIDDING));
+    const invite = summarize(rows.filter((r) => r.type === UpworkProposalType.INVITE));
+    const combined = {
+      clientsWon: bidding.clientsWon + invite.clientsWon,
+      totalClientEarnings: Math.round((bidding.totalClientEarnings + invite.totalClientEarnings) * 100) / 100,
+      totalServiceFees: Math.round((bidding.totalServiceFees + invite.totalServiceFees) * 100) / 100,
+      totalNetEarnings: Math.round((bidding.totalNetEarnings + invite.totalNetEarnings) * 100) / 100,
+      missingEarningsCount: bidding.missingEarningsCount + invite.missingEarningsCount,
+    };
+
+    return { month, year, bidding, invite, combined };
   }
 }
