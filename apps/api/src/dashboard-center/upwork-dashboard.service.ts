@@ -326,6 +326,17 @@ export class UpworkDashboardService {
     let totalClientEarnings = 0;
     let totalServiceFees = 0;
     let missingEarningsCount = 0;
+    // Guards against double-counting the same real contract's money twice
+    // (Part: Upwork earnings-by-client matching, 2026-10-28, found while
+    // verifying real Contract ID data -- two different WON proposal rows
+    // can genuinely share one Contract ID, e.g. a client invited through
+    // two profiles, or the same client logged under two slightly
+    // different names that both happen to resolve to the same
+    // transaction bucket). `clientsWon` still counts every WON proposal
+    // row as before, matching the dashboard's own existing wonBids/
+    // wonInvites counts -- only the $ totals are deduplicated, since a
+    // row count and a sum of real money answer different questions.
+    const countedBuckets = new Set<{ gross: number; fee: number }>();
     for (const p of wonProposals) {
       // Exact Contract ID match first -- whenever the team entered one,
       // this is authoritative and skips name matching entirely (Part:
@@ -344,6 +355,8 @@ export class UpworkDashboardService {
         missingEarningsCount++;
         continue;
       }
+      if (countedBuckets.has(match)) continue;
+      countedBuckets.add(match);
       totalClientEarnings += match.gross;
       totalServiceFees += match.fee;
     }
