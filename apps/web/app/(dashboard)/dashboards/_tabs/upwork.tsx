@@ -495,7 +495,7 @@ export function UpworkTab() {
                     ]}
                     footnote={
                       kpis.biddingEarningsMissingCount > 0
-                        ? `${kpis.biddingEarningsMissingCount} won bid(s) have no matching Upwork transaction yet (either the sync hasn't caught up, or the client name doesn't match) -- excluded from the totals above.`
+                        ? `${kpis.biddingEarningsMissingCount} won bid(s) are not billed yet -- excluded from the totals above.`
                         : undefined
                     }
                   />
@@ -594,7 +594,7 @@ export function UpworkTab() {
                     ]}
                     footnote={
                       kpis.inviteEarningsMissingCount > 0
-                        ? `${kpis.inviteEarningsMissingCount} won invite(s) have no matching Upwork transaction yet (either the sync hasn't caught up, or the client name doesn't match) -- excluded from the totals above.`
+                        ? `${kpis.inviteEarningsMissingCount} won invite(s) are not billed yet -- excluded from the totals above.`
                         : undefined
                     }
                   />
