@@ -212,11 +212,37 @@ export class UpworkDashboardService {
   private async getWonClientEarnings(orgId: string, type: "BIDDING" | "INVITE", range: { from: Date; to: Date }) {
     const wonProposals = await this.prisma.upworkProposal.findMany({
       where: { orgId, type, status: "WON", createdAt: { gte: range.from, lte: range.to }, clientName: { not: null } },
-      select: { clientName: true },
+      select: { clientName: true, jobLink: true },
     });
     const clientsWon = wonProposals.length;
     if (clientsWon === 0) {
       return { clientsWon: 0, totalClientEarnings: 0, totalServiceFees: 0, totalNetEarnings: 0, missingEarningsCount: 0 };
+    }
+
+    // INVITE-only second identity signal (Part: Upwork earnings-by-client
+    // matching, 2026-10-28, explicit user request to find a more reliable
+    // matching attribute): an invite's own `jobLink` isn't a job posting
+    // at all, it's the Upwork message-ROOM url the team pasted when
+    // logging it (confirmed live, real example:
+    // ".../ab/messages/rooms/room_<hash>?pageTitle=..."). Every room has a
+    // real "owner" -- confirmed live: always the client -- which
+    // UpworkRoomsSyncService now stores (previously fetched every sync
+    // tick and discarded entirely). This is Upwork's OWN name for that
+    // client, independent of whatever free-text the team typed into
+    // clientName, so it's tried as a fallback identity when the typed
+    // name alone doesn't resolve -- never used to overwrite clientName
+    // itself.
+    const extractRoomId = (jobLink: string): string | null => /rooms\/(room_[a-f0-9]+)/.exec(jobLink)?.[1] ?? null;
+    const roomOwnerByRoomId = new Map<string, string>();
+    if (type === "INVITE") {
+      const roomIds = [...new Set(wonProposals.map((p) => extractRoomId(p.jobLink)).filter((id): id is string => id !== null))];
+      if (roomIds.length > 0) {
+        const rooms = await this.prisma.upworkApiRoom.findMany({
+          where: { orgId, upworkRoomId: { in: roomIds }, ownerName: { not: null } },
+          select: { upworkRoomId: true, ownerName: true },
+        });
+        for (const r of rooms) roomOwnerByRoomId.set(r.upworkRoomId, r.ownerName!);
+      }
     }
 
     const transactions = await this.prisma.upworkApiTransaction.findMany({
@@ -224,7 +250,11 @@ export class UpworkDashboardService {
       select: { assignmentCompanyName: true, amountRaw: true, accountingSubtype: true },
     });
 
-    const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    // Strips trailing periods too (Part: room-owner fallback, 2026-10-28) --
+    // Upwork's own room-owner name comes back as "Emma M." (confirmed
+    // live), and without stripping the period "m." never matches the
+    // transaction ledger's own "Emma M" under firstLastInitialKey below.
+    const normalize = (s: string) => s.trim().toLowerCase().replace(/[.,]/g, "").replace(/\s+/g, " ");
     const words = (s: string) => normalize(s).split(" ").filter(Boolean);
     /** "zayd e" from "Zayd Esa" or "Zayd E" -- null for a single-word name,
      *  which has no last initial to key on. */
@@ -280,7 +310,15 @@ export class UpworkDashboardService {
     let totalServiceFees = 0;
     let missingEarningsCount = 0;
     for (const p of wonProposals) {
-      const match = resolve(p.clientName!);
+      let match = resolve(p.clientName!);
+      // Room-owner fallback (INVITE only) -- only reached when the typed
+      // clientName itself didn't resolve, tried AS A SECOND identity, not
+      // a replacement for it.
+      if (!match) {
+        const roomId = extractRoomId(p.jobLink);
+        const ownerName = roomId ? roomOwnerByRoomId.get(roomId) : undefined;
+        if (ownerName) match = resolve(ownerName);
+      }
       if (!match) {
         missingEarningsCount++;
         continue;

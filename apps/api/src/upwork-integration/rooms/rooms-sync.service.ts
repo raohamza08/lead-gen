@@ -127,6 +127,8 @@ export class UpworkRoomsSyncService {
               latestMessageAt: toDate(e.node.latestStory?.createdDateTime),
               latestMessageFrom: e.node.latestStory?.user?.name ?? null,
               assignedProfileNames: this.extractAssignedProfileNames(e.node.roomUsers),
+              ownerName: e.node.roomUsers?.find((ru) => ru.role === "owner")?.user?.name ?? null,
+              ownerUpworkUserId: e.node.roomUsers?.find((ru) => ru.role === "owner")?.user?.id ?? null,
             };
             return this.prisma.upworkApiRoom.upsert({
               where: { orgId_upworkRoomId: { orgId: connectionRow.orgId, upworkRoomId: e.node.id } },

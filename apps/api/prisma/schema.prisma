@@ -2311,6 +2311,22 @@ model UpworkApiRoom {
   /// is what keeps him from polluting every room's group, since he has
   /// no UpworkFreelancerProfile row to match against.
   assignedProfileNames String[] @default([]) @map("assigned_profile_names")
+  /// The room's "owner" (confirmed live: always the client) — Upwork's
+  /// own name/id for them, previously fetched on every sync tick and
+  /// then discarded entirely (Part: Upwork earnings-by-client matching,
+  /// 2026-10-28, explicit user request to find a more reliable matching
+  /// attribute). Used as a SECOND, Upwork-sourced identity signal for
+  /// matching an INVITE's earnings against UpworkApiTransaction —
+  /// independent of whatever free-text name the team typed into
+  /// UpworkProposal.clientName, which this never overwrites. Same
+  /// "Firstname L." truncated format as assignmentCompanyName
+  /// (confirmed live), so still resolved through the same fuzzy matcher,
+  /// not an exact-ID join — ownerUpworkUserId didn't line up with any ID
+  /// on the transaction side when checked live, so it's kept only as a
+  /// stable reference for this room's owner across re-syncs, not a join
+  /// key.
+  ownerName           String?      @map("owner_name")
+  ownerUpworkUserId   String?      @map("owner_upwork_user_id")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
 
