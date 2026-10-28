@@ -1777,6 +1777,19 @@ model UpworkProposal {
 
   clickupTaskId String?              @map("clickup_task_id")
   clientName    String?              @map("client_name")
+  /// Upwork's own numeric Contract ID (visible on the contract's Upwork
+  /// page, and embedded in every one of its transactions' description
+  /// text as "Contract ID: <id>") — Part: Upwork earnings-by-client
+  /// matching, 2026-10-28, explicit user request for an exact join
+  /// instead of fuzzy name matching. Optional and entered manually once
+  /// the team knows it (there's no API path from a bid/invite to its
+  /// own contract ID before it exists); UpworkDashboardService.
+  /// getWonClientEarnings matches on this FIRST, ahead of the
+  /// clientName/room-owner fuzzy chain, whenever it's set — confirmed
+  /// live that Upwork's own `relatedAssignment` field on
+  /// TransactionHistoryRow is this exact same numeric ID, present on
+  /// both a contract's invoice AND its service-fee rows.
+  contractId    String?              @map("contract_id")
   status        UpworkProposalStatus @default(SUBMITTED)
   /// Who closed the client, once WON — the sheet's "Client closed by".
   closedBy      String?              @map("closed_by")
@@ -2196,11 +2209,22 @@ model UpworkApiTransaction {
   /// treats null here as "can't attribute this row to a client", never as
   /// a blank string to match against.
   assignmentCompanyName String?    @map("assignment_company_name")
+  /// Upwork's own numeric Contract ID for this row's assignment (Part:
+  /// Upwork earnings-by-client matching, 2026-10-28) — confirmed live
+  /// as the real value of `relatedAssignment` on `TransactionHistoryRow`,
+  /// present on BOTH a contract's invoice and its paired service-fee
+  /// adjustment row, not just one. Stored as a string (Upwork returns a
+  /// plain number, but this is an identifier, never arithmetic) so it
+  /// lines up directly with UpworkProposal.contractId for an exact join
+  /// in UpworkDashboardService.getWonClientEarnings, ahead of that
+  /// method's fuzzy clientName/room-owner fallback.
+  contractId            String?    @map("contract_id")
   createdAt          DateTime     @default(now()) @map("created_at")
 
   @@unique([orgId, upworkRecordId])
   @@index([orgId, occurredAt])
   @@index([orgId, assignmentCompanyName])
+  @@index([orgId, contractId])
   @@map("upwork_api_transactions")
 }
 

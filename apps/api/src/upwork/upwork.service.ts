@@ -120,7 +120,7 @@ export class UpworkService {
 
     const columns = [
       "Type", "Date", "Profile", "Job Category", "Job Link", "Connects", "Account Type",
-      "Client Name", "Submitted By", "Status", "Closed By", "Project Hours", "Pricing Type", "Cover Letter",
+      "Client Name", "Contract ID", "Submitted By", "Status", "Closed By", "Project Hours", "Pricing Type", "Cover Letter",
       "ClickUp Task ID", "Accepted At", "Onboarded At",
     ];
 
@@ -139,6 +139,7 @@ export class UpworkService {
         p.connects,
         p.accountType,
         p.clientName,
+        p.contractId,
         p.submittedBy,
         p.status,
         p.closedBy,

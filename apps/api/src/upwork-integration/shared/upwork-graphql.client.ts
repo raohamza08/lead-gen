@@ -149,6 +149,13 @@ export interface TransactionHistoryRow {
   /// org's OAuth connection carries the "payment activities" scope (see
   /// this field's own column docblock on UpworkApiTransaction).
   assignmentCompanyName: string | null;
+  /// Upwork's own numeric Contract ID for this row (Part: Upwork
+  /// earnings-by-client matching, 2026-10-28, explicit user request for
+  /// an exact join) — confirmed live as a plain number (e.g. 44713938),
+  /// present on both a contract's invoice row and its paired
+  /// service-fee adjustment row, same scope-gating as
+  /// assignmentCompanyName above.
+  relatedAssignment: number | null;
 }
 
 /** Exported (Part: real bug fix, 2026-10-22 — reactive token refresh) so
@@ -518,7 +525,7 @@ export class UpworkGraphQLClient {
             transactionHistoryRow {
               recordId transactionCreationDate type description accountingSubtype
               transactionAmount { rawValue currency displayValue }
-              paymentStatus assignmentCompanyName
+              paymentStatus assignmentCompanyName relatedAssignment
             }
           }
         }

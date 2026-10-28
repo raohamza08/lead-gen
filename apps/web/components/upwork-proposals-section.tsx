@@ -39,6 +39,11 @@ interface UpworkProposal {
   submittedBy: string;
   clickupTaskId: string | null;
   clientName: string | null;
+  // Upwork's own numeric Contract ID (Part: Upwork earnings-by-client
+  // matching, 2026-10-28) -- optional, entered once the team knows it;
+  // the Upwork Dashboard's Client Won earnings match on this first,
+  // ahead of the client-name fuzzy match, whenever it's set.
+  contractId: string | null;
   status: UpworkProposalStatus;
   closedBy: string | null;
   createdAt: string;
@@ -312,6 +317,20 @@ export function UpworkProposalsSection({ type }: { type: UpworkProposalType }) {
         placeholder="—"
         onBlur={(e) => { if (e.target.value !== (r.clientName ?? "")) updateField(r.id, { clientName: e.target.value || null }); }}
         className="w-28 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
+      />
+    ) },
+    // Optional, filled in once the team knows it (visible on the
+    // contract's own Upwork page, or in any of its transactions'
+    // description text) -- lets the Upwork Dashboard's Client Won
+    // earnings match exactly instead of estimating from the name above
+    // (Part: Upwork earnings-by-client matching, 2026-10-28).
+    { key: "contractId", header: "Contract ID", sortValue: (r) => r.contractId, render: (r) => (
+      <input
+        defaultValue={r.contractId ?? ""}
+        placeholder="—"
+        title="Upwork's own Contract ID -- makes earnings matching exact instead of estimated"
+        onBlur={(e) => { if (e.target.value !== (r.contractId ?? "")) updateField(r.id, { contractId: e.target.value.trim() || null }); }}
+        className="w-24 rounded border border-transparent bg-transparent px-1 py-0.5 text-xs hover:border-[var(--line)] focus:border-[var(--line)]"
       />
     ) },
     // Closed By is dropped for invites (Part: Upwork Invites, 2026-09-30) —
@@ -604,6 +623,7 @@ function ProposalDetailModal({
   const [projectHours, setProjectHours] = useState(proposal.projectHours != null ? String(proposal.projectHours) : "");
   const [pricingType, setPricingType] = useState<UpworkProjectPricingType>(proposal.pricingType);
   const [clientName, setClientName] = useState(proposal.clientName ?? "");
+  const [contractId, setContractId] = useState(proposal.contractId ?? "");
   const [status, setStatus] = useState<UpworkProposalStatus>(proposal.status);
   const [closedBy, setClosedBy] = useState(proposal.closedBy ?? "");
   const [saving, setSaving] = useState(false);
@@ -633,6 +653,7 @@ function ProposalDetailModal({
         projectHours: projectHours ? Number(projectHours) : null,
         pricingType,
         clientName: clientName.trim() || null,
+        contractId: contractId.trim() || null,
         status,
         ...(type === "BIDDING"
           ? { connects: connects ? Number(connects) : null, accountType, closedBy: closedBy || null }
@@ -657,6 +678,19 @@ function ProposalDetailModal({
         <label className="block">
           <span className={labelClass}>Client name{type === "INVITE" ? " (required)" : ""}</span>
           <input value={clientName} onChange={(e) => setClientName(e.target.value)} className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Contract ID (optional)</span>
+          <input
+            value={contractId}
+            onChange={(e) => setContractId(e.target.value)}
+            placeholder="e.g. 44713938"
+            className={inputClass}
+          />
+          <span className="mt-1 block text-[11px] text-ink/50">
+            Upwork&apos;s own numeric Contract ID — find it on the contract&apos;s Upwork page, or in any of its
+            transactions. Makes the Client Won earnings stat match exactly instead of estimating from the name above.
+          </span>
         </label>
         <label className="block">
           <span className={labelClass}>Upwork profile / ID name</span>

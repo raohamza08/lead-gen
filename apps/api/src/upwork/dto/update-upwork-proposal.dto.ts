@@ -15,6 +15,11 @@ export class UpdateUpworkProposalDto {
   @IsOptional() @IsString() clientName?: string;
   @IsOptional() @IsString() closedBy?: string;
   @IsOptional() @IsString() clickupTaskId?: string;
+  /** Upwork's own numeric Contract ID (Part: Upwork earnings-by-client
+   *  matching, 2026-10-28) -- optional, entered once the team knows it;
+   *  UpworkDashboardService.getWonClientEarnings matches on this first,
+   *  ahead of the clientName/room-owner fuzzy chain, whenever set. */
+  @IsOptional() @IsString() contractId?: string;
   @IsOptional() @IsString() @MinLength(1) coverLetter?: string;
   @IsOptional() @IsNumber() @Min(0) projectHours?: number;
   @IsOptional() @IsEnum(UpworkProjectPricingType) pricingType?: UpworkProjectPricingType;

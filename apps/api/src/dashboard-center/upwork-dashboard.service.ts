@@ -211,8 +211,11 @@ export class UpworkDashboardService {
    *  don't line up) is a different fact than "earned nothing". */
   private async getWonClientEarnings(orgId: string, type: "BIDDING" | "INVITE", range: { from: Date; to: Date }) {
     const wonProposals = await this.prisma.upworkProposal.findMany({
-      where: { orgId, type, status: "WON", createdAt: { gte: range.from, lte: range.to }, clientName: { not: null } },
-      select: { clientName: true, jobLink: true },
+      where: {
+        orgId, type, status: "WON", createdAt: { gte: range.from, lte: range.to },
+        OR: [{ clientName: { not: null } }, { contractId: { not: null } }],
+      },
+      select: { clientName: true, jobLink: true, contractId: true },
     });
     const clientsWon = wonProposals.length;
     if (clientsWon === 0) {
@@ -246,8 +249,8 @@ export class UpworkDashboardService {
     }
 
     const transactions = await this.prisma.upworkApiTransaction.findMany({
-      where: { orgId, assignmentCompanyName: { not: null } },
-      select: { assignmentCompanyName: true, amountRaw: true, accountingSubtype: true },
+      where: { orgId, OR: [{ assignmentCompanyName: { not: null } }, { contractId: { not: null } }] },
+      select: { assignmentCompanyName: true, amountRaw: true, accountingSubtype: true, contractId: true },
     });
 
     // Strips trailing periods too (Part: room-owner fallback, 2026-10-28) --
@@ -267,14 +270,28 @@ export class UpworkDashboardService {
     // Grouped by each transaction's own literal name -- the only map that
     // actually holds money, never merged across different real clients.
     const byExact = new Map<string, { gross: number; fee: number }>();
+    // Grouped by Upwork's own Contract ID (Part: Upwork earnings-by-client
+    // matching, 2026-10-28, explicit user request) -- an exact join, no
+    // normalization/fuzziness involved at all, tried FIRST in the
+    // resolution loop below whenever a proposal has one entered.
+    const byContractId = new Map<string, { gross: number; fee: number }>();
     for (const t of transactions) {
       const amount = Number(t.amountRaw ?? 0);
-      if (!amount || !t.assignmentCompanyName) continue;
-      const key = normalize(t.assignmentCompanyName);
-      const bucket = byExact.get(key) ?? { gross: 0, fee: 0 };
-      if (amount > 0) bucket.gross += amount;
-      else if (/fee/i.test(t.accountingSubtype ?? "")) bucket.fee += Math.abs(amount);
-      byExact.set(key, bucket);
+      if (!amount) continue;
+      const isFee = amount < 0 && /fee/i.test(t.accountingSubtype ?? "");
+      if (t.assignmentCompanyName) {
+        const key = normalize(t.assignmentCompanyName);
+        const bucket = byExact.get(key) ?? { gross: 0, fee: 0 };
+        if (amount > 0) bucket.gross += amount;
+        else if (isFee) bucket.fee += Math.abs(amount);
+        byExact.set(key, bucket);
+      }
+      if (t.contractId) {
+        const bucket = byContractId.get(t.contractId) ?? { gross: 0, fee: 0 };
+        if (amount > 0) bucket.gross += amount;
+        else if (isFee) bucket.fee += Math.abs(amount);
+        byContractId.set(t.contractId, bucket);
+      }
     }
 
     // Fuzzy lookup indexes, built FROM byExact's own keys -- each maps a
@@ -310,10 +327,14 @@ export class UpworkDashboardService {
     let totalServiceFees = 0;
     let missingEarningsCount = 0;
     for (const p of wonProposals) {
-      let match = resolve(p.clientName!);
-      // Room-owner fallback (INVITE only) -- only reached when the typed
-      // clientName itself didn't resolve, tried AS A SECOND identity, not
-      // a replacement for it.
+      // Exact Contract ID match first -- whenever the team entered one,
+      // this is authoritative and skips name matching entirely (Part:
+      // Upwork earnings-by-client matching, 2026-10-28).
+      let match = p.contractId ? byContractId.get(p.contractId) ?? null : null;
+      if (!match && p.clientName) match = resolve(p.clientName);
+      // Room-owner fallback (INVITE only) -- only reached when neither the
+      // contract ID nor the typed clientName resolved, tried AS A SECOND
+      // identity, not a replacement for either.
       if (!match) {
         const roomId = extractRoomId(p.jobLink);
         const ownerName = roomId ? roomOwnerByRoomId.get(roomId) : undefined;
