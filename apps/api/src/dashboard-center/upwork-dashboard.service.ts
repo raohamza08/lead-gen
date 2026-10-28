@@ -164,9 +164,31 @@ export class UpworkDashboardService {
    *  `UpworkApiTransaction.assignmentCompanyName` (Upwork's own client
    *  name on each ledger row — only populated once the org's connection
    *  carries the "payment activities" scope, see that column's own
-   *  schema docblock), normalized (trimmed, case-insensitive) since the
-   *  two are typed/reported independently and won't always match on
-   *  exact casing.
+   *  schema docblock). Exact match (trimmed, case-insensitive) first;
+   *  if that misses, falls back to a fuzzy match because the two sides
+   *  are typed completely independently and routinely disagree on
+   *  format, not just casing -- confirmed against real production data
+   *  (2026-10-28, following a direct user report that Bidding clients
+   *  weren't matching at all: only 1 of 17 real WON bids matched on
+   *  exact name). The real cause: Upwork privacy-truncates an
+   *  individual client's name on the ledger to "Firstname L" (last
+   *  initial only), while the team logs whatever they saw in Upwork's
+   *  own UI -- sometimes the full name ("Zayd Esa"), sometimes just the
+   *  first name ("Sabrena", "Darnell", "Alejandro"). Neither of those
+   *  equals Upwork's own "Zayd E" / "Sabrena Sasso" / "Darnell Davis" /
+   *  "Alejandro Lovera" under a plain normalize-and-compare. The fuzzy
+   *  fallback below (firstname+last-initial, then firstname-only) fixed
+   *  3 of those 4 real examples immediately.
+   *
+   *  Fuzzy matching is proposal-side only -- it never merges two
+   *  different real transaction clients into one bucket (`byExact`
+   *  stays keyed on each transaction's own literal name, untouched).
+   *  A fuzzy key is only used to resolve a proposal's clientName to a
+   *  bucket when exactly ONE real transaction-client shares that key;
+   *  if two different real clients would both match (e.g. two "John"s),
+   *  it's left unresolved rather than guessing which one earned the
+   *  money -- a wrong guess here means attributing one client's revenue
+   *  to another, worse than just reporting it as missing.
    *
    *  "Clients Won" is scoped to the dashboard's own date range (same
    *  `where` every other WON count on this page uses, so this can never
@@ -201,23 +223,64 @@ export class UpworkDashboardService {
       where: { orgId, assignmentCompanyName: { not: null } },
       select: { assignmentCompanyName: true, amountRaw: true, accountingSubtype: true },
     });
-    const normalize = (s: string) => s.trim().toLowerCase();
-    const byClient = new Map<string, { gross: number; fee: number }>();
+
+    const normalize = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+    const words = (s: string) => normalize(s).split(" ").filter(Boolean);
+    /** "zayd e" from "Zayd Esa" or "Zayd E" -- null for a single-word name,
+     *  which has no last initial to key on. */
+    const firstLastInitialKey = (s: string): string | null => {
+      const w = words(s);
+      return w.length >= 2 ? `${w[0]} ${w[1][0]}` : null;
+    };
+    const firstNameKey = (s: string): string | null => words(s)[0] ?? null;
+
+    // Grouped by each transaction's own literal name -- the only map that
+    // actually holds money, never merged across different real clients.
+    const byExact = new Map<string, { gross: number; fee: number }>();
     for (const t of transactions) {
       const amount = Number(t.amountRaw ?? 0);
       if (!amount || !t.assignmentCompanyName) continue;
       const key = normalize(t.assignmentCompanyName);
-      const bucket = byClient.get(key) ?? { gross: 0, fee: 0 };
+      const bucket = byExact.get(key) ?? { gross: 0, fee: 0 };
       if (amount > 0) bucket.gross += amount;
       else if (/fee/i.test(t.accountingSubtype ?? "")) bucket.fee += Math.abs(amount);
-      byClient.set(key, bucket);
+      byExact.set(key, bucket);
     }
+
+    // Fuzzy lookup indexes, built FROM byExact's own keys -- each maps a
+    // fuzzy key to the set of real client names sharing it, so a fallback
+    // match only fires when that set has exactly one member (see this
+    // method's own docblock for why an ambiguous one is left unresolved).
+    const byFirstLastInitial = new Map<string, Set<string>>();
+    const byFirstName = new Map<string, Set<string>>();
+    for (const exactKey of byExact.keys()) {
+      const fli = firstLastInitialKey(exactKey);
+      if (fli) (byFirstLastInitial.get(fli) ?? byFirstLastInitial.set(fli, new Set()).get(fli)!).add(exactKey);
+      const fn = firstNameKey(exactKey);
+      if (fn) (byFirstName.get(fn) ?? byFirstName.set(fn, new Set()).get(fn)!).add(exactKey);
+    }
+
+    const resolve = (clientName: string) => {
+      const exact = normalize(clientName);
+      if (byExact.has(exact)) return byExact.get(exact)!;
+      const fli = firstLastInitialKey(clientName);
+      if (fli) {
+        const candidates = byFirstLastInitial.get(fli);
+        if (candidates?.size === 1) return byExact.get([...candidates][0])!;
+      }
+      const fn = firstNameKey(clientName);
+      if (fn) {
+        const candidates = byFirstName.get(fn);
+        if (candidates?.size === 1) return byExact.get([...candidates][0])!;
+      }
+      return null;
+    };
 
     let totalClientEarnings = 0;
     let totalServiceFees = 0;
     let missingEarningsCount = 0;
     for (const p of wonProposals) {
-      const match = byClient.get(normalize(p.clientName!));
+      const match = resolve(p.clientName!);
       if (!match) {
         missingEarningsCount++;
         continue;
