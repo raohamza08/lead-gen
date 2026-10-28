@@ -74,6 +74,7 @@ export class UpworkTransactionsSyncService {
                   amountCurrency: r.transactionAmount?.currency ?? null,
                   amountDisplay: r.transactionAmount?.displayValue ?? null,
                   paymentStatus: r.paymentStatus,
+                  assignmentCompanyName: r.assignmentCompanyName,
                 };
                 return this.prisma.upworkApiTransaction.upsert({
                   where: { orgId_upworkRecordId: { orgId: connectionRow.orgId, upworkRecordId: r.recordId! } },

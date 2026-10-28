@@ -14,6 +14,7 @@ import { SkeletonCard } from "../../../../components/ui/skeleton";
 import { EmptyState } from "../../../../components/ui/empty-state";
 import { Input } from "../../../../components/ui/input";
 import { Button } from "../../../../components/ui/button";
+import { Modal } from "../../../../components/ui/modal";
 
 interface UpworkKpis {
   range: { from: string; to: string };
@@ -40,6 +41,17 @@ interface UpworkKpis {
   invitesInDiscussionDeltaPct: number | null;
   conversionRateBidding?: number;
   conversionRateInvites?: number;
+  // Auto-matched from the real Upwork transaction ledger by client name,
+  // never manually entered (Part: Upwork earnings-by-client matching,
+  // 2026-10-28) -- see UpworkDashboardService.getWonClientEarnings.
+  biddingTotalClientEarnings: number;
+  biddingTotalServiceFees: number;
+  biddingTotalNetEarnings: number;
+  biddingEarningsMissingCount: number;
+  inviteTotalClientEarnings: number;
+  inviteTotalServiceFees: number;
+  inviteTotalNetEarnings: number;
+  inviteEarningsMissingCount: number;
   bidsViewed: number;
   invitesViewed: number;
   bidsInDiscussion: number;
@@ -159,6 +171,7 @@ function IconStat({
   value,
   deltaPct,
   caption,
+  detail,
 }: {
   icon: ReactNode;
   iconColor: string;
@@ -167,8 +180,17 @@ function IconStat({
   value: string;
   deltaPct?: number | null;
   caption?: string;
+  /** When given, the tile becomes clickable and opens a modal with this
+   *  content (Part: Upwork earnings tracking, 2026-10-28) — same "clickable
+   *  tile opens a modal with the data" contract as StatTile's own `detail`
+   *  prop in chart-kit.tsx; added here specifically so the Won tile can
+   *  surface its earnings breakdown without a separate panel elsewhere on
+   *  the app (explicit user correction — earnings belong inside this stat,
+   *  "not any where else"). */
+  detail?: ReactNode;
 }) {
-  return (
+  const [open, setOpen] = useState(false);
+  const body = (
     <div className="card flex items-center gap-3 p-4">
       <span
         aria-hidden
@@ -186,6 +208,17 @@ function IconStat({
         {caption && <div className="mt-0.5 truncate text-[11px] text-ink/45">{caption}</div>}
       </div>
     </div>
+  );
+  if (!detail) return body;
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className="block w-full text-left">
+        {body}
+      </button>
+      <Modal open={open} onOpenChange={setOpen} title={label} contentClassName="w-full max-w-md">
+        {detail}
+      </Modal>
+    </>
   );
 }
 
@@ -447,10 +480,26 @@ export function UpworkTab() {
                 shape="circle"
                 icon={<CheckIcon />}
                 iconColor="rgb(var(--good-rgb))"
-                label="Won"
+                label="Client Won"
                 value={num(kpis.wonBids)}
                 deltaPct={kpis.wonBidsDeltaPct}
                 caption={`Success rate: ${pct(kpis.conversionRateBidding)}`}
+                detail={
+                  <MetricDetail
+                    definition="Earnings for bids won in this period, auto-matched against Upwork's own transaction ledger by client name -- never manually entered."
+                    rows={[
+                      { label: "Clients Won", value: num(kpis.wonBids) },
+                      { label: "Total Client Earnings", value: money(kpis.biddingTotalClientEarnings) },
+                      { label: "Total Upwork Service Fees", value: money(kpis.biddingTotalServiceFees) },
+                      { label: "Total Net Earnings", value: money(kpis.biddingTotalNetEarnings) },
+                    ]}
+                    footnote={
+                      kpis.biddingEarningsMissingCount > 0
+                        ? `${kpis.biddingEarningsMissingCount} won bid(s) have no matching Upwork transaction yet (either the sync hasn't caught up, or the client name doesn't match) -- excluded from the totals above.`
+                        : undefined
+                    }
+                  />
+                }
               />
               <IconStat
                 shape="circle"
@@ -530,10 +579,26 @@ export function UpworkTab() {
                 shape="circle"
                 icon={<CheckIcon />}
                 iconColor="rgb(var(--good-rgb))"
-                label="Won"
+                label="Client Won"
                 value={num(kpis.wonInvites)}
                 deltaPct={kpis.wonInvitesDeltaPct}
                 caption={`Win rate: ${pct(kpis.conversionRateInvites)}`}
+                detail={
+                  <MetricDetail
+                    definition="Earnings for invites won in this period, auto-matched against Upwork's own transaction ledger by client name -- never manually entered."
+                    rows={[
+                      { label: "Clients Won", value: num(kpis.wonInvites) },
+                      { label: "Total Client Earnings", value: money(kpis.inviteTotalClientEarnings) },
+                      { label: "Total Upwork Service Fees", value: money(kpis.inviteTotalServiceFees) },
+                      { label: "Total Net Earnings", value: money(kpis.inviteTotalNetEarnings) },
+                    ]}
+                    footnote={
+                      kpis.inviteEarningsMissingCount > 0
+                        ? `${kpis.inviteEarningsMissingCount} won invite(s) have no matching Upwork transaction yet (either the sync hasn't caught up, or the client name doesn't match) -- excluded from the totals above.`
+                        : undefined
+                    }
+                  />
+                }
               />
               <IconStat
                 shape="circle"

@@ -10,7 +10,6 @@ import { UpworkService } from "./upwork.service";
 import { CreateUpworkProposalDto } from "./dto/create-upwork-proposal.dto";
 import { UpdateUpworkProposalDto } from "./dto/update-upwork-proposal.dto";
 import { QueryUpworkProposalsDto } from "./dto/query-upwork-proposals.dto";
-import { QueryEarningsSummaryDto } from "./dto/query-earnings-summary.dto";
 import { UpdateUpworkPicklistsDto } from "./dto/update-upwork-picklists.dto";
 import { SetNotifyRecipientsDto } from "./dto/set-notify-recipients.dto";
 import { AuditLogService } from "../audit-log/audit-log.service";
@@ -26,17 +25,6 @@ export class UpworkController {
   @Get("stats")
   getStats(@CurrentUser() user: JwtClaims) {
     return this.upwork.getStats(user.orgId);
-  }
-
-  /** Backs the Bidding/Invite pages' own monthly earnings panel (Part:
-   *  Upwork earnings tracking, 2026-10-28) — every authenticated user with
-   *  Upwork access can read it, same as getStats; only entering/editing the
-   *  underlying earnings fields is ADMIN/MANAGER-gated (see
-   *  UpworkService.update). Must come before ":id" for the same reason
-   *  "export" does below. */
-  @Get("earnings-summary")
-  getEarningsSummary(@CurrentUser() user: JwtClaims, @Query() query: QueryEarningsSummaryDto) {
-    return this.upwork.getEarningsSummary(user.orgId, query);
   }
 
   /** Every authenticated user with Upwork access reads these — they're what
@@ -88,7 +76,7 @@ export class UpworkController {
 
   @Patch(":id")
   update(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Body() dto: UpdateUpworkProposalDto) {
-    return this.upwork.update(user.orgId, id, dto, user.role);
+    return this.upwork.update(user.orgId, id, dto);
   }
 
   /** Admin-only, same reasoning as updatePicklists — choosing who gets

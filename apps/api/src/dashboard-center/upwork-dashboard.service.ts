@@ -154,6 +154,87 @@ export class UpworkDashboardService {
     return safeDivide(agg._sum.totalCost ?? 0, agg._sum.connectsAmount ?? 0);
   }
 
+  /** Earnings for WON proposals of one type, auto-matched against Upwork's
+   *  own real transaction ledger — never manually entered (Part: Upwork
+   *  earnings-by-client matching, 2026-10-28, explicit user correction:
+   *  "the earning for those clients should be picked from the
+   *  transactions and payment data by matching the client... it is not a
+   *  manual task"). Matches `UpworkProposal.clientName` (what the team
+   *  types in when logging/closing a bid or invite) against
+   *  `UpworkApiTransaction.assignmentCompanyName` (Upwork's own client
+   *  name on each ledger row — only populated once the org's connection
+   *  carries the "payment activities" scope, see that column's own
+   *  schema docblock), normalized (trimmed, case-insensitive) since the
+   *  two are typed/reported independently and won't always match on
+   *  exact casing.
+   *
+   *  "Clients Won" is scoped to the dashboard's own date range (same
+   *  `where` every other WON count on this page uses, so this can never
+   *  disagree with the `wonBids`/`wonInvites` tiles already shown) — but
+   *  once a client is in that set, EVERY matching transaction row is
+   *  summed regardless of when it occurred, not just rows inside the same
+   *  range, since a contract's payments land over its whole lifetime, not
+   *  just the month it was won.
+   *
+   *  Gross = sum of positive transaction amounts for a matched client
+   *  (invoices, bonuses, etc.); fee = sum of negative amounts whose
+   *  `accountingSubtype` names it a fee (so a refund/dispute adjustment,
+   *  which is also negative but isn't Upwork's cut, doesn't get counted
+   *  as a "service fee"). Net is derived from those two sums directly,
+   *  not re-summed from individual rows, so it can never drift from
+   *  gross-minus-fee. A WON client with zero matching transactions
+   *  contributes nothing to any total and is counted in
+   *  `missingEarningsCount` instead — never treated as $0 earned, since
+   *  "no match yet" (sync hasn't caught up, or the two names genuinely
+   *  don't line up) is a different fact than "earned nothing". */
+  private async getWonClientEarnings(orgId: string, type: "BIDDING" | "INVITE", range: { from: Date; to: Date }) {
+    const wonProposals = await this.prisma.upworkProposal.findMany({
+      where: { orgId, type, status: "WON", createdAt: { gte: range.from, lte: range.to }, clientName: { not: null } },
+      select: { clientName: true },
+    });
+    const clientsWon = wonProposals.length;
+    if (clientsWon === 0) {
+      return { clientsWon: 0, totalClientEarnings: 0, totalServiceFees: 0, totalNetEarnings: 0, missingEarningsCount: 0 };
+    }
+
+    const transactions = await this.prisma.upworkApiTransaction.findMany({
+      where: { orgId, assignmentCompanyName: { not: null } },
+      select: { assignmentCompanyName: true, amountRaw: true, accountingSubtype: true },
+    });
+    const normalize = (s: string) => s.trim().toLowerCase();
+    const byClient = new Map<string, { gross: number; fee: number }>();
+    for (const t of transactions) {
+      const amount = Number(t.amountRaw ?? 0);
+      if (!amount || !t.assignmentCompanyName) continue;
+      const key = normalize(t.assignmentCompanyName);
+      const bucket = byClient.get(key) ?? { gross: 0, fee: 0 };
+      if (amount > 0) bucket.gross += amount;
+      else if (/fee/i.test(t.accountingSubtype ?? "")) bucket.fee += Math.abs(amount);
+      byClient.set(key, bucket);
+    }
+
+    let totalClientEarnings = 0;
+    let totalServiceFees = 0;
+    let missingEarningsCount = 0;
+    for (const p of wonProposals) {
+      const match = byClient.get(normalize(p.clientName!));
+      if (!match) {
+        missingEarningsCount++;
+        continue;
+      }
+      totalClientEarnings += match.gross;
+      totalServiceFees += match.fee;
+    }
+
+    return {
+      clientsWon,
+      totalClientEarnings: Math.round(totalClientEarnings * 100) / 100,
+      totalServiceFees: Math.round(totalServiceFees * 100) / 100,
+      totalNetEarnings: Math.round((totalClientEarnings - totalServiceFees) * 100) / 100,
+      missingEarningsCount,
+    };
+  }
+
   async getKpis(orgId: string, query: DashboardRangeQuery) {
     const { current, previous } = resolveDashboardRange(query);
     const where = { orgId, createdAt: { gte: current.from, lte: current.to } };
@@ -263,6 +344,11 @@ export class UpworkDashboardService {
     const connectCost = connectsUsed * costPerConnect;
     const inviteConnectCost = connectsUsedInvites * costPerConnect;
 
+    const [biddingEarnings, inviteEarnings] = await Promise.all([
+      this.getWonClientEarnings(orgId, "BIDDING", current),
+      this.getWonClientEarnings(orgId, "INVITE", current),
+    ]);
+
     return {
       range: { from: current.from, to: current.to },
       totalBids,
@@ -279,6 +365,16 @@ export class UpworkDashboardService {
       lostInvites,
       conversionRateBidding: safeRate(wonBids, totalBids),
       conversionRateInvites: safeRate(wonInvites, totalInvites),
+      // Auto-matched from the real Upwork transaction ledger, never
+      // manually entered -- see getWonClientEarnings's own docblock.
+      biddingTotalClientEarnings: biddingEarnings.totalClientEarnings,
+      biddingTotalServiceFees: biddingEarnings.totalServiceFees,
+      biddingTotalNetEarnings: biddingEarnings.totalNetEarnings,
+      biddingEarningsMissingCount: biddingEarnings.missingEarningsCount,
+      inviteTotalClientEarnings: inviteEarnings.totalClientEarnings,
+      inviteTotalServiceFees: inviteEarnings.totalServiceFees,
+      inviteTotalNetEarnings: inviteEarnings.totalNetEarnings,
+      inviteEarningsMissingCount: inviteEarnings.missingEarningsCount,
       bidsViewed,
       invitesViewed,
       bidsInDiscussion,

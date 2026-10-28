@@ -144,6 +144,11 @@ export interface TransactionHistoryRow {
   accountingSubtype: string | null;
   transactionAmount: { rawValue: string; currency: string; displayValue: string } | null;
   paymentStatus: string | null;
+  /// The client's company name on this row's contract (Part: Upwork
+  /// earnings-by-client matching, 2026-10-28) — only present once the
+  /// org's OAuth connection carries the "payment activities" scope (see
+  /// this field's own column docblock on UpworkApiTransaction).
+  assignmentCompanyName: string | null;
 }
 
 /** Exported (Part: real bug fix, 2026-10-22 — reactive token refresh) so
@@ -487,11 +492,16 @@ export class UpworkGraphQLClient {
   /** Real financial ledger (spec Module B) — confirmed live against real
    *  data: service fees, fixed-price invoices, Connects purchase fees,
    *  freelancer refunds, all with real contract/client references embedded
-   *  in `description` (Upwork does not expose these as separate structured
-   *  fields on this row type, confirmed via introspection —
-   *  TransactionHistoryRow has no contractId/clientId field, only free-text
-   *  description). Date range is required (`transactionDateTime_bt`), no
-   *  "all time" option. */
+   *  in `description`. `assignmentCompanyName` (the structured client-name
+   *  field used for earnings-by-client matching, Part: 2026-10-28) was
+   *  originally confirmed ABSENT from this row type via introspection —
+   *  that was correct only for the OAuth scope this connection carried at
+   *  the time. Re-authorizing with the broader "payment activities" scope
+   *  the same day grew `TransactionHistoryRow` from 7 fields to 32,
+   *  `assignmentCompanyName` among them — don't trust an old "Upwork
+   *  doesn't expose X" finding here without re-checking after any scope
+   *  change. Date range is required (`transactionDateTime_bt`), no "all
+   *  time" option. */
   async getTransactionHistory(
     accessToken: string,
     organizationId: string | null,
@@ -508,7 +518,7 @@ export class UpworkGraphQLClient {
             transactionHistoryRow {
               recordId transactionCreationDate type description accountingSubtype
               transactionAmount { rawValue currency displayValue }
-              paymentStatus
+              paymentStatus assignmentCompanyName
             }
           }
         }
