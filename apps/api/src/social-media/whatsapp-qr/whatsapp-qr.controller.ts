@@ -59,6 +59,11 @@ export class WhatsAppQrController {
       phoneNumber: account.externalAccountId,
       status: session?.status ?? "DISCONNECTED",
       socketLive: this.sessions.getStatus(accountId) === "live",
+      // Lets the Numbers tab show a scannable code just from having the
+      // page open -- no modal, no click required (Part: WhatsApp Team
+      // Inbox reliability, 2026-10-29) -- cleared the moment the session
+      // actually connects (see handleConnectionUpdate's own docblock).
+      pendingQrDataUrl: session?.status === "QR_PENDING" ? session.pendingQrDataUrl : null,
     };
   }
 

@@ -27,6 +27,35 @@ function StatusBadge({ status }: { status: SessionStatus | WhatsAppQrAccount["st
 }
 
 /**
+ * Inline "needs a QR scan" card, shown just from having this page open --
+ * no modal, no click required (Part: WhatsApp Team Inbox reliability,
+ * 2026-10-29, direct user report: two numbers sat dead for ~2 days because
+ * the only way to ever see a pending QR was to be the specific person who'd
+ * just clicked "Reconnect" and still had the modal open). Polls the same
+ * session-status endpoint the old modal only ever called once; the backend
+ * (WhatsAppQrReconnectWorker) keeps regenerating a fresh code every ~30s
+ * for as long as the session sits at QR_PENDING, so this always has
+ * something scannable rather than one code going stale a minute in.
+ */
+function PendingQrCard({ accountId }: { accountId: string }) {
+  const { data } = useQuery({
+    queryKey: ["whatsapp-qr-session-status", accountId],
+    queryFn: () => api.getWhatsAppQrSessionStatus(accountId) as Promise<{ status: SessionStatus; pendingQrDataUrl: string | null }>,
+    refetchInterval: 5000,
+  });
+  if (!data?.pendingQrDataUrl) return null;
+  return (
+    <div className="mt-3 flex flex-col items-center gap-2 rounded-lg border border-[var(--line)] p-3">
+      {/* eslint-disable-next-line @next/next/no-img-element -- a data: URL, not something next/image can optimize */}
+      <img src={data.pendingQrDataUrl} alt="WhatsApp QR code" className="h-40 w-40 rounded-md border border-[var(--line)]" />
+      <p className="text-center text-[11px] text-ink/50">
+        This number needs re-scanning — open WhatsApp on its phone → Settings → Linked Devices → Link a Device.
+      </p>
+    </div>
+  );
+}
+
+/**
  * QR connect modal -- scan once, the session manager keeps the socket alive
  * server-side from then on (Part: WhatsApp Team Inbox, 2026-10-26). No
  * OAuth redirect here at all: the backend pushes the QR image + connected
@@ -127,8 +156,16 @@ export function WhatsAppQrNumbersList() {
     setBusyId(accountId);
     setActionError(null);
     try {
+      // No longer opens ConnectQrModal (Part: WhatsApp Team Inbox
+      // reliability, 2026-10-29 -- real bug found while fixing the
+      // "connection silently dies" report: that modal's own effect
+      // unconditionally calls startWhatsAppQrSession() whenever it opens,
+      // which creates a BRAND NEW SocialAccount regardless of which
+      // existing number's QR you were actually trying to re-scan. The
+      // inline PendingQrCard below picks up the real fresh code for THIS
+      // accountId within one poll (~5s), no modal needed.
       await api.reconnectWhatsAppQrSession(accountId);
-      setModalOpen(true);
+      queryClient.invalidateQueries({ queryKey: ["whatsapp-qr-session-status", accountId] });
     } catch (err) {
       setActionError((err as Error).message);
     } finally {
@@ -260,6 +297,7 @@ export function WhatsAppQrNumbersList() {
                 </button>
               )}
             </div>
+            {n.status !== "CONNECTED" && <PendingQrCard accountId={n.id} />}
           </div>
         ))}
         {!accountsQuery.isLoading && numbers.length === 0 && (

@@ -2743,6 +2743,21 @@ model WhatsAppQrSession {
   socialAccountId    String                  @unique @map("social_account_id")
   socialAccount      SocialAccount           @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
   status             WhatsAppQrSessionStatus @default(CONNECTING)
+  /// The most recently generated QR image (base64 data URL), persisted
+  /// regardless of whether anyone is live-watching a connect modal (Part:
+  /// WhatsApp Team Inbox reliability, 2026-10-29, explicit user report —
+  /// two numbers sat dead for ~2 days because a QR requirement raised in
+  /// the background, outside any user-initiated connect flow, had
+  /// nowhere to go: RealtimeGateway.emitToUser only reaches someone
+  /// actively watching, and nothing else kept the code). Cleared once
+  /// `connection === "open"` — a stale QR is useless the moment the
+  /// session is actually connected. WhatsAppQrReconnectWorker now
+  /// retries a QR_PENDING session on the same cooldown as a plain
+  /// DISCONNECTED one specifically so this field keeps getting a FRESH
+  /// code (WhatsApp's QR expires after roughly a minute) rather than one
+  /// static image going stale the moment nobody's there to scan it in
+  /// time.
+  pendingQrDataUrl   String?                 @map("pending_qr_data_url") @db.Text
   lastQrAt           DateTime?               @map("last_qr_at")
   lastConnectedAt    DateTime?               @map("last_connected_at")
   lastDisconnectedAt DateTime?               @map("last_disconnected_at")

@@ -7,6 +7,8 @@ import { PrismaService } from "../../common/prisma/prisma.service";
 import { RealtimeGateway } from "../../realtime/realtime.gateway";
 import { SocialInboxIngestService } from "../social-inbox-ingest.service";
 import { MEDIA_STORAGE_SERVICE, MediaStorageService } from "../media/media-storage.interface";
+import { NotificationsService } from "../../notifications/notifications.service";
+import { NotificationCategory } from "@prisma/client";
 
 type BaileysModule = typeof import("@whiskeysockets/baileys");
 
@@ -63,6 +65,7 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly realtime: RealtimeGateway,
     private readonly ingest: SocialInboxIngestService,
+    private readonly notifications: NotificationsService,
     @Inject(MEDIA_STORAGE_SERVICE) private readonly storage: MediaStorageService,
   ) {}
 
@@ -117,6 +120,25 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       this.connectingUsers.delete(account.id);
     });
     return { accountId: account.id };
+  }
+
+  /** Ends and discards any socket already held for `accountId`, if any, so
+   *  a following connect() is guaranteed to open a genuinely fresh one
+   *  instead of hitting connect()'s own no-op guard (Part: WhatsApp Team
+   *  Inbox reliability, 2026-10-29). A QR_PENDING session still holds a
+   *  "live" socket object in `sockets` -- it was never deleted, only
+   *  `connection === "close"` does that -- so WhatsAppQrReconnectWorker's
+   *  retry of a stuck QR_PENDING session would otherwise silently no-op
+   *  forever against the same stale socket, confirmed as the real
+   *  explanation for two numbers sitting dead for ~2 days: nothing ever
+   *  forced a genuinely new connection attempt. */
+  async forceReconnect(accountId: string): Promise<void> {
+    const existing = this.sockets.get(accountId);
+    if (existing) {
+      this.sockets.delete(accountId);
+      await Promise.resolve(existing.end(undefined)).catch(() => undefined);
+    }
+    await this.connect(accountId);
   }
 
   async connect(accountId: string): Promise<void> {
@@ -244,22 +266,83 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     return subject;
   }
 
+  /** Flags a WhatsApp number as actually down -- fixing a real production
+   *  bug (Part: WhatsApp Team Inbox reliability, 2026-10-29, direct user
+   *  report of lost messages): every close branch below used to update
+   *  WhatsAppQrSession.status but NOT SocialAccount.status except on an
+   *  explicit logout, so the Numbers tab (which only ever reads
+   *  SocialAccount.status) kept showing "Connected" for a number that had
+   *  actually been down for hours -- confirmed live in production, two
+   *  real numbers sat dead for ~2 days this way. Idempotent by design
+   *  (checks the current status first) so a flaky connection retrying
+   *  every 30s only ever sends ONE notification per real outage, not one
+   *  per failed retry. */
+  private async markAccountDown(accountId: string, reason: string): Promise<void> {
+    const account = await this.prisma.socialAccount.findUnique({ where: { id: accountId } });
+    if (!account || account.status === "DISCONNECTED") return;
+    await this.prisma.socialAccount.update({ where: { id: accountId }, data: { status: "DISCONNECTED" } });
+    await this.notifications.notify(account.orgId, {
+      category: NotificationCategory.SOCIAL,
+      type: "WHATSAPP_QR_DISCONNECTED",
+      title: "WhatsApp number disconnected",
+      message: `${account.displayName || account.username} went offline (${reason}) and is no longer receiving messages. ${
+        reason === "needs_qr" ? "Open the Numbers tab to scan a fresh QR code." : "It will keep retrying automatically."
+      }`,
+      severity: "ERROR",
+      entityType: "socialAccount",
+      entityId: account.id,
+      actionUrl: "/social-media/whatsapp-qr?tab=numbers",
+      forceEmail: true,
+    });
+  }
+
+  /** Mirror of markAccountDown for the good-news case -- a "resolved" email
+   *  only fires when the number was actually flagged down first, never on
+   *  a routine first-time connect. */
+  private async markAccountUp(accountId: string): Promise<void> {
+    const account = await this.prisma.socialAccount.findUnique({ where: { id: accountId } });
+    if (account && account.status === "DISCONNECTED") {
+      await this.notifications.notify(account.orgId, {
+        category: NotificationCategory.SOCIAL,
+        type: "WHATSAPP_QR_RECONNECTED",
+        title: "WhatsApp number back online",
+        message: `${account.displayName || account.username} reconnected and is receiving messages again.`,
+        severity: "WARNING",
+        entityType: "socialAccount",
+        entityId: account.id,
+        actionUrl: "/social-media/whatsapp-qr?tab=numbers",
+        emailTone: "resolved",
+      });
+    }
+  }
+
   private async handleConnectionUpdate(accountId: string, update: Partial<ConnectionState>) {
     const { connection, qr, lastDisconnect } = update;
 
     if (qr) {
+      const qrDataUrl = await QRCode.toDataURL(qr);
+      // Persisted unconditionally, not just pushed to whoever's watching
+      // (Part: WhatsApp Team Inbox reliability, 2026-10-29) -- a QR raised
+      // by the automatic reconnect sweep (nobody mid-click in the UI) used
+      // to just vanish; the Numbers tab now polls this same field so
+      // anyone who opens it sees a scannable code within one reconnect
+      // cooldown, not only the person who happened to click "Connect".
       await this.prisma.whatsAppQrSession.update({
         where: { socialAccountId: accountId },
-        data: { status: "QR_PENDING", lastQrAt: new Date() },
+        data: { status: "QR_PENDING", lastQrAt: new Date(), pendingQrDataUrl: qrDataUrl },
       });
+      // Needing a fresh QR always means "not actually connected right
+      // now" regardless of who triggered this connect() call -- fix for
+      // the same status-desync bug described on markAccountDown.
+      await this.markAccountDown(accountId, "needs_qr");
       const requestingUserId = this.connectingUsers.get(accountId);
       if (requestingUserId) {
-        const qrDataUrl = await QRCode.toDataURL(qr);
         this.realtime.emitToUser(requestingUserId, "whatsappQr.qr", { accountId, qrDataUrl });
       }
     }
 
     if (connection === "open") {
+      await this.markAccountUp(accountId);
       const sock = this.sockets.get(accountId);
       const phoneNumber = sock?.user?.id?.split(":")[0];
       // Settle the display username on the real number once connected --
@@ -278,7 +361,10 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       });
       await this.prisma.whatsAppQrSession.update({
         where: { socialAccountId: accountId },
-        data: { status: "CONNECTED", lastConnectedAt: new Date(), disconnectReason: null },
+        // Stale QR is useless the instant the session is actually
+        // connected -- clear it so the Numbers tab stops showing a dead
+        // code (Part: WhatsApp Team Inbox reliability, 2026-10-29).
+        data: { status: "CONNECTED", lastConnectedAt: new Date(), disconnectReason: null, pendingQrDataUrl: null },
       });
       const requestingUserId = this.connectingUsers.get(accountId);
       if (requestingUserId) {
@@ -305,9 +391,9 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       } else if (statusCode === DisconnectReason.loggedOut) {
         await this.prisma.whatsAppQrSession.update({
           where: { socialAccountId: accountId },
-          data: { status: "LOGGED_OUT", lastDisconnectedAt: new Date(), disconnectReason: "logged_out" },
+          data: { status: "LOGGED_OUT", lastDisconnectedAt: new Date(), disconnectReason: "logged_out", pendingQrDataUrl: null },
         });
-        await this.prisma.socialAccount.update({ where: { id: accountId }, data: { status: "DISCONNECTED" } });
+        await this.markAccountDown(accountId, "logged out");
         await fs.rm(this.sessionDir(accountId), { recursive: true, force: true }).catch(() => undefined);
         const requestingUserId = this.connectingUsers.get(accountId);
         if (requestingUserId) this.realtime.emitToUser(requestingUserId, "whatsappQr.loggedOut", { accountId });
@@ -316,11 +402,15 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         // Anything other than an explicit logout is left for
         // WhatsAppQrReconnectWorker's sweep to retry with backoff, not
         // retried inline here -- a flaky network blip shouldn't become an
-        // unbounded retry loop on this same event handler.
+        // unbounded retry loop on this same event handler. The sweep now
+        // retries this status too (Part: WhatsApp Team Inbox reliability,
+        // 2026-10-29 -- "make sure the connection doesn't go down until I
+        // disconnect them"), same 30s cooldown as before.
         await this.prisma.whatsAppQrSession.update({
           where: { socialAccountId: accountId },
           data: { status: "DISCONNECTED", lastDisconnectedAt: new Date(), disconnectReason: String(statusCode ?? "unknown") },
         });
+        await this.markAccountDown(accountId, "connection dropped");
         const requestingUserId = this.connectingUsers.get(accountId);
         if (requestingUserId) {
           this.realtime.emitToUser(requestingUserId, "whatsappQr.disconnected", { accountId });
@@ -364,9 +454,23 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
     // fields with no shared base -- read loosely here rather than fighting
     // the exact union of IImageMessage/IVideoMessage/IAudioMessage/
     // IDocumentMessage, same pragmatic looseness their own examples use.
-    const content = message.message as Record<string, any>;
-    const mediaContent: Record<string, any> | undefined = content.imageMessage ?? content.videoMessage ?? content.audioMessage ?? content.documentMessage;
-    const mediaType: "image" | "video" | "audio" | "document" | undefined = content.imageMessage
+    const rawContent = message.message as Record<string, any>;
+    // View-once photos/videos and the newer "document with caption" wrapper
+    // both nest the real message one level down under `.message` (Part:
+    // WhatsApp message-type coverage, 2026-10-29, explicit user report of
+    // missing messages) -- unwrapped here so every check below sees the
+    // real imageMessage/videoMessage/documentMessage either way, instead of
+    // silently falling through to "no text, no media" for anything sent as
+    // a view-once photo.
+    const content: Record<string, any> =
+      rawContent.viewOnceMessage?.message ??
+      rawContent.viewOnceMessageV2?.message ??
+      rawContent.viewOnceMessageV2Extension?.message ??
+      rawContent.documentWithCaptionMessage?.message ??
+      rawContent;
+    const mediaContent: Record<string, any> | undefined =
+      content.imageMessage ?? content.videoMessage ?? content.audioMessage ?? content.documentMessage ?? content.stickerMessage;
+    const mediaType: "image" | "video" | "audio" | "document" | "sticker" | undefined = content.imageMessage
       ? "image"
       : content.videoMessage
         ? "video"
@@ -374,7 +478,9 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
           ? "audio"
           : content.documentMessage
             ? "document"
-            : undefined;
+            : content.stickerMessage
+              ? "sticker"
+              : undefined;
 
     let media: { url: string; mimeType: string; filename: string } | undefined;
     if (mediaContent && mediaType) {
@@ -383,6 +489,25 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
         return undefined;
       });
     }
+    // Message types with no file to download at all -- location pins,
+    // shared contact cards, and polls (Part: WhatsApp message-type
+    // coverage, 2026-10-29) -- previously hit the bare `!text && !media`
+    // check below and vanished with zero trace. Each formatted as a plain
+    // text line rather than invented media, since none of them are
+    // actually a file.
+    const location = content.locationMessage ?? content.liveLocationMessage;
+    const contactCard = content.contactMessage;
+    const contactsArray = content.contactsArrayMessage;
+    const poll = content.pollCreationMessage ?? content.pollCreationMessageV3;
+    const structuredText = location
+      ? `📍 Location: ${location.name || location.address || `${location.degreesLatitude}, ${location.degreesLongitude}`}`
+      : contactCard
+        ? `👤 Contact card: ${contactCard.displayName || "shared contact"}`
+        : contactsArray
+          ? `👤 Contact card: ${(contactsArray.contacts ?? []).map((c: Record<string, any>) => c.displayName).filter(Boolean).join(", ") || "shared contacts"}`
+          : poll
+            ? `📊 Poll: ${poll.name}${poll.options?.length ? ` (${poll.options.map((o: Record<string, any>) => o.optionName).join(", ")})` : ""}`
+            : undefined;
     // Real caption if there is one; if media downloaded fine with no
     // caption, no text at all (Part: WhatsApp media-caption parity,
     // 2026-10-27, explicit user request -- "it should work exactly like
@@ -394,8 +519,9 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
       content.conversation ??
       content.extendedTextMessage?.text ??
       mediaContent?.caption ??
+      structuredText ??
       (mediaType && !media ? `[${mediaType}]` : undefined);
-    if (!text && !media) return;
+    if (!text && !media) return; // genuinely content-free (a reaction, a protocol message, etc.) -- correctly skipped, not a gap
 
     const account = await this.prisma.socialAccount.findUniqueOrThrow({ where: { id: accountId } });
     // contactNumber keeps its "@lid" suffix when the real number isn't
@@ -424,9 +550,13 @@ export class WhatsAppQrSessionManagerService implements OnModuleInit {
   private async downloadAndStoreMedia(
     accountId: string,
     mediaContent: Record<string, any>,
-    mediaType: "image" | "video" | "audio" | "document",
+    mediaType: "image" | "video" | "audio" | "document" | "sticker",
   ): Promise<{ url: string; mimeType: string; filename: string }> {
     const { downloadContentFromMessage } = await this.lib();
+    // Baileys' own MediaType union includes "sticker" (stickers are just
+    // webp images under the hood) -- same download path as every other
+    // media type, not a special case (Part: WhatsApp message-type
+    // coverage, 2026-10-29).
     const stream = await downloadContentFromMessage(mediaContent, mediaType);
     const chunks: Buffer[] = [];
     for await (const chunk of stream) chunks.push(chunk as Buffer);
