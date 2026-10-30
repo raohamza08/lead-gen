@@ -237,7 +237,7 @@ model Organization {
   upworkApiSubmittedProposals   UpworkApiSubmittedProposal[]
   upworkRequests                UpworkRequest[]
   upworkProposalWritingSettings UpworkProposalWritingSettings?
-  linkedinOutreachSession       LinkedinOutreachSession?
+  linkedinOutreachAccounts      LinkedinOutreachAccount[]
   upworkProposalDrafts          UpworkProposalDraft[]
   upworkFreelancerProfiles      UpworkFreelancerProfile[]
   upworkDiscoveredJobs          UpworkDiscoveredJob[]
@@ -2776,17 +2776,22 @@ enum WhatsAppQrSessionStatus {
   LOGGED_OUT
 }
 
-/// One persistent, server-side LinkedIn browser session per org (Part:
-/// LinkedIn Outreach) — the company's shared LinkedIn profile stays logged
-/// in via an on-disk Playwright browser profile (LinkedinOutreachSessionService,
-/// never stored here) that survives restarts/idle-closes, so shift workers
-/// never re-enter LinkedIn credentials. This row only tracks status for the
-/// UI, same split as WhatsAppQrSession above: the live browser process/CDP
-/// session is in-memory, this is just "what should the page show right now."
-model LinkedinOutreachSession {
+/// One persistent, server-side LinkedIn browser session per CONNECTED
+/// ACCOUNT (Part: LinkedIn Outreach — originally one shared profile per org,
+/// extended to multiple named accounts per org per explicit user request,
+/// 2026-10-30) — each row is its own Playwright on-disk profile
+/// (LinkedinOutreachSessionService, never stored here) that stays logged in
+/// and survives restarts/idle-closes, so shift workers never re-enter
+/// LinkedIn credentials. This row only tracks status for the UI, same split
+/// as WhatsAppQrSession above: the live browser process/CDP session is
+/// in-memory, this is just "what should the page show right now."
+model LinkedinOutreachAccount {
   id    String       @id @default(uuid())
-  orgId String       @unique @map("org_id")
+  orgId String       @map("org_id")
   org   Organization @relation(fields: [orgId], references: [id])
+  /// User-chosen name shown in the account switcher (e.g. "Company Page",
+  /// "Sales — Jane") — purely cosmetic, never used for login.
+  label            String                 @default("Primary")
   status           LinkedinOutreachStatus @default(LOGGED_OUT)
   /// Plain id, no FK — a status snapshot of who last touched the session,
   /// not a relation anything needs to cascade/include through (same
@@ -2800,7 +2805,8 @@ model LinkedinOutreachSession {
   createdAt        DateTime               @default(now()) @map("created_at")
   updatedAt        DateTime               @updatedAt @map("updated_at")
 
-  @@map("linkedin_outreach_sessions")
+  @@index([orgId])
+  @@map("linkedin_outreach_accounts")
 }
 
 enum LinkedinOutreachStatus {

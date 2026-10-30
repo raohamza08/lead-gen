@@ -31,10 +31,11 @@ import { corsOriginValidator } from "../common/cors";
  *   whatsappQr.connected    { accountId, phoneNumber } — same user-only targeting as above
  *   whatsappQr.loggedOut    { accountId } — the linked device was removed/logged out, needs a fresh QR scan
  *   whatsappQr.disconnected { accountId } — connect attempt failed for a non-logout reason, see WhatsAppQrReconnectWorker
- *   linkedinSession.frame  { data } — a JPEG screencast frame (base64) of the shared LinkedIn browser, org-wide
- *   linkedinSession.status { status } — LOGGED_OUT | AWAITING_LOGIN | ACTIVE
- *   linkedinSession.lock   { holder } — who currently holds the claim (or null)
- *   linkedinSession.kicked { by } — pushed only to whoever just got taken over (emitToUser)
+ *   linkedinSession.frame   { accountId, data } — a JPEG screencast frame (base64) of one connected LinkedIn account's browser, org-wide (client filters by accountId)
+ *   linkedinSession.status  { accountId, status } — LOGGED_OUT | AWAITING_LOGIN | ACTIVE
+ *   linkedinSession.lock    { accountId, holder } — who currently holds the claim on that account (or null)
+ *   linkedinSession.kicked  { accountId, by } — pushed only to whoever just got taken over (emitToUser)
+ *   linkedinSession.removed { accountId } — an account was deleted, org-wide
  */
 @Injectable()
 @WebSocketGateway({

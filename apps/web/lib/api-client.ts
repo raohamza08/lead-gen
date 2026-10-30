@@ -1248,14 +1248,23 @@ export const api = {
     }),
   getUpworkInviteProposalDrafts: () => request("/upwork-proposal-writing/invite-drafts"),
 
-  // ---- LinkedIn Outreach (Part: LinkedIn Outreach, shared-session shift handoff) ----
+  // ---- LinkedIn Outreach (Part: LinkedIn Outreach, shared-session shift
+  // handoff — multi-account 2026-10-30) ----
   // Live mouse/keyboard control itself goes over the socket
   // (`linkedinSession.input`, see lib/realtime.ts), not through here.
-  getLinkedinOutreachStatus: () => request("/linkedin-outreach/status"),
-  claimLinkedinOutreachSession: () => request("/linkedin-outreach/claim", { method: "POST" }),
-  takeoverLinkedinOutreachSession: () => request("/linkedin-outreach/takeover", { method: "POST" }),
-  releaseLinkedinOutreachSession: () => request("/linkedin-outreach/release", { method: "POST" }),
-  logoutLinkedinOutreachSession: () => request("/linkedin-outreach/logout", { method: "POST" }),
+  listLinkedinOutreachAccounts: () => request("/linkedin-outreach/accounts"),
+  addLinkedinOutreachAccount: (label: string) =>
+    request("/linkedin-outreach/accounts", { method: "POST", body: JSON.stringify({ label }) }),
+  removeLinkedinOutreachAccount: (accountId: string) =>
+    request(`/linkedin-outreach/accounts/${accountId}`, { method: "DELETE" }),
+  claimLinkedinOutreachSession: (accountId: string) =>
+    request(`/linkedin-outreach/accounts/${accountId}/claim`, { method: "POST" }),
+  takeoverLinkedinOutreachSession: (accountId: string) =>
+    request(`/linkedin-outreach/accounts/${accountId}/takeover`, { method: "POST" }),
+  releaseLinkedinOutreachSession: (accountId: string) =>
+    request(`/linkedin-outreach/accounts/${accountId}/release`, { method: "POST" }),
+  logoutLinkedinOutreachSession: (accountId: string) =>
+    request(`/linkedin-outreach/accounts/${accountId}/logout`, { method: "POST" }),
 
   // ---- Dashboard Center (Part: Dashboard Center, 2026-09-30) ----
   getDashboardOverview: (params: Record<string, string> = {}) =>
