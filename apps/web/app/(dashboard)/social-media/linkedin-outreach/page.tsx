@@ -205,13 +205,34 @@ export default function LinkedinOutreachPage() {
       sendInput({ type: "insertText", text: e.key });
       return;
     }
-    sendInput({ type: "keyDown", key: e.key, code: e.code });
+    sendInput({ type: "keyDown", key: e.key });
   }
   function handleKeyUp(e: React.KeyboardEvent<HTMLCanvasElement>) {
     if (!isHolder) return;
     e.preventDefault();
     if (isPrintableKey(e)) return;
-    sendInput({ type: "keyUp", key: e.key, code: e.code });
+    sendInput({ type: "keyUp", key: e.key });
+  }
+
+  // Ctrl/Cmd+V forwarded as a real key press (handleKeyDown above) still
+  // only pastes whatever is in the REMOTE browser's own clipboard — that
+  // machine and the operator's own computer are two different clipboards,
+  // so there's no way for a simulated keystroke alone to reach across that
+  // gap. This explicit action reads the operator's actual local clipboard
+  // (Clipboard API, needs the page's own HTTPS origin + a real user
+  // gesture, which this button click provides) and types it into the
+  // remote page the same way normal typing does. The reverse direction —
+  // copying remote-selected text back out to the operator's own clipboard
+  // — isn't implemented; that needs reading the remote page's selection
+  // and piping it back over the socket, which is its own separate feature.
+  async function handlePasteFromClipboard() {
+    if (!isHolder) return;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) sendInput({ type: "insertText", text });
+    } catch {
+      setError("Couldn't read your clipboard — your browser may be blocking clipboard access on this page.");
+    }
   }
 
   const statusLabel = (status: SessionStatus | undefined) =>
@@ -281,6 +302,11 @@ export default function LinkedinOutreachPage() {
               {!selected.holder && (
                 <Button onClick={() => runAction(selected.id, api.claimLinkedinOutreachSession)} loading={busy}>
                   Claim
+                </Button>
+              )}
+              {selected.holder && isHolder && (
+                <Button variant="secondary" onClick={handlePasteFromClipboard}>
+                  Paste
                 </Button>
               )}
               {selected.holder && isHolder && (

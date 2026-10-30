@@ -61,6 +61,10 @@ export class LinkedinOutreachSessionService implements OnModuleInit {
   private readonly holders = new Map<string, Holder>();
   private readonly idleTimers = new Map<string, NodeJS.Timeout>();
   private readonly lastFrameAt = new Map<string, number>();
+  // Serializes each account's input events so a fast chord (e.g. holding
+  // Ctrl then pressing C) can't have its CDP dispatches race each other —
+  // see handleInput's own docblock for why that reordering broke Ctrl+C/V.
+  private readonly inputQueues = new Map<string, Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -88,8 +92,8 @@ export class LinkedinOutreachSessionService implements OnModuleInit {
         const button = event.button === "right" || event.button === "middle" ? event.button : "left";
         this.handleInput(accountId, claims.sub, { type, x: event.x, y: event.y, button }).catch(() => undefined);
       } else if (type === "keyDown" || type === "keyUp") {
-        if (typeof event.key !== "string" || typeof event.code !== "string") return;
-        this.handleInput(accountId, claims.sub, { type, key: event.key, code: event.code }).catch(() => undefined);
+        if (typeof event.key !== "string") return;
+        this.handleInput(accountId, claims.sub, { type, key: event.key }).catch(() => undefined);
       } else if (type === "insertText") {
         if (typeof event.text !== "string") return;
         this.handleInput(accountId, claims.sub, { type, text: event.text }).catch(() => undefined);
@@ -280,6 +284,7 @@ export class LinkedinOutreachSessionService implements OnModuleInit {
     await fs.rm(this.userDataDir(accountId), { recursive: true, force: true }).catch(() => undefined);
     await this.prisma.linkedinOutreachAccount.delete({ where: { id: accountId } }).catch(() => undefined);
     this.accountOrgCache.delete(accountId);
+    this.inputQueues.delete(accountId);
     this.auditLog.write({ orgId, actorId: userId, action: "LINKEDIN_ACCOUNT_REMOVED", entityType: "linkedin_outreach_account", entityId: accountId });
     this.realtime.emitToOrg(orgId, "linkedinSession.removed", { accountId });
   }
@@ -337,39 +342,73 @@ export class LinkedinOutreachSessionService implements OnModuleInit {
    *  attack worth a loud error on every mouse-move. No separate org-ownership
    *  DB check here: holder.userId is only ever set by claim(), which already
    *  verified the account belongs to the claimer's org, so matching against
-   *  it is sufficient without a per-event round trip. */
+   *  it is sufficient without a per-event round trip.
+   *
+   *  Goes through Playwright's own `page.mouse`/`page.keyboard`, not raw CDP
+   *  `Input.*` calls (what this used to do) — hand-rolled CDP dispatch has
+   *  no memory of which modifier keys are currently held, so a separately
+   *  dispatched Ctrl-down then "c"-down never reads as Ctrl+C to Chrome, and
+   *  a bare keyDown/keyUp with no virtual-key-code info can fail to trigger
+   *  native edit commands like Backspace/Delete. Playwright's Mouse/Keyboard
+   *  classes track that state across calls internally (the same mechanism
+   *  that makes its own click()/type()/press() reliable against real sites)
+   *  — reusing it fixes copy/paste and delete for free instead of
+   *  re-deriving CDP's modifier bitmask and virtual-key tables by hand (Part:
+   *  LinkedIn Outreach, 2026-10-30, explicit user report that writing,
+   *  removing, and copy/paste still didn't work after the clickCount fix).
+   *
+   *  Queued per-account (see `inputQueues`) rather than dispatched
+   *  immediately — the socket handler that calls this fires one call per
+   *  incoming message without waiting for the previous one, so a fast key
+   *  chord (Control-down then "c"-down, both sent within the same
+   *  millisecond) could reach this method before the first call's `await
+   *  page.keyboard.down(...)` had actually finished updating Playwright's
+   *  own held-modifiers state, letting the second call's CDP dispatch win
+   *  the race and go out not knowing Control was down. Confirmed live:
+   *  without the queue, a simulated Ctrl+A chord typed a literal "a" into
+   *  the field instead of selecting its contents. */
   async handleInput(
     accountId: string,
     userId: string,
     event:
       | { type: "mouseMove" | "mousePressed" | "mouseReleased"; x: number; y: number; button?: "left" | "right" | "middle" }
-      | { type: "keyDown" | "keyUp"; key: string; code: string }
+      | { type: "keyDown" | "keyUp"; key: string }
       | { type: "insertText"; text: string },
   ): Promise<void> {
     const holder = this.holders.get(accountId);
     if (!holder || holder.userId !== userId) return;
-    const cdp = this.cdpSessions.get(accountId);
-    if (!cdp) return;
+
+    const prior = this.inputQueues.get(accountId) ?? Promise.resolve();
+    const next = prior.then(() => this.dispatchInput(accountId, event));
+    this.inputQueues.set(accountId, next.catch(() => undefined));
+    return next;
+  }
+
+  private async dispatchInput(
+    accountId: string,
+    event:
+      | { type: "mouseMove" | "mousePressed" | "mouseReleased"; x: number; y: number; button?: "left" | "right" | "middle" }
+      | { type: "keyDown" | "keyUp"; key: string }
+      | { type: "insertText"; text: string },
+  ): Promise<void> {
+    const page = this.pages.get(accountId);
+    if (!page || page.isClosed()) return;
 
     try {
-      if (event.type === "mouseMove" || event.type === "mousePressed" || event.type === "mouseReleased") {
-        await cdp.send("Input.dispatchMouseEvent", {
-          type: event.type === "mouseMove" ? "mouseMoved" : event.type === "mousePressed" ? "mousePressed" : "mouseReleased",
-          x: event.x,
-          y: event.y,
-          button: event.button ?? "left",
-          // Chrome requires a non-zero clickCount on BOTH the press and the
-          // release for Input.dispatchMouseEvent to synthesize an actual
-          // click — omitting it on release (as this used to) left every
-          // click silently not registering while the page still looked
-          // interactive (Part: LinkedIn Outreach, 2026-10-30 bug fix,
-          // explicit user report — "not able to click or write").
-          clickCount: event.type === "mouseMove" ? undefined : 1,
-        });
-      } else if (event.type === "keyDown" || event.type === "keyUp") {
-        await cdp.send("Input.dispatchKeyEvent", { type: event.type, key: event.key, code: event.code });
+      if (event.type === "mouseMove") {
+        await page.mouse.move(event.x, event.y);
+      } else if (event.type === "mousePressed") {
+        await page.mouse.move(event.x, event.y);
+        await page.mouse.down({ button: event.button ?? "left" });
+      } else if (event.type === "mouseReleased") {
+        await page.mouse.move(event.x, event.y);
+        await page.mouse.up({ button: event.button ?? "left" });
+      } else if (event.type === "keyDown") {
+        await page.keyboard.down(event.key);
+      } else if (event.type === "keyUp") {
+        await page.keyboard.up(event.key);
       } else if (event.type === "insertText") {
-        await cdp.send("Input.insertText", { text: event.text });
+        await page.keyboard.insertText(event.text);
       }
     } catch (err) {
       this.logger.debug(`Dropped LinkedIn session input event for account ${accountId}: ${(err as Error).message}`);
