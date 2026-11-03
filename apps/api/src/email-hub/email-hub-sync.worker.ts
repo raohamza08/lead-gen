@@ -9,6 +9,19 @@ import { ImapReaderProvider } from "./readers/imap-reader.provider";
 import { FetchedMessage } from "./mailbox-reader.interface";
 import { EmailLeadClassifierService } from "./email-lead-classifier.service";
 import { SequencerService } from "../sequencer/sequencer.service";
+import { ALERT_EMAIL_FROM_NAME } from "../notifications/alert-email.template";
+
+/** Every automated system/error alert (NotificationsService.emailPrimaryAdmin)
+ *  goes out through the org's own connected mailbox — same account the Email
+ *  Hub syncs — so it lands in that mailbox's real Sent folder exactly like a
+ *  genuine outreach email, and would otherwise show up in the Sent view
+ *  (Part: Sentinel alert emails cluttering Unified Inbox Sent, 2026-11-03).
+ *  Both markers are set on every alert send (ALERT_EMAIL_FROM_NAME as the
+ *  From display name, the subject prefix in emailPrimaryAdmin) and on nothing
+ *  else, so matching either is enough to recognize one. */
+function isSentinelAlertEmail(message: { fromName?: string; subject: string }): boolean {
+  return message.fromName === ALERT_EMAIL_FROM_NAME || message.subject.startsWith("[Outly Sentinel]");
+}
 
 /** Strips reply/forward prefixes and collapses whitespace so "Re: Re: Fwd:
  *  Website proposal" and "Website proposal" thread together when no
@@ -195,6 +208,12 @@ export class EmailHubSyncWorker implements OnModuleInit, OnModuleDestroy {
    *  muted sender's mail lands already filed into Ignored, not one poll
    *  cycle behind the mute. */
   private async persistMessage(account: EmailAccount, message: FetchedMessage, preIgnored: boolean) {
+    // Skip entirely, not just hide at read time — these never went through
+    // the Email Hub's own send path (TransactionalEmailService calls the
+    // provider directly), so there's no instant row to promote and nothing
+    // else downstream (threading, lead classification) should ever see one.
+    if (message.folder === "SENT" && isSentinelAlertEmail(message)) return;
+
     // A SENT-folder message may already exist as the instant row
     // EmailHubService.recordSentMessage wrote synchronously the moment the
     // user hit Send (Part: Email Hub instant Sent view, 2026-09-02) — this
