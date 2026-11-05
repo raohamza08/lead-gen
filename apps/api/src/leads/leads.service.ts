@@ -446,9 +446,9 @@ export class LeadsService {
    *  delete; the only difference is scope. Still cancels each lead's own
    *  wait-timer job individually (not a bulk queue op) since BullMQ jobs
    *  are addressed by their own id, not queryable by leadId. */
-  async removeByStage(orgId: string, stage: PipelineStage) {
+  async removeByStage(orgId: string, stage: PipelineStage, campaignId?: string) {
     const leads = await this.prisma.lead.findMany({
-      where: { orgId, pipelineState: { stage } },
+      where: { orgId, pipelineState: { stage }, ...(campaignId ? { campaignId } : {}) },
       select: { id: true },
     });
     for (const lead of leads) {

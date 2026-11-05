@@ -347,8 +347,12 @@ export class LeadsController {
   @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
   @RequiresModule("LEAD_GENERATION")
   @Roles(Role.ADMIN)
-  removeByStage(@CurrentUser() user: JwtClaims, @Param("stage", new ParseEnumPipe(PipelineStage)) stage: PipelineStage) {
-    return this.leadsService.removeByStage(user.orgId, stage);
+  removeByStage(
+    @CurrentUser() user: JwtClaims,
+    @Param("stage", new ParseEnumPipe(PipelineStage)) stage: PipelineStage,
+    @Query("campaignId") campaignId?: string,
+  ) {
+    return this.leadsService.removeByStage(user.orgId, stage, campaignId);
   }
 
   // ADMIN only, same reasoning as remove() below — Lead Room's "delete

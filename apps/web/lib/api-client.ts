@@ -325,8 +325,8 @@ export const api = {
   importLeads: (csv: string, mapping: Record<string, string | null>) =>
     request("/leads/import", { method: "POST", body: JSON.stringify({ csv, mapping }) }),
   deleteLead: (id: string) => request(`/leads/${id}`, { method: "DELETE" }),
-  deleteLeadsByStage: (stage: string) =>
-    request<{ deleted: number }>(`/leads/by-stage/${stage}`, { method: "DELETE" }),
+  deleteLeadsByStage: (stage: string, campaignId?: string) =>
+    request<{ deleted: number }>(`/leads/by-stage/${stage}${campaignId ? `?campaignId=${campaignId}` : ""}`, { method: "DELETE" }),
   promoteLeadsToPipeline: (body: { sourceLayer?: string; limit?: number; leadId?: string; campaignId?: string }) =>
     request<{ promoted: number }>("/leads/promote-to-pipeline", { method: "POST", body: JSON.stringify(body) }),
   bulkDeleteLeads: (leadIds: string[]) =>
