@@ -7,6 +7,7 @@ export class QueryLeadsDto {
   @IsOptional() @IsString() industry?: string;
   @IsOptional() @IsString() country?: string;
   @IsOptional() @IsString() assignedUserId?: string;
+  @IsOptional() @IsString() campaignId?: string;
   @IsOptional() @IsEnum(LeadSourceLayer) sourceLayer?: LeadSourceLayer;
   @IsOptional() @IsString() search?: string;
 

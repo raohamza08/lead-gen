@@ -316,6 +316,7 @@ export class LeadsService {
       industry: query.industry,
       country: query.country,
       assignedUserId: query.assignedUserId,
+      campaignId: query.campaignId,
       sourceLayer: query.sourceLayer,
       ...(searchOr ? { OR: searchOr } : {}),
       pipelineState: query.stage ? { stage: query.stage } : undefined,

@@ -196,6 +196,10 @@ export default function LeadsPage() {
   const [country, setCountry] = useState("");
   const [stage, setStage] = useState("");
   const [source, setSource] = useState("");
+  // Isolate just this campaign's leads (Part: proper Campaign system,
+  // 2026-11-05, explicit user request — "ab mai un leads ko kahan dekh
+  // skta hun k wo kis pipeline kis status me hain").
+  const [campaignFilter, setCampaignFilter] = useState("");
   // Server-side, same reasoning as every other filter here (Part: table
   // filter/KPI rollout, 2026-10-27, explicit user request — "add option to
   // filter anything by date in each table") — client-side date filtering
@@ -207,7 +211,7 @@ export default function LeadsPage() {
   // Any filter change invalidates whatever page you were on — landing on
   // page 5 of a now-much-smaller filtered result set would either show
   // nothing or read past the end silently.
-  useEffect(() => setPage(1), [debouncedSearch, industry, country, stage, source, dateFrom, dateTo]);
+  useEffect(() => setPage(1), [debouncedSearch, industry, country, stage, source, campaignFilter, dateFrom, dateTo]);
 
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(EMPTY_LEAD);
@@ -310,6 +314,7 @@ export default function LeadsPage() {
     ...(country ? { country } : {}),
     ...(stage ? { stage } : {}),
     ...(source ? { sourceLayer: source } : {}),
+    ...(campaignFilter ? { campaignId: campaignFilter } : {}),
     ...(dateFrom ? { dateFrom } : {}),
     ...(dateTo ? { dateTo } : {}),
   };
@@ -838,15 +843,28 @@ export default function LeadsPage() {
           </select>
         </label>
         <label>
+          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Campaign</span>
+          <select
+            value={campaignFilter}
+            onChange={(e) => setCampaignFilter(e.target.value)}
+            className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none"
+          >
+            <option value="">All</option>
+            {(campaignsQuery.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Added</span>
           <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={() => { setDateFrom(""); setDateTo(""); }} />
         </label>
-        {(search || industry || country || stage || source || dateFrom || dateTo) && (
+        {(search || industry || country || stage || source || campaignFilter || dateFrom || dateTo) && (
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); setSource(""); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); setSource(""); setCampaignFilter(""); setDateFrom(""); setDateTo(""); }}
           >
             Clear
           </Button>
