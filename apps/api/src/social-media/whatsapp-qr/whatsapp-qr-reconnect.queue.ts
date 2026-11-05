@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 /** Fine-grained on purpose -- a genuine network blip should recover within
  *  about a minute, not sit until some slower shared sweep interval gets to
@@ -12,7 +12,7 @@ export const WHATSAPP_QR_RECONNECT_SWEEP_INTERVAL_MS = 60 * 1000;
  *  registration, WhatsAppQrReconnectWorker owns the actual retry logic. */
 @Injectable()
 export class WhatsAppQrReconnectQueue implements OnModuleInit, OnModuleDestroy {
-  private readonly queue = new Queue(QUEUE_NAMES.WHATSAPP_QR_RECONNECT, { connection: getRedisConnection() });
+  private readonly queue = new Queue(QUEUE_NAMES.WHATSAPP_QR_RECONNECT, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
 
   async onModuleInit() {
     await this.queue.add("tick", {}, { repeat: { every: WHATSAPP_QR_RECONNECT_SWEEP_INTERVAL_MS }, jobId: "whatsapp-qr-reconnect-sweep-tick" });

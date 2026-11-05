@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** Once a day is plenty -- a long-lived Meta token lives ~60 days, and the
  *  worker itself only acts on tokens inside a 7-day expiry window (see
@@ -13,7 +13,7 @@ export class MetaAdsTokenRefreshQueue implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.META_ADS_TOKEN_REFRESH, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.META_ADS_TOKEN_REFRESH, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

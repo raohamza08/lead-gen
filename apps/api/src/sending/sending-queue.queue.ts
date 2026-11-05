@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 export interface SendingJob {
   emailMessageId: string;
@@ -24,7 +24,7 @@ export interface SendingJob {
 export class SendingQueue {
   private readonly queue = new Queue<SendingJob>(QUEUE_NAMES.SENDING_QUEUE, {
     connection: getRedisConnection(),
-    defaultJobOptions: { attempts: 1 },
+    defaultJobOptions: { ...DEFAULT_QUEUE_JOB_OPTIONS, attempts: 1 },
   });
 
   add(job: SendingJob) {

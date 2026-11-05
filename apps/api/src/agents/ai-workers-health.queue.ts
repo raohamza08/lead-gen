@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** One minute -- frequent enough that a real outage is caught within a
  *  couple of ticks, not so frequent it meaningfully loads the health
@@ -11,7 +11,7 @@ export const AI_WORKERS_HEALTH_INTERVAL_MS = 60 * 1000;
  *  every other sweep pair in this codebase. */
 @Injectable()
 export class AiWorkersHealthQueue implements OnModuleInit, OnModuleDestroy {
-  private readonly queue = new Queue(QUEUE_NAMES.AI_WORKERS_HEALTH, { connection: getRedisConnection() });
+  private readonly queue = new Queue(QUEUE_NAMES.AI_WORKERS_HEALTH, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
 
   async onModuleInit() {
     await this.queue.add(

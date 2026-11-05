@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** 15 minutes (Part: Connected Social Accounts token vault, 2026-09-07) --
  *  far more frequent than any provider's token lifetime requires on its own
@@ -19,7 +19,7 @@ export class SocialTokenRefreshQueue implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.SOCIAL_TOKEN_REFRESH, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.SOCIAL_TOKEN_REFRESH, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

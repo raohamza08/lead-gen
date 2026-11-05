@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** Every 6 hours -- the cadence this drives is in whole days (2-day
  *  follow-up window), so a coarse tick is enough; no reason to poll as
@@ -13,7 +13,7 @@ export const UPWORK_FOLLOW_UP_REMINDER_INTERVAL_MS = 6 * 60 * 60 * 1000;
  *  UpworkFollowUpReminderWorker owns the actual reminder logic. */
 @Injectable()
 export class UpworkFollowUpReminderQueue implements OnModuleInit, OnModuleDestroy {
-  private readonly queue = new Queue(QUEUE_NAMES.UPWORK_FOLLOW_UP_REMINDER, { connection: getRedisConnection() });
+  private readonly queue = new Queue(QUEUE_NAMES.UPWORK_FOLLOW_UP_REMINDER, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
 
   async onModuleInit() {
     await this.queue.add(

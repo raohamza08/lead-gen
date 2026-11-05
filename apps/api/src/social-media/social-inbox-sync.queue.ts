@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** The webhook (SocialWebhookController) is the primary real-time path;
  *  this reconciliation tick is only a safety net for a missed/delayed
@@ -17,7 +17,7 @@ export class SocialInboxSyncQueue implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.SOCIAL_INBOX_SYNC, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.SOCIAL_INBOX_SYNC, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

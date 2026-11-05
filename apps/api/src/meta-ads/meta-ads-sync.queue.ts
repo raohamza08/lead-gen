@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** 3 hours -- ad performance data changes far more often than the Social
  *  Media module's follower-count snapshots (6h, see
@@ -15,7 +15,7 @@ export class MetaAdsSyncQueue implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.META_ADS_SYNC, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.META_ADS_SYNC, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

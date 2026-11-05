@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
 import { PipelineStage } from "@leadgen/types";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 
@@ -28,11 +28,11 @@ export class SyncService {
     const connection = getRedisConnection();
     this.sheetsQueue = new Queue(QUEUE_NAMES.SHEETS_SYNC, {
       connection,
-      defaultJobOptions: { attempts: 5, backoff: { type: "exponential", delay: 2000 } },
+      defaultJobOptions: { ...DEFAULT_QUEUE_JOB_OPTIONS, attempts: 5, backoff: { type: "exponential", delay: 2000 } },
     });
     this.clickupQueue = new Queue(QUEUE_NAMES.CLICKUP_SYNC, {
       connection,
-      defaultJobOptions: { attempts: 5, backoff: { type: "exponential", delay: 2000 } },
+      defaultJobOptions: { ...DEFAULT_QUEUE_JOB_OPTIONS, attempts: 5, backoff: { type: "exponential", delay: 2000 } },
     });
   }
 

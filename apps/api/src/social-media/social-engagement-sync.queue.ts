@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** 10 minutes (Part: Social Hub Engagement, 2026-09-07) -- same cadence as
  *  SOCIAL_INBOX_SYNC, for the same reason: comments deserve a timely
@@ -17,7 +17,7 @@ export class SocialEngagementSyncQueue implements OnModuleInit, OnModuleDestroy 
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.SOCIAL_ENGAGEMENT_SYNC, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.SOCIAL_ENGAGEMENT_SYNC, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

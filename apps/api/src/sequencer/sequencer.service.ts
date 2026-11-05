@@ -3,7 +3,7 @@ import { Queue, Worker, Job } from "bullmq";
 import { NotificationCategory } from "@prisma/client";
 import { PipelineStage } from "@leadgen/types";
 import { PrismaService } from "../common/prisma/prisma.service";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 import { SyncService } from "../sync/sync.service";
 import { OrganizationService } from "../organization/organization.service";
 import { AgentDispatchQueue } from "../common/queue/agent-dispatch.queue";
@@ -74,7 +74,7 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
     private readonly notifications: NotificationsService,
   ) {
     const connection = getRedisConnection();
-    this.waitQueue = new Queue(QUEUE_NAMES.WAIT_TIMERS, { connection });
+    this.waitQueue = new Queue(QUEUE_NAMES.WAIT_TIMERS, { connection, defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   onModuleInit() {

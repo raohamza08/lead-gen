@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "./redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "./redis-connection";
 
 export interface ImportEnrichmentJob {
   leadId: string;
@@ -23,7 +23,7 @@ export class ImportEnrichmentQueue {
     // No retries here — the underlying dispatch to the AI workers already
     // retries via AgentDispatchQueue; retrying this outer job too would just
     // restart the wait loop needlessly.
-    defaultJobOptions: { attempts: 1 },
+    defaultJobOptions: { ...DEFAULT_QUEUE_JOB_OPTIONS, attempts: 1 },
   });
 
   add(job: ImportEnrichmentJob) {

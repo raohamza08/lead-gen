@@ -12,6 +12,21 @@ export function getRedisConnection(): IORedis {
   return connection;
 }
 
+/** Default BullMQ job retention for every queue below -- without this,
+ *  every completed/failed job's hash stays in Redis forever. Confirmed
+ *  live, 2026-11-05: no queue in this codebase set these, and after ~2
+ *  months of production ticking across two dozen repeatable queues (most
+ *  every few minutes) plus the high-volume AGENT_DISPATCH queue, Redis grew
+ *  to 1.3GB RSS / 900k+ keys with maxmemory unset -- enough to OOM-kill
+ *  every deploy build on this box and leave nothing for Node itself. Every
+ *  `new Queue(...)` must pass this (merged into any job-specific
+ *  defaultJobOptions like attempts/backoff) -- a queue that forgets it will
+ *  quietly reproduce the exact same leak. */
+export const DEFAULT_QUEUE_JOB_OPTIONS = {
+  removeOnComplete: { count: 500, age: 24 * 60 * 60 }, // keep the last 500 or 24h of completed jobs, whichever is smaller
+  removeOnFail: { count: 2000, age: 14 * 24 * 60 * 60 }, // failures kept longer (worth debugging) but still bounded
+} as const;
+
 export const QUEUE_NAMES = {
   WAIT_TIMERS: "wait-timers",
   SHEETS_SYNC: "sheets-sync",

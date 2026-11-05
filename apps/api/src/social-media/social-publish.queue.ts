@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** Posts are time-sensitive in a way inbound mail sync isn't — an operator
  *  scheduling a post for a specific minute expects it to go out close to
@@ -16,7 +16,7 @@ export class SocialPublishQueue implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.SOCIAL_PUBLISH, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.SOCIAL_PUBLISH, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 export const UPWORK_FREELANCER_PROFILES_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
@@ -9,7 +9,7 @@ export class UpworkFreelancerProfilesSyncQueue implements OnModuleInit, OnModule
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.UPWORK_FREELANCER_PROFILES_SYNC, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.UPWORK_FREELANCER_PROFILES_SYNC, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

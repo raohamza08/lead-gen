@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 /** Two-tier sync (Part: Upwork API integration — Rooms & Messages
  *  two-tier sync, originally 2026-10-23, re-tuned 2026-10-23 same day
@@ -28,7 +28,7 @@ export class UpworkRoomsSyncQueue implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.UPWORK_ROOMS_SYNC, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.UPWORK_ROOMS_SYNC, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

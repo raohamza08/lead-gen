@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../common/queue/redis-connection";
 
 /** Every minute -- fine-grained on purpose, so the 5-minute suspend cooldown
  *  (EMAIL_ACCOUNT_RESUME_COOLDOWN_MS) is honored within about a minute of
@@ -13,7 +13,7 @@ export const EMAIL_ACCOUNT_RESUME_SWEEP_INTERVAL_MS = 60 * 1000;
  *  registration, EmailAccountResumeWorker owns the actual resume logic. */
 @Injectable()
 export class EmailAccountResumeQueue implements OnModuleInit, OnModuleDestroy {
-  private readonly queue = new Queue(QUEUE_NAMES.EMAIL_ACCOUNT_RESUME_SWEEP, { connection: getRedisConnection() });
+  private readonly queue = new Queue(QUEUE_NAMES.EMAIL_ACCOUNT_RESUME_SWEEP, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
 
   async onModuleInit() {
     await this.queue.add(

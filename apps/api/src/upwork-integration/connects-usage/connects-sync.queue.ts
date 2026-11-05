@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 /** 1 hour (Part: Connects usage monitoring, 2026-10-28, explicit user
  *  request after spotting the dashboard under-reporting invite spend by
@@ -18,7 +18,7 @@ export class UpworkConnectsSyncQueue implements OnModuleInit, OnModuleDestroy {
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.UPWORK_CONNECTS_SYNC, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.UPWORK_CONNECTS_SYNC, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {

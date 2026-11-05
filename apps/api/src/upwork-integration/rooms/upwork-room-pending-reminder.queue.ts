@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 /** Every 2 minutes — pure DB read (no Upwork API calls), so there's no
  *  rate-limit/budget reason to run this coarser; a tighter tick just
@@ -11,7 +11,7 @@ export const UPWORK_ROOM_PENDING_REMINDER_INTERVAL_MS = 2 * 60 * 1000;
 
 @Injectable()
 export class UpworkRoomPendingReminderQueue implements OnModuleInit, OnModuleDestroy {
-  private readonly queue = new Queue(QUEUE_NAMES.UPWORK_ROOM_PENDING_REMINDER, { connection: getRedisConnection() });
+  private readonly queue = new Queue(QUEUE_NAMES.UPWORK_ROOM_PENDING_REMINDER, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
 
   async onModuleInit() {
     await this.queue.add(

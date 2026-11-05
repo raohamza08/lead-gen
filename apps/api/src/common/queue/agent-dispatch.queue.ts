@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "./redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "./redis-connection";
 
 /**
  * Every call out to the Python AI workers used to be a bare `fetch()` —
@@ -36,7 +36,7 @@ export type AgentDispatchJob =
 export class AgentDispatchQueue {
   private readonly queue = new Queue<AgentDispatchJob>(QUEUE_NAMES.AGENT_DISPATCH, {
     connection: getRedisConnection(),
-    defaultJobOptions: { attempts: 3, backoff: { type: "exponential", delay: 5000 } },
+    defaultJobOptions: { ...DEFAULT_QUEUE_JOB_OPTIONS, attempts: 3, backoff: { type: "exponential", delay: 5000 } },
   });
 
   add(job: AgentDispatchJob) {

@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Queue } from "bullmq";
-import { getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
+import { DEFAULT_QUEUE_JOB_OPTIONS, getRedisConnection, QUEUE_NAMES } from "../../common/queue/redis-connection";
 
 /** 6 hours -- same cadence as every other Upwork sync queue. */
 export const UPWORK_TRANSACTIONS_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -10,7 +10,7 @@ export class UpworkTransactionsSyncQueue implements OnModuleInit, OnModuleDestro
   private readonly queue: Queue;
 
   constructor() {
-    this.queue = new Queue(QUEUE_NAMES.UPWORK_TRANSACTIONS_SYNC, { connection: getRedisConnection() });
+    this.queue = new Queue(QUEUE_NAMES.UPWORK_TRANSACTIONS_SYNC, { connection: getRedisConnection(), defaultJobOptions: DEFAULT_QUEUE_JOB_OPTIONS });
   }
 
   async onModuleInit() {
