@@ -580,34 +580,74 @@ model ExtractionRun {
 /// can be attributed. Without it "best offer" and "best sequence" are
 /// unanswerable — every lead looks the same to analytics, and the learning loop
 /// has nothing to compare against.
+///
+/// Part: proper Campaign lifecycle, 2026-11-05 — `active` used to be the only
+/// state (a plain on/off toggle with zero enforcement anywhere). Replaced
+/// with a real `status` lifecycle so exactly one campaign can be ACTIVE per
+/// org at a time (service-layer rule in CampaignsService, not a DB
+/// constraint — "no other ACTIVE campaign exists" is a cross-row check),
+/// stats stay isolated once a campaign COMPLETEs (nothing new ever attaches
+/// to it again), and the next campaign starts clean.
 model Campaign {
-  id               String       @id @default(uuid())
-  orgId            String       @map("org_id")
-  org              Organization @relation(fields: [orgId], references: [id])
+  id               String         @id @default(uuid())
+  orgId            String         @map("org_id")
+  org              Organization   @relation(fields: [orgId], references: [id])
   name             String
   niche            String
   country          String?
   /// What is being sold in this campaign, in the operator's own words. Feeds
   /// the email prompts, so it is a real input, not a label.
   offer            String?
-  caseStudy        String?      @map("case_study")
+  caseStudy        String?        @map("case_study")
   goal             String?
-  targetLeads      Int          @default(100) @map("target_leads")
+  targetLeads      Int            @default(100) @map("target_leads")
   /// Per-step subject/angle overrides. Empty means use the default sequence.
-  emailSequence    Json         @default("[]") @map("email_sequence")
-  linkedinSequence Json         @default("[]") @map("linkedin_sequence")
+  emailSequence    Json           @default("[]") @map("email_sequence")
+  linkedinSequence Json           @default("[]") @map("linkedin_sequence")
   /// Optional niche filter that feeds this campaign.
-  filterId         String?      @map("filter_id")
-  filter           NicheFilter? @relation(fields: [filterId], references: [id])
-  active           Boolean      @default(true)
-  createdAt        DateTime     @default(now()) @map("created_at")
-  updatedAt        DateTime     @updatedAt @map("updated_at")
+  filterId         String?        @map("filter_id")
+  filter           NicheFilter?   @relation(fields: [filterId], references: [id])
+  /// DRAFT until started, ACTIVE while running (at most one per org —
+  /// enforced in CampaignsService.start, not here), PAUSED to temporarily
+  /// stop new leads/sends without losing progress, COMPLETED once
+  /// totalSent reaches monthlyEmailTarget (or a human ends it early) —
+  /// permanent, nothing new ever attaches to a COMPLETED campaign again.
+  status           CampaignStatus @default(DRAFT)
+  /// How many emails/day this campaign aims for — purely a pacing target
+  /// for the drip scheduler and the dashboard's target-vs-actual display,
+  /// never a hard cap enforced by throwing an error.
+  dailySendTarget  Int            @default(1000) @map("daily_send_target")
+  /// The real completion criterion — once totalSent reaches this, the
+  /// campaign auto-completes. Supersedes targetLeads (a lead count) for
+  /// lifecycle purposes now that what the user actually measures is sends.
+  monthlyEmailTarget Int          @default(30000) @map("monthly_email_target")
+  /// Running counter of real SENT emails attributed to this campaign —
+  /// incremented at the one place a send actually succeeds
+  /// (EmailProviderService.sendMessageNow / SendingWorker), not derived by
+  /// counting rows on every read.
+  totalSent        Int            @default(0) @map("total_sent")
+  startedAt        DateTime?      @map("started_at")
+  completedAt      DateTime?      @map("completed_at")
+  /// Kept for existing callers (CampaignsController's plain PATCH) during
+  /// the transition to `status` — no longer the source of truth for
+  /// "is this campaign running," which is now `status === ACTIVE`.
+  active           Boolean        @default(true)
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
   leads       Lead[]
   socialPosts SocialPost[]
 
   @@index([orgId, active])
+  @@index([orgId, status])
   @@map("campaigns")
+}
+
+enum CampaignStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  COMPLETED
 }
 
 /// One agent execution. Written by the workers after every agent run so the
