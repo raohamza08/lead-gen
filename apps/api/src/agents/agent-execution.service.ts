@@ -5,6 +5,7 @@ import { PrismaService } from "../common/prisma/prisma.service";
 import { RealtimeGateway } from "../realtime/realtime.gateway";
 import { NotificationsService } from "../notifications/notifications.service";
 import { PreparationPipelineService } from "../preparation/preparation-pipeline.service";
+import { ClaudeRateLimitService } from "./claude-rate-limit.service";
 
 /** Which sequence step a given agent's outcome should re-evaluate
  *  preparation for (Part: Preparation Pipeline / Sending Queue,
@@ -117,6 +118,7 @@ export class AgentExecutionService {
     private readonly realtime: RealtimeGateway,
     private readonly notifications: NotificationsService,
     private readonly preparationPipeline: PreparationPipelineService,
+    private readonly claudeRateLimit: ClaudeRateLimitService,
   ) {}
 
   /**
@@ -234,6 +236,17 @@ export class AgentExecutionService {
     }
 
     const errorSummary = classifyError(agent, errorDetail);
+    // Both "Claude limit reached" and "Gemini limit reached" are the SAME
+    // real signal (Part: Claude-budget-aware drip scheduler, 2026-11-05) --
+    // classifyError's "Gemini" label for email_draft/linkedin_draft is
+    // stale display text from before those agents were migrated onto the
+    // same Claude CLI every other agent already uses (confirmed: no real
+    // Gemini API call exists anywhere in ai-workers any more). Trips the
+    // circuit breaker regardless of which label this particular agent got,
+    // since underneath it's always the one shared Claude subscription.
+    if (errorSummary.endsWith("limit reached")) {
+      await this.claudeRateLimit.markRateLimited(orgId);
+    }
     const terminal = !retryable || existing.attempt >= MAX_AGENT_ATTEMPTS;
     const status = terminal ? AgentExecutionStatus.FAILED_TERMINAL : AgentExecutionStatus.FAILED_RETRY_SCHEDULED;
     const nextRetryAt = terminal ? null : new Date(Date.now() + backoffMs(existing.attempt));

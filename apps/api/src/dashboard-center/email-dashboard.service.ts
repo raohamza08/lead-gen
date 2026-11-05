@@ -11,21 +11,33 @@ export class EmailDashboardService {
     private readonly analytics: AnalyticsService,
   ) {}
 
-  private async performanceForRange(orgId: string, from: Date, to: Date) {
+  /** Threads an optional campaign scope onto a `Lead` where-filter (Part:
+   *  proper Campaign system, 2026-11-05) — every query in this file that
+   *  touches EmailMessage/EmailEvent goes through this instead of a bare
+   *  `{ orgId }`, so a campaign's dashboard is strictly isolated to its own
+   *  leads and a completed campaign's numbers never pick up anything a
+   *  later campaign sends. Omitting campaignId preserves the exact
+   *  org-wide behavior every existing caller already relies on. */
+  private leadWhere(orgId: string, campaignId?: string) {
+    return { orgId, ...(campaignId ? { campaignId } : {}) };
+  }
+
+  private async performanceForRange(orgId: string, from: Date, to: Date, campaignId?: string) {
+    const lead = this.leadWhere(orgId, campaignId);
     const [sent, delivered, opened, clicked, replied, bounced, spamComplaints, unsubscribed, blocked, failed, queued] = await Promise.all([
-      this.prisma.emailEvent.count({ where: { eventType: "SENT", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
-      this.prisma.emailEvent.count({ where: { eventType: "DELIVERED", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
+      this.prisma.emailEvent.count({ where: { eventType: "SENT", occurredAt: { gte: from, lte: to }, message: { lead } } }),
+      this.prisma.emailEvent.count({ where: { eventType: "DELIVERED", occurredAt: { gte: from, lte: to }, message: { lead } } }),
       // Verified opens only (Part: 3-minute open verification) -- same rule
       // AnalyticsService.getEmailFunnel already follows, kept consistent here.
-      this.prisma.emailMessage.count({ where: { verifiedOpenedAt: { gte: from, lte: to }, lead: { orgId } } }),
-      this.prisma.emailEvent.count({ where: { eventType: "CLICKED", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
-      this.prisma.emailEvent.count({ where: { eventType: "REPLIED", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
-      this.prisma.emailEvent.count({ where: { eventType: "BOUNCED", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
-      this.prisma.emailEvent.count({ where: { eventType: "SPAM_COMPLAINT", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
-      this.prisma.emailEvent.count({ where: { eventType: "UNSUBSCRIBED", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
-      this.prisma.emailEvent.count({ where: { eventType: "BLOCKED", occurredAt: { gte: from, lte: to }, message: { lead: { orgId } } } }),
-      this.prisma.emailMessage.count({ where: { status: "FAILED", createdAt: { gte: from, lte: to }, lead: { orgId } } }),
-      this.prisma.emailMessage.count({ where: { status: "QUEUED", createdAt: { gte: from, lte: to }, lead: { orgId } } }),
+      this.prisma.emailMessage.count({ where: { verifiedOpenedAt: { gte: from, lte: to }, lead } }),
+      this.prisma.emailEvent.count({ where: { eventType: "CLICKED", occurredAt: { gte: from, lte: to }, message: { lead } } }),
+      this.prisma.emailEvent.count({ where: { eventType: "REPLIED", occurredAt: { gte: from, lte: to }, message: { lead } } }),
+      this.prisma.emailEvent.count({ where: { eventType: "BOUNCED", occurredAt: { gte: from, lte: to }, message: { lead } } }),
+      this.prisma.emailEvent.count({ where: { eventType: "SPAM_COMPLAINT", occurredAt: { gte: from, lte: to }, message: { lead } } }),
+      this.prisma.emailEvent.count({ where: { eventType: "UNSUBSCRIBED", occurredAt: { gte: from, lte: to }, message: { lead } } }),
+      this.prisma.emailEvent.count({ where: { eventType: "BLOCKED", occurredAt: { gte: from, lte: to }, message: { lead } } }),
+      this.prisma.emailMessage.count({ where: { status: "FAILED", createdAt: { gte: from, lte: to }, lead } }),
+      this.prisma.emailMessage.count({ where: { status: "QUEUED", createdAt: { gte: from, lte: to }, lead } }),
     ]);
 
     // meetings/won intentionally omitted here -- those come from PipelineState
@@ -34,11 +46,11 @@ export class EmailDashboardService {
     return buildPerformance({ queued, sent, delivered, opened, clicked, replied, bounced, spamComplaints, unsubscribed, blocked, failed, meetings: 0, won: 0 });
   }
 
-  async getKpis(orgId: string, query: DashboardRangeQuery) {
+  async getKpis(orgId: string, query: DashboardRangeQuery, campaignId?: string) {
     const { current, previous } = resolveDashboardRange(query);
     const [performance, previousPerformance, totalCampaigns, activeCampaigns] = await Promise.all([
-      this.performanceForRange(orgId, current.from, current.to),
-      previous ? this.performanceForRange(orgId, previous.from, previous.to) : Promise.resolve(undefined),
+      this.performanceForRange(orgId, current.from, current.to, campaignId),
+      previous ? this.performanceForRange(orgId, previous.from, previous.to, campaignId) : Promise.resolve(undefined),
       this.prisma.campaign.count({ where: { orgId } }),
       this.prisma.campaign.count({ where: { orgId, active: true } }),
     ]);
@@ -65,10 +77,10 @@ export class EmailDashboardService {
   /** Live snapshot, not date-ranged -- "how many leads are sitting in each
    *  state right now" is inherently a current-moment question (Part:
    *  Dashboard Center spec's Queue Analytics section). */
-  async getQueueSnapshot(orgId: string) {
+  async getQueueSnapshot(orgId: string, campaignId?: string) {
     const rows = await this.prisma.emailMessage.groupBy({
       by: ["status"],
-      where: { lead: { orgId } },
+      where: { lead: this.leadWhere(orgId, campaignId) },
       _count: { _all: true },
     });
     return rows.map((r) => ({ status: r.status, count: r._count._all })).sort((a, b) => b.count - a.count);
@@ -97,10 +109,11 @@ export class EmailDashboardService {
     return this.analytics.getEmailFunnel(orgId);
   }
 
-  async getTimeseries(orgId: string, query: DashboardRangeQuery) {
+  async getTimeseries(orgId: string, query: DashboardRangeQuery, campaignId?: string) {
     const { current } = resolveDashboardRange(query);
+    const lead = this.leadWhere(orgId, campaignId);
     const rows = await this.prisma.emailEvent.findMany({
-      where: { occurredAt: { gte: current.from, lte: current.to }, message: { lead: { orgId } } },
+      where: { occurredAt: { gte: current.from, lte: current.to }, message: { lead } },
       select: { eventType: true, occurredAt: true },
     });
 
@@ -117,7 +130,7 @@ export class EmailDashboardService {
     // Verified opens use EmailMessage.verifiedOpenedAt, a different table
     // than the event stream above (same reasoning as performanceForRange).
     const opens = await this.prisma.emailMessage.findMany({
-      where: { verifiedOpenedAt: { gte: current.from, lte: current.to }, lead: { orgId } },
+      where: { verifiedOpenedAt: { gte: current.from, lte: current.to }, lead },
       select: { verifiedOpenedAt: true },
     });
     for (const o of opens) {

@@ -1,7 +1,9 @@
 import { Module } from "@nestjs/common";
 import { AnalyticsModule } from "../analytics/analytics.module";
 import { MetaAdsModule } from "../meta-ads/meta-ads.module";
+import { CampaignsModule } from "../campaigns/campaigns.module";
 import { DashboardCenterController } from "./dashboard-center.controller";
+import { CampaignDashboardController } from "./campaign-dashboard.controller";
 import { LeadsDashboardService } from "./leads-dashboard.service";
 import { EmailDashboardService } from "./email-dashboard.service";
 import { InboxDashboardService } from "./inbox-dashboard.service";
@@ -15,8 +17,11 @@ import { WebsiteAnalyticsDashboardService } from "./website-analytics-dashboard.
 import { ConnectsDashboardService } from "./connects-dashboard.service";
 
 @Module({
-  imports: [AnalyticsModule, MetaAdsModule],
-  controllers: [DashboardCenterController],
+  // CampaignsModule: safe here (not a cycle) -- see
+  // CampaignDashboardController's own docblock for why this direction and
+  // not the reverse.
+  imports: [AnalyticsModule, MetaAdsModule, CampaignsModule],
+  controllers: [DashboardCenterController, CampaignDashboardController],
   providers: [
     LeadsDashboardService,
     EmailDashboardService,

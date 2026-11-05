@@ -7,6 +7,7 @@ import { AgentExecutionSweepQueue } from "./agent-execution-sweep.queue";
 import { AgentExecutionSweepWorker } from "./agent-execution-sweep.worker";
 import { AiWorkersHealthQueue } from "./ai-workers-health.queue";
 import { AiWorkersHealthWorker } from "./ai-workers-health.worker";
+import { ClaudeRateLimitService } from "./claude-rate-limit.service";
 import { SequencerModule } from "../sequencer/sequencer.module";
 
 @Module({
@@ -18,6 +19,12 @@ import { SequencerModule } from "../sequencer/sequencer.module";
     AgentExecutionSweepWorker,
     AiWorkersHealthQueue,
     AiWorkersHealthWorker,
+    // Also provided directly in SequencerModule (DraftSchedulerWorker needs
+    // it too) rather than exported from here -- AgentsModule already
+    // imports SequencerModule, so the reverse import would be circular.
+    // Stateless (just a thin Redis wrapper), so two separately-provided
+    // instances sharing the same Redis key is perfectly safe.
+    ClaudeRateLimitService,
   ],
 })
 export class AgentsModule {}

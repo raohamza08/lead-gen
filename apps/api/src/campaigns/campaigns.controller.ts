@@ -115,4 +115,30 @@ export class CampaignsController {
     const res = await this.prisma.campaign.deleteMany({ where: { id, orgId: user.orgId } });
     return { deleted: res.count };
   }
+
+  // ---- Lifecycle (Part: proper Campaign system, 2026-11-05) ----
+
+  @Post(":id/start")
+  @Roles(Role.ADMIN, Role.MANAGER)
+  async start(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    const campaign = await this.campaigns.start(user.orgId, id);
+    this.auditLog.write({ orgId: user.orgId, actorId: user.sub, action: "CAMPAIGN_STARTED", entityType: "campaign", entityId: id, metadata: { name: campaign.name } });
+    return campaign;
+  }
+
+  @Post(":id/pause")
+  @Roles(Role.ADMIN, Role.MANAGER)
+  async pause(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    const campaign = await this.campaigns.pause(user.orgId, id);
+    this.auditLog.write({ orgId: user.orgId, actorId: user.sub, action: "CAMPAIGN_PAUSED", entityType: "campaign", entityId: id, metadata: { name: campaign.name } });
+    return campaign;
+  }
+
+  @Post(":id/complete")
+  @Roles(Role.ADMIN, Role.MANAGER)
+  async complete(@CurrentUser() user: JwtClaims, @Param("id") id: string) {
+    const campaign = await this.campaigns.complete(user.orgId, id);
+    this.auditLog.write({ orgId: user.orgId, actorId: user.sub, action: "CAMPAIGN_COMPLETED", entityType: "campaign", entityId: id, metadata: { name: campaign.name } });
+    return campaign;
+  }
 }

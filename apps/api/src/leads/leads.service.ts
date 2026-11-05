@@ -77,13 +77,17 @@ export class LeadsService {
       return { status: "duplicate" };
     }
 
-    // A lead's campaign is inferred from the filter that found it: campaigns
-    // point at a filter, not the other way round, so this is the only place
-    // that link can be made. Without it, campaign performance reads zero
-    // regardless of activity, no matter how many leads the filter produces.
-    const campaign = dto.filterId
-      ? await this.prisma.campaign.findFirst({ where: { orgId, filterId: dto.filterId } })
-      : null;
+    // Explicit attribution to whichever campaign is currently ACTIVE for
+    // this org (Part: proper Campaign system, 2026-11-05) — replaces the
+    // old inference-via-NicheFilter.filterId, which silently misattributed
+    // a lead the instant a filter got reused across campaigns (or
+    // attributed nothing at all if no Campaign row happened to point at
+    // that filter yet). At most one campaign is ever ACTIVE per org (see
+    // CampaignsService.start), so this is unambiguous. A lead created with
+    // no ACTIVE campaign (none started yet, or the active one just
+    // completed mid-run) simply gets none — same as any lead created
+    // before campaigns existed.
+    const campaign = await this.prisma.campaign.findFirst({ where: { orgId, status: "ACTIVE" } });
 
     try {
       const lead = await this.prisma.$transaction(async (tx) => {
@@ -1464,6 +1468,14 @@ export class LeadsService {
       data: { orgId, uploadedByUserId: userId, sourceMethod: "CSV", totalRecords: rows.length },
     });
 
+    // Same explicit-attribution default as createVerified above (Part:
+    // proper Campaign system, 2026-11-05) — a row's own mapped campaignId
+    // (if the CSV/mapping provides one) still wins; this is only the
+    // fallback for rows that don't specify one, so an import done while a
+    // campaign is ACTIVE attributes to it automatically instead of
+    // silently landing with no campaign at all.
+    const activeCampaign = await this.prisma.campaign.findFirst({ where: { orgId, status: "ACTIVE" } });
+
     const [existingDomains, existingEmails, existingLinkedinSlugs, existingCompanyKeys] = await Promise.all([
       this.prisma.lead.findMany({ where: { orgId, websiteDomain: { not: null } }, select: { websiteDomain: true } }),
       this.prisma.lead.findMany({ where: { orgId, email: { not: null } }, select: { email: true } }),
@@ -1548,7 +1560,7 @@ export class LeadsService {
             city: dto.city,
             employeeCount: dto.employeeCount,
             businessDescription: dto.businessDescription,
-            campaignId: dto.campaignId,
+            campaignId: dto.campaignId ?? activeCampaign?.id,
             researchEvidence: dto.notes ? `[MANUAL ENTRY] ${dto.notes}` : "[MANUAL ENTRY]",
           })),
         });

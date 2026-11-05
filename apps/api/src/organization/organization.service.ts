@@ -89,23 +89,38 @@ export class OrganizationService {
     return this.getBranding(orgId);
   }
 
+  /** No safe universal default (Part: Claude-budget-aware drip scheduler,
+   *  2026-11-05) — conservative enough that a brand-new org with the
+   *  automated campaign pipeline just turned on doesn't immediately
+   *  compete with whoever's interactive Claude Code usage shares that same
+   *  subscription login, before anyone's had a chance to tune it. */
+  private static readonly DEFAULT_CLAUDE_AGENT_CALLS_PER_HOUR = 10;
+
   /**
    * autoSendEnabled defaults to true when unset (Part: autonomous system) —
    * every AI-drafted email in the 5-email sequence sends itself unless an
    * org explicitly opts back into a human approving each one first. See
    * LeadsService.receiveEmailDraft for where this is actually read (and for
    * why a draft flagged `needsReview` overrides this regardless).
+   *
+   * claudeAgentCallsPerHour (Part: Claude-budget-aware drip scheduler,
+   * 2026-11-05) is read by DraftSchedulerWorker before every tick — see its
+   * own docblock for why this exists instead of a hardcoded pacing constant.
    */
-  async getAutomationSettings(orgId: string): Promise<{ autoSendEnabled: boolean }> {
+  async getAutomationSettings(orgId: string): Promise<{ autoSendEnabled: boolean; claudeAgentCallsPerHour: number }> {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
     const settings = (org.settings as Record<string, unknown>) ?? {};
-    return { autoSendEnabled: settings.autoSendEnabled !== false };
+    return {
+      autoSendEnabled: settings.autoSendEnabled !== false,
+      claudeAgentCallsPerHour:
+        (settings.claudeAgentCallsPerHour as number) || OrganizationService.DEFAULT_CLAUDE_AGENT_CALLS_PER_HOUR,
+    };
   }
 
   async updateAutomationSettings(
     orgId: string,
-    dto: { autoSendEnabled?: boolean },
-  ): Promise<{ autoSendEnabled: boolean }> {
+    dto: { autoSendEnabled?: boolean; claudeAgentCallsPerHour?: number },
+  ): Promise<{ autoSendEnabled: boolean; claudeAgentCallsPerHour: number }> {
     const org = await this.prisma.organization.findUniqueOrThrow({ where: { id: orgId } });
     const settings = { ...(org.settings as Record<string, unknown>), ...dto };
     await this.prisma.organization.update({

@@ -163,4 +163,9 @@ export const QUEUE_NAMES = {
   // since reconnect() is cheap and idempotent (a no-op if already live).
   // See whatsapp-qr-reconnect.worker.ts.
   WHATSAPP_QR_RECONNECT: "whatsapp-qr-reconnect",
+  // Paces follow-up email drafting (steps 2-5) against the org's
+  // claudeAgentCallsPerHour budget instead of firing the instant each
+  // lead's wait timer elapses (Part: Claude-budget-aware drip scheduler,
+  // 2026-11-05) -- see draft-scheduler.worker.ts.
+  DRAFT_SCHEDULER: "draft-scheduler",
 } as const;

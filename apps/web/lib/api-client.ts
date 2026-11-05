@@ -410,6 +410,11 @@ export const api = {
     request("/campaigns", { method: "POST", body: JSON.stringify(body) }),
   updateCampaign: (id: string, body: Record<string, unknown>) =>
     request(`/campaigns/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  startCampaign: (id: string) => request(`/campaigns/${id}/start`, { method: "POST" }),
+  pauseCampaign: (id: string) => request(`/campaigns/${id}/pause`, { method: "POST" }),
+  completeCampaign: (id: string) => request(`/campaigns/${id}/complete`, { method: "POST" }),
+  getCampaignDashboard: (id: string, params: Record<string, string> = {}) =>
+    request(`/campaigns/${id}/dashboard?${new URLSearchParams(params).toString()}`),
   getNotifications: (params: Record<string, string> = {}) =>
     request(`/notifications?${new URLSearchParams(params).toString()}`),
   getUnreadNotificationCount: () => request("/notifications/unread-count"),

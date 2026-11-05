@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SchedulerRegistry } from "@nestjs/schedule";
 import { CronJob } from "cron";
@@ -157,6 +157,28 @@ export class NicheFiltersService implements OnModuleInit {
    */
   async runNow(orgId: string, id: string) {
     const filter = await this.findOne(orgId, id);
+
+    // Campaign-level target enforcement (Part: proper Campaign system,
+    // 2026-11-05) — a filter feeding the org's ACTIVE campaign must stop
+    // once that campaign already has the leads it needs (targetLeads),
+    // instead of every run blindly chasing the filter's own dailyTarget
+    // regardless of how much the campaign still actually needs. Scoped to
+    // filterId+ACTIVE specifically: a filter not currently feeding any
+    // ACTIVE campaign (or feeding one that's PAUSED/COMPLETED) runs
+    // unconstrained, same as before this change existed.
+    const campaign = await this.prisma.campaign.findFirst({ where: { orgId, filterId: filter.id, status: "ACTIVE" } });
+    let effectiveDailyTarget = filter.dailyTarget;
+    if (campaign) {
+      const leadCount = await this.prisma.lead.count({ where: { campaignId: campaign.id } });
+      const headroom = campaign.targetLeads - leadCount;
+      if (headroom <= 0) {
+        throw new BadRequestException(
+          `"${campaign.name}" already has its target of ${campaign.targetLeads} leads — no more needed from this filter right now.`,
+        );
+      }
+      effectiveDailyTarget = Math.min(filter.dailyTarget, headroom);
+    }
+
     const run = await this.prisma.extractionRun.create({
       data: { filterId: filter.id, status: "RUNNING" },
     });
@@ -164,12 +186,14 @@ export class NicheFiltersService implements OnModuleInit {
     // searchBrief expands the stored taxonomy values into explained criteria.
     // Without it the worker only has raw enum tokens like MANUAL_WORKFLOWS,
     // which the model can't act on. `filter` is still sent so the worker
-    // keeps the structured values it needs (orgId, dailyTarget, id).
+    // keeps the structured values it needs (orgId, dailyTarget, id) — with
+    // dailyTarget overridden to the campaign-aware cap above, never
+    // mutating the stored NicheFilter row itself.
     await this.agentDispatch.add({
       kind: "extraction_run",
       runId: run.id,
       orgId,
-      filter,
+      filter: { ...filter, dailyTarget: effectiveDailyTarget },
       searchBrief: buildSearchBrief(filter),
     });
     // The queue retries transient dispatch failures on its own (Part:

@@ -27,13 +27,6 @@ const WAIT_AFTER: Partial<Record<PipelineStage, PipelineStage>> = {
   [PipelineStage.EMAIL_4_SENT]: PipelineStage.WAITING_EMAIL_5,
 };
 
-const NEXT_EMAIL_STEP: Partial<Record<PipelineStage, number>> = {
-  [PipelineStage.WAITING_EMAIL_2]: 2,
-  [PipelineStage.WAITING_EMAIL_3]: 3,
-  [PipelineStage.WAITING_EMAIL_4]: 4,
-  [PipelineStage.WAITING_EMAIL_5]: 5,
-};
-
 /** How many business days from now, skipping Saturdays/Sundays in the count
  *  itself (not just the landing day) — 3 business days starting Thursday
  *  lands the following Tuesday, not Sunday pushed to Monday. */
@@ -111,10 +104,25 @@ export class SequencerService implements OnModuleInit, OnModuleDestroy {
       return this.scheduleWait(leadId, waitInto);
     }
 
-    const step = NEXT_EMAIL_STEP[stage];
-    if (step) {
-      return this.dispatchEmailDraft(leadId, step);
-    }
+    // Follow-up drafting (steps 2-5) no longer dispatches from here (Part:
+    // Claude-budget-aware drip scheduler, 2026-11-05) -- landing on a
+    // WAITING_EMAIL_N stage IS the "due" signal now, whether this
+    // transition came from a wait timer elapsing or a human dragging a
+    // card directly. DraftSchedulerWorker's own tick (see
+    // draft-scheduler.worker.ts's own STEP_FOR_WAITING_STAGE) finds due
+    // leads and calls dispatchEmailDraft itself, paced by the org's
+    // claudeAgentCallsPerHour budget -- firing immediately here could
+    // stampede dozens of simultaneous Claude calls if several leads'
+    // 3-business-day waits happened to land at the same moment, with zero
+    // control over when that AI spend actually happens relative to the
+    // fixed daily send time.
+    //
+    // Email #1 above (READY_FOR_OUTREACH) deliberately still dispatches
+    // immediately -- new leads trickle in one at a time as discovery finds
+    // them (itself already serialized by ai-workers' own CLI concurrency
+    // limit), not in a same-instant batch the way a whole cohort's
+    // follow-up waits can land together, so it isn't the stampede risk
+    // this change is for.
     // other stages are human- or reply-driven, not sequencer-driven
   }
 

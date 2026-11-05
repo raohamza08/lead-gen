@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api-client";
 import { DataTable, KpiStrip, SectionCard, StatTile, formatCompact } from "../../../components/chart-kit";
@@ -14,6 +15,8 @@ import { LoadingRow, Spinner } from "../../../components/spinner";
  * analytics.
  */
 
+type CampaignStatus = "DRAFT" | "ACTIVE" | "PAUSED" | "COMPLETED";
+
 interface CampaignPerformance {
   id: string;
   name: string;
@@ -21,6 +24,10 @@ interface CampaignPerformance {
   country: string | null;
   offer: string | null;
   active: boolean;
+  status: CampaignStatus;
+  dailySendTarget: number;
+  monthlyEmailTarget: number;
+  totalSent: number;
   targetLeads: number;
   leads: number;
   replied: number;
@@ -46,6 +53,8 @@ const EMPTY = {
   caseStudy: "",
   goal: "",
   targetLeads: 100,
+  dailySendTarget: 1000,
+  monthlyEmailTarget: 30000,
   filterId: "",
 };
 
@@ -127,6 +136,33 @@ export default function CampaignsPage() {
     linkMutation.mutate({ campaignId, filterId });
   }
   const linking = linkMutation.isPending ? linkMutation.variables?.campaignId ?? null : null;
+
+  // Lifecycle (Part: proper Campaign system, 2026-11-05) -- one mutation per
+  // transition rather than a single generic "setStatus" call, since each
+  // one is a distinct backend action (start/pause/complete) with its own
+  // validation (e.g. only one ACTIVE campaign per org at a time).
+  const [lifecycleTarget, setLifecycleTarget] = useState<string | null>(null);
+  const lifecycleMutation = useMutation({
+    mutationFn: ({ campaignId, action }: { campaignId: string; action: "start" | "pause" | "complete" }) => {
+      if (action === "start") return api.startCampaign(campaignId);
+      if (action === "pause") return api.pauseCampaign(campaignId);
+      return api.completeCampaign(campaignId);
+    },
+    onMutate: ({ campaignId }) => setLifecycleTarget(campaignId),
+    onSuccess: () => {
+      setLifecycleTarget(null);
+      invalidateAll();
+    },
+    onError: (err) => {
+      setLifecycleTarget(null);
+      setError((err as Error).message);
+    },
+  });
+  function runLifecycle(campaignId: string, action: "start" | "pause" | "complete") {
+    setError(null);
+    setNotice(null);
+    lifecycleMutation.mutate({ campaignId, action });
+  }
 
   const totals = rows.reduce(
     (acc, r) => ({
@@ -227,6 +263,26 @@ export default function CampaignsPage() {
               />
             </label>
             <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Daily send target</span>
+              <input
+                type="number"
+                min={1}
+                value={draft.dailySendTarget}
+                onChange={(e) => setDraft((d) => ({ ...d, dailySendTarget: Number(e.target.value) }))}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1 block text-xs text-ink/60">Monthly email target</span>
+              <input
+                type="number"
+                min={1}
+                value={draft.monthlyEmailTarget}
+                onChange={(e) => setDraft((d) => ({ ...d, monthlyEmailTarget: Number(e.target.value) }))}
+                className="w-full rounded border border-[var(--line)] bg-transparent px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="block">
               <span className="mb-1 block text-xs text-ink/60">Niche filter</span>
               <select
                 value={draft.filterId}
@@ -306,10 +362,69 @@ export default function CampaignsPage() {
                 sortValue: (r) => r.pipelineValue,
               },
               {
-                key: "active",
-                header: "Active",
-                render: (r) => (r.active ? "Yes" : <span className="text-ink/50">No</span>),
-                sortValue: (r) => (r.active ? 1 : 0),
+                key: "sent",
+                header: "Sent / Monthly target",
+                numeric: true,
+                render: (r) => `${formatCompact(r.totalSent)} / ${formatCompact(r.monthlyEmailTarget)}`,
+                sortValue: (r) => r.totalSent,
+              },
+              {
+                key: "status",
+                header: "Status",
+                render: (r) => {
+                  const tone =
+                    r.status === "ACTIVE" ? "text-good" : r.status === "COMPLETED" ? "text-ink/50" : r.status === "PAUSED" ? "text-bad" : "text-ink/50";
+                  return <span className={`text-xs font-medium ${tone}`}>{r.status}</span>;
+                },
+                sortValue: (r) => r.status,
+              },
+              {
+                key: "lifecycle",
+                header: "",
+                render: (r) => {
+                  const busy = lifecycleTarget === r.id;
+                  if (r.status === "COMPLETED") return <span className="text-xs text-ink/40">Locked</span>;
+                  return (
+                    <div className="flex gap-1.5">
+                      {r.status !== "ACTIVE" && (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => runLifecycle(r.id, "start")}
+                          className="rounded border border-[var(--line)] px-2 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                        >
+                          Start
+                        </button>
+                      )}
+                      {r.status === "ACTIVE" && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => runLifecycle(r.id, "pause")}
+                            className="rounded border border-[var(--line)] px-2 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                          >
+                            Pause
+                          </button>
+                          <button
+                            type="button"
+                            disabled={busy}
+                            onClick={() => runLifecycle(r.id, "complete")}
+                            className="rounded border border-[var(--line)] px-2 py-1 text-xs text-ink/70 transition-colors hover:bg-ink/5 disabled:opacity-50"
+                          >
+                            Complete
+                          </button>
+                        </>
+                      )}
+                      <Link
+                        href={`/campaigns/${r.id}`}
+                        className="rounded border border-[var(--line)] px-2 py-1 text-xs text-accent transition-colors hover:bg-ink/5"
+                      >
+                        Dashboard
+                      </Link>
+                    </div>
+                  );
+                },
               },
             ]}
           />
