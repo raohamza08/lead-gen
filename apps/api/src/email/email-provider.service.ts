@@ -134,13 +134,12 @@ export class EmailProviderService {
       throw new ComplianceGateError("Email body is missing an unsubscribe mechanism (CAN-SPAM requirement)");
     }
 
-    const account = await this.pickAvailableAccount(lead.orgId);
-    if (!account) {
+    const candidates = await this.pickAvailableAccounts(lead.orgId);
+    if (candidates.length === 0) {
       throw new ComplianceGateError("No email account available within its daily/hourly send limit");
     }
 
     const branding = await this.organization.getBranding(lead.orgId);
-    const provider = this.providerFor(account.provider);
     const apiRoot = apiPublicUrl();
     let renderedBody = bodyHtml
       .replace(/\{\{unsubscribe_link\}\}/g, `${apiRoot}/unsubscribe?lead=${lead.id}`)
@@ -160,24 +159,47 @@ export class EmailProviderService {
       renderedBody += `<img src="${apiRoot}/track/open/${messageId}.png" width="1" height="1" alt="" style="display:none" />`;
     }
 
-    const result = await provider.send(account, {
-      fromAddress: account.address,
-      // A per-mailbox display name (Settings > Email accounts) wins over the
-      // org-wide From name — an org with several mailboxes may want each to
-      // show a different name in the recipient's inbox. Falls back to
-      // emailFromName specifically — a third, independently-settable name
-      // distinct from both emailOrgName (signature's company line) and
-      // emailSenderName (signature's opening line); see OrgBranding's
-      // docblock. emailFromName itself falls back to emailOrgName when
-      // unset, so an org that hasn't touched this new field yet keeps its
-      // existing inbox identity rather than silently changing.
-      fromName: account.displayName || branding.emailFromName,
-      toAddress: lead.email,
-      subject,
-      bodyHtml: renderedBody,
-    });
-
-    return { accountId: account.id, providerMessageId: result.providerMessageId };
+    // Try every candidate in order (least-used-today first), not just the
+    // first one — a mailbox that passed our own daily/hourly pre-check can
+    // still have its actual send rejected by the provider itself (Gmail's
+    // real 500/day quota resets on Pacific time and counts recipients, not
+    // messages, so it can disagree with our own UTC-midnight count; an
+    // expired app password or a transient SMTP error are just as real).
+    // Confirmed live, 2026-11-05, explicit user report: a campaign across 3
+    // mailboxes failed outright the moment ONE hit its limit, instead of
+    // falling through to the other two. Only once every candidate's actual
+    // send attempt has failed does this throw, carrying the LAST account's
+    // real error rather than a generic one.
+    let lastError: Error | undefined;
+    for (const account of candidates) {
+      const provider = this.providerFor(account.provider);
+      try {
+        const result = await provider.send(account, {
+          fromAddress: account.address,
+          // A per-mailbox display name (Settings > Email accounts) wins over
+          // the org-wide From name — an org with several mailboxes may want
+          // each to show a different name in the recipient's inbox. Falls
+          // back to emailFromName specifically — a third, independently-
+          // settable name distinct from both emailOrgName (signature's
+          // company line) and emailSenderName (signature's opening line);
+          // see OrgBranding's docblock. emailFromName itself falls back to
+          // emailOrgName when unset, so an org that hasn't touched this new
+          // field yet keeps its existing inbox identity rather than
+          // silently changing.
+          fromName: account.displayName || branding.emailFromName,
+          toAddress: lead.email,
+          subject,
+          bodyHtml: renderedBody,
+        });
+        return { accountId: account.id, providerMessageId: result.providerMessageId };
+      } catch (err) {
+        lastError = err as Error;
+        this.logger.warn(
+          `Send via ${account.address} failed, falling back to the next available mailbox: ${lastError.message}`,
+        );
+      }
+    }
+    throw lastError ?? new Error("Every available email account failed to send");
   }
 
   private providerFor(provider: string): EmailProvider {
@@ -190,15 +212,22 @@ export class EmailProviderService {
   }
 
   /**
-   * Rotation + rate limiting (Part B2/E5/I1): picks the least-recently-used
-   * ACTIVE account that hasn't hit its daily OR hourly limit — hourlyLimit
-   * was defined on EmailAccount but never actually checked anywhere until
-   * Part: Preparation Pipeline / Sending Queue, 2026-09-01. A production
-   * version should track a rolling send counter per account rather than
-   * counting rows on every send; this scaffold favors correctness/
-   * readability over that optimization.
+   * Rotation + rate limiting (Part B2/E5/I1, extended Part: multi-mailbox
+   * failover, 2026-11-05): returns EVERY ACTIVE, sendingEnabled account that
+   * hasn't hit its daily OR hourly limit, ordered least-sent-today first —
+   * not just the single first match. sendForLead tries each in turn, so a
+   * mailbox whose actual send fails (real provider-side rejection, not just
+   * this pre-check) falls through to the next one instead of failing the
+   * whole message. Ordering by least-used also spreads load evenly across
+   * every configured mailbox instead of exhausting the first one in DB
+   * order before ever touching the others. hourlyLimit was defined on
+   * EmailAccount but never actually checked anywhere until Part: Preparation
+   * Pipeline / Sending Queue, 2026-09-01. A production version should track
+   * a rolling send counter per account rather than counting rows on every
+   * send; this scaffold favors correctness/readability over that
+   * optimization.
    */
-  private async pickAvailableAccount(orgId: string) {
+  private async pickAvailableAccounts(orgId: string) {
     // sendingEnabled is a separate, explicit opt-in from status — a mailbox
     // being ACTIVE (e.g. for Email Hub reading) never used to be enough to
     // keep it out of real outreach rotation on its own. See EmailAccount.
@@ -227,12 +256,12 @@ export class EmailProviderService {
     const sentToday = new Map(dailyCounts.map((c) => [c.accountId, c._count._all]));
     const sentThisHour = new Map(hourlyCounts.map((c) => [c.accountId, c._count._all]));
 
-    for (const account of accounts) {
-      if ((sentToday.get(account.id) ?? 0) < account.dailyLimit && (sentThisHour.get(account.id) ?? 0) < account.hourlyLimit) {
-        return account;
-      }
-    }
-    return null;
+    return accounts
+      .filter(
+        (account) =>
+          (sentToday.get(account.id) ?? 0) < account.dailyLimit && (sentThisHour.get(account.id) ?? 0) < account.hourlyLimit,
+      )
+      .sort((a, b) => (sentToday.get(a.id) ?? 0) - (sentToday.get(b.id) ?? 0));
   }
 
   /**
@@ -243,7 +272,7 @@ export class EmailProviderService {
    * once, so a large batch is split into multiple SendingSessions instead of
    * handed to the worker all at once only to fail the compliance gate one by
    * one. Deliberately daily-only (not also capped per-hour here): the
-   * per-send hourlyLimit check in pickAvailableAccount above already
+   * per-send hourlyLimit check in pickAvailableAccounts above already
    * throttles a released batch's actual send rate, backing off the rest into
    * RETRY_SCHEDULED — that's a real per-account clock, not something this
    * up-front estimate needs to duplicate.
