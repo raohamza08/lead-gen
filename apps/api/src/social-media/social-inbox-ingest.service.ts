@@ -136,14 +136,23 @@ export class SocialInboxIngestService {
       return { isNew: true, conversationId: conversation.id };
     });
 
-    // Never notify about our own outbound reply landing in the DB, and only
-    // for a genuinely new message -- a dedup no-op must not spam a second
-    // realtime/notification for something already surfaced once.
-    if (result.isNew && !input.fromUs && !input.isHistoryBackfill) {
+    // Realtime sync must fire for BOTH directions -- a team member's reply
+    // (fromUs: true) needs to appear live in every other open session just
+    // as much as an inbound message does (Part: WhatsApp Team Inbox
+    // realtime fix, 2026-11-05, explicit user report -- "didn't show me the
+    // message that my team sent"). Only a genuinely new, non-backfill
+    // message triggers this -- a dedup no-op must not spam a second
+    // broadcast for something already surfaced once.
+    if (result.isNew && !input.isHistoryBackfill) {
       this.realtime.emitToOrg(socialAccount.orgId, "socialInbox.messageReceived", {
         conversationId: result.conversationId,
         socialAccountId: socialAccount.id,
       });
+    }
+    // The in-app/email NOTIFICATION stays inbound-only -- nobody needs to be
+    // notified about their own team's outbound reply, just see it live
+    // (handled by the realtime emit above regardless of direction).
+    if (result.isNew && !input.fromUs && !input.isHistoryBackfill) {
       await this.notifications.notify(socialAccount.orgId, {
         category: NotificationCategory.SOCIAL,
         type: "SOCIAL_MESSAGE_RECEIVED",
