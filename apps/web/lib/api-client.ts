@@ -291,8 +291,10 @@ export const api = {
     request(`/leads?${new URLSearchParams(params).toString()}`),
   getLeadSourceBreakdown: () => request("/leads/source-breakdown"),
   getLeadFilterOptions: () => request<{ industries: string[]; countries: string[] }>("/leads/filter-options"),
-  getPromotePreviewCount: (sourceLayer?: string) =>
-    request<{ count: number }>(`/leads/promote-preview${sourceLayer ? `?sourceLayer=${sourceLayer}` : ""}`),
+  getPromotePreviewCount: (sourceLayer?: string, campaignId?: string) =>
+    request<{ count: number }>(
+      `/leads/promote-preview?${new URLSearchParams({ ...(sourceLayer ? { sourceLayer } : {}), ...(campaignId ? { campaignId } : {}) }).toString()}`,
+    ),
   getLead: (id: string) => request(`/leads/${id}`),
   updateReview: (id: string, body: Record<string, unknown>) =>
     request(`/leads/${id}/review`, { method: "PATCH", body: JSON.stringify(body) }),
@@ -325,7 +327,7 @@ export const api = {
   deleteLead: (id: string) => request(`/leads/${id}`, { method: "DELETE" }),
   deleteLeadsByStage: (stage: string) =>
     request<{ deleted: number }>(`/leads/by-stage/${stage}`, { method: "DELETE" }),
-  promoteLeadsToPipeline: (body: { sourceLayer?: string; limit?: number; leadId?: string }) =>
+  promoteLeadsToPipeline: (body: { sourceLayer?: string; limit?: number; leadId?: string; campaignId?: string }) =>
     request<{ promoted: number }>("/leads/promote-to-pipeline", { method: "POST", body: JSON.stringify(body) }),
   bulkDeleteLeads: (leadIds: string[]) =>
     request<{ deleted: number }>("/leads/bulk-delete", { method: "POST", body: JSON.stringify({ leadIds }) }),

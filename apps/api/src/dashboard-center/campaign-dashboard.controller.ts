@@ -5,6 +5,7 @@ import { ModuleAccessGuard } from "../common/guards/module-access.guard";
 import { RequiresModule } from "../common/decorators/requires-module.decorator";
 import { CurrentUser } from "../common/decorators/current-user.decorator";
 import { JwtClaims } from "@leadgen/types";
+import { PrismaService } from "../common/prisma/prisma.service";
 import { CampaignsService } from "../campaigns/campaigns.service";
 import { LeadsDashboardService } from "./leads-dashboard.service";
 import { EmailDashboardService } from "./email-dashboard.service";
@@ -34,6 +35,7 @@ import { DashboardRangeQueryDto } from "./dto/dashboard-center.dto";
 @RequiresModule("LEAD_GENERATION")
 export class CampaignDashboardController {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly campaigns: CampaignsService,
     private readonly leadsDashboard: LeadsDashboardService,
     private readonly emailDashboard: EmailDashboardService,
@@ -42,9 +44,10 @@ export class CampaignDashboardController {
   @Get(":id/dashboard")
   async dashboard(@CurrentUser() user: JwtClaims, @Param("id") id: string, @Query() query: DashboardRangeQueryDto) {
     const campaign = await this.campaigns.getOwned(user.orgId, id);
-    const [leads, email] = await Promise.all([
+    const [leads, email, pipeline] = await Promise.all([
       this.leadsDashboard.getKpis(user.orgId, { ...query, campaignId: id }),
       this.emailDashboard.getKpis(user.orgId, query, id),
+      this.pipelineBreakdown(id),
     ]);
     // Target vs. actual reported plainly, never hidden (Part: Claude-
     // budget-aware drip scheduler, 2026-11-05, explicit user requirement —
@@ -63,6 +66,30 @@ export class CampaignDashboardController {
       },
       leads,
       email,
+      pipeline,
+    };
+  }
+
+  /** Lead Room (no PipelineState row yet) + a count per real stage, so a
+   *  campaign's own page can show "which lead is where" the moment it's
+   *  opened (Part: proper Campaign system, 2026-11-05, explicit user
+   *  request — "jab compaign ko open kren or wahan proper pipeline show ho
+   *  jaye hamein k konsi lead kahan hai") instead of making someone go
+   *  filter the Leads page separately. PipelineState has no campaignId of
+   *  its own (campaignId lives on Lead), hence the relation filter rather
+   *  than a direct groupBy on PipelineState. */
+  private async pipelineBreakdown(campaignId: string) {
+    const [leadRoomCount, byStage] = await Promise.all([
+      this.prisma.lead.count({ where: { campaignId, pipelineState: null } }),
+      this.prisma.pipelineState.groupBy({
+        by: ["stage"],
+        where: { lead: { campaignId } },
+        _count: { _all: true },
+      }),
+    ]);
+    return {
+      leadRoomCount,
+      byStage: byStage.map((row) => ({ stage: row.stage, count: row._count._all })),
     };
   }
 }

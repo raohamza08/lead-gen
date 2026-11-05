@@ -127,8 +127,8 @@ export class LeadsController {
   @Get("promote-preview")
   @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
   @RequiresModule("LEAD_GENERATION")
-  promotePreview(@CurrentUser() user: JwtClaims, @Query("sourceLayer") sourceLayer?: LeadSourceLayer) {
-    return this.leadsService.getPromotePreviewCount(user.orgId, sourceLayer);
+  promotePreview(@CurrentUser() user: JwtClaims, @Query("sourceLayer") sourceLayer?: LeadSourceLayer, @Query("campaignId") campaignId?: string) {
+    return this.leadsService.getPromotePreviewCount(user.orgId, sourceLayer, campaignId);
   }
 
   // Must come before ":id" for the same reason "export"/"source-breakdown" do

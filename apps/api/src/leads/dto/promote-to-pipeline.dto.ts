@@ -14,4 +14,12 @@ export class PromoteToPipelineDto {
    *  ignoring sourceLayer/limit. */
   @IsOptional() @IsString()
   leadId?: string;
+
+  /** Scopes the batch to one campaign's own leads (Part: proper Campaign
+   *  system, 2026-11-05, explicit user request — "jab campaign open karen
+   *  tab hi wahan proper pipeline show ho jaye") — the campaign dashboard's
+   *  own "Move to Pipeline" action, distinct from the org-wide one on the
+   *  Leads page. */
+  @IsOptional() @IsString()
+  campaignId?: string;
 }

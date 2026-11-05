@@ -290,9 +290,9 @@ export class LeadsService {
    * actually do, without requiring the frontend to hold every un-promoted
    * lead in memory just to count a subset of them.
    */
-  async getPromotePreviewCount(orgId: string, sourceLayer?: LeadSourceLayer): Promise<{ count: number }> {
+  async getPromotePreviewCount(orgId: string, sourceLayer?: LeadSourceLayer, campaignId?: string): Promise<{ count: number }> {
     const count = await this.prisma.lead.count({
-      where: { orgId, pipelineState: null, ...(sourceLayer ? { sourceLayer } : {}) },
+      where: { orgId, pipelineState: null, ...(sourceLayer ? { sourceLayer } : {}), ...(campaignId ? { campaignId } : {}) },
     });
     return { count };
   }
@@ -546,14 +546,15 @@ export class LeadsService {
    * "Promote to Pipeline" action) — mutually sensible with sourceLayer/limit
    * but normally used alone.
    */
-  async promoteToPipeline(orgId: string, options: { sourceLayer?: LeadSourceLayer; limit?: number; leadId?: string }) {
-    const { sourceLayer, limit, leadId } = options;
+  async promoteToPipeline(orgId: string, options: { sourceLayer?: LeadSourceLayer; limit?: number; leadId?: string; campaignId?: string }) {
+    const { sourceLayer, limit, leadId, campaignId } = options;
     const candidates = await this.prisma.lead.findMany({
       where: {
         orgId,
         pipelineState: null,
         ...(leadId ? { id: leadId } : {}),
         ...(sourceLayer ? { sourceLayer } : {}),
+        ...(campaignId ? { campaignId } : {}),
       },
       orderBy: { createdAt: "asc" },
       ...(limit ? { take: limit } : {}),
