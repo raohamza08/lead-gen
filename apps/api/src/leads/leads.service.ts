@@ -503,6 +503,36 @@ export class LeadsService {
   }
 
   /**
+   * Adds already-existing leads (manually added, CSV-imported earlier, or
+   * from a previous campaign) into a campaign explicitly (Part: proper
+   * Campaign system, 2026-11-05, explicit user request — "mai khud leads
+   * add krna chahta hn jo mere pas leads walay module me hain" i.e. not
+   * every lead a campaign sends to has to come from AI discovery; a human
+   * picking existing leads from the Leads module is just as valid a source).
+   * Same shape as bulkAssign above (scoped updateMany, capped batch via the
+   * DTO's own ArrayMaxSize) -- campaignId: null detaches, same convention
+   * assignedUserId already uses.
+   */
+  async bulkAssignCampaign(orgId: string, leadIds: string[], campaignId: string | null, actorId?: string) {
+    if (campaignId) {
+      const campaign = await this.prisma.campaign.findFirst({ where: { id: campaignId, orgId }, select: { id: true } });
+      if (!campaign) throw new NotFoundException("Campaign not found in this organization");
+    }
+    const result = await this.prisma.lead.updateMany({
+      where: { orgId, id: { in: leadIds } },
+      data: { campaignId },
+    });
+    this.auditLog.write({
+      orgId,
+      actorId,
+      action: "LEADS_BULK_ASSIGNED_CAMPAIGN",
+      entityType: "lead",
+      metadata: { count: result.count, leadIds, campaignId },
+    });
+    return { assigned: result.count };
+  }
+
+  /**
    * Lead Room's "Move to Pipeline" action — the human-add paths
    * (createManual/importLeads/EmailHub addToLead, all via insertManualLead)
    * no longer create a PipelineState at creation time, so a lead sits here

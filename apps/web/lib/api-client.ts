@@ -405,6 +405,8 @@ export const api = {
   getRecentAgentRuns: (limit = 50) => request(`/agent-runs/recent?limit=${limit}`),
   getAgentFleet: () => request("/agents/fleet"),
   getCampaigns: () => request("/campaigns"),
+  bulkAssignLeadsCampaign: (leadIds: string[], campaignId: string | null) =>
+    request("/leads/bulk-assign-campaign", { method: "POST", body: JSON.stringify({ leadIds, campaignId }) }),
   getCampaignPerformance: () => request("/campaigns/performance"),
   createCampaign: (body: Record<string, unknown>) =>
     request("/campaigns", { method: "POST", body: JSON.stringify(body) }),

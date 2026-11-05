@@ -15,6 +15,11 @@ import { Table, TableHead, TableHeadRow, Th, TableBody, Tr, Td, TableEmptyRow } 
 import { DateRangeFilter } from "../../../components/ui/date-range-filter";
 import { KpiStrip, StatTile, formatCompact } from "../../../components/chart-kit";
 
+interface CampaignOption {
+  id: string;
+  name: string;
+}
+
 interface LeadRow extends Lead {
   score: LeadScore | null;
   pipelineState: { stage: string } | null;
@@ -148,6 +153,32 @@ export default function LeadsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deletingSelected, setDeletingSelected] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // Add selected (already-existing) leads to a campaign (Part: proper
+  // Campaign system, 2026-11-05, explicit user request — "mai khud leads
+  // add krna chahta hn jo mere pas leads walay module me hain" — a human
+  // picking leads here is just as valid a campaign source as AI discovery
+  // or a fresh CSV import, which already attach automatically).
+  const campaignsQuery = useQuery({
+    queryKey: ["campaigns"],
+    queryFn: () => api.getCampaigns() as Promise<CampaignOption[]>,
+  });
+  const [assignCampaignId, setAssignCampaignId] = useState("");
+  const assignCampaignMutation = useMutation({
+    mutationFn: () => api.bulkAssignLeadsCampaign([...selected], assignCampaignId || null) as Promise<{ assigned: number }>,
+    onSuccess: (res: { assigned: number }) => {
+      const campaignName = campaignsQuery.data?.find((c) => c.id === assignCampaignId)?.name;
+      setNotice(
+        assignCampaignId
+          ? `Added ${res.assigned} lead${res.assigned === 1 ? "" : "s"} to "${campaignName ?? "the campaign"}".`
+          : `Removed ${res.assigned} lead${res.assigned === 1 ? "" : "s"} from their campaign.`,
+      );
+      setSelected(new Set());
+      setAssignCampaignId("");
+      invalidateLeads();
+    },
+    onError: (err) => setError((err as Error).message),
+  });
 
   // Filters — server-side (Part: performance audit, 2026-09-02; the backend
   // already supported these query params, the page just wasn't passing them,
@@ -468,6 +499,31 @@ export default function LeadsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <>
+              <select
+                value={assignCampaignId}
+                onChange={(e) => setAssignCampaignId(e.target.value)}
+                className="rounded-lg border border-[var(--line)] bg-transparent px-2.5 py-2 text-sm"
+              >
+                <option value="">Remove from campaign</option>
+                {(campaignsQuery.data ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => assignCampaignMutation.mutate()}
+                disabled={assignCampaignMutation.isPending}
+                loading={assignCampaignMutation.isPending}
+              >
+                {assignCampaignId ? `Add to campaign (${selected.size})` : `Remove from campaign (${selected.size})`}
+              </Button>
+            </>
+          )}
           {isAdmin && selected.size > 0 && (
             <Button type="button" variant="danger" onClick={deleteSelected} disabled={deletingSelected}>
               {deleteProgress

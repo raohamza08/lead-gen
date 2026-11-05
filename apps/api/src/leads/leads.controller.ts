@@ -16,6 +16,7 @@ import { ApplyEnrichmentDto } from "./dto/apply-enrichment.dto";
 import { PromoteToPipelineDto } from "./dto/promote-to-pipeline.dto";
 import { BulkDeleteLeadsDto } from "./dto/bulk-delete-leads.dto";
 import { BulkAssignLeadsDto } from "./dto/bulk-assign-leads.dto";
+import { BulkAssignCampaignDto } from "./dto/bulk-assign-campaign.dto";
 import { VerifyEmailsDto } from "./dto/verify-emails.dto";
 import { JwtAuthGuard } from "../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../common/guards/roles.guard";
@@ -372,6 +373,14 @@ export class LeadsController {
   @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
   bulkAssign(@CurrentUser() user: JwtClaims, @Body() dto: BulkAssignLeadsDto) {
     return this.leadsService.bulkAssign(user.orgId, dto.leadIds, dto.assignedUserId ?? null, user.sub);
+  }
+
+  @Post("bulk-assign-campaign")
+  @UseGuards(JwtAuthGuard, RolesGuard, ModuleAccessGuard)
+  @RequiresModule("LEAD_GENERATION")
+  @Roles(Role.ADMIN, Role.MANAGER, Role.SALES_REP, Role.LEAD_REVIEWER)
+  bulkAssignCampaign(@CurrentUser() user: JwtClaims, @Body() dto: BulkAssignCampaignDto) {
+    return this.leadsService.bulkAssignCampaign(user.orgId, dto.leadIds, dto.campaignId ?? null, user.sub);
   }
 
   // ADMIN only: unlike other deletes in this app (niche filter, email
