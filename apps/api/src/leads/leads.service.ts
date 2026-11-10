@@ -319,7 +319,10 @@ export class LeadsService {
       campaignId: query.campaignId,
       sourceLayer: query.sourceLayer,
       ...(searchOr ? { OR: searchOr } : {}),
-      pipelineState: query.stage ? { stage: query.stage } : undefined,
+      // Lead Room (/leads with no stage picked) asks for unpromoted leads
+      // only — a lead with a PipelineState row has already left Lead Room
+      // for the Pipeline board and shouldn't show up in both places.
+      pipelineState: query.unpromotedOnly === "true" ? null : query.stage ? { stage: query.stage } : undefined,
       // Part: table filter/KPI rollout, 2026-10-27 — dateTo inclusive
       // through the end of that calendar day, same convention the
       // frontend's DateRangeFilter/useDateFilter already use.

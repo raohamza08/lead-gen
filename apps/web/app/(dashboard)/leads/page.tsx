@@ -194,7 +194,6 @@ export default function LeadsPage() {
   }, [search]);
   const [industry, setIndustry] = useState("");
   const [country, setCountry] = useState("");
-  const [stage, setStage] = useState("");
   const [source, setSource] = useState("");
   // Isolate just this campaign's leads (Part: proper Campaign system,
   // 2026-11-05, explicit user request — "ab mai un leads ko kahan dekh
@@ -211,7 +210,7 @@ export default function LeadsPage() {
   // Any filter change invalidates whatever page you were on — landing on
   // page 5 of a now-much-smaller filtered result set would either show
   // nothing or read past the end silently.
-  useEffect(() => setPage(1), [debouncedSearch, industry, country, stage, source, campaignFilter, dateFrom, dateTo]);
+  useEffect(() => setPage(1), [debouncedSearch, industry, country, source, campaignFilter, dateFrom, dateTo]);
 
   const [showForm, setShowForm] = useState(false);
   const [draft, setDraft] = useState(EMPTY_LEAD);
@@ -309,10 +308,13 @@ export default function LeadsPage() {
   const leadsParams = {
     page: String(page),
     pageSize: String(PAGE_SIZE),
+    // Lead Room only ever shows leads that haven't been promoted to the
+    // Pipeline yet — once a lead gets a stage, it belongs on /pipeline, not
+    // here (Part: Lead Room / Pipeline overlap fix, 2026-11-10).
+    unpromotedOnly: "true",
     ...(debouncedSearch ? { search: debouncedSearch } : {}),
     ...(industry ? { industry } : {}),
     ...(country ? { country } : {}),
-    ...(stage ? { stage } : {}),
     ...(source ? { sourceLayer: source } : {}),
     ...(campaignFilter ? { campaignId: campaignFilter } : {}),
     ...(dateFrom ? { dateFrom } : {}),
@@ -817,19 +819,6 @@ export default function LeadsPage() {
           </label>
         ))}
         <label>
-          <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Stage</span>
-          <select
-            value={stage}
-            onChange={(e) => setStage(e.target.value)}
-            className="rounded-lg border border-[var(--line)] bg-transparent px-3 py-1.5 text-sm outline-none"
-          >
-            <option value="">All</option>
-            {Object.values(PipelineStage).map((s) => (
-              <option key={s} value={s}>{s.replace(/_/g, " ").toLowerCase()}</option>
-            ))}
-          </select>
-        </label>
-        <label>
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Source</span>
           <select
             value={source}
@@ -859,12 +848,12 @@ export default function LeadsPage() {
           <span className="mb-1 block text-[11px] uppercase tracking-wide text-ink/55">Added</span>
           <DateRangeFilter from={dateFrom} to={dateTo} onFromChange={setDateFrom} onToChange={setDateTo} onClear={() => { setDateFrom(""); setDateTo(""); }} />
         </label>
-        {(search || industry || country || stage || source || campaignFilter || dateFrom || dateTo) && (
+        {(search || industry || country || source || campaignFilter || dateFrom || dateTo) && (
           <Button
             type="button"
             variant="secondary"
             size="sm"
-            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setStage(""); setSource(""); setCampaignFilter(""); setDateFrom(""); setDateTo(""); }}
+            onClick={() => { setSearch(""); setIndustry(""); setCountry(""); setSource(""); setCampaignFilter(""); setDateFrom(""); setDateTo(""); }}
           >
             Clear
           </Button>
@@ -977,7 +966,7 @@ export default function LeadsPage() {
           ))}
           {leads.length === 0 && (
             <TableEmptyRow colSpan={isAdmin ? 10 : 9}>
-              {total === 0 && !search && !industry && !country && !stage && !source
+              {total === 0 && !search && !industry && !country && !source
                 ? "No leads yet — configure a niche filter in Settings, or add one manually above."
                 : "No leads match these filters."}
             </TableEmptyRow>

@@ -4,6 +4,13 @@ import { LeadSourceLayer, PipelineStage } from "@leadgen/types";
 
 export class QueryLeadsDto {
   @IsOptional() @IsEnum(PipelineStage) stage?: PipelineStage;
+
+  /** Lead Room's own listing (/leads) — once a lead is promoted (gets a
+   *  PipelineState row, see LeadsService.promoteToPipeline), it belongs to
+   *  the Pipeline board only and should stop showing up here. Boolean comes
+   *  across the wire as the string "true". */
+  @IsOptional() @IsString() unpromotedOnly?: string;
+
   @IsOptional() @IsString() industry?: string;
   @IsOptional() @IsString() country?: string;
   @IsOptional() @IsString() assignedUserId?: string;
